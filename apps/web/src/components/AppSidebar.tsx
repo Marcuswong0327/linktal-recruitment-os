@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { navGroups } from '@/config/nav';
+import { NavUser, type SidebarUser } from '@/components/NavUser';
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarHeader,
@@ -13,6 +15,12 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
+
+// TODO: replace with the signed-in user once auth is wired up.
+const currentUser: SidebarUser = {
+  name: 'Johnson Chin',
+  email: 'johnson@linktal.com',
+};
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -68,6 +76,10 @@ export function AppSidebar() {
           );
         })}
       </SidebarContent>
+
+      <SidebarFooter>
+        <NavUser user={currentUser} />
+      </SidebarFooter>
     </Sidebar>
   );
 }
