@@ -72,6 +72,11 @@ To keep things centralized (see intro), follow one rule when reaching for a comp
 - **Adding app behavior or composition** (e.g. a `FormField` that pairs label + input + error, or a `SubmitButton` wired to form pending state) → **create a new component** in `src/features/…` or `src/components/` that builds *on top of* the primitive.
 - **Never** write a 1:1 pass-through wrapper that just re-exports a primitive under a new name.
 
+### File naming
+
+- **Generated shadcn primitives** in `src/components/ui/` stay **kebab-case** (`button.tsx`, `sidebar.tsx`) — matches what the CLI emits, so re-running `shadcn add` never fights us.
+- **Our own app components** use **PascalCase** matching the exported component (`AppSidebar.tsx` exports `AppSidebar`).
+
 ## Dark Mode
 
 We support Dark Mode. It's **class-based**: toggling the `.dark` class on `<html>` re-points every token to its dark value (defined under `.dark` in `globals.css`), so anything built on tokens flips automatically with no per-component work. Because it's class-driven, we can also force a mode regardless of OS preference. Build with tokens and dark mode is essentially free.
