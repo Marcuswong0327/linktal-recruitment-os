@@ -29,10 +29,10 @@ export const navGroups: NavGroup[] = [
   {
     label: "OPERATIONS",
     items: [
-      { title: "Companies", href: "/companies", icon: Building2, disabled: true },
+      { title: "Companies", href: "/companies", icon: Building2 },
       { title: "Contacts", href: "/contacts", icon: Contact, disabled: true },
-      { title: "Job Orders", href: "/job-orders", icon: BookA, disabled: true },
-      { title: "Candidates", href: "/candidates", icon: UsersRound, disabled: true },
+      { title: "Job Orders", href: "/job-orders", icon: BookA },
+      { title: "Candidates", href: "/candidates", icon: UsersRound },
       { title: "Submissions", href: "/submissions", icon: FileText, disabled: true },
       { title: "Interviews", href: "/interviews", icon: MessageSquare, disabled: true },
       { title: "Placements", href: "/placements", icon: BriefcaseBusiness, disabled: true },
