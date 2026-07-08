@@ -1,4 +1,4 @@
-import { AppSidebar } from '@/components/AppSidebar';
+import { AppSidebar } from '@/components/app-shell/AppSidebar';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
 

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { navGroups } from '@/config/nav';
-import { NavUser, type SidebarUser } from '@/components/NavUser';
+import { NavUser, type SidebarUser } from '@/components/app-shell/NavUser';
 import {
   Sidebar,
   SidebarContent,
