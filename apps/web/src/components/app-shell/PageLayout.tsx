@@ -12,7 +12,7 @@ function PageLayout({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="page-layout"
-      className={cn('mx-auto flex w-full flex-col gap-5 max-w-[90%] p-6', className)}
+      className={cn('mx-auto flex w-full flex-col gap-5 max-w-[95%] p-6', className)}
       {...props}
     />
   );
