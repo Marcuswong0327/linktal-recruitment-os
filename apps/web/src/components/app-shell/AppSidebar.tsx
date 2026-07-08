@@ -63,7 +63,7 @@ export function AppSidebar() {
                         aria-disabled={item.disabled}
                         tooltip={item.disabled ? `${item.title} — coming soon` : item.title}
                         render={item.disabled ? undefined : <Link href={item.href} />}
-                        className="gap-3"
+                        className="gap-4"
                       >
                         <item.icon />
                         <span>{item.title}</span>
