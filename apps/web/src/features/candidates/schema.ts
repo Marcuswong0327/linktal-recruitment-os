@@ -19,12 +19,32 @@ export const createCandidateSchema = z.object({
 
 export type CreateCandidateInput = z.infer<typeof createCandidateSchema>;
 
+export const candidateStatusLabels: Record<
+  (typeof candidateStatuses)[number],
+  string
+> = {
+  APPLIED: 'Applied',
+  SCREENING: 'Screening',
+  INTERVIEW: 'Interview',
+  OFFER: 'Offer',
+  HIRED: 'Hired',
+  REJECTED: 'Rejected',
+};
+
 export type Candidate = {
   id: string;
   name: string;
   email: string;
+  /** Current job title. */
   role: string;
+  currentCompany: string;
+  location: string;
   status: (typeof candidateStatuses)[number];
+  /** Expected annual salary. */
+  expectedSalary: number;
+  noticePeriodDays: number;
+  /** Consultant who owns this candidate. */
+  owner: string;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
