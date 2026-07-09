@@ -55,9 +55,9 @@ export function DataGridFacetedFilter({
             variant="outline"
             size="default"
             className={cn(
-              'rounded-lg border-dashed border-foreground/40 aria-expanded:border-solid',
+              'rounded-lg border-dashed border-foreground/40 aria-expanded:border-solid dark:bg-input/50 dark:hover:bg-input/70',
               selectedSet.size > 0 &&
-                'border-solid border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary',
+                'border-solid border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary dark:border-primary/60 dark:bg-input/50 dark:text-primary dark:hover:bg-input/70',
             )}
           />
         }
