@@ -60,12 +60,25 @@ The database schema was derived from these Excel files:
 | **Client** | Client companies (employers) | Client-XXXX |
 | **Stakeholder** | Contacts at client companies | Stake-XXXX |
 | **StakeholderContactHistory** | Communication with stakeholders | auto |
-| **ClientJobResearch** | Job openings research | auto |
+| **ClientJobResearch** | Job openings research (historical/prospecting) | auto |
 | **Candidate** | Job seekers (workHistory as JSONB) | CDD-XXXX |
 | **CandidateScreeningHistory** | Screening notes (notes as JSONB) | auto |
-| **JobOrder** | Open positions | auto |
+| **JobOrder** | Open positions (optional link to Research) | auto |
 | **CandidateSubmission** | Submissions to jobs | auto |
-| **Placement** | Successful placements | auto |
+| **Placement** | Successful placements (fee calculation) | auto |
+
+### Placement Fee Fields (Confirmed)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| baseSalary | Decimal | Base salary offered |
+| superPercentage | Decimal | Default 12% |
+| totalPackage | Decimal | Auto: baseSalary × (1 + super%) |
+| feePercentage | Decimal | e.g., 15% |
+| feeValue | Decimal | Auto: totalPackage × feePercentage |
+| feeType | Enum | 'percentage' or 'flat' |
+| startDate | DateTime | Candidate's first day = Invoice date |
+| guaranteeEndDate | DateTime | Auto: startDate + 90 days |
 
 ### JSONB Fields (Flexible Arrays)
 
@@ -84,20 +97,31 @@ Role (N) ──── RolePermission ──── (N) Permission
 Client (1) ──── (N) Stakeholder ──── (N) ContactHistory
 Client (1) ──── (N) ClientJobResearch
 Client (1) ──── (N) JobOrder (N) ──── (1) Consultant
+JobOrder (N) ──→ (0..1) ClientJobResearch (optional link)
 Candidate (1) ──── (N) ScreeningHistory
 Candidate (1) ──── (N) Submission (N) ──── (1) JobOrder
 Submission (1) ──── (0..1) Placement
 ```
 
-### RBAC Roles
+### RBAC Roles (Confirmed)
 
 | Role | Description |
 |------|-------------|
 | `admin` | Full system access, manage users |
 | `manager` | View all data, reports, manage team |
-| `consultant` | CRUD own clients/candidates/jobs |
+| `consultant` | Full workflow access (CRUD own data) |
 | `finance` | View placements, fees, invoices |
-| `viewer` | Read-only access |
+| `researcher` | Research + upload only (limited workflow) |
+| `viewer` | Read-only access (optional) |
+
+**Researcher vs Consultant:**
+| Researcher Can Do | Researcher Cannot Do |
+|-------------------|----------------------|
+| Search client/company info | Enter screening call notes |
+| Find job titles & hiring info | Manage job order workflow |
+| Upload company information | Access sensitive candidate data |
+| Upload candidate profiles | Create placements |
+| Upload resumes | Financial data |
 
 ### Status Enums
 
@@ -118,7 +142,9 @@ Submission (1) ──── (0..1) Placement
 6. Place         → Placement (successful hire)
 ```
 
-## Status Auto-Update Flow (To Be Confirmed)
+## Status Auto-Update Flow (Pending Confirmation)
+
+See `docs/manual-vs-automated-workflows.md` for full details.
 
 | Trigger | Should Update |
 |---------|---------------|
@@ -127,36 +153,57 @@ Submission (1) ──── (0..1) Placement
 | Placement created | Candidate.status → Placed |
 | Placement created | JobOrder.status → Placed (if all openings filled) |
 | Placement created | Client.status → Traded (if first placement) |
-| Placement failed within guarantee | Alert + link to replacement JobOrder |
+| Placement failed within guarantee | Alert consultant |
 
-## Guarantee Period Logic
+## Guarantee Period Logic (Confirmed)
 
 ```
-Client.guaranteePeriod = 90 days
-Placement.startDate = Feb 1
-Placement.guaranteeEndDate = May 1 (auto-calculated)
+Default: 90 days (per Terms of Business)
+Start: Candidate's actual start date (= Invoice Date = Placement Date)
+
+Client.guaranteePeriod = 90 days (can vary per client)
+Placement.startDate = Feb 1 (candidate's first day)
+Placement.guaranteeEndDate = May 1 (auto-calculated: startDate + 90 days)
+Placement.invoiceDate = Feb 1 (same as startDate)
 
 If candidate quits before guaranteeEndDate:
   → Placement.status = Failed
-  → Create replacement JobOrder (fee = $0)
-  → Link replacement to failed Placement
+  → Create replacement JobOrder (handled as new job, fee negotiated separately)
 ```
 
-## Open Questions (Pending Client Confirmation)
+**Not tracked:** Offer date, contract signing date
 
-1. **ClientJobResearch** - Merge into JobOrder (with status: Prospect → Active) or keep separate?
-2. **Salary range** - Add salaryMin/salaryMax to JobOrder?
-3. **Replacement linking** - Link replacement JobOrder to failed Placement?
-4. **Custom types** - Allow consultants to add new Industry, Position types?
-5. **Manual work awareness** - Phase 1 is manual, Phase 2 adds automation?
-6. **Fee structure** - Flat rate, percentage, or both? Store on Client or JobOrder?
-7. **Data cleanup** - Clean Excel before migration or import as-is?
-8. **RBAC roles** - Confirm: Admin, Manager, Consultant, Finance, Viewer?
-9. **Guarantee period** - Starts from placement date or start date?
-10. **Resume submission** - System sends email or opens email client?
-11. **Auth provider** - Custom build or third-party (Clerk/Auth0)?
-12. **MVP scope** - Which modules first?
-13. **Status auto-updates** - Auto-update statuses when actions happen, or keep manual?
+## Confirmed Decisions
+
+| # | Question | Decision |
+|---|----------|----------|
+| 1 | ClientJobResearch | Keep separate, optional link from JobOrder |
+| 2 | Salary range | Include as optional fields (salaryMin, salaryMax) |
+| 3 | Replacement linking | No complex linking for now (treat as new job) |
+| 4 | Custom types | Yes, allow free text input (Industry, Position, etc.) |
+| 5 | Fee structure | Percentage of total package (salary + super), allow manual override |
+| 6 | RBAC roles | Admin, Manager, Consultant, Finance, Researcher, Viewer |
+| 7 | Guarantee period | 90 days (per Terms of Business) |
+| 8 | Guarantee start date | Candidate's actual start date (= Invoice Date) |
+
+**Fee Calculation:**
+```
+Base Salary × (1 + Super%) = Total Package
+Total Package × Fee% = Placement Fee + GST
+```
+
+See `docs/confirmed-decisions.md` for full details.
+
+## Additional Confirmed Decisions
+
+| # | Question | Decision |
+|---|----------|----------|
+| 9 | Data cleanup | Import as-is, handle duplicates during import |
+| 10 | Auth provider | Better Auth with Neon (no passwordHash) |
+| 11 | MVP scope | Excel Import + RBAC first |
+| 12 | Auto-updates | Implement all 17 service-level auto-updates |
+
+**Duplicate Found:** CDD-0104 appears twice (Tony Ju vs Tony John) - assign new ID during import.
 
 ## Data Quality Issues (From Excel)
 
@@ -177,11 +224,14 @@ The codebase is a **skeleton/foundation** with:
 
 ## Next Steps
 
-1. Get client confirmation on open questions
-2. Expand Prisma schema based on `docs/database-erd.md`
-3. Create migrations for all entities
-4. Build out API modules for each entity
-5. Create spreadsheet-like UI components
+1. ~~Get client confirmation on open questions~~ ✓ (12 decisions confirmed)
+2. ~~Update Prisma schema with confirmed fields~~ ✓
+3. Run migrations: `cd apps/api && npx prisma migrate dev`
+4. Seed RBAC (Roles + Permissions)
+5. Create Excel import script
+6. Import data from Excel files
+7. Build out API modules for each entity
+8. Create spreadsheet-like UI components
 
 ## Commands
 
@@ -198,6 +248,10 @@ pnpm prisma:studio    # Open Prisma Studio
 pnpm prisma:migrate   # Run migrations
 ```
 
-## ERD Visualization
+## Documentation
 
-See `docs/database-erd.md` for the full Mermaid ERD diagram and column mappings from Excel to database fields.
+| File | Description |
+|------|-------------|
+| `docs/database-erd.md` | Full Mermaid ERD diagram and column mappings |
+| `docs/confirmed-decisions.md` | Confirmed client decisions with details |
+| `docs/manual-vs-automated-workflows.md` | Manual vs automated workflows + auto-update rules |
