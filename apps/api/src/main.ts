@@ -23,11 +23,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-<<<<<<< Updated upstream
-  // Swagger / OpenAPI setup
-=======
   // Swagger setup
->>>>>>> Stashed changes
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Linktal Recruitment API')
     .setDescription('API for Linktal Recruitment OS')
@@ -43,11 +39,7 @@ async function bootstrap() {
   const port = config.get<number>('PORT') ?? 3001;
   await app.listen(port, '0.0.0.0');
   console.log(`API listening on http://0.0.0.0:${port}/api`);
-<<<<<<< Updated upstream
-  console.log(`Swagger docs: http://0.0.0.0:${port}/docs`);
-=======
   console.log(`Swagger docs at http://0.0.0.0:${port}/docs`);
->>>>>>> Stashed changes
 }
 
 bootstrap();

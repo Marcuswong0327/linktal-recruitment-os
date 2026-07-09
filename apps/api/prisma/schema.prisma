@@ -1,5 +1,5 @@
 // Prisma schema — https://pris.ly/d/prisma-schema
-// Datasource: PostgreSQL on Neon with Better Auth
+// Datasource: PostgreSQL on Neon with Neon Auth
 
 generator client {
   provider = "prisma-client-js"
@@ -11,12 +11,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-<<<<<<< Updated upstream
-// =============================================================================
-// ENUMS
-// =============================================================================
-// Note: UserStatus is handled by Better Auth (additionalFields.status)
-=======
 // ============================================================================
 // ENUMS
 // ============================================================================
@@ -26,7 +20,6 @@ enum UserStatus {
   INACTIVE
   SUSPENDED
 }
->>>>>>> Stashed changes
 
 enum ClientStatus {
   COLD
@@ -61,51 +54,6 @@ enum PlacementStatus {
   FAILED
 }
 
-<<<<<<< Updated upstream
-enum FeeType {
-  PERCENTAGE
-  FLAT
-}
-
-enum ContactMethod {
-  PHONE
-  EMAIL
-  WHATSAPP
-  LINKEDIN
-  IN_PERSON
-}
-
-// =============================================================================
-// RBAC: ROLES & PERMISSIONS
-// =============================================================================
-// Note: User table is created by Better Auth with additional fields:
-//   - roleId (String)
-//   - status (String, default: "ACTIVE")
-// See apps/web/src/lib/auth.ts for Better Auth user schema extension
-
-model Role {
-  id          String   @id @default(cuid())
-  name        String   @unique // admin, manager, consultant, finance, researcher, viewer
-  description String?
-
-  permissions RolePermission[]
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-model Permission {
-  id          String   @id @default(cuid())
-  resource    String   // e.g., "candidate", "client", "job_order"
-  action      String   // e.g., "create", "read", "update", "delete"
-  description String?
-
-  roles       RolePermission[]
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-=======
 // ============================================================================
 // RBAC TABLES
 // ============================================================================
@@ -128,7 +76,6 @@ model Permission {
   createdAt   DateTime         @default(now())
   roles       RolePermission[]
 
->>>>>>> Stashed changes
   @@unique([resource, action])
 }
 
@@ -136,113 +83,12 @@ model RolePermission {
   id           String     @id @default(cuid())
   roleId       String
   permissionId String
-<<<<<<< Updated upstream
-
-=======
->>>>>>> Stashed changes
   role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@unique([roleId, permissionId])
 }
 
-<<<<<<< Updated upstream
-// =============================================================================
-// CONSULTANT (Recruiter profile linked to Better Auth user)
-// =============================================================================
-
-model Consultant {
-  id           String   @id @default(cuid())
-  displayId    String   @unique  // Format: "consultant-XXXX"
-  userId       String   @unique  // Links to Better Auth's user.id
-  displayName  String
-  phone        String?
-
-  // Relations (no direct User relation - user table managed by Better Auth)
-  clients      Client[]
-  jobOrders    JobOrder[]
-  candidates   Candidate[]    // Candidates contacted by this consultant
-  screenings   CandidateScreeningHistory[]
-
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
-
-// =============================================================================
-// CLIENT (Companies hiring)
-// =============================================================================
-
-model Client {
-  id                   String       @id @default(cuid())
-  displayId            String       @unique  // Format: "Client-XXXX"
-  companyName          String
-  country              String?
-  industry             String?      // Free text (custom allowed)
-  city                 String?
-  suburb               String?
-  specializations      Json?        // String[] - flexible array
-
-  // Contact info
-  website              String?
-  linkedInUrl          String?
-
-  // Fee structure
-  feePercentage        Decimal?     @db.Decimal(5, 2) // e.g., 15.00
-  feeSchedule          String?      // Text description of fee arrangement
-  guaranteePeriod      Int          @default(90) // Days
-
-  // Status & tracking
-  status               ClientStatus @default(COLD)
-  latestContactDate    DateTime?
-  latestContactBy      String?      // Consultant name
-
-  // Relations
-  consultantId         String?
-  consultant           Consultant?  @relation(fields: [consultantId], references: [id])
-  stakeholders         Stakeholder[]
-  jobResearch          ClientJobResearch[]
-  jobOrders            JobOrder[]
-
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
-
-  @@index([displayId])
-  @@index([status])
-  @@index([industry])
-  @@index([consultantId])
-}
-
-// =============================================================================
-// STAKEHOLDER (Contacts at client companies)
-// =============================================================================
-
-model Stakeholder {
-  id              String    @id @default(cuid())
-  displayId       String    @unique  // Format: "Stake-XXXX"
-  clientId        String
-
-  // Contact details
-  fullName        String
-  givenName       String?
-  familyName      String?
-  jobTitle        String?
-  email           String?
-  mobile          String?
-  linkedInUrl     String?
-
-  // Status & tracking
-  status          String    @default("Cold") // Cold, Warm, Active
-  lastContactDate DateTime?
-
-  // Relations
-  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  contactHistory  StakeholderContactHistory[]
-
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  @@index([displayId])
-=======
 // ============================================================================
 // CONSULTANT (Recruiter profile)
 // ============================================================================
@@ -310,187 +156,10 @@ model Stakeholder {
   updatedAt      DateTime                    @updatedAt
   contactHistory StakeholderContactHistory[]
 
->>>>>>> Stashed changes
   @@index([clientId])
 }
 
 model StakeholderContactHistory {
-<<<<<<< Updated upstream
-  id            String        @id @default(cuid())
-  stakeholderId String
-
-  contactDate   DateTime      @default(now())
-  contactMethod ContactMethod
-  notes         String?
-  outcome       String?
-  followUpDate  DateTime?
-
-  // Who made the contact
-  contactedBy   String?       // Consultant name or ID
-
-  // Relations
-  stakeholder   Stakeholder   @relation(fields: [stakeholderId], references: [id], onDelete: Cascade)
-
-  createdAt     DateTime      @default(now())
-
-  @@index([stakeholderId])
-  @@index([contactDate])
-}
-
-// =============================================================================
-// CLIENT JOB RESEARCH (Historical/prospecting job openings)
-// =============================================================================
-
-model ClientJobResearch {
-  id              String    @id @default(cuid())
-  clientId        String
-
-  jobTitle        String
-  jobDescription  String?
-  salaryRange     String?
-  location        String?
-  sourceUrl       String?   // URL where job was found (Seek, LinkedIn, etc.)
-  sourceType      String?   // Seek, LinkedIn, Company Website, etc.
-
-  status          String    @default("Prospect") // Prospect, Contacted, Converted, Closed
-  notes           String?
-
-  // Relations
-  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  jobOrders       JobOrder[] // Jobs that were created from this research
-
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  @@index([clientId])
-  @@index([status])
-}
-
-// =============================================================================
-// CANDIDATE (Job seekers)
-// =============================================================================
-
-model Candidate {
-  id                String          @id @default(cuid())
-  displayId         String          @unique  // Format: "CDD-XXXX"
-
-  // Personal info
-  fullName          String
-  givenName         String?
-  familyName        String?
-  email             String?
-  mobile            String?
-  linkedInUrl       String?
-  seekTalentUrl     String?
-
-  // Location
-  country           String?
-  city              String?
-  suburb            String?
-
-  // Professional info
-  industry          String?         // Free text (custom allowed)
-  roleType          String?         // Free text (custom allowed)
-  currentPosition   String?         // Free text (custom allowed)
-  specializations   Json?           // String[] - flexible array
-  workHistory       Json?           // Array of {company, role, startDate, endDate}
-
-  // Resume
-  rawResumeUrl      String?
-  editedResumeUrl   String?
-
-  // Status & tracking
-  status            CandidateStatus @default(COLD)
-  contactedBy       String?         // Consultant name or ID
-  lastScreenedAt    DateTime?
-  placedAt          DateTime?
-
-  // Relations
-  consultantId      String?
-  consultant        Consultant?     @relation(fields: [consultantId], references: [id])
-  screeningHistory  CandidateScreeningHistory[]
-  submissions       CandidateSubmission[]
-
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-
-  @@index([displayId])
-  @@index([status])
-  @@index([industry])
-  @@index([consultantId])
-}
-
-model CandidateScreeningHistory {
-  id           String     @id @default(cuid())
-  candidateId  String
-
-  screenedAt   DateTime   @default(now())
-  screenedBy   String?    // Consultant name or ID
-  notes        Json?      // Array of {text, createdAt}
-  outcome      String?    // Qualified, Not Qualified, Follow Up, etc.
-
-  // Screening details
-  salaryExpectation     Decimal?   @db.Decimal(12, 2)
-  noticePeriod          String?
-  availableFrom         DateTime?
-  willingToRelocate     Boolean?
-
-  // Relations
-  candidate    Candidate  @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  consultantId String?
-  consultant   Consultant? @relation(fields: [consultantId], references: [id])
-
-  createdAt    DateTime   @default(now())
-
-  @@index([candidateId])
-  @@index([screenedAt])
-}
-
-// =============================================================================
-// JOB ORDER (Open positions)
-// =============================================================================
-
-model JobOrder {
-  id                    String          @id @default(cuid())
-  displayId             String          @unique  // Format: "JO-XXXX"
-
-  // Client & research link
-  clientId              String
-  clientJobResearchId   String?         // Optional link to research
-  consultantId          String
-
-  // Job details
-  jobTitle              String
-  jobDescription        String?
-  location              String?
-  roleType              String?         // Free text
-
-  // Salary (optional)
-  salaryMin             Decimal?        @db.Decimal(12, 2)
-  salaryMax             Decimal?        @db.Decimal(12, 2)
-  salaryCurrency        String          @default("AUD")
-
-  // Requirements
-  numberOfOpenings      Int             @default(1)
-  placedCount           Int             @default(0) // Auto-updated
-
-  // Status & tracking
-  status                JobOrderStatus  @default(ACTIVE)
-  priority              String?         // High, Medium, Low
-  lastSubmissionDate    DateTime?
-  lastActivityDate      DateTime?
-
-  // Relations
-  client                Client          @relation(fields: [clientId], references: [id])
-  clientJobResearch     ClientJobResearch? @relation(fields: [clientJobResearchId], references: [id])
-  consultant            Consultant      @relation(fields: [consultantId], references: [id])
-  submissions           CandidateSubmission[]
-
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
-
-  @@index([displayId])
-=======
   id            String      @id @default(cuid())
   stakeholderId String
   stakeholder   Stakeholder @relation(fields: [stakeholderId], references: [id], onDelete: Cascade)
@@ -598,48 +267,11 @@ model JobOrder {
   updatedAt        DateTime              @updatedAt
   submissions      CandidateSubmission[]
 
->>>>>>> Stashed changes
   @@index([clientId])
   @@index([consultantId])
   @@index([status])
 }
 
-<<<<<<< Updated upstream
-// =============================================================================
-// CANDIDATE SUBMISSION (Submissions to jobs)
-// =============================================================================
-
-model CandidateSubmission {
-  id             String           @id @default(cuid())
-  candidateId    String
-  jobOrderId     String
-
-  // Submission details
-  submittedAt    DateTime         @default(now())
-  submittedBy    String?          // Consultant name or ID
-  resumeVersion  String?          // Which resume was sent
-  coverNote      String?
-
-  // Status & tracking
-  status         SubmissionStatus @default(SUBMITTED)
-  interviewDate  DateTime?
-  interviewNotes String?
-  rejectionReason String?
-
-  // Client response
-  clientResponseDate DateTime?
-  clientFeedback     String?
-
-  // Relations
-  candidate      Candidate        @relation(fields: [candidateId], references: [id])
-  jobOrder       JobOrder         @relation(fields: [jobOrderId], references: [id])
-  placement      Placement?
-
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-
-  @@unique([candidateId, jobOrderId]) // One submission per candidate per job
-=======
 // ============================================================================
 // CANDIDATE SUBMISSION (Submissions to jobs)
 // ============================================================================
@@ -658,49 +290,11 @@ model CandidateSubmission {
   placement   Placement?
 
   @@unique([candidateId, jobOrderId])
->>>>>>> Stashed changes
   @@index([candidateId])
   @@index([jobOrderId])
   @@index([status])
 }
 
-<<<<<<< Updated upstream
-// =============================================================================
-// PLACEMENT (Successful hires)
-// =============================================================================
-
-model Placement {
-  id                  String          @id @default(cuid())
-  displayId           String          @unique  // Format: "PL-XXXX"
-  submissionId        String          @unique
-
-  // Salary & fee calculation
-  baseSalary          Decimal         @db.Decimal(12, 2)
-  superPercentage     Decimal         @default(12) @db.Decimal(5, 2) // Default 12%
-  totalPackage        Decimal         @db.Decimal(12, 2) // Auto: baseSalary × (1 + super%)
-  feePercentage       Decimal         @db.Decimal(5, 2)  // e.g., 15%
-  feeValue            Decimal         @db.Decimal(12, 2) // Auto: totalPackage × feePercentage
-  feeType             FeeType         @default(PERCENTAGE)
-
-  // Dates
-  offerDate           DateTime?
-  startDate           DateTime        // Candidate's first day = Invoice date
-  invoiceDate         DateTime        // Same as startDate
-  guaranteeEndDate    DateTime        // Auto: startDate + guaranteePeriod
-
-  // Status
-  status              PlacementStatus @default(ACTIVE)
-  isWithinGuarantee   Boolean         @default(true) // Auto-updated
-
-  // Notes
-  notes               String?
-
-  // Relations
-  submission          CandidateSubmission @relation(fields: [submissionId], references: [id])
-
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-=======
 // ============================================================================
 // PLACEMENT (Successful placements)
 // ============================================================================
@@ -719,7 +313,6 @@ model Placement {
   notes              String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
->>>>>>> Stashed changes
 
   @@index([displayId])
   @@index([status])

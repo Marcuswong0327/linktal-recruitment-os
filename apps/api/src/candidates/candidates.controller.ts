@@ -42,11 +42,7 @@ export class CandidatesController {
   }
 
   @Patch(':id')
-<<<<<<< Updated upstream
-  @ApiOperation({ summary: 'Update candidate' })
-=======
   @ApiOperation({ summary: 'Update a candidate' })
->>>>>>> Stashed changes
   @ApiResponse({ status: 200, description: 'Candidate updated' })
   @ApiResponse({ status: 404, description: 'Candidate not found' })
   update(@Param('id') id: string, @Body() dto: UpdateCandidateDto) {
@@ -55,11 +51,7 @@ export class CandidatesController {
 
   @Delete(':id')
   @HttpCode(204)
-<<<<<<< Updated upstream
-  @ApiOperation({ summary: 'Delete candidate' })
-=======
   @ApiOperation({ summary: 'Delete a candidate' })
->>>>>>> Stashed changes
   @ApiResponse({ status: 204, description: 'Candidate deleted' })
   @ApiResponse({ status: 404, description: 'Candidate not found' })
   remove(@Param('id') id: string) {

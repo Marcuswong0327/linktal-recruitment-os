@@ -1,9 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-<<<<<<< Updated upstream
-import { IsEmail, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-=======
 import { IsEmail, IsEnum, IsInt, IsOptional, IsString, IsUrl, MaxLength, Min, MinLength } from 'class-validator';
->>>>>>> Stashed changes
 import { CandidateStatus } from '@prisma/client';
 
 export class CreateCandidateDto {
@@ -41,10 +37,6 @@ export class CreateCandidateDto {
   @IsString()
   @MaxLength(30)
   mobile?: string;
-<<<<<<< Updated upstream
-
-  @ApiPropertyOptional({ description: 'Country', example: 'Australia' })
-=======
 
   @ApiPropertyOptional({ description: 'Country', example: 'Australia' })
   @IsOptional()
@@ -98,40 +90,12 @@ export class CreateCandidateDto {
   resumeUrl?: string;
 
   @ApiPropertyOptional({ description: 'Status', enum: CandidateStatus, example: 'COLD' })
->>>>>>> Stashed changes
-  @IsOptional()
-  @IsString()
-  country?: string;
-
-  @ApiPropertyOptional({ description: 'City', example: 'Brisbane' })
-  @IsOptional()
-  @IsString()
-  city?: string;
-
-  @ApiPropertyOptional({ description: 'Industry', example: 'Manufacturing' })
-  @IsOptional()
-  @IsString()
-  industry?: string;
-
-<<<<<<< Updated upstream
-  @ApiPropertyOptional({ description: 'Role type', example: 'Production Lead' })
-  @IsOptional()
-  @IsString()
-  roleType?: string;
-
-  @ApiPropertyOptional({ description: 'Current position', example: 'Production Manager' })
-  @IsOptional()
-  @IsString()
-  currentPosition?: string;
-
-  @ApiPropertyOptional({ description: 'Status', enum: CandidateStatus, example: 'COLD' })
   @IsOptional()
   @IsEnum(CandidateStatus)
   status?: CandidateStatus;
-=======
+
   @ApiPropertyOptional({ description: 'Notes' })
   @IsOptional()
   @IsString()
   notes?: string;
->>>>>>> Stashed changes
 }

@@ -10,11 +10,7 @@ export default defineConfig({
       target: './src/lib/api/generated',
       schemas: './src/lib/api/generated/types',
       client: 'react-query',
-<<<<<<< Updated upstream
-      baseUrl: 'http://localhost:3001/api',
-=======
       baseUrl: 'http://localhost:3001',
->>>>>>> Stashed changes
       override: {
         query: {
           useQuery: true,
