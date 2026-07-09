@@ -4,6 +4,10 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
+  // This will cause a TypeScript error - intentional for testing CI
+  const deliberateTypeError: number = "this is a string, not a number";
+  console.log(deliberateTypeError);
+
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
 
