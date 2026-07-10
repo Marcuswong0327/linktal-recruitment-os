@@ -1,5 +1,5 @@
 // Prisma schema — https://pris.ly/d/prisma-schema
-// Datasource: PostgreSQL on Neon.
+// Datasource: PostgreSQL on Neon with Neon Auth
 
 generator client {
   provider = "prisma-client-js"
@@ -11,24 +11,311 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-enum CandidateStatus {
-  APPLIED
-  SCREENING
-  INTERVIEW
-  OFFER
-  HIRED
-  REJECTED
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
 }
 
-model Candidate {
-  id        String          @id @default(cuid())
-  name      String
-  email     String          @unique
-  role      String
-  status    CandidateStatus @default(APPLIED)
-  notes     String?
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
+enum ClientStatus {
+  COLD
+  WARM
+  TRADED
+}
+
+enum CandidateStatus {
+  COLD
+  WARM
+  HOT
+  PLACED
+}
+
+enum JobOrderStatus {
+  ACTIVE
+  PLACED
+  CLOSED
+  ON_HOLD
+}
+
+enum SubmissionStatus {
+  SUBMITTED
+  INTERVIEWING
+  REJECTED
+  PLACED
+}
+
+enum PlacementStatus {
+  ACTIVE
+  COMPLETED
+  FAILED
+}
+
+// ============================================================================
+// RBAC TABLES
+// ============================================================================
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique // admin, manager, consultant, finance, researcher, viewer
+  description String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  permissions RolePermission[]
+  consultants Consultant[]
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  resource    String // candidates, clients, jobOrders, etc.
+  action      String // create, read, update, delete
+  description String?
+  createdAt   DateTime         @default(now())
+  roles       RolePermission[]
+
+  @@unique([resource, action])
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+// ============================================================================
+// CONSULTANT (Recruiter profile)
+// ============================================================================
+
+model Consultant {
+  id          String     @id @default(cuid())
+  displayId   String     @unique // Format: "consultant-XXXX"
+  neonUserId  String?    @unique // Neon Auth user ID
+  email       String     @unique
+  fullName    String
+  roleId      String?
+  role        Role?      @relation(fields: [roleId], references: [id])
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  clients     Client[]
+  jobOrders   JobOrder[]
+}
+
+// ============================================================================
+// CLIENT (Companies hiring)
+// ============================================================================
+
+model Client {
+  id              String                @id @default(cuid())
+  displayId       String                @unique // Format: "Client-XXXX"
+  companyName     String
+  industry        String?
+  country         String?
+  city            String?
+  website         String?
+  tobSigned       Boolean               @default(false) // Terms of Business signed
+  feePercentage   Float?                @default(15) // Fee as percentage of package
+  guaranteePeriod Int                   @default(90) // Guarantee period in days
+  status          ClientStatus          @default(COLD)
+  notes           String?
+  consultantId    String?
+  consultant      Consultant?           @relation(fields: [consultantId], references: [id])
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  stakeholders    Stakeholder[]
+  jobResearch     ClientJobResearch[]
+  jobOrders       JobOrder[]
 
   @@index([status])
+  @@index([consultantId])
+}
+
+// ============================================================================
+// STAKEHOLDER (Contacts at client companies)
+// ============================================================================
+
+model Stakeholder {
+  id             String                      @id @default(cuid())
+  displayId      String                      @unique // Format: "Stake-XXXX"
+  clientId       String
+  client         Client                      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  fullName       String
+  jobTitle       String?
+  email          String?
+  mobile         String?
+  isDecisionMaker Boolean                    @default(false)
+  notes          String?
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+  contactHistory StakeholderContactHistory[]
+
+  @@index([clientId])
+}
+
+model StakeholderContactHistory {
+  id            String      @id @default(cuid())
+  stakeholderId String
+  stakeholder   Stakeholder @relation(fields: [stakeholderId], references: [id], onDelete: Cascade)
+  contactType   String // email, call, meeting, linkedin
+  notes         String?
+  contactedAt   DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+
+  @@index([stakeholderId])
+}
+
+// ============================================================================
+// CLIENT JOB RESEARCH (Job openings research)
+// ============================================================================
+
+model ClientJobResearch {
+  id              String   @id @default(cuid())
+  clientId        String
+  client          Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  jobTitle        String
+  sourceUrl       String?
+  salaryRange     String?
+  notes           String?
+  isContacted     Boolean  @default(false)
+  researchedAt    DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([clientId])
+}
+
+// ============================================================================
+// CANDIDATE (Job seekers)
+// ============================================================================
+
+model Candidate {
+  id              String                      @id @default(cuid())
+  displayId       String                      @unique // Format: "CDD-XXXX"
+  fullName        String
+  givenName       String?
+  familyName      String?
+  email           String?
+  mobile          String?
+  country         String?
+  city            String?
+  industry        String?
+  roleType        String?
+  currentPosition String?
+  currentCompany  String?
+  yearsExperience Int?
+  salaryExpectation String?
+  linkedinUrl     String?
+  resumeUrl       String?
+  workHistory     Json?                       // JSONB: [{company, role, startDate, endDate}]
+  specializations Json?                       // JSONB: ["string"]
+  status          CandidateStatus             @default(COLD)
+  notes           String?
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+  screeningHistory CandidateScreeningHistory[]
+  submissions     CandidateSubmission[]
+
+  @@index([status])
+  @@index([email])
+}
+
+model CandidateScreeningHistory {
+  id          String    @id @default(cuid())
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  notes       Json?     // JSONB: [{text, createdAt}]
+  screenedAt  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+
+  @@index([candidateId])
+}
+
+// ============================================================================
+// JOB ORDER (Open positions)
+// ============================================================================
+
+model JobOrder {
+  id               String                @id @default(cuid())
+  displayId        String?               @unique // Format: auto-generated or custom
+  clientId         String
+  client           Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  consultantId     String?
+  consultant       Consultant?           @relation(fields: [consultantId], references: [id])
+  jobTitle         String
+  department       String?
+  location         String?
+  jobType          String?               // Full-time, Part-time, Contract
+  salaryMin        Float?
+  salaryMax        Float?
+  salaryCurrency   String?               @default("AUD")
+  openings         Int                   @default(1)
+  filledCount      Int                   @default(0)
+  description      String?
+  requirements     String?
+  status           JobOrderStatus        @default(ACTIVE)
+  priorityLevel    Int?                  @default(2) // 1=High, 2=Medium, 3=Low
+  receivedAt       DateTime              @default(now())
+  closedAt         DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  submissions      CandidateSubmission[]
+
+  @@index([clientId])
+  @@index([consultantId])
+  @@index([status])
+}
+
+// ============================================================================
+// CANDIDATE SUBMISSION (Submissions to jobs)
+// ============================================================================
+
+model CandidateSubmission {
+  id          String           @id @default(cuid())
+  candidateId String
+  candidate   Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  jobOrderId  String
+  jobOrder    JobOrder         @relation(fields: [jobOrderId], references: [id], onDelete: Cascade)
+  status      SubmissionStatus @default(SUBMITTED)
+  submittedAt DateTime         @default(now())
+  notes       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  placement   Placement?
+
+  @@unique([candidateId, jobOrderId])
+  @@index([candidateId])
+  @@index([jobOrderId])
+  @@index([status])
+}
+
+// ============================================================================
+// PLACEMENT (Successful placements)
+// ============================================================================
+
+model Placement {
+  id                 String              @id @default(cuid())
+  displayId          String?             @unique // Format: "PLC-XXXX"
+  submissionId       String              @unique
+  submission         CandidateSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  salary             Float?
+  startDate          DateTime?
+  guaranteeEndDate   DateTime?           // Auto-calculated: startDate + client.guaranteePeriod
+  fee                Float?
+  feePercentage      Float?
+  status             PlacementStatus     @default(ACTIVE)
+  notes              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([displayId])
+  @@index([status])
+  @@index([startDate])
+  @@index([guaranteeEndDate])
 }

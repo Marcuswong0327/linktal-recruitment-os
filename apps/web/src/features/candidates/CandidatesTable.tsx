@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,13 +18,18 @@ import {
 import { DataGrid, type DataGridFilter } from '@/components/DataGrid';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
-import { candidateColumns } from './columns';
-import { mockCandidates } from './mock';
+import {
+  useGetCandidates,
+  useUpdateCandidate,
+  getGetCandidatesQueryKey,
+} from '@/lib/api/generated/candidates/candidates';
+import type { UpdateCandidateDto } from '@/lib/api/generated/types';
 import {
   type Candidate,
   candidateStatuses,
   candidateStatusLabels,
 } from './schema';
+import { candidateColumns } from './columns';
 
 const statusOptions = candidateStatuses.map((value) => ({
   value,
@@ -35,16 +41,38 @@ const candidateFilters: DataGridFilter[] = [
 ];
 
 export function CandidatesTable() {
-  const [candidates, setCandidates] =
-    React.useState<Candidate[]>(mockCandidates);
+  const queryClient = useQueryClient();
+  const { data, isLoading, isError, error } = useGetCandidates();
   const [editing, setEditing] = React.useState<Candidate | null>(null);
 
-  function handleSave(updated: Candidate) {
-    setCandidates((prev) =>
-      prev.map((c) => (c.id === updated.id ? updated : c)),
+  const updateCandidate = useUpdateCandidate({
+    mutation: {
+      onSuccess: (_result, { data: patch }) => {
+        queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
+        setEditing(null);
+        toast.success(`Saved changes to ${patch.fullName ?? 'candidate'}`);
+      },
+      onError: (err) => {
+        toast.error(err.message || 'Failed to save candidate');
+      },
+    },
+  });
+
+  // customFetch throws on non-2xx, so a resolved query is always the 200
+  // envelope; the guard is for TypeScript's discriminated union.
+  const candidates = data?.status === 200 ? data.data.data : [];
+
+  function handleSave(patch: UpdateCandidateDto) {
+    if (!editing) return;
+    updateCandidate.mutate({ id: editing.id, data: patch });
+  }
+
+  if (isError) {
+    return (
+      <p className="text-sm text-destructive">
+        Failed to load candidates: {error?.message ?? 'Unknown error'}
+      </p>
     );
-    setEditing(null);
-    toast.success(`Saved changes to ${updated.name}`);
   }
 
   return (
@@ -52,6 +80,7 @@ export function CandidatesTable() {
       <DataGrid
         columns={candidateColumns}
         data={candidates}
+        isLoading={isLoading}
         searchPlaceholder="Search candidates…"
         filters={candidateFilters}
         onRowClick={setEditing}
@@ -73,6 +102,7 @@ export function CandidatesTable() {
             <EditCandidateForm
               key={editing.id}
               candidate={editing}
+              saving={updateCandidate.isPending}
               onSave={handleSave}
               onCancel={() => setEditing(null)}
             />
@@ -85,58 +115,66 @@ export function CandidatesTable() {
 
 function EditCandidateForm({
   candidate,
+  saving,
   onSave,
   onCancel,
 }: {
   candidate: Candidate;
-  onSave: (candidate: Candidate) => void;
+  saving: boolean;
+  onSave: (patch: UpdateCandidateDto) => void;
   onCancel: () => void;
 }) {
-  const [name, setName] = React.useState(candidate.name);
-  const [email, setEmail] = React.useState(candidate.email);
-  const [role, setRole] = React.useState(candidate.role);
+  const [fullName, setFullName] = React.useState(candidate.fullName);
+  const [email, setEmail] = React.useState(candidate.email ?? '');
+  const [mobile, setMobile] = React.useState(candidate.mobile ?? '');
+  const [currentPosition, setCurrentPosition] = React.useState(
+    candidate.currentPosition ?? '',
+  );
   const [currentCompany, setCurrentCompany] = React.useState(
-    candidate.currentCompany,
+    candidate.currentCompany ?? '',
   );
-  const [location, setLocation] = React.useState(candidate.location);
-  const [status, setStatus] = React.useState(candidate.status);
-  const [expectedSalary, setExpectedSalary] = React.useState(
-    String(candidate.expectedSalary),
+  const [city, setCity] = React.useState(candidate.city ?? '');
+  const [status, setStatus] = React.useState<Candidate['status']>(
+    candidate.status,
   );
-  const [noticePeriodDays, setNoticePeriodDays] = React.useState(
-    String(candidate.noticePeriodDays),
+  const [salaryExpectation, setSalaryExpectation] = React.useState(
+    candidate.salaryExpectation ?? '',
   );
-  const [owner, setOwner] = React.useState(candidate.owner);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    onSave({
-      ...candidate,
-      name,
-      email,
-      role,
-      currentCompany,
-      location,
-      status,
-      expectedSalary: Number(expectedSalary) || 0,
-      noticePeriodDays: Number(noticePeriodDays) || 0,
-      owner,
-    });
+    // PATCH semantics: drop empty strings instead of sending "" to nullable
+    // API fields (the DTO has no way to express clearing a field).
+    const patch = Object.fromEntries(
+      Object.entries({
+        fullName,
+        email,
+        mobile,
+        currentPosition,
+        currentCompany,
+        city,
+        status,
+        salaryExpectation,
+      }).filter(([, value]) => value !== ''),
+    ) as UpdateCandidateDto;
+    onSave(patch);
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex h-full flex-col">
       <SheetHeader>
         <SheetTitle>Edit candidate</SheetTitle>
-        <SheetDescription>Update {candidate.name}’s profile.</SheetDescription>
+        <SheetDescription>
+          Update {candidate.fullName}’s profile.
+        </SheetDescription>
       </SheetHeader>
 
       <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
         <FormField label="Name" htmlFor="candidate-name">
           <Input
             id="candidate-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
           />
         </FormField>
         <FormField label="Email" htmlFor="candidate-email">
@@ -147,11 +185,18 @@ function EditCandidateForm({
             onChange={(e) => setEmail(e.target.value)}
           />
         </FormField>
-        <FormField label="Current title" htmlFor="candidate-role">
+        <FormField label="Mobile" htmlFor="candidate-mobile">
           <Input
-            id="candidate-role"
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
+            id="candidate-mobile"
+            value={mobile}
+            onChange={(e) => setMobile(e.target.value)}
+          />
+        </FormField>
+        <FormField label="Current title" htmlFor="candidate-position">
+          <Input
+            id="candidate-position"
+            value={currentPosition}
+            onChange={(e) => setCurrentPosition(e.target.value)}
           />
         </FormField>
         <FormField label="Current company" htmlFor="candidate-company">
@@ -161,11 +206,11 @@ function EditCandidateForm({
             onChange={(e) => setCurrentCompany(e.target.value)}
           />
         </FormField>
-        <FormField label="Location" htmlFor="candidate-location">
+        <FormField label="City" htmlFor="candidate-city">
           <Input
-            id="candidate-location"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
+            id="candidate-city"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
           />
         </FormField>
         <FormField label="Status" htmlFor="candidate-status">
@@ -179,24 +224,8 @@ function EditCandidateForm({
         <FormField label="Expected salary" htmlFor="candidate-salary">
           <Input
             id="candidate-salary"
-            type="number"
-            value={expectedSalary}
-            onChange={(e) => setExpectedSalary(e.target.value)}
-          />
-        </FormField>
-        <FormField label="Notice period (days)" htmlFor="candidate-notice">
-          <Input
-            id="candidate-notice"
-            type="number"
-            value={noticePeriodDays}
-            onChange={(e) => setNoticePeriodDays(e.target.value)}
-          />
-        </FormField>
-        <FormField label="Owner" htmlFor="candidate-owner">
-          <Input
-            id="candidate-owner"
-            value={owner}
-            onChange={(e) => setOwner(e.target.value)}
+            value={salaryExpectation}
+            onChange={(e) => setSalaryExpectation(e.target.value)}
           />
         </FormField>
       </div>
@@ -205,8 +234,8 @@ function EditCandidateForm({
         <Button type="button" variant="outline" size="lg" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" size="lg">
-          Save changes
+        <Button type="submit" size="lg" disabled={saving}>
+          {saving ? 'Saving…' : 'Save changes'}
         </Button>
       </SheetFooter>
     </form>

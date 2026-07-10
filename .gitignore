@@ -34,3 +34,7 @@ pnpm-debug.log*
 
 # coverage
 coverage/
+
+# recruitment source data — contains real candidate/client PII, never commit.
+# Files live in apps/api/data/ locally; see apps/api/data/README.md.
+apps/api/data/*.xlsx

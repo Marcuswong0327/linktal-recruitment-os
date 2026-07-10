@@ -18,59 +18,68 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-const salaryFormatter = new Intl.NumberFormat('en-SG', {
-  style: 'currency',
-  currency: 'SGD',
-  maximumFractionDigits: 0,
-});
-
 type CandidateStatus = (typeof candidateStatuses)[number];
 
 const statusVariant: Record<
   CandidateStatus,
   'muted' | 'info' | 'warning' | 'default' | 'success' | 'destructive'
 > = {
-  APPLIED: 'muted',
-  SCREENING: 'info',
-  INTERVIEW: 'warning',
-  OFFER: 'default',
-  HIRED: 'success',
-  REJECTED: 'destructive',
+  COLD: 'muted',
+  WARM: 'warning',
+  HOT: 'destructive',
+  PLACED: 'success',
 };
+
+function MutedCell({ value }: { value: string | null }) {
+  return <span className="text-muted-foreground">{value || '—'}</span>;
+}
 
 export const candidateColumns: ColumnDef<Candidate>[] = [
   {
-    accessorKey: 'name',
+    accessorKey: 'displayId',
+    header: 'ID',
+    cell: ({ row }) => (
+      <span className="font-mono text-xs text-muted-foreground">
+        {row.original.displayId}
+      </span>
+    ),
+  },
+  {
+    accessorKey: 'fullName',
     header: 'Name',
     cell: ({ row }) => {
       const candidate = row.original;
       return (
         <div className="flex items-center gap-2.5">
           <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
-            {initials(candidate.name)}
+            {initials(candidate.fullName)}
           </span>
-          <span className="font-medium text-foreground">{candidate.name}</span>
+          <span className="font-medium text-foreground">
+            {candidate.fullName}
+          </span>
         </div>
       );
     },
   },
   {
-    accessorKey: 'role',
+    accessorKey: 'currentPosition',
     header: 'Current Title',
-    cell: ({ row }) => <span>{row.original.role}</span>,
+    cell: ({ row }) => <MutedCell value={row.original.currentPosition} />,
   },
   {
     accessorKey: 'currentCompany',
     header: 'Company',
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">{row.original.currentCompany}</span>
-    ),
+    cell: ({ row }) => <MutedCell value={row.original.currentCompany} />,
   },
   {
-    accessorKey: 'location',
+    accessorKey: 'city',
     header: 'Location',
     cell: ({ row }) => (
-      <span className="text-muted-foreground">{row.original.location}</span>
+      <MutedCell
+        value={[row.original.city, row.original.country]
+          .filter(Boolean)
+          .join(', ')}
+      />
     ),
   },
   {
@@ -83,26 +92,23 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     ),
   },
   {
-    accessorKey: 'expectedSalary',
+    accessorKey: 'salaryExpectation',
     header: 'Expected',
     cell: ({ row }) => (
       <span className="tabular-nums">
-        {salaryFormatter.format(row.original.expectedSalary)}
+        {row.original.salaryExpectation || '—'}
       </span>
     ),
   },
   {
-    accessorKey: 'noticePeriodDays',
-    header: 'Notice',
+    accessorKey: 'yearsExperience',
+    header: 'Experience',
     cell: ({ row }) => (
-      <span className="tabular-nums">{row.original.noticePeriodDays} days</span>
-    ),
-  },
-  {
-    accessorKey: 'owner',
-    header: 'Owner',
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">{row.original.owner}</span>
+      <span className="tabular-nums">
+        {row.original.yearsExperience != null
+          ? `${row.original.yearsExperience} yrs`
+          : '—'}
+      </span>
     ),
   },
 ];

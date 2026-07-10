@@ -1,51 +1,44 @@
 import { z } from 'zod';
+import { CreateCandidateDtoStatus } from '@/lib/api/generated/types';
+import type { CandidateEntity } from '@/lib/api/generated/types';
 
-export const candidateStatuses = [
-  'APPLIED',
-  'SCREENING',
-  'INTERVIEW',
-  'OFFER',
-  'HIRED',
-  'REJECTED',
-] as const;
+// Types come straight from the generated API client, which is derived from the
+// Prisma schema — the single source of truth. Don't hand-maintain shapes here.
+export type Candidate = CandidateEntity;
 
-export const createCandidateSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters').max(120),
-  email: z.string().email('Enter a valid email address'),
-  role: z.string().min(2, 'Role is required').max(120),
-  status: z.enum(candidateStatuses).default('APPLIED'),
-  notes: z.string().max(2000).optional(),
-});
-
-export type CreateCandidateInput = z.infer<typeof createCandidateSchema>;
+export const candidateStatuses = Object.values(CreateCandidateDtoStatus);
 
 export const candidateStatusLabels: Record<
   (typeof candidateStatuses)[number],
   string
 > = {
-  APPLIED: 'Applied',
-  SCREENING: 'Screening',
-  INTERVIEW: 'Interview',
-  OFFER: 'Offer',
-  HIRED: 'Hired',
-  REJECTED: 'Rejected',
+  COLD: 'Cold',
+  WARM: 'Warm',
+  HOT: 'Hot',
+  PLACED: 'Placed',
 };
 
-export type Candidate = {
-  id: string;
-  name: string;
-  email: string;
-  /** Current job title. */
-  role: string;
-  currentCompany: string;
-  location: string;
-  status: (typeof candidateStatuses)[number];
-  /** Expected annual salary. */
-  expectedSalary: number;
-  noticePeriodDays: number;
-  /** Consultant who owns this candidate. */
-  owner: string;
-  notes: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
+// Client-side validation for the create form. Fields and the status enum mirror
+// CreateCandidateDto; the parsed output is assignable to it.
+export const createCandidateSchema = z.object({
+  displayId: z
+    .string()
+    .min(2, 'Display ID is required')
+    .max(20),
+  fullName: z
+    .string()
+    .min(2, 'Name must be at least 2 characters')
+    .max(120),
+  email: z
+    .string()
+    .email('Enter a valid email address')
+    .max(255)
+    .optional()
+    .or(z.literal('')),
+  mobile: z.string().max(30).optional(),
+  currentPosition: z.string().max(120).optional(),
+  status: z.nativeEnum(CreateCandidateDtoStatus),
+  notes: z.string().max(2000).optional(),
+});
+
+export type CreateCandidateInput = z.infer<typeof createCandidateSchema>;
