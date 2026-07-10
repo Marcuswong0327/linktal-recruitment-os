@@ -39,12 +39,6 @@ export class WorkHistoryItemDto {
 }
 
 export class CreateCandidateDto {
-  @ApiProperty({ description: 'Display ID', example: 'CDD-0001' })
-  @IsString()
-  @MinLength(2)
-  @MaxLength(20)
-  displayId!: string;
-
   @ApiProperty({ description: 'Full name', example: 'John Smith' })
   @IsString()
   @MinLength(2)

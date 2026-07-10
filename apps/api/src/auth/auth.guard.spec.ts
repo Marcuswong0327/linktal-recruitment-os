@@ -1,4 +1,4 @@
-import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from './auth.decorators';
 import { AuthGuard } from './auth.guard';
@@ -51,6 +51,7 @@ describe('AuthGuard', () => {
       email: 'a@b.com',
       fullName: 'A B',
       roleName: 'viewer',
+      isActive: true,
       permissions: new Set(['candidate:read']),
     } as AuthUser;
     const guard = makeGuard({
@@ -61,6 +62,25 @@ describe('AuthGuard', () => {
     const ctx = contextFor({ authorization: 'Bearer abc.def.ghi' });
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
     expect(ctx.switchToHttp().getRequest().user).toBe(user);
+  });
+
+  it('rejects a deactivated (isActive=false) account despite a valid token', async () => {
+    const guard = makeGuard({
+      verify: async () => ({ sub: 'u1', email: 'a@b.com' }),
+      resolve: async () =>
+        ({
+          consultantId: 'c1',
+          neonUserId: 'u1',
+          email: 'a@b.com',
+          fullName: 'A B',
+          roleName: 'viewer',
+          isActive: false,
+          permissions: new Set<string>(),
+        }) as AuthUser,
+    });
+    await expect(
+      guard.canActivate(contextFor({ authorization: 'Bearer abc.def.ghi' })),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it('rejects a non-bearer authorization scheme', async () => {

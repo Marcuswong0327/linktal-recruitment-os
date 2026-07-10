@@ -266,9 +266,61 @@ step individually reversible.
   current data size.)
 - **Neon uses a pooled + a direct URL.** Migrations need `DIRECT_URL`
   (unpooled); the schema's `directUrl` is already configured for this.
-- **One shared dev DB.** History drift on it affects everyone — see the history
-  in git for the July 2026 baseline reconciliation for how to fix drift with
-  `migrate resolve` + `migrate diff` without dropping data.
+- **One shared dev DB.** History drift on it affects everyone — see §7 for the
+  July 2026 baseline squash, which fixed drift with `migrate resolve` +
+  `migrate diff` without dropping data.
+
+---
+
+## 7. Squashing / baselining history (July 2026)
+
+**What happened:** the migrations folder had drifted from the database. The only
+migration on record (`20260708160230_init_with_display_ids`) replayed to an
+**older** shape than `schema.prisma` — the `Stakeholder` / `StakeholderContactHistory`
+models had been reshaped and money fields changed `Decimal → Float` via an
+out-of-band `db push`, so those edits were live in the DB but never captured as a
+migration. Result: `migrate dev` shadow-replayed the old migration, saw the
+mismatch, and demanded a **full database reset** ("All data will be lost") on
+every run — even though the live DB actually matched `schema.prisma`.
+
+**Fix (data-preserving squash):** the history was collapsed into a single
+baseline that reproduces the current schema, then marked as already-applied:
+
+```bash
+cd apps/api
+
+# 1. Generate a baseline that recreates the whole current schema from empty
+npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma \
+  --script > prisma/migrations/0_init/migration.sql
+
+# 2. Remove the old, out-of-sync migration folders (keep migration_lock.toml)
+#    rm -rf prisma/migrations/<old_ts>_*
+
+# 3. Clear Prisma's bookkeeping table ONLY — no real data is touched
+echo 'DELETE FROM "_prisma_migrations";' > /tmp/clear.sql
+npx prisma db execute --file /tmp/clear.sql --schema prisma/schema.prisma
+
+# 4. Record the baseline as already-applied against the live DB
+npx prisma migrate resolve --applied 0_init
+```
+
+Verified afterwards: `migrate status` → "up to date", `migrate dev` → "Already in
+sync", and row counts unchanged (100 clients / 132 stakeholders / 68 job orders /
+103 candidates). Going forward `migrate dev` generates clean incremental
+migrations with no drift warnings.
+
+> ⚠️ **This squash rewrote history: `init_with_display_ids` no longer exists.**
+> - **Fresh database** (new clone, new environment, CI ephemeral DB): nothing to
+>   do — `migrate deploy` just runs `0_init` from scratch.
+> - **Existing database** (another dev DB, a personal clone, prod) that already
+>   had the old migration applied: do **not** run `migrate deploy` — it will try
+>   to re-run `0_init` on tables that already exist and fail. Instead re-baseline
+>   it the same way: clear its `_prisma_migrations` rows for the old migration(s)
+>   and run `npx prisma migrate resolve --applied 0_init`. Only then are future
+>   `migrate deploy`s safe.
+>
+> Because a squash is disruptive to anyone with an existing DB, avoid repeating
+> it — prefer normal incremental migrations from here on.
 
 ---
 

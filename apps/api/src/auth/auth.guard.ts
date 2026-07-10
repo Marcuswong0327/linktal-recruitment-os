@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -40,7 +41,18 @@ export class AuthGuard implements CanActivate {
     }
 
     const claims = await this.verifier.verify(token);
-    request.user = await this.rbac.resolveUser(claims);
+    const user = await this.rbac.resolveUser(claims);
+
+    // Deactivated accounts are blocked even with a valid token — this is how
+    // access is revoked (deleting a consultant only re-provisions them).
+    if (!user.isActive) {
+      throw new ForbiddenException({
+        code: 'ACCOUNT_INACTIVE',
+        message: 'This account has been deactivated.',
+      });
+    }
+
+    request.user = user;
     return true;
   }
 

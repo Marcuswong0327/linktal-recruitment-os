@@ -1,9 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser, TokenClaims } from './auth.types';
-
-const DISPLAY_ID_PREFIX = 'consultant-';
 
 // Role for brand-new users (unmatched email → freshly created).
 const DEFAULT_ROLE = 'viewer';
@@ -21,6 +18,7 @@ type ConsultantWithRole = {
   neonUserId: string | null;
   email: string;
   fullName: string;
+  isActive: boolean;
   role: {
     name: string;
     permissions: { permission: { resource: string; action: string } }[];
@@ -73,26 +71,16 @@ export class RbacService {
       }
     }
 
-    const data = {
-      neonUserId: claims.sub,
-      email: claims.email ?? `${claims.sub}@users.noreply.local`,
-      fullName: claims.name ?? claims.email ?? 'New User',
-      roleId: (await this.roleByName(DEFAULT_ROLE))?.id,
-    };
-
-    // Assign the next sequential displayId (consultant-0001, -0002, …). Retry on
-    // the rare collision when two first-time sign-ins race for the same number.
-    for (let attempt = 0; ; attempt++) {
-      try {
-        return await this.prisma.consultant.create({
-          data: { ...data, displayId: await this.nextDisplayId() },
-          include: withRole,
-        });
-      } catch (err) {
-        if (attempt < 5 && this.isDisplayIdConflict(err)) continue;
-        throw err;
-      }
-    }
+    // displayId is assigned by the DB (Consultant_displayId_seq default).
+    return this.prisma.consultant.create({
+      data: {
+        neonUserId: claims.sub,
+        email: claims.email ?? `${claims.sub}@users.noreply.local`,
+        fullName: claims.name ?? claims.email ?? 'New User',
+        roleId: (await this.roleByName(DEFAULT_ROLE))?.id,
+      },
+      include: withRole,
+    });
   }
 
   private async roleByName(name: string) {
@@ -101,27 +89,6 @@ export class RbacService {
       this.logger.error(`Role "${name}" not found — run the RBAC seed.`);
     }
     return role;
-  }
-
-  /** Next `consultant-XXXX` id: max existing number + 1, zero-padded to 4. */
-  private async nextDisplayId(): Promise<string> {
-    const rows = await this.prisma.consultant.findMany({
-      where: { displayId: { startsWith: DISPLAY_ID_PREFIX } },
-      select: { displayId: true },
-    });
-    const max = rows.reduce((m, { displayId }) => {
-      const n = Number.parseInt(displayId.slice(DISPLAY_ID_PREFIX.length), 10);
-      return Number.isFinite(n) && n > m ? n : m;
-    }, 0);
-    return `${DISPLAY_ID_PREFIX}${String(max + 1).padStart(4, '0')}`;
-  }
-
-  private isDisplayIdConflict(err: unknown): boolean {
-    return (
-      err instanceof Prisma.PrismaClientKnownRequestError &&
-      err.code === 'P2002' &&
-      (err.meta?.target as string[] | undefined)?.includes('displayId') === true
-    );
   }
 
   private toAuthUser(consultant: ConsultantWithRole): AuthUser {
@@ -137,6 +104,7 @@ export class RbacService {
       email: consultant.email,
       fullName: consultant.fullName,
       roleName: consultant.role?.name ?? null,
+      isActive: consultant.isActive,
       permissions,
     };
   }

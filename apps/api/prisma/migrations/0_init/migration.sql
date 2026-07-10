@@ -1,3 +1,9 @@
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
+
+-- CreateEnum
+CREATE TYPE "UserStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'SUSPENDED');
+
 -- CreateEnum
 CREATE TYPE "ClientStatus" AS ENUM ('COLD', 'WARM', 'TRADED');
 
@@ -12,12 +18,6 @@ CREATE TYPE "SubmissionStatus" AS ENUM ('SUBMITTED', 'INTERVIEWING', 'REJECTED',
 
 -- CreateEnum
 CREATE TYPE "PlacementStatus" AS ENUM ('ACTIVE', 'COMPLETED', 'FAILED');
-
--- CreateEnum
-CREATE TYPE "FeeType" AS ENUM ('PERCENTAGE', 'FLAT');
-
--- CreateEnum
-CREATE TYPE "ContactMethod" AS ENUM ('PHONE', 'EMAIL', 'WHATSAPP', 'LINKEDIN', 'IN_PERSON');
 
 -- CreateTable
 CREATE TABLE "Role" (
@@ -37,7 +37,6 @@ CREATE TABLE "Permission" (
     "action" TEXT NOT NULL,
     "description" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Permission_pkey" PRIMARY KEY ("id")
 );
@@ -55,9 +54,11 @@ CREATE TABLE "RolePermission" (
 CREATE TABLE "Consultant" (
     "id" TEXT NOT NULL,
     "displayId" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "displayName" TEXT NOT NULL,
-    "phone" TEXT,
+    "neonUserId" TEXT,
+    "email" TEXT NOT NULL,
+    "fullName" TEXT NOT NULL,
+    "roleId" TEXT,
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -69,19 +70,15 @@ CREATE TABLE "Client" (
     "id" TEXT NOT NULL,
     "displayId" TEXT NOT NULL,
     "companyName" TEXT NOT NULL,
-    "country" TEXT,
     "industry" TEXT,
+    "country" TEXT,
     "city" TEXT,
-    "suburb" TEXT,
-    "specializations" JSONB,
     "website" TEXT,
-    "linkedInUrl" TEXT,
-    "feePercentage" DECIMAL(5,2),
-    "feeSchedule" TEXT,
+    "tobSigned" BOOLEAN NOT NULL DEFAULT false,
+    "feePercentage" DOUBLE PRECISION,
     "guaranteePeriod" INTEGER NOT NULL DEFAULT 90,
     "status" "ClientStatus" NOT NULL DEFAULT 'COLD',
-    "latestContactDate" TIMESTAMP(3),
-    "latestContactBy" TEXT,
+    "notes" TEXT,
     "consultantId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -95,14 +92,11 @@ CREATE TABLE "Stakeholder" (
     "displayId" TEXT NOT NULL,
     "clientId" TEXT NOT NULL,
     "fullName" TEXT NOT NULL,
-    "givenName" TEXT,
-    "familyName" TEXT,
     "jobTitle" TEXT,
     "email" TEXT,
     "mobile" TEXT,
-    "linkedInUrl" TEXT,
-    "status" TEXT NOT NULL DEFAULT 'Cold',
-    "lastContactDate" TIMESTAMP(3),
+    "isDecisionMaker" BOOLEAN NOT NULL DEFAULT false,
+    "notes" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -113,12 +107,9 @@ CREATE TABLE "Stakeholder" (
 CREATE TABLE "StakeholderContactHistory" (
     "id" TEXT NOT NULL,
     "stakeholderId" TEXT NOT NULL,
-    "contactDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "contactMethod" "ContactMethod" NOT NULL,
+    "contactType" TEXT NOT NULL,
     "notes" TEXT,
-    "outcome" TEXT,
-    "followUpDate" TIMESTAMP(3),
-    "contactedBy" TEXT,
+    "contactedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "StakeholderContactHistory_pkey" PRIMARY KEY ("id")
@@ -129,13 +120,11 @@ CREATE TABLE "ClientJobResearch" (
     "id" TEXT NOT NULL,
     "clientId" TEXT NOT NULL,
     "jobTitle" TEXT NOT NULL,
-    "jobDescription" TEXT,
-    "salaryRange" TEXT,
-    "location" TEXT,
     "sourceUrl" TEXT,
-    "sourceType" TEXT,
-    "status" TEXT NOT NULL DEFAULT 'Prospect',
+    "salaryRange" TEXT,
     "notes" TEXT,
+    "isContacted" BOOLEAN NOT NULL DEFAULT false,
+    "researchedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -151,23 +140,20 @@ CREATE TABLE "Candidate" (
     "familyName" TEXT,
     "email" TEXT,
     "mobile" TEXT,
-    "linkedInUrl" TEXT,
-    "seekTalentUrl" TEXT,
     "country" TEXT,
     "city" TEXT,
-    "suburb" TEXT,
     "industry" TEXT,
     "roleType" TEXT,
     "currentPosition" TEXT,
-    "specializations" JSONB,
+    "currentCompany" TEXT,
+    "yearsExperience" INTEGER,
+    "salaryExpectation" TEXT,
+    "linkedinUrl" TEXT,
+    "resumeUrl" TEXT,
     "workHistory" JSONB,
-    "rawResumeUrl" TEXT,
-    "editedResumeUrl" TEXT,
+    "specializations" JSONB,
     "status" "CandidateStatus" NOT NULL DEFAULT 'COLD',
-    "contactedBy" TEXT,
-    "lastScreenedAt" TIMESTAMP(3),
-    "placedAt" TIMESTAMP(3),
-    "consultantId" TEXT,
+    "notes" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -178,15 +164,8 @@ CREATE TABLE "Candidate" (
 CREATE TABLE "CandidateScreeningHistory" (
     "id" TEXT NOT NULL,
     "candidateId" TEXT NOT NULL,
-    "screenedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "screenedBy" TEXT,
     "notes" JSONB,
-    "outcome" TEXT,
-    "salaryExpectation" DECIMAL(12,2),
-    "noticePeriod" TEXT,
-    "availableFrom" TIMESTAMP(3),
-    "willingToRelocate" BOOLEAN,
-    "consultantId" TEXT,
+    "screenedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "CandidateScreeningHistory_pkey" PRIMARY KEY ("id")
@@ -197,21 +176,22 @@ CREATE TABLE "JobOrder" (
     "id" TEXT NOT NULL,
     "displayId" TEXT NOT NULL,
     "clientId" TEXT NOT NULL,
-    "clientJobResearchId" TEXT,
-    "consultantId" TEXT NOT NULL,
+    "consultantId" TEXT,
     "jobTitle" TEXT NOT NULL,
-    "jobDescription" TEXT,
+    "department" TEXT,
     "location" TEXT,
-    "roleType" TEXT,
-    "salaryMin" DECIMAL(12,2),
-    "salaryMax" DECIMAL(12,2),
-    "salaryCurrency" TEXT NOT NULL DEFAULT 'AUD',
-    "numberOfOpenings" INTEGER NOT NULL DEFAULT 1,
-    "placedCount" INTEGER NOT NULL DEFAULT 0,
+    "jobType" TEXT,
+    "salaryMin" DOUBLE PRECISION,
+    "salaryMax" DOUBLE PRECISION,
+    "salaryCurrency" TEXT DEFAULT 'AUD',
+    "openings" INTEGER NOT NULL DEFAULT 1,
+    "filledCount" INTEGER NOT NULL DEFAULT 0,
+    "description" TEXT,
+    "requirements" TEXT,
     "status" "JobOrderStatus" NOT NULL DEFAULT 'ACTIVE',
-    "priority" TEXT,
-    "lastSubmissionDate" TIMESTAMP(3),
-    "lastActivityDate" TIMESTAMP(3),
+    "priorityLevel" INTEGER DEFAULT 2,
+    "receivedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "closedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -223,16 +203,9 @@ CREATE TABLE "CandidateSubmission" (
     "id" TEXT NOT NULL,
     "candidateId" TEXT NOT NULL,
     "jobOrderId" TEXT NOT NULL,
-    "submittedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "submittedBy" TEXT,
-    "resumeVersion" TEXT,
-    "coverNote" TEXT,
     "status" "SubmissionStatus" NOT NULL DEFAULT 'SUBMITTED',
-    "interviewDate" TIMESTAMP(3),
-    "interviewNotes" TEXT,
-    "rejectionReason" TEXT,
-    "clientResponseDate" TIMESTAMP(3),
-    "clientFeedback" TEXT,
+    "submittedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "notes" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -242,20 +215,14 @@ CREATE TABLE "CandidateSubmission" (
 -- CreateTable
 CREATE TABLE "Placement" (
     "id" TEXT NOT NULL,
-    "displayId" TEXT NOT NULL,
+    "displayId" TEXT,
     "submissionId" TEXT NOT NULL,
-    "baseSalary" DECIMAL(12,2) NOT NULL,
-    "superPercentage" DECIMAL(5,2) NOT NULL DEFAULT 12,
-    "totalPackage" DECIMAL(12,2) NOT NULL,
-    "feePercentage" DECIMAL(5,2) NOT NULL,
-    "feeValue" DECIMAL(12,2) NOT NULL,
-    "feeType" "FeeType" NOT NULL DEFAULT 'PERCENTAGE',
-    "offerDate" TIMESTAMP(3),
-    "startDate" TIMESTAMP(3) NOT NULL,
-    "invoiceDate" TIMESTAMP(3) NOT NULL,
-    "guaranteeEndDate" TIMESTAMP(3) NOT NULL,
+    "salary" DOUBLE PRECISION,
+    "startDate" TIMESTAMP(3),
+    "guaranteeEndDate" TIMESTAMP(3),
+    "fee" DOUBLE PRECISION,
+    "feePercentage" DOUBLE PRECISION,
     "status" "PlacementStatus" NOT NULL DEFAULT 'ACTIVE',
-    "isWithinGuarantee" BOOLEAN NOT NULL DEFAULT true,
     "notes" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -276,19 +243,16 @@ CREATE UNIQUE INDEX "RolePermission_roleId_permissionId_key" ON "RolePermission"
 CREATE UNIQUE INDEX "Consultant_displayId_key" ON "Consultant"("displayId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Consultant_userId_key" ON "Consultant"("userId");
+CREATE UNIQUE INDEX "Consultant_neonUserId_key" ON "Consultant"("neonUserId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Consultant_email_key" ON "Consultant"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Client_displayId_key" ON "Client"("displayId");
 
 -- CreateIndex
-CREATE INDEX "Client_displayId_idx" ON "Client"("displayId");
-
--- CreateIndex
 CREATE INDEX "Client_status_idx" ON "Client"("status");
-
--- CreateIndex
-CREATE INDEX "Client_industry_idx" ON "Client"("industry");
 
 -- CreateIndex
 CREATE INDEX "Client_consultantId_idx" ON "Client"("consultantId");
@@ -297,49 +261,28 @@ CREATE INDEX "Client_consultantId_idx" ON "Client"("consultantId");
 CREATE UNIQUE INDEX "Stakeholder_displayId_key" ON "Stakeholder"("displayId");
 
 -- CreateIndex
-CREATE INDEX "Stakeholder_displayId_idx" ON "Stakeholder"("displayId");
-
--- CreateIndex
 CREATE INDEX "Stakeholder_clientId_idx" ON "Stakeholder"("clientId");
 
 -- CreateIndex
 CREATE INDEX "StakeholderContactHistory_stakeholderId_idx" ON "StakeholderContactHistory"("stakeholderId");
 
 -- CreateIndex
-CREATE INDEX "StakeholderContactHistory_contactDate_idx" ON "StakeholderContactHistory"("contactDate");
-
--- CreateIndex
 CREATE INDEX "ClientJobResearch_clientId_idx" ON "ClientJobResearch"("clientId");
-
--- CreateIndex
-CREATE INDEX "ClientJobResearch_status_idx" ON "ClientJobResearch"("status");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Candidate_displayId_key" ON "Candidate"("displayId");
 
 -- CreateIndex
-CREATE INDEX "Candidate_displayId_idx" ON "Candidate"("displayId");
-
--- CreateIndex
 CREATE INDEX "Candidate_status_idx" ON "Candidate"("status");
 
 -- CreateIndex
-CREATE INDEX "Candidate_industry_idx" ON "Candidate"("industry");
-
--- CreateIndex
-CREATE INDEX "Candidate_consultantId_idx" ON "Candidate"("consultantId");
+CREATE INDEX "Candidate_email_idx" ON "Candidate"("email");
 
 -- CreateIndex
 CREATE INDEX "CandidateScreeningHistory_candidateId_idx" ON "CandidateScreeningHistory"("candidateId");
 
 -- CreateIndex
-CREATE INDEX "CandidateScreeningHistory_screenedAt_idx" ON "CandidateScreeningHistory"("screenedAt");
-
--- CreateIndex
 CREATE UNIQUE INDEX "JobOrder_displayId_key" ON "JobOrder"("displayId");
-
--- CreateIndex
-CREATE INDEX "JobOrder_displayId_idx" ON "JobOrder"("displayId");
 
 -- CreateIndex
 CREATE INDEX "JobOrder_clientId_idx" ON "JobOrder"("clientId");
@@ -387,6 +330,9 @@ ALTER TABLE "RolePermission" ADD CONSTRAINT "RolePermission_roleId_fkey" FOREIGN
 ALTER TABLE "RolePermission" ADD CONSTRAINT "RolePermission_permissionId_fkey" FOREIGN KEY ("permissionId") REFERENCES "Permission"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "Consultant" ADD CONSTRAINT "Consultant_roleId_fkey" FOREIGN KEY ("roleId") REFERENCES "Role"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "Client" ADD CONSTRAINT "Client_consultantId_fkey" FOREIGN KEY ("consultantId") REFERENCES "Consultant"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -399,28 +345,20 @@ ALTER TABLE "StakeholderContactHistory" ADD CONSTRAINT "StakeholderContactHistor
 ALTER TABLE "ClientJobResearch" ADD CONSTRAINT "ClientJobResearch_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Candidate" ADD CONSTRAINT "Candidate_consultantId_fkey" FOREIGN KEY ("consultantId") REFERENCES "Consultant"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "CandidateScreeningHistory" ADD CONSTRAINT "CandidateScreeningHistory_candidateId_fkey" FOREIGN KEY ("candidateId") REFERENCES "Candidate"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "CandidateScreeningHistory" ADD CONSTRAINT "CandidateScreeningHistory_consultantId_fkey" FOREIGN KEY ("consultantId") REFERENCES "Consultant"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "JobOrder" ADD CONSTRAINT "JobOrder_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "JobOrder" ADD CONSTRAINT "JobOrder_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "JobOrder" ADD CONSTRAINT "JobOrder_consultantId_fkey" FOREIGN KEY ("consultantId") REFERENCES "Consultant"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "JobOrder" ADD CONSTRAINT "JobOrder_clientJobResearchId_fkey" FOREIGN KEY ("clientJobResearchId") REFERENCES "ClientJobResearch"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "CandidateSubmission" ADD CONSTRAINT "CandidateSubmission_candidateId_fkey" FOREIGN KEY ("candidateId") REFERENCES "Candidate"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "JobOrder" ADD CONSTRAINT "JobOrder_consultantId_fkey" FOREIGN KEY ("consultantId") REFERENCES "Consultant"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "CandidateSubmission" ADD CONSTRAINT "CandidateSubmission_jobOrderId_fkey" FOREIGN KEY ("jobOrderId") REFERENCES "JobOrder"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "CandidateSubmission" ADD CONSTRAINT "CandidateSubmission_candidateId_fkey" FOREIGN KEY ("candidateId") REFERENCES "Candidate"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Placement" ADD CONSTRAINT "Placement_submissionId_fkey" FOREIGN KEY ("submissionId") REFERENCES "CandidateSubmission"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- AddForeignKey
-ALTER TABLE "CandidateSubmission" ADD CONSTRAINT "CandidateSubmission_jobOrderId_fkey" FOREIGN KEY ("jobOrderId") REFERENCES "JobOrder"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Placement" ADD CONSTRAINT "Placement_submissionId_fkey" FOREIGN KEY ("submissionId") REFERENCES "CandidateSubmission"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

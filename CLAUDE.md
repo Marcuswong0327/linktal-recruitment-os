@@ -253,3 +253,4 @@ pnpm prisma:migrate   # Run migrations
 | `docs/database-erd.md` | Full Mermaid ERD diagram and column mappings |
 | `docs/manual-vs-automated-workflows.md` | Manual vs automated workflows + auto-update rules (roadmap) |
 | `docs/migrations.md` | DB migration workflow: rollout, rollback, Railway deploy |
+| `docs/rbac-roles.md` | RBAC: role/permission matrix + conditional rules (admin protection, last-admin, self-service) |
