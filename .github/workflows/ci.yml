@@ -36,9 +36,6 @@ jobs:
       # definitions exist before typecheck/lint run.
       - name: Build
         run: pnpm build
-        env:
-          NEON_AUTH_BASE_URL: ${{ secrets.NEON_AUTH_BASE_URL }}
-          NEON_AUTH_COOKIE_SECRET: ${{ secrets.NEON_AUTH_COOKIE_SECRET }}
 
       - name: Lint
         run: pnpm lint

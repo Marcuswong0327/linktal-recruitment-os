@@ -1,6 +1,42 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsEnum, IsInt, IsOptional, IsString, IsUrl, MaxLength, Min, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsEmail,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUrl,
+  MaxLength,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
 import { CandidateStatus } from '@prisma/client';
+
+/** One entry in a candidate's work history (stored as JSONB). */
+export class WorkHistoryItemDto {
+  @ApiPropertyOptional({ example: 'Acme Corp' })
+  @IsOptional()
+  @IsString()
+  company?: string;
+
+  @ApiPropertyOptional({ example: 'Production Manager' })
+  @IsOptional()
+  @IsString()
+  role?: string;
+
+  @ApiPropertyOptional({ description: 'ISO date or free text', example: '2019-01' })
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ description: 'ISO date or free text; omit if current', example: '2023-06' })
+  @IsOptional()
+  @IsString()
+  endDate?: string;
+}
 
 export class CreateCandidateDto {
   @ApiProperty({ description: 'Display ID', example: 'CDD-0001' })
@@ -89,7 +125,20 @@ export class CreateCandidateDto {
   @IsUrl()
   resumeUrl?: string;
 
-  @ApiPropertyOptional({ description: 'Status', enum: CandidateStatus, example: 'COLD' })
+  @ApiPropertyOptional({ description: 'Work history entries', type: WorkHistoryItemDto, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => WorkHistoryItemDto)
+  workHistory?: WorkHistoryItemDto[];
+
+  @ApiPropertyOptional({ description: 'Specialization tags', type: String, isArray: true, example: ['CNC', 'Welding'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  specializations?: string[];
+
+  @ApiPropertyOptional({ description: 'Status; defaults to COLD when omitted', enum: CandidateStatus, example: 'COLD' })
   @IsOptional()
   @IsEnum(CandidateStatus)
   status?: CandidateStatus;

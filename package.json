@@ -13,6 +13,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "gen:api": "pnpm --filter @linktal/api openapi:gen && pnpm --filter @linktal/web generate-api",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,md,json}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,md,json}\""
   },

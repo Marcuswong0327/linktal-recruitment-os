@@ -1,31 +1,34 @@
 import { z } from 'zod';
+import { CreateCandidateDtoStatus } from '@/lib/api/generated/types';
+import type { CandidateEntity } from '@/lib/api/generated/types';
 
-export const candidateStatuses = [
-  'APPLIED',
-  'SCREENING',
-  'INTERVIEW',
-  'OFFER',
-  'HIRED',
-  'REJECTED',
-] as const;
+// Types come straight from the generated API client, which is derived from the
+// Prisma schema — the single source of truth. Don't hand-maintain shapes here.
+export type Candidate = CandidateEntity;
 
+export const candidateStatuses = Object.values(CreateCandidateDtoStatus);
+
+// Client-side validation for the create form. Fields and the status enum mirror
+// CreateCandidateDto; the parsed output is assignable to it.
 export const createCandidateSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters').max(120),
-  email: z.string().email('Enter a valid email address'),
-  role: z.string().min(2, 'Role is required').max(120),
-  status: z.enum(candidateStatuses).default('APPLIED'),
+  displayId: z
+    .string()
+    .min(2, 'Display ID is required')
+    .max(20),
+  fullName: z
+    .string()
+    .min(2, 'Name must be at least 2 characters')
+    .max(120),
+  email: z
+    .string()
+    .email('Enter a valid email address')
+    .max(255)
+    .optional()
+    .or(z.literal('')),
+  mobile: z.string().max(30).optional(),
+  currentPosition: z.string().max(120).optional(),
+  status: z.nativeEnum(CreateCandidateDtoStatus),
   notes: z.string().max(2000).optional(),
 });
 
 export type CreateCandidateInput = z.infer<typeof createCandidateSchema>;
-
-export type Candidate = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  status: (typeof candidateStatuses)[number];
-  notes: string | null;
-  createdAt: string;
-  updatedAt: string;
-};

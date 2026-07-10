@@ -1,8 +1,11 @@
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { swaggerConfig } from './swagger.config';
+import { ErrorResponse } from './common/error-response.entity';
+import { addErrorResponses } from './common/openapi-errors';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -24,14 +27,11 @@ async function bootstrap() {
   });
 
   // Swagger setup
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Linktal Recruitment API')
-    .setDescription('API for Linktal Recruitment OS')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  const document = addErrorResponses(
+    SwaggerModule.createDocument(app, swaggerConfig, {
+      extraModels: [ErrorResponse],
+    }),
+  );
   SwaggerModule.setup('docs', app, document, {
     jsonDocumentUrl: 'docs/openapi.json',
   });
