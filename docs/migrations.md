@@ -75,9 +75,24 @@ push / merge to main
   → healthcheck /api/health must pass, else the release is rolled back
 ```
 
-### Config-as-code: `railway.json` (repo root)
+### Two services, two config files
 
-Railway reads `railway.json` on each deploy. The relevant parts:
+This is a monorepo with **two Railway services**, each with its own config file
+at the repo root (set per service via Settings → *Config-as-code file path*):
+
+| Service | Config file | Runs migrations? |
+|---------|-------------|:----------------:|
+| API (NestJS) | `railway.json` | **yes** — `preDeployCommand` |
+| Web (Next.js) | `railway.web.json` | **no** |
+
+> ⚠️ Both services default to `railway.json` if you don't set a path — which makes
+> the **web service run the API's migrate command** and fail on a missing
+> `DIRECT_URL`. Point the web service at `railway.web.json`. Migrations must run on
+> the **API service only**.
+
+### API config: `railway.json`
+
+Railway reads it on each deploy. The relevant parts:
 
 ```jsonc
 {
