@@ -4,15 +4,18 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
+    "dev:https": "next dev -p 3000 --experimental-https",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint --max-warnings 0",
-    "typecheck": "tsc --noEmit"
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "generate-api": "orval"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
+    "@neondatabase/auth": "^0.4.2-beta",
     "@tanstack/react-query": "^5.64.1",
-    "next": "^15.1.4",
+    "next": "^16.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hook-form": "^7.54.2",
@@ -20,14 +23,17 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
+    "@eslint/js": "^9.18.0",
     "@tailwindcss/postcss": "^4.0.0",
     "@tanstack/react-query-devtools": "^5.64.1",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
     "eslint": "^9.18.0",
-    "eslint-config-next": "^15.1.4",
+    "eslint-config-next": "^16.0.0",
+    "orval": "^8.20.0",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
   }
 }

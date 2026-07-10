@@ -1,0 +1,1059 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Health check",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/candidates": {
+      "get": {
+        "operationId": "getCandidates",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (1-based)",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Items per page",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to most recently created.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "displayId",
+                "fullName",
+                "familyName",
+                "givenName",
+                "email",
+                "city",
+                "country",
+                "industry",
+                "roleType",
+                "currentCompany",
+                "currentPosition",
+                "yearsExperience",
+                "status"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across fullName, email, currentCompany and displayId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Filter by status. Defaults to ALL (every status); pass a specific status to narrow.",
+            "schema": {
+              "default": "ALL",
+              "type": "string",
+              "enum": [
+                "COLD",
+                "WARM",
+                "HOT",
+                "PLACED",
+                "ALL"
+              ]
+            }
+          },
+          {
+            "name": "industry",
+            "required": false,
+            "in": "query",
+            "description": "Filter by industry (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "roleType",
+            "required": false,
+            "in": "query",
+            "description": "Filter by role type (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "country",
+            "required": false,
+            "in": "query",
+            "description": "Filter by country (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "city",
+            "required": false,
+            "in": "query",
+            "description": "Filter by city (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "currentCompany",
+            "required": false,
+            "in": "query",
+            "description": "Filter by current company (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "currentPosition",
+            "required": false,
+            "in": "query",
+            "description": "Filter by current position (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "yearsExperienceMin",
+            "required": false,
+            "in": "query",
+            "description": "Minimum years of experience (inclusive)",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "yearsExperienceMax",
+            "required": false,
+            "in": "query",
+            "description": "Maximum years of experience (inclusive)",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated candidates",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedCandidatesEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List candidates (paginated, filterable, sortable)",
+        "tags": [
+          "Candidates"
+        ]
+      },
+      "post": {
+        "operationId": "createCandidate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCandidateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Candidate created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a new candidate",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
+    "/candidates/by-display-id/{displayId}": {
+      "get": {
+        "operationId": "getCandidateByDisplayId",
+        "parameters": [
+          {
+            "name": "displayId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Candidate found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get candidate by display ID (CDD-XXXX)",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
+    "/candidates/{id}": {
+      "get": {
+        "operationId": "getCandidate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Candidate found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get candidate by ID",
+        "tags": [
+          "Candidates"
+        ]
+      },
+      "patch": {
+        "operationId": "updateCandidate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCandidateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Candidate updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a candidate",
+        "tags": [
+          "Candidates"
+        ]
+      },
+      "delete": {
+        "operationId": "deleteCandidate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Candidate deleted"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a candidate",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Linktal Recruitment API",
+    "description": "API for Linktal Recruitment OS",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "CandidateEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayId": {
+            "type": "string",
+            "example": "CDD-0001"
+          },
+          "fullName": {
+            "type": "string",
+            "example": "John Smith"
+          },
+          "givenName": {
+            "type": "string",
+            "nullable": true
+          },
+          "familyName": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "mobile": {
+            "type": "string",
+            "nullable": true
+          },
+          "country": {
+            "type": "string",
+            "nullable": true
+          },
+          "city": {
+            "type": "string",
+            "nullable": true
+          },
+          "industry": {
+            "type": "string",
+            "nullable": true
+          },
+          "roleType": {
+            "type": "string",
+            "nullable": true
+          },
+          "currentPosition": {
+            "type": "string",
+            "nullable": true
+          },
+          "currentCompany": {
+            "type": "string",
+            "nullable": true
+          },
+          "yearsExperience": {
+            "type": "number",
+            "nullable": true
+          },
+          "salaryExpectation": {
+            "type": "string",
+            "nullable": true
+          },
+          "linkedinUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "resumeUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "workHistory": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "nullable": true,
+            "description": "[{ company, role, startDate, endDate }]"
+          },
+          "specializations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COLD",
+              "WARM",
+              "HOT",
+              "PLACED"
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "displayId",
+          "fullName",
+          "givenName",
+          "familyName",
+          "email",
+          "mobile",
+          "country",
+          "city",
+          "industry",
+          "roleType",
+          "currentPosition",
+          "currentCompany",
+          "yearsExperience",
+          "salaryExpectation",
+          "linkedinUrl",
+          "resumeUrl",
+          "workHistory",
+          "specializations",
+          "status",
+          "notes",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "PaginatedCandidatesEntity": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CandidateEntity"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Total rows matching the filters",
+            "example": 342
+          },
+          "page": {
+            "type": "number",
+            "description": "Current page (1-based)",
+            "example": 1
+          },
+          "pageSize": {
+            "type": "number",
+            "description": "Items per page",
+            "example": 20
+          },
+          "pageCount": {
+            "type": "number",
+            "description": "Total number of pages",
+            "example": 18
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "page",
+          "pageSize",
+          "pageCount"
+        ]
+      },
+      "WorkHistoryItemDto": {
+        "type": "object",
+        "properties": {
+          "company": {
+            "type": "string",
+            "example": "Acme Corp"
+          },
+          "role": {
+            "type": "string",
+            "example": "Production Manager"
+          },
+          "startDate": {
+            "type": "string",
+            "description": "ISO date or free text",
+            "example": "2019-01"
+          },
+          "endDate": {
+            "type": "string",
+            "description": "ISO date or free text; omit if current",
+            "example": "2023-06"
+          }
+        }
+      },
+      "CreateCandidateDto": {
+        "type": "object",
+        "properties": {
+          "displayId": {
+            "type": "string",
+            "description": "Display ID",
+            "example": "CDD-0001"
+          },
+          "fullName": {
+            "type": "string",
+            "description": "Full name",
+            "example": "John Smith"
+          },
+          "givenName": {
+            "type": "string",
+            "description": "Given name",
+            "example": "John"
+          },
+          "familyName": {
+            "type": "string",
+            "description": "Family name",
+            "example": "Smith"
+          },
+          "email": {
+            "type": "string",
+            "description": "Email address",
+            "example": "john@example.com"
+          },
+          "mobile": {
+            "type": "string",
+            "description": "Mobile number",
+            "example": "+61 412 345 678"
+          },
+          "country": {
+            "type": "string",
+            "description": "Country",
+            "example": "Australia"
+          },
+          "city": {
+            "type": "string",
+            "description": "City",
+            "example": "Brisbane"
+          },
+          "industry": {
+            "type": "string",
+            "description": "Industry",
+            "example": "Manufacturing"
+          },
+          "roleType": {
+            "type": "string",
+            "description": "Role type",
+            "example": "Production Lead"
+          },
+          "currentPosition": {
+            "type": "string",
+            "description": "Current position",
+            "example": "Production Manager"
+          },
+          "currentCompany": {
+            "type": "string",
+            "description": "Current company",
+            "example": "Acme Corp"
+          },
+          "yearsExperience": {
+            "type": "number",
+            "description": "Years of experience",
+            "example": 5
+          },
+          "salaryExpectation": {
+            "type": "string",
+            "description": "Salary expectation",
+            "example": "150K"
+          },
+          "linkedinUrl": {
+            "type": "string",
+            "description": "LinkedIn URL",
+            "example": "https://linkedin.com/in/johnsmith"
+          },
+          "resumeUrl": {
+            "type": "string",
+            "description": "Resume URL"
+          },
+          "workHistory": {
+            "description": "Work history entries",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkHistoryItemDto"
+            }
+          },
+          "specializations": {
+            "description": "Specialization tags",
+            "example": [
+              "CNC",
+              "Welding"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "description": "Status; defaults to COLD when omitted",
+            "enum": [
+              "COLD",
+              "WARM",
+              "HOT",
+              "PLACED"
+            ],
+            "example": "COLD"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes"
+          }
+        },
+        "required": [
+          "displayId",
+          "fullName"
+        ]
+      },
+      "UpdateCandidateDto": {
+        "type": "object",
+        "properties": {
+          "displayId": {
+            "type": "string",
+            "description": "Display ID",
+            "example": "CDD-0001"
+          },
+          "fullName": {
+            "type": "string",
+            "description": "Full name",
+            "example": "John Smith"
+          },
+          "givenName": {
+            "type": "string",
+            "description": "Given name",
+            "example": "John"
+          },
+          "familyName": {
+            "type": "string",
+            "description": "Family name",
+            "example": "Smith"
+          },
+          "email": {
+            "type": "string",
+            "description": "Email address",
+            "example": "john@example.com"
+          },
+          "mobile": {
+            "type": "string",
+            "description": "Mobile number",
+            "example": "+61 412 345 678"
+          },
+          "country": {
+            "type": "string",
+            "description": "Country",
+            "example": "Australia"
+          },
+          "city": {
+            "type": "string",
+            "description": "City",
+            "example": "Brisbane"
+          },
+          "industry": {
+            "type": "string",
+            "description": "Industry",
+            "example": "Manufacturing"
+          },
+          "roleType": {
+            "type": "string",
+            "description": "Role type",
+            "example": "Production Lead"
+          },
+          "currentPosition": {
+            "type": "string",
+            "description": "Current position",
+            "example": "Production Manager"
+          },
+          "currentCompany": {
+            "type": "string",
+            "description": "Current company",
+            "example": "Acme Corp"
+          },
+          "yearsExperience": {
+            "type": "number",
+            "description": "Years of experience",
+            "example": 5
+          },
+          "salaryExpectation": {
+            "type": "string",
+            "description": "Salary expectation",
+            "example": "150K"
+          },
+          "linkedinUrl": {
+            "type": "string",
+            "description": "LinkedIn URL",
+            "example": "https://linkedin.com/in/johnsmith"
+          },
+          "resumeUrl": {
+            "type": "string",
+            "description": "Resume URL"
+          },
+          "workHistory": {
+            "description": "Work history entries",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkHistoryItemDto"
+            }
+          },
+          "specializations": {
+            "description": "Specialization tags",
+            "example": [
+              "CNC",
+              "Welding"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "description": "Status; defaults to COLD when omitted",
+            "enum": [
+              "COLD",
+              "WARM",
+              "HOT",
+              "PLACED"
+            ],
+            "example": "COLD"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number",
+            "example": 404
+          },
+          "code": {
+            "type": "string",
+            "example": "NOT_FOUND",
+            "description": "Stable machine-readable code"
+          },
+          "message": {
+            "type": "string",
+            "example": "Candidate abc not found"
+          },
+          "details": {
+            "nullable": true,
+            "description": "Field-level messages (e.g. validation errors)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "path": {
+            "type": "string",
+            "example": "/api/candidates/abc"
+          },
+          "timestamp": {
+            "type": "string",
+            "example": "2026-07-09T10:20:30.000Z"
+          }
+        },
+        "required": [
+          "statusCode",
+          "code",
+          "message",
+          "details",
+          "path",
+          "timestamp"
+        ]
+      }
+    }
+  }
+}

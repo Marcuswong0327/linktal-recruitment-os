@@ -6,14 +6,19 @@
     "build": "prisma generate && nest build",
     "dev": "nest start --watch",
     "start": "node dist/main.js",
-    "start:prod": "prisma migrate deploy && node dist/main.js",
+    "start:prod": "node dist/main.js",
     "lint": "eslint \"{src,test}/**/*.ts\" --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "jest --passWithNoTests",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "openapi:gen": "ts-node --files scripts/generate-openapi.ts",
+    "seed": "ts-node prisma/seed.ts",
+    "inspect:excel": "ts-node scripts/inspect-excel.ts",
+    "import:excel": "ts-node scripts/import-excel.ts",
+    "import:placements": "ts-node scripts/import-placements.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -21,31 +26,34 @@
     "@nestjs/core": "^11.0.1",
     "@nestjs/mapped-types": "^2.1.0",
     "@nestjs/platform-express": "^11.0.1",
-    "@prisma/client": "^6.2.1",
+    "@nestjs/swagger": "^11.4.5",
+    "@prisma/client": "^6.19.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "jose": "^5.9.6",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
-    "@eslint/js": "^9.18.0",
     "@nestjs/testing": "^11.0.1",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.5",
     "@types/supertest": "^6.0.2",
     "eslint": "^9.18.0",
-    "typescript-eslint": "^8.20.0",
     "jest": "^29.7.0",
-    "prisma": "^6.2.1",
+    "prisma": "^6.19.3",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
   }
 }
