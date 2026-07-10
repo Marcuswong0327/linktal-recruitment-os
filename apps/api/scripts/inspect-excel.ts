@@ -1,10 +1,11 @@
 import * as XLSX from 'xlsx';
 import * as path from 'path';
+import { dataFile } from './data-dir';
 
 const FILES = [
-  '/Users/joelim/Downloads/Icarus Candidate Database.xlsx',
-  '/Users/joelim/Downloads/Icarus Client Database.xlsx',
-  '/Users/joelim/Downloads/Job Orders Portfolio.xlsx',
+  dataFile('Icarus Candidate Database.xlsx'),
+  dataFile('Icarus Client Database.xlsx'),
+  dataFile('Job Orders Portfolio.xlsx'),
 ];
 
 for (const filePath of FILES) {

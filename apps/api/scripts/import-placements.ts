@@ -1,8 +1,9 @@
 import * as XLSX from 'xlsx';
 import { PrismaClient, SubmissionStatus, PlacementStatus } from '@prisma/client';
+import { dataFile } from './data-dir';
 
 const prisma = new PrismaClient();
-const CANDIDATE_FILE = '/Users/joelim/Downloads/Icarus Candidate Database.xlsx';
+const CANDIDATE_FILE = dataFile('Icarus Candidate Database.xlsx');
 
 function parseExcelDate(value: unknown): Date | null {
   if (!value) return null;

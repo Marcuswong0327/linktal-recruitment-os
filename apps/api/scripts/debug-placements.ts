@@ -1,7 +1,8 @@
 import * as XLSX from 'xlsx';
+import { dataFile } from './data-dir';
 
-const CANDIDATE_FILE = '/Users/joelim/Downloads/Icarus Candidate Database.xlsx';
-const CLIENT_FILE = '/Users/joelim/Downloads/Icarus Client Database.xlsx';
+const CANDIDATE_FILE = dataFile('Icarus Candidate Database.xlsx');
+const CLIENT_FILE = dataFile('Icarus Client Database.xlsx');
 
 // Get all client company names
 const clientWorkbook = XLSX.readFile(CLIENT_FILE);

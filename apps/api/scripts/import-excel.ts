@@ -1,12 +1,13 @@
 import * as XLSX from 'xlsx';
 import { PrismaClient, CandidateStatus, ClientStatus, JobOrderStatus, SubmissionStatus, PlacementStatus } from '@prisma/client';
+import { dataFile } from './data-dir';
 
 const prisma = new PrismaClient();
 
-// File paths
-const CANDIDATE_FILE = '/Users/joelim/Downloads/Icarus Candidate Database.xlsx';
-const CLIENT_FILE = '/Users/joelim/Downloads/Icarus Client Database.xlsx';
-const JOB_ORDER_FILE = '/Users/joelim/Downloads/Job Orders Portfolio.xlsx';
+// File paths (see apps/api/data; override the location with DATA_DIR)
+const CANDIDATE_FILE = dataFile('Icarus Candidate Database.xlsx');
+const CLIENT_FILE = dataFile('Icarus Client Database.xlsx');
+const JOB_ORDER_FILE = dataFile('Job Orders Portfolio.xlsx');
 
 // Helper to parse Excel dates (Excel stores dates as numbers)
 function parseExcelDate(value: unknown): Date | null {

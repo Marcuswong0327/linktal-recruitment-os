@@ -15,7 +15,10 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "openapi:gen": "ts-node --files scripts/generate-openapi.ts",
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "ts-node prisma/seed.ts",
+    "inspect:excel": "ts-node scripts/inspect-excel.ts",
+    "import:excel": "ts-node scripts/import-excel.ts",
+    "import:placements": "ts-node scripts/import-placements.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

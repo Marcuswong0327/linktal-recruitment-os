@@ -1,5 +1,28 @@
 # Manual vs Automated Workflows
 
+> **Status: ROADMAP — not yet implemented.** As of this writing, **none** of the
+> automations or auto-update rules below are built. The only services that exist
+> are `candidates`, `auth`, and `health`; no status auto-updates run anywhere.
+> Treat this file as the target design, not a description of current behaviour.
+>
+> **Schema reality check** — some rules below assume fields that don't exist yet.
+> Aligning the rule names to `schema.prisma`:
+>
+> | Rule mentions | Actual schema | Note |
+> |---------------|---------------|------|
+> | `Placement.feeValue` | `Placement.fee` | renamed |
+> | `salaryOffered` | `Placement.salary` | renamed |
+> | `JobOrder.placedCount` | `JobOrder.filledCount` | renamed |
+> | `numberOfOpenings` | `JobOrder.openings` | renamed |
+> | status `'Warm'`/`'Placed'` | enum `WARM`/`PLACED` | enums are upper-case |
+> | `Placement.guaranteeEndDate` | ✅ exists | already in schema |
+> | `Client.feePercentage`, `guaranteePeriod` | ✅ exist (numeric) | already in schema |
+> | `JobOrder.salaryMin/Max` | ✅ exist | already in schema |
+> | `Placement.isWithinGuarantee` / `guaranteeStatus` | ❌ missing | would need adding (use `Placement.status` FAILED/COMPLETED for now) |
+> | `Client.latestContactBy/Date`, `Stakeholder.lastContactDate`, `Candidate.contactedBy` | ❌ missing | contact time lives on `StakeholderContactHistory.contactedAt`; there is no per-record "contacted by" owner field |
+> | `JobOrder.latestSubmissionDate`, `isReplacement`, `replacementForPlacementId` | ❌ missing | replacement-linking was explicitly deferred |
+> | JobOrder → ClientJobResearch link | ❌ missing | no `jobResearchId` on JobOrder yet |
+
 ## 1. Client Sourcing & Research
 | Manual | Automated |
 |--------|-----------|
@@ -82,12 +105,16 @@
 
 ## Summary: Tables to Link/Improve
 
-| Table | Improvement |
-|-------|-------------|
-| ClientJobResearch | Add `convertedToJobOrderId` OR merge into JobOrder |
-| JobOrder | Add `salaryMin`, `salaryMax`, `placedCount`, `replacementForPlacementId` |
-| Placement | Add `guaranteeEndDate`, `isWithinGuarantee` |
-| Client | Add `feePercentage` (number) alongside `feeSchedule` (text) |
+| Table | Improvement | Status |
+|-------|-------------|--------|
+| JobOrder | `salaryMin`, `salaryMax` | ✅ done |
+| JobOrder | `placedCount` | ✅ done (as `filledCount`) |
+| Placement | `guaranteeEndDate` | ✅ done |
+| Client | `feePercentage` (numeric), `guaranteePeriod` (numeric) | ✅ done |
+| ClientJobResearch → JobOrder | link (`jobResearchId` on JobOrder) | ❌ todo |
+| JobOrder | `latestSubmissionDate`, `isReplacement`, `replacementForPlacementId` | ❌ todo |
+| Placement | `isWithinGuarantee` (or derive from `status` + `guaranteeEndDate`) | ❌ todo |
+| Contact ownership | `contactedBy`/`latestContactBy` fields (only if row-level ownership is wanted) | ❌ not planned |
 
 ## Summary: Auto-Update Triggers
 

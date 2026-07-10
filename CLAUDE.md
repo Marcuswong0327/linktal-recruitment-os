@@ -192,8 +192,6 @@ Base Salary × (1 + Super%) = Total Package
 Total Package × Fee% = Placement Fee + GST
 ```
 
-See `docs/confirmed-decisions.md` for full details.
-
 ## Additional Confirmed Decisions
 
 | # | Question | Decision |
@@ -253,5 +251,5 @@ pnpm prisma:migrate   # Run migrations
 | File | Description |
 |------|-------------|
 | `docs/database-erd.md` | Full Mermaid ERD diagram and column mappings |
-| `docs/confirmed-decisions.md` | Confirmed client decisions with details |
-| `docs/manual-vs-automated-workflows.md` | Manual vs automated workflows + auto-update rules |
+| `docs/manual-vs-automated-workflows.md` | Manual vs automated workflows + auto-update rules (roadmap) |
+| `docs/migrations.md` | DB migration workflow: rollout, rollback, Railway deploy |
