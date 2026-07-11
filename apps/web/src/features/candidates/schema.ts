@@ -18,6 +18,18 @@ export const candidateStatusLabels: Record<
   PLACED: 'Placed',
 };
 
+// Temperature scale: blue → yellow → red, green once placed. Shared by the
+// table's status column and the status filter so the pills always match.
+export const candidateStatusVariants: Record<
+  (typeof candidateStatuses)[number],
+  'info' | 'warning' | 'destructive' | 'success'
+> = {
+  COLD: 'info',
+  WARM: 'warning',
+  HOT: 'destructive',
+  PLACED: 'success',
+};
+
 // Client-side validation for the create form. Fields and the status enum mirror
 // CreateCandidateDto; the parsed output is assignable to it.
 export const createCandidateSchema = z.object({
