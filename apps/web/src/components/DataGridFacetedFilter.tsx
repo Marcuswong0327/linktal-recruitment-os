@@ -1,0 +1,146 @@
+'use client';
+
+import * as React from 'react';
+import { Check, ChevronsUpDown } from 'lucide-react';
+
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+
+export interface FacetedFilterOption {
+  label: string;
+  value: string;
+  /** Badge variant for semantic coloring; renders the option as its pill. */
+  variant?: React.ComponentProps<typeof Badge>['variant'];
+}
+
+interface DataGridFacetedFilterProps {
+  title: string;
+  options: FacetedFilterOption[];
+  /** Currently selected values. */
+  selected: string[];
+  onChange: (values: string[]) => void;
+  /** Selecting a value replaces the selection instead of adding to it. */
+  single?: boolean;
+}
+
+export function DataGridFacetedFilter({
+  title,
+  options,
+  selected,
+  onChange,
+  single = false,
+}: DataGridFacetedFilterProps) {
+  const selectedSet = new Set(selected);
+
+  function toggle(value: string, checked: boolean) {
+    if (single) {
+      onChange(checked ? [value] : []);
+      return;
+    }
+    const next = new Set(selectedSet);
+    if (checked) {
+      next.add(value);
+    } else {
+      next.delete(value);
+    }
+    onChange([...next]);
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="outline"
+            size="default"
+            className={cn(
+              'rounded-lg border-dashed border-foreground/40 aria-expanded:border-solid dark:bg-input/50 dark:hover:bg-input/70',
+              // Active state stays neutral — the selected value's own pill
+              // carries the semantic color.
+              selectedSet.size > 0 && 'border-solid',
+            )}
+          />
+        }
+      >
+        {title}
+        {selectedSet.size > 0 ? (
+          <>
+            <span className="mx-0.5 h-4 w-px bg-border" />
+            {selectedSet.size <= 2 ? (
+              options
+                .filter((option) => selectedSet.has(option.value))
+                .map((option) => (
+                  <Badge
+                    key={option.value}
+                    variant={option.variant ?? 'default'}
+                    className="rounded-sm px-1 font-normal"
+                  >
+                    {option.label}
+                  </Badge>
+                ))
+            ) : (
+              <Badge variant="muted" className="rounded-sm px-1 font-normal">
+                {selectedSet.size} selected
+              </Badge>
+            )}
+          </>
+        ) : null}
+        <ChevronsUpDown className="opacity-50" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-44">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{title}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {options.map((option) => {
+            const isChecked = selectedSet.has(option.value);
+            return (
+              <DropdownMenuCheckboxItem
+                key={option.value}
+                checked={isChecked}
+                onCheckedChange={(checked) => toggle(option.value, checked)}
+                // Leading box checkbox instead of the primitive's right-side tick.
+                className="pr-2 [&_[data-slot=dropdown-menu-checkbox-item-indicator]]:hidden"
+              >
+                <span
+                  className={cn(
+                    'flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input transition-colors',
+                    isChecked && 'border-primary bg-primary text-primary-foreground',
+                  )}
+                >
+                  {isChecked ? <Check className="size-3" /> : null}
+                </span>
+                {option.variant ? (
+                  <Badge variant={option.variant}>{option.label}</Badge>
+                ) : (
+                  option.label
+                )}
+              </DropdownMenuCheckboxItem>
+            );
+          })}
+        </DropdownMenuGroup>
+        {selectedSet.size > 0 ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className={cn('justify-center text-muted-foreground')}
+              onClick={() => onChange([])}
+            >
+              Clear
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

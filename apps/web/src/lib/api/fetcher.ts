@@ -61,10 +61,12 @@ export const customFetch = async <T>(
     );
   }
 
-  // Handle 204 No Content
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
+  // The generated client types every response as an { data, status, headers }
+  // envelope (Orval's fetch-client convention), so return that shape — not the
+  // bare body — or status-based narrowing in callers never matches at runtime.
+  return {
+    data: response.status === 204 ? undefined : await response.json(),
+    status: response.status,
+    headers: response.headers,
+  } as T;
 };
