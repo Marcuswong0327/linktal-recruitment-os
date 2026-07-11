@@ -1,6 +1,7 @@
 'use client';
 
-import { ChevronsUpDown } from 'lucide-react';
+import * as React from 'react';
+import { Check, ChevronsUpDown } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -19,6 +20,8 @@ import {
 export interface FacetedFilterOption {
   label: string;
   value: string;
+  /** Badge variant for semantic coloring; renders the option as its pill. */
+  variant?: React.ComponentProps<typeof Badge>['variant'];
 }
 
 interface DataGridFacetedFilterProps {
@@ -27,6 +30,8 @@ interface DataGridFacetedFilterProps {
   /** Currently selected values. */
   selected: string[];
   onChange: (values: string[]) => void;
+  /** Selecting a value replaces the selection instead of adding to it. */
+  single?: boolean;
 }
 
 export function DataGridFacetedFilter({
@@ -34,10 +39,15 @@ export function DataGridFacetedFilter({
   options,
   selected,
   onChange,
+  single = false,
 }: DataGridFacetedFilterProps) {
   const selectedSet = new Set(selected);
 
   function toggle(value: string, checked: boolean) {
+    if (single) {
+      onChange(checked ? [value] : []);
+      return;
+    }
     const next = new Set(selectedSet);
     if (checked) {
       next.add(value);
@@ -56,8 +66,9 @@ export function DataGridFacetedFilter({
             size="default"
             className={cn(
               'rounded-lg border-dashed border-foreground/40 aria-expanded:border-solid dark:bg-input/50 dark:hover:bg-input/70',
-              selectedSet.size > 0 &&
-                'border-solid border-primary/40 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary dark:border-primary/60 dark:bg-input/50 dark:text-primary dark:hover:bg-input/70',
+              // Active state stays neutral — the selected value's own pill
+              // carries the semantic color.
+              selectedSet.size > 0 && 'border-solid',
             )}
           />
         }
@@ -65,21 +76,21 @@ export function DataGridFacetedFilter({
         {title}
         {selectedSet.size > 0 ? (
           <>
-            <span className="mx-0.5 h-4 w-px bg-primary/20" />
+            <span className="mx-0.5 h-4 w-px bg-border" />
             {selectedSet.size <= 2 ? (
               options
                 .filter((option) => selectedSet.has(option.value))
                 .map((option) => (
                   <Badge
                     key={option.value}
-                    variant="default"
+                    variant={option.variant ?? 'default'}
                     className="rounded-sm px-1 font-normal"
                   >
                     {option.label}
                   </Badge>
                 ))
             ) : (
-              <Badge variant="default" className="rounded-sm px-1 font-normal">
+              <Badge variant="muted" className="rounded-sm px-1 font-normal">
                 {selectedSet.size} selected
               </Badge>
             )}
@@ -91,15 +102,32 @@ export function DataGridFacetedFilter({
         <DropdownMenuGroup>
           <DropdownMenuLabel>{title}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {options.map((option) => (
-            <DropdownMenuCheckboxItem
-              key={option.value}
-              checked={selectedSet.has(option.value)}
-              onCheckedChange={(checked) => toggle(option.value, checked)}
-            >
-              {option.label}
-            </DropdownMenuCheckboxItem>
-          ))}
+          {options.map((option) => {
+            const isChecked = selectedSet.has(option.value);
+            return (
+              <DropdownMenuCheckboxItem
+                key={option.value}
+                checked={isChecked}
+                onCheckedChange={(checked) => toggle(option.value, checked)}
+                // Leading box checkbox instead of the primitive's right-side tick.
+                className="pr-2 [&_[data-slot=dropdown-menu-checkbox-item-indicator]]:hidden"
+              >
+                <span
+                  className={cn(
+                    'flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input transition-colors',
+                    isChecked && 'border-primary bg-primary text-primary-foreground',
+                  )}
+                >
+                  {isChecked ? <Check className="size-3" /> : null}
+                </span>
+                {option.variant ? (
+                  <Badge variant={option.variant}>{option.label}</Badge>
+                ) : (
+                  option.label
+                )}
+              </DropdownMenuCheckboxItem>
+            );
+          })}
         </DropdownMenuGroup>
         {selectedSet.size > 0 ? (
           <>

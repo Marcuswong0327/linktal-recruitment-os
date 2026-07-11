@@ -44,6 +44,8 @@ export const jobOrderColumns: ColumnDef<JobOrder>[] = [
   {
     accessorKey: 'status',
     header: 'Status',
+    size: 110,
+    meta: { align: 'center' },
     cell: ({ row }) => (
       <Badge variant={statusVariant[row.original.status]}>
         {jobOrderStatusLabels[row.original.status]}
@@ -53,6 +55,7 @@ export const jobOrderColumns: ColumnDef<JobOrder>[] = [
   {
     id: 'salary',
     header: 'Salary Range',
+    size: 190,
     accessorFn: (row) => row.salaryMax,
     cell: ({ row }) => (
       <span className="tabular-nums whitespace-nowrap">
@@ -64,6 +67,8 @@ export const jobOrderColumns: ColumnDef<JobOrder>[] = [
   {
     accessorKey: 'feeValue',
     header: 'Fee',
+    size: 120,
+    meta: { align: 'center' },
     cell: ({ row }) => (
       <span className="tabular-nums">
         {salaryFormatter.format(row.original.feeValue)}
@@ -73,6 +78,8 @@ export const jobOrderColumns: ColumnDef<JobOrder>[] = [
   {
     accessorKey: 'candidateCount',
     header: 'Candidates',
+    size: 110,
+    meta: { align: 'center' },
     cell: ({ row }) => (
       <span className="tabular-nums">{row.original.candidateCount}</span>
     ),
@@ -80,6 +87,7 @@ export const jobOrderColumns: ColumnDef<JobOrder>[] = [
   {
     accessorKey: 'location',
     header: 'Location',
+    size: 150,
     cell: ({ row }) => (
       <span className="text-muted-foreground">{row.original.location}</span>
     ),

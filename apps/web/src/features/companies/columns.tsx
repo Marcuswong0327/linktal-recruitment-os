@@ -52,6 +52,8 @@ export const companyColumns: ColumnDef<Company>[] = [
   {
     accessorKey: 'relationshipStatus',
     header: 'Relationship',
+    size: 140,
+    meta: { align: 'center' },
     cell: ({ row }) => (
       <Badge variant={relationshipVariant[row.original.relationshipStatus]}>
         {relationshipStatusLabels[row.original.relationshipStatus]}
@@ -61,6 +63,8 @@ export const companyColumns: ColumnDef<Company>[] = [
   {
     accessorKey: 'tobStatus',
     header: 'TOB',
+    size: 120,
+    meta: { align: 'center' },
     cell: ({ row }) => (
       <Badge variant={tobVariant[row.original.tobStatus]}>
         {tobStatusLabels[row.original.tobStatus]}
@@ -70,6 +74,8 @@ export const companyColumns: ColumnDef<Company>[] = [
   {
     accessorKey: 'stakeholderCount',
     header: 'Stakeholders',
+    size: 130,
+    meta: { align: 'center' },
     cell: ({ row }) => (
       <span className="tabular-nums">{row.original.stakeholderCount}</span>
     ),
@@ -77,6 +83,8 @@ export const companyColumns: ColumnDef<Company>[] = [
   {
     accessorKey: 'openJobOrders',
     header: 'Open JOs',
+    size: 100,
+    meta: { align: 'center' },
     cell: ({ row }) => (
       <span className="tabular-nums">{row.original.openJobOrders}</span>
     ),
@@ -84,6 +92,7 @@ export const companyColumns: ColumnDef<Company>[] = [
   {
     accessorKey: 'owner',
     header: 'Owner',
+    size: 160,
     cell: ({ row }) => (
       <span className="text-muted-foreground">{row.original.owner}</span>
     ),

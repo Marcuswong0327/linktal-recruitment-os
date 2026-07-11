@@ -68,6 +68,8 @@ export const userColumns: ColumnDef<User>[] = [
   {
     accessorKey: 'role',
     header: 'Role',
+    size: 130,
+    meta: { align: 'center' },
     cell: ({ row }) => (
       <Badge variant={roleVariant[row.original.role]}>
         {userRoleLabels[row.original.role]}
@@ -77,6 +79,8 @@ export const userColumns: ColumnDef<User>[] = [
   {
     accessorKey: 'status',
     header: 'Status',
+    size: 120,
+    meta: { align: 'center' },
     cell: ({ row }) => (
       <Badge variant={statusVariant[row.original.status]}>
         {userStatusLabels[row.original.status]}
@@ -86,6 +90,8 @@ export const userColumns: ColumnDef<User>[] = [
   {
     accessorKey: 'openJobOrders',
     header: 'Open JOs',
+    size: 100,
+    meta: { align: 'center' },
     cell: ({ row }) => (
       <span className="tabular-nums">{row.original.openJobOrders}</span>
     ),
@@ -93,6 +99,7 @@ export const userColumns: ColumnDef<User>[] = [
   {
     accessorKey: 'lastActiveAt',
     header: 'Last active',
+    size: 140,
     cell: ({ row }) => (
       <span className="text-muted-foreground">
         {formatDate(row.original.lastActiveAt)}
