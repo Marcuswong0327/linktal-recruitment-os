@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { authClient, getAuthToken } from '@/lib/auth/client';
+import { authClient, getAuthToken, signOut } from '@/lib/auth/client';
 
 // Enable the matching providers in your Neon Auth console. Add/remove freely.
 const PROVIDERS = [
@@ -87,7 +87,7 @@ function UserBar({ email, name }: { email: string; name: string }) {
         <button className={btn} onClick={copyToken}>
           {copied ? 'Copied!' : 'Copy API token'}
         </button>
-        <button className={btn} onClick={() => authClient.signOut()}>
+        <button className={btn} onClick={() => signOut()}>
           Sign out
         </button>
       </div>
