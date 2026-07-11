@@ -7,11 +7,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <TooltipProvider>
       <SidebarProvider>
         <AppSidebar />
-        <SidebarInset>
+        {/* h-svh + min-h-0/overflow-auto below: lock the shell to the viewport
+            so grids scroll their own rows instead of the page. */}
+        <SidebarInset className="h-svh">
           <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
             <SidebarTrigger className="-ml-1" />
           </header>
-          <div className="flex flex-1 flex-col">{children}</div>
+          {/* bg-muted: --card and --background are both pure white in light
+              mode, so cards need a tinted canvas to separate from. */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-muted/50">{children}</div>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
