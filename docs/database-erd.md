@@ -29,13 +29,14 @@ erDiagram
     }
 
     %% ==================== IDENTITY / CONSULTANT ====================
-    %% There is no separate User table. Authentication is handled by Neon Auth
-    %% (external); Consultant is the local identity + role record, linked by
-    %% neonUserId. A first-time login is provisioned just-in-time (viewer role).
+    %% There is no separate User table. Authentication is handled by NextAuth
+    %% (Auth.js) + Microsoft Entra ID (Azure AD), external; Consultant is the
+    %% local identity + role record, linked by azureId. A first-time login is
+    %% provisioned just-in-time (viewer role).
     Consultant {
         string id PK
         string displayId "unique: consultant-XXXX"
-        string neonUserId "unique, nullable - Neon Auth user id"
+        string azureId "unique, nullable - Azure AD object id (oid)"
         string email "unique"
         string fullName
         string roleId FK "nullable"
@@ -214,7 +215,7 @@ erDiagram
 | **Role** | Named roles (admin, manager, consultant, finance, researcher, viewer) | cuid |
 | **Permission** | `resource` + `action` pair | cuid, unique(resource, action) |
 | **RolePermission** | Join: roles ↔ permissions | cuid, unique(roleId, permissionId) |
-| **Consultant** | Local identity + role (linked to Neon Auth via `neonUserId`) | cuid, displayId `consultant-XXXX` |
+| **Consultant** | Local identity + role (linked to Azure AD via `azureId`) | cuid, displayId `consultant-XXXX` |
 
 ### Core Entities
 
