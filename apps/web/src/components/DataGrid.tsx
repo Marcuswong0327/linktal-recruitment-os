@@ -130,9 +130,14 @@ export function DataGrid<TData>({
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
 
   // Selection is page-scoped (see onSelectionChange doc) — drop it when the
-  // visible rows change out from under it.
+  // visible rows change out from under it. Bails out when already empty:
+  // `data` isn't guaranteed referentially stable across renders, and
+  // unconditionally setting a fresh `{}` would still swap the state
+  // reference every time, which re-fires the onSelectionChange effect below,
+  // which updates the caller's state, which re-renders this component with
+  // (possibly) another new `data` reference — an infinite loop.
   React.useEffect(() => {
-    setRowSelection({});
+    setRowSelection((prev) => (Object.keys(prev).length === 0 ? prev : {}));
   }, [data]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
 
@@ -204,6 +209,15 @@ export function DataGrid<TData>({
     getFilteredRowModel: getFilteredRowModel(),
     manualSorting: isServer,
     manualFiltering: isServer,
+    // Without this, table-core's autoResetPageIndex (on by default) queues a
+    // resetPageIndex() on every core row model recompute. In server mode our
+    // `data`/`columns` props are rebuilt each render (e.g. name-lookup
+    // callbacks depending on freshly-fetched arrays), so that reset kept
+    // firing every render — each one a state update that triggers another
+    // render — an infinite "Maximum update depth exceeded" loop. Pagination
+    // is already handled externally here (see `server`), so tell table-core
+    // not to manage or auto-reset it itself.
+    manualPagination: isServer,
   });
 
   const onSelectionChangeRef = React.useRef(onSelectionChange);
