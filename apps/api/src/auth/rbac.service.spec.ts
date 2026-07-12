@@ -85,11 +85,10 @@ describe('RbacService', () => {
   });
 
   describe('registerWithPassword', () => {
-    it('creates a new consultant with the default viewer role', async () => {
+    it('creates a new consultant as inactive and rejects, regardless of email domain', async () => {
       const prisma = {
         consultant: {
           findUnique: jest.fn().mockResolvedValue(null),
-          findMany: jest.fn().mockResolvedValue([]),
           create: jest.fn().mockImplementation(({ data }) =>
             Promise.resolve({ ...data, role: viewerRole }),
           ),
@@ -98,15 +97,16 @@ describe('RbacService', () => {
       } as unknown as PrismaService;
       const service = new RbacService(prisma);
 
-      const user = await service.registerWithPassword({
-        email: 'new@b.com',
-        password: 'hunter2hunter2',
-        fullName: 'New Person',
-      });
-
-      expect(user.email).toBe('new@b.com');
-      expect(user.roleName).toBe('viewer');
-      expect(prisma.consultant.create).toHaveBeenCalled();
+      await expect(
+        service.registerWithPassword({
+          email: 'new@linktal.com.au',
+          password: 'hunter2hunter2',
+          fullName: 'New Person',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.consultant.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ isActive: false }) }),
+      );
     });
 
     it('links password auth onto an existing passwordless row instead of duplicating', async () => {

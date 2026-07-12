@@ -6,6 +6,7 @@
  */
 export const AUTH_ERROR_MESSAGES: Record<string, string> = {
   ACCOUNT_INACTIVE: 'Your account has been deactivated. Contact your administrator for access.',
+  ACCOUNT_PENDING_APPROVAL: 'Your account has been created and is pending admin approval.',
   INVALID_CREDENTIALS: 'Incorrect email or password.',
   EMAIL_TAKEN: 'An account with this email already exists — try signing in instead.',
 };
