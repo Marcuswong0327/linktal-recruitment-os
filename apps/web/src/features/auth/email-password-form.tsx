@@ -37,7 +37,7 @@ export function EmailPasswordForm() {
       return;
     }
 
-    router.push('/');
+    router.push('/dashboard');
     router.refresh();
   }
 
