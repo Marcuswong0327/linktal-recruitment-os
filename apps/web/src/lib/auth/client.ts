@@ -1,10 +1,8 @@
 'use client';
 
-import { createAuthClient } from '@neondatabase/auth/next';
+import { signOut as nextAuthSignOut } from 'next-auth/react';
 
-export const authClient = createAuthClient();
-
-// In-memory (per-tab) token cache so we don't round-trip to the Neon Auth
+// In-memory (per-tab) token cache so we don't round-trip to the /api/auth/token
 // proxy before every API call. Memory-only on purpose: persisting the token
 // (localStorage etc.) would widen XSS exposure, while a module variable adds
 // nothing an attacker couldn't already get via the cookie-backed endpoint.
@@ -36,15 +34,16 @@ export function clearAuthTokenCache() {
 /** Signs out and drops the cached token so this tab stops calling the API. */
 export async function signOut() {
   clearAuthTokenCache();
-  return authClient.signOut();
+  return nextAuthSignOut({ callbackUrl: '/sign-in' });
 }
 
 /**
- * Returns the current Neon Auth JWT for calling the backend API as a Bearer
- * token, or null when signed out. Hits the Neon Auth proxy's token endpoint
- * directly (same-origin, cookie-authenticated) rather than authClient.token(),
- * so it works regardless of client hydration state. The API verifies the JWT
- * against Neon's JWKS.
+ * Returns the current API access token (minted by apps/api, carried inside
+ * the NextAuth session) for calling the backend as a Bearer token, or null
+ * when signed out. Hits the same-origin /api/auth/token route (cookie-
+ * authenticated) rather than reading the client session object directly, so
+ * it works regardless of client hydration state. The API verifies the token
+ * itself (see apps/api's TokenService).
  *
  * Cached in memory until shortly before expiry; concurrent callers share one
  * fetch. Failures aren't cached, so a signed-out tab retries on the next call.
