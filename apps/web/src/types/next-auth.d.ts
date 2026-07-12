@@ -38,3 +38,17 @@ declare module '@auth/core/jwt' {
     error?: string;
   }
 }
+
+// Same story as JWT above: the Credentials provider's `authorize()` return
+// type and the `jwt` callback's `user` param both come from @auth/core/types
+// directly, not from next-auth's re-export.
+declare module '@auth/core/types' {
+  interface User {
+    accessToken?: string;
+    accessTokenExpiresAt?: number;
+    refreshToken?: string;
+    consultantId?: string;
+    roleName?: string | null;
+    permissions?: string[];
+  }
+}

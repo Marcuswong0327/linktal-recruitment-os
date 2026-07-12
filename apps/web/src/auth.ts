@@ -1,4 +1,5 @@
-import NextAuth from 'next-auth';
+import NextAuth, { CredentialsSignin } from 'next-auth';
+import Credentials from 'next-auth/providers/credentials';
 import MicrosoftEntraID from 'next-auth/providers/microsoft-entra-id';
 
 // Server-to-server URL for the login/refresh handshake below — deliberately
@@ -40,24 +41,22 @@ async function readApiError(res: Response): Promise<string> {
   return body?.code ?? 'API_ERROR';
 }
 
-async function exchangeIdTokenForApiSession(idToken: string): Promise<ApiResult<ApiSession>> {
-  const res = await fetch(`${API_INTERNAL_URL}/auth/login`, {
+async function postAuth<T>(path: string, body: unknown): Promise<ApiResult<T>> {
+  const res = await fetch(`${API_INTERNAL_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ idToken }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) return { ok: false, code: await readApiError(res) };
-  return { ok: true, data: (await res.json()) as ApiSession };
+  return { ok: true, data: (await res.json()) as T };
 }
 
-async function refreshApiAccessToken(refreshToken: string): Promise<ApiResult<ApiRefresh>> {
-  const res = await fetch(`${API_INTERNAL_URL}/auth/refresh`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken }),
-  });
-  if (!res.ok) return { ok: false, code: await readApiError(res) };
-  return { ok: true, data: (await res.json()) as ApiRefresh };
+function exchangeIdTokenForApiSession(idToken: string) {
+  return postAuth<ApiSession>('/auth/login', { idToken });
+}
+
+function refreshApiAccessToken(refreshToken: string) {
+  return postAuth<ApiRefresh>('/auth/refresh', { refreshToken });
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -69,10 +68,61 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // which would accept any Microsoft account).
       issuer: process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
     }),
+    Credentials({
+      id: 'credentials',
+      name: 'Email and password',
+      // No `credentials` schema — we render our own form and call signIn()
+      // directly, so NextAuth's auto-generated form (which would use this)
+      // never renders.
+      credentials: {},
+      async authorize(raw) {
+        const { email, password, fullName, mode } = raw as {
+          email?: string;
+          password?: string;
+          fullName?: string;
+          mode?: 'register' | 'login';
+        };
+        if (!email || !password) {
+          const err = new CredentialsSignin();
+          err.code = 'INVALID_CREDENTIALS';
+          throw err;
+        }
+
+        // Verified independently against the Consultant table by the API
+        // (see RbacService.registerWithPassword/verifyPassword) — this
+        // provider never trusts a password itself, only what the API returns.
+        const result =
+          mode === 'register'
+            ? await postAuth<ApiSession>('/auth/register', { email, password, fullName: fullName ?? '' })
+            : await postAuth<ApiSession>('/auth/login-password', { email, password });
+
+        if (!result.ok) {
+          // Carries the API's specific error code (e.g. 'EMAIL_TAKEN',
+          // 'ACCOUNT_INACTIVE') through to signIn()'s return value on the
+          // client, instead of collapsing every failure into one generic
+          // message.
+          const err = new CredentialsSignin();
+          err.code = result.code;
+          throw err;
+        }
+
+        return {
+          id: result.data.user.consultantId,
+          email: result.data.user.email,
+          name: result.data.user.fullName,
+          accessToken: result.data.accessToken,
+          accessTokenExpiresAt: result.data.accessTokenExpiresAt,
+          refreshToken: result.data.refreshToken,
+          consultantId: result.data.user.consultantId,
+          roleName: result.data.user.roleName,
+          permissions: result.data.user.permissions,
+        };
+      },
+    }),
   ],
   session: { strategy: 'jwt' },
   callbacks: {
-    async jwt({ token, account }) {
+    async jwt({ token, account, user }) {
       // Initial sign-in: account.id_token is Azure's own signed id_token.
       // Exchange it for the API's own access/refresh tokens — the API
       // independently re-verifies this id_token against Microsoft's JWKS
@@ -86,6 +136,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           accessTokenExpiresAt: result.data.accessTokenExpiresAt,
           refreshToken: result.data.refreshToken,
           user: result.data.user,
+          error: undefined,
+        };
+      }
+
+      // Initial sign-in via the Credentials provider — authorize() already
+      // did the register/login-password exchange and attached the API
+      // tokens to the returned `user` object.
+      if (user && 'accessToken' in user) {
+        return {
+          ...token,
+          accessToken: user.accessToken,
+          accessTokenExpiresAt: user.accessTokenExpiresAt,
+          refreshToken: user.refreshToken,
+          user: {
+            consultantId: user.consultantId ?? '',
+            email: user.email ?? null,
+            fullName: user.name ?? '',
+            roleName: user.roleName ?? null,
+            permissions: user.permissions ?? [],
+          },
           error: undefined,
         };
       }

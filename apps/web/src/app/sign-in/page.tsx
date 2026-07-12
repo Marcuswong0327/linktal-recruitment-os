@@ -2,18 +2,11 @@ import { redirect } from 'next/navigation';
 import { TriangleAlert } from 'lucide-react';
 import { auth } from '@/auth';
 import { SignInButton } from '@/features/auth/sign-in-button';
+import { EmailPasswordForm } from '@/features/auth/email-password-form';
+import { AUTH_ERROR_MESSAGES, DEFAULT_AUTH_ERROR_MESSAGE } from '@/features/auth/auth-error-messages';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
-
-/**
- * Maps the API's error `code` (surfaced via session.error, then carried here
- * as a query param by SessionErrorHandler's forced sign-out — see that file
- * for why it's a query param and not session state) to a user-facing reason.
- */
-const ERROR_MESSAGES: Record<string, string> = {
-  ACCOUNT_INACTIVE: 'Your account has been deactivated. Contact your administrator for access.',
-};
-const DEFAULT_ERROR_MESSAGE = 'Something went wrong signing you in. Please contact the admin for further information';
+import { Separator } from '@/components/ui/separator';
 
 export default async function SignInPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const session = await auth();
@@ -41,18 +34,24 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
           <Alert variant="destructive" className="w-full">
             <TriangleAlert />
             <AlertTitle>Sign-in failed</AlertTitle>
-            <AlertDescription>{ERROR_MESSAGES[error] ?? DEFAULT_ERROR_MESSAGE}</AlertDescription>
+            <AlertDescription>{AUTH_ERROR_MESSAGES[error] ?? DEFAULT_AUTH_ERROR_MESSAGE}</AlertDescription>
           </Alert>
         )}
 
         <Card className="w-full">
-          <CardContent>
+          <CardContent className="flex flex-col gap-4">
+            <EmailPasswordForm />
+            <div className="flex items-center gap-3">
+              <Separator className="flex-1" />
+              <span className="text-xs text-muted-foreground">or</span>
+              <Separator className="flex-1" />
+            </div>
             <SignInButton />
           </CardContent>
         </Card>
 
         <p className="text-center text-xs text-muted-foreground">
-          Access is restricted to your organization&rsquo;s Microsoft account.
+          Microsoft sign-in is restricted to your organization&rsquo;s account.
         </p>
       </div>
     </main>
