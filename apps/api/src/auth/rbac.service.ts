@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser, TokenClaims } from './auth.types';
@@ -18,9 +18,10 @@ const withRole = {
 
 type ConsultantWithRole = {
   id: string;
-  neonUserId: string | null;
+  azureId: string | null;
   email: string;
   fullName: string;
+  isActive: boolean;
   role: {
     name: string;
     permissions: { permission: { resource: string; action: string } }[];
@@ -35,23 +36,59 @@ export class RbacService {
 
   /**
    * Maps a verified token to the app user. `Consultant` is the identity+role
-   * table (linked to Neon Auth via `neonUserId`). A first-time user is
+   * table (linked to Azure AD via `azureId`). A first-time user is
    * provisioned just-in-time with the default `viewer` role.
    */
   async resolveUser(claims: TokenClaims): Promise<AuthUser> {
     const consultant = await this.findOrProvision(claims);
+    this.assertActive(consultant);
     return this.toAuthUser(consultant);
   }
 
-  private async findOrProvision(claims: TokenClaims): Promise<ConsultantWithRole> {
-    const byNeonId = await this.prisma.consultant.findUnique({
-      where: { neonUserId: claims.sub },
+  /**
+   * Re-resolves a consultant by id (used on refresh, where we only have the
+   * consultantId embedded in the refresh token, not a fresh set of claims) —
+   * so a role change takes effect on the next refresh without a re-login.
+   */
+  async resolveById(consultantId: string): Promise<AuthUser> {
+    const consultant = await this.prisma.consultant.findUnique({
+      where: { id: consultantId },
       include: withRole,
     });
-    if (byNeonId) return byNeonId;
+    if (!consultant) {
+      throw new UnauthorizedException({
+        code: 'INVALID_TOKEN',
+        message: 'Consultant no longer exists',
+      });
+    }
+    this.assertActive(consultant);
+    return this.toAuthUser(consultant);
+  }
+
+  /**
+   * Rejects a deactivated consultant. `resolveUser` runs on every
+   * authenticated request (AuthGuard calls it per-request, not just at
+   * token-mint time), so deactivating someone takes effect immediately — no
+   * separate revocation needed, despite refresh tokens being stateless.
+   */
+  private assertActive(consultant: ConsultantWithRole) {
+    if (!consultant.isActive) {
+      throw new ForbiddenException({
+        code: 'ACCOUNT_INACTIVE',
+        message: 'This account has been deactivated',
+      });
+    }
+  }
+
+  private async findOrProvision(claims: TokenClaims): Promise<ConsultantWithRole> {
+    const byAzureId = await this.prisma.consultant.findUnique({
+      where: { azureId: claims.sub },
+      include: withRole,
+    });
+    if (byAzureId) return byAzureId;
 
     // A consultant may already exist by email (e.g. from data import) without a
-    // linked Neon account — link it rather than creating a duplicate. If that
+    // linked Azure account — link it rather than creating a duplicate. If that
     // imported row has no role yet, give it the default so the user isn't left
     // with zero permissions on first login.
     if (claims.email) {
@@ -63,7 +100,7 @@ export class RbacService {
         return this.prisma.consultant.update({
           where: { id: byEmail.id },
           data: {
-            neonUserId: claims.sub,
+            azureId: claims.sub,
             ...(byEmail.role
               ? {}
               : { roleId: (await this.roleByName(LINKED_DEFAULT_ROLE))?.id }),
@@ -74,7 +111,7 @@ export class RbacService {
     }
 
     const data = {
-      neonUserId: claims.sub,
+      azureId: claims.sub,
       email: claims.email ?? `${claims.sub}@users.noreply.local`,
       fullName: claims.name ?? claims.email ?? 'New User',
       roleId: (await this.roleByName(DEFAULT_ROLE))?.id,
@@ -133,7 +170,7 @@ export class RbacService {
 
     return {
       consultantId: consultant.id,
-      neonUserId: consultant.neonUserId ?? '',
+      azureId: consultant.azureId ?? '',
       email: consultant.email,
       fullName: consultant.fullName,
       roleName: consultant.role?.name ?? null,

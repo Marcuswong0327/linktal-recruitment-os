@@ -1,6 +1,6 @@
-/** Identity extracted from a verified Neon Auth JWT. */
+/** Identity extracted from a verified Azure AD id_token. */
 export interface TokenClaims {
-  /** Neon Auth user id (JWT `sub`). */
+  /** Azure AD object id (`oid` claim, falling back to `sub`). */
   sub: string;
   email?: string;
   name?: string;
@@ -9,7 +9,7 @@ export interface TokenClaims {
 /** The authenticated principal attached to each request after the guards run. */
 export interface AuthUser {
   consultantId: string;
-  neonUserId: string;
+  azureId: string;
   email: string | null;
   fullName: string;
   roleName: string | null;

@@ -8,7 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from './auth.decorators';
 import { RbacService } from './rbac.service';
-import { TokenVerifierService } from './token-verifier.service';
+import { TokenService } from './token.service';
 
 /**
  * Authenticates every request (globally) unless the route is @Public().
@@ -19,7 +19,7 @@ import { TokenVerifierService } from './token-verifier.service';
 export class AuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly verifier: TokenVerifierService,
+    private readonly tokens: TokenService,
     private readonly rbac: RbacService,
   ) {}
 
@@ -39,7 +39,7 @@ export class AuthGuard implements CanActivate {
       });
     }
 
-    const claims = await this.verifier.verify(token);
+    const claims = await this.tokens.verifyAccessToken(token);
     request.user = await this.rbac.resolveUser(claims);
     return true;
   }

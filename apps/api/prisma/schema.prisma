@@ -1,5 +1,5 @@
 // Prisma schema — https://pris.ly/d/prisma-schema
-// Datasource: PostgreSQL on Neon with Neon Auth
+// Datasource: PostgreSQL on Neon (auth is handled by NextAuth + Azure AD, not Neon)
 
 generator client {
   provider = "prisma-client-js"
@@ -96,7 +96,7 @@ model RolePermission {
 model Consultant {
   id          String     @id @default(cuid())
   displayId   String     @unique // Format: "consultant-XXXX"
-  neonUserId  String?    @unique // Neon Auth user ID
+  azureId     String?    @unique // Azure AD object id (oid claim)
   email       String     @unique
   fullName    String
   roleId      String?
