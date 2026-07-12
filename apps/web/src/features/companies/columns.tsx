@@ -3,98 +3,84 @@
 import type { ColumnDef } from '@tanstack/react-table';
 
 import { Badge } from '@/components/ui/badge';
-import {
-  type Company,
-  type RelationshipStatus,
-  type TobStatus,
-  relationshipStatusLabels,
-  tobStatusLabels,
-} from './schema';
+import { type ClientStatus, type Company, clientStatusLabels } from './schema';
 
-const relationshipVariant: Record<
-  RelationshipStatus,
-  'muted' | 'warning' | 'success' | 'outline'
-> = {
+const statusVariant: Record<ClientStatus, 'muted' | 'warning' | 'success'> = {
   COLD: 'muted',
   WARM: 'warning',
   TRADED: 'success',
-  UNS: 'outline',
 };
 
-const tobVariant: Record<TobStatus, 'muted' | 'warning' | 'success'> = {
-  NONE: 'muted',
-  SENT: 'warning',
-  SIGNED: 'success',
-};
+interface CompanyColumnsOptions {
+  /** Resolves a consultantId to a display name (client-side join — the API returns IDs only). */
+  consultantName: (id: string | null) => string;
+}
 
-export const companyColumns: ColumnDef<Company>[] = [
-  {
-    accessorKey: 'name',
-    header: 'Company',
-    cell: ({ row }) => (
-      <span className="font-medium text-foreground">{row.original.name}</span>
-    ),
-  },
-  {
-    accessorKey: 'industry',
-    header: 'Industry',
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">{row.original.industry}</span>
-    ),
-  },
-  {
-    accessorKey: 'location',
-    header: 'Location',
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">{row.original.location}</span>
-    ),
-  },
-  {
-    accessorKey: 'relationshipStatus',
-    header: 'Relationship',
-    size: 140,
-    meta: { align: 'center' },
-    cell: ({ row }) => (
-      <Badge variant={relationshipVariant[row.original.relationshipStatus]}>
-        {relationshipStatusLabels[row.original.relationshipStatus]}
-      </Badge>
-    ),
-  },
-  {
-    accessorKey: 'tobStatus',
-    header: 'TOB',
-    size: 120,
-    meta: { align: 'center' },
-    cell: ({ row }) => (
-      <Badge variant={tobVariant[row.original.tobStatus]}>
-        {tobStatusLabels[row.original.tobStatus]}
-      </Badge>
-    ),
-  },
-  {
-    accessorKey: 'stakeholderCount',
-    header: 'Stakeholders',
-    size: 130,
-    meta: { align: 'center' },
-    cell: ({ row }) => (
-      <span className="tabular-nums">{row.original.stakeholderCount}</span>
-    ),
-  },
-  {
-    accessorKey: 'openJobOrders',
-    header: 'Open JOs',
-    size: 100,
-    meta: { align: 'center' },
-    cell: ({ row }) => (
-      <span className="tabular-nums">{row.original.openJobOrders}</span>
-    ),
-  },
-  {
-    accessorKey: 'owner',
-    header: 'Owner',
-    size: 160,
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">{row.original.owner}</span>
-    ),
-  },
-];
+export function getCompanyColumns({ consultantName }: CompanyColumnsOptions): ColumnDef<Company>[] {
+  return [
+    {
+      accessorKey: 'companyName',
+      header: 'Company',
+      cell: ({ row }) => (
+        <span className="font-medium text-foreground">{row.original.companyName}</span>
+      ),
+    },
+    {
+      accessorKey: 'industry',
+      header: 'Industry',
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{row.original.industry ?? '—'}</span>
+      ),
+    },
+    {
+      id: 'location',
+      header: 'Location',
+      accessorFn: (row) => [row.city, row.country].filter(Boolean).join(', '),
+      cell: ({ row }) => {
+        const location = [row.original.city, row.original.country].filter(Boolean).join(', ');
+        return <span className="text-muted-foreground">{location || '—'}</span>;
+      },
+    },
+    {
+      accessorKey: 'status',
+      header: 'Relationship',
+      size: 140,
+      meta: { align: 'center' },
+      cell: ({ row }) => (
+        <Badge variant={statusVariant[row.original.status]}>
+          {clientStatusLabels[row.original.status]}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: 'tobSigned',
+      header: 'TOB',
+      size: 120,
+      meta: { align: 'center' },
+      cell: ({ row }) => (
+        <Badge variant={row.original.tobSigned ? 'success' : 'muted'}>
+          {row.original.tobSigned ? 'Signed' : 'Not signed'}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: 'feePercentage',
+      header: 'Fee %',
+      size: 100,
+      meta: { align: 'center' },
+      cell: ({ row }) => (
+        <span className="tabular-nums">
+          {row.original.feePercentage != null ? `${row.original.feePercentage}%` : '—'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'consultantId',
+      header: 'Consultant',
+      size: 160,
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{consultantName(row.original.consultantId)}</span>
+      ),
+    },
+  ];
+}
