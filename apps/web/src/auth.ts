@@ -60,6 +60,12 @@ function refreshApiAccessToken(refreshToken: string) {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  // Auth.js only auto-trusts the request Host on Vercel (via the VERCEL env
+  // var); on Railway (or any other host behind a proxy) it otherwise rejects
+  // the real domain and falls back to the container's internal address,
+  // throwing UntrustedHost. Railway's proxy sets X-Forwarded-Host correctly,
+  // so trusting it here is safe.
+  trustHost: true,
   providers: [
     MicrosoftEntraID({
       clientId: process.env.AUTH_MICROSOFT_ENTRA_ID_ID,
