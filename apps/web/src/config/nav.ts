@@ -55,7 +55,7 @@ export const navGroups: NavGroup[] = [
     // admin" check rather than hardcoding a role name.
     requiredPermission: { resource: "user", action: "update" },
     items: [
-      { title: "Users", href: "/users", icon: Users, disabled: true },
+      { title: "Users", href: "/users", icon: Users },
       { title: "Settings", href: "/settings", icon: Cog, disabled: true },
       { title: "Activity Log", href: '/activity-log', icon: ScrollText, disabled: true }],
   },

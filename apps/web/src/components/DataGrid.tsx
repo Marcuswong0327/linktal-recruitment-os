@@ -5,6 +5,7 @@ import {
   type ColumnDef,
   type ColumnFiltersState,
   type FilterFn,
+  type RowSelectionState,
   type SortingState,
   flexRender,
   getCoreRowModel,
@@ -16,10 +17,13 @@ import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Search, 
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DataGridFacetedFilter, type FacetedFilterOption } from '@/components/DataGridFacetedFilter';
+
+const SELECT_COLUMN_ID = '__select';
 
 export interface DataGridFilter {
   /** Column id (accessorKey) to filter on. */
@@ -90,6 +94,20 @@ interface DataGridProps<TData> {
    * and filters are reported via onQueryChange instead of applied locally.
    */
   server?: DataGridServerProps;
+  /**
+   * Stable row id for selection (defaults to row index, which is wrong once
+   * paginated/filtered — pass this whenever `onSelectionChange` is used).
+   */
+  getRowId?: (row: TData) => string;
+  /**
+   * Adds a checkbox column and reports the selected row objects. Selection
+   * is scoped to the currently visible page (cleared on page change) — this
+   * app's tables are small enough that cross-page selection isn't worth the
+   * added complexity of tracking rows no longer in `data`.
+   */
+  onSelectionChange?: (rows: TData[]) => void;
+  /** Per-row override for whether a row's checkbox can be selected (default: all can). */
+  canSelectRow?: (row: TData) => boolean;
 }
 
 export function DataGrid<TData>({
@@ -103,9 +121,19 @@ export function DataGrid<TData>({
   isLoading = false,
   skeletonRows = 8,
   server,
+  getRowId,
+  onSelectionChange,
+  canSelectRow,
 }: DataGridProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
+  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
+
+  // Selection is page-scoped (see onSelectionChange doc) — drop it when the
+  // visible rows change out from under it.
+  React.useEffect(() => {
+    setRowSelection({});
+  }, [data]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
 
   // In server mode, report query state upward (debounced so typing in the
@@ -129,28 +157,64 @@ export function DataGrid<TData>({
 
   // Attach the faceted filter fn to whichever columns are declared filterable.
   const filterColumnIds = React.useMemo(() => new Set((filters ?? []).map((f) => f.columnId)), [filters]);
-  const tableColumns = React.useMemo(
-    () =>
-      columns.map((col) => {
-        const id = (col as { id?: string; accessorKey?: string }).id ?? (col as { accessorKey?: string }).accessorKey;
-        return id && filterColumnIds.has(id) ? { ...col, filterFn: facetedFilterFn as FilterFn<TData> } : col;
-      }),
-    [columns, filterColumnIds],
-  );
+  const tableColumns = React.useMemo(() => {
+    const withFilters = columns.map((col) => {
+      const id = (col as { id?: string; accessorKey?: string }).id ?? (col as { accessorKey?: string }).accessorKey;
+      return id && filterColumnIds.has(id) ? { ...col, filterFn: facetedFilterFn as FilterFn<TData> } : col;
+    });
+    if (!onSelectionChange) return withFilters;
+
+    const selectColumn: ColumnDef<TData, unknown> = {
+      id: SELECT_COLUMN_ID,
+      size: 40,
+      header: ({ table }) => (
+        <Checkbox
+          checked={table.getIsAllPageRowsSelected()}
+          indeterminate={!table.getIsAllPageRowsSelected() && table.getIsSomePageRowsSelected()}
+          onCheckedChange={(checked) => table.toggleAllPageRowsSelected(!!checked)}
+          onClick={(e) => e.stopPropagation()}
+          aria-label="Select all"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          onCheckedChange={(checked) => row.toggleSelected(!!checked)}
+          onClick={(e) => e.stopPropagation()}
+          disabled={!row.getCanSelect()}
+          aria-label="Select row"
+        />
+      ),
+    };
+    return [selectColumn, ...withFilters];
+  }, [columns, filterColumnIds, onSelectionChange]);
 
   const table = useReactTable({
     data,
     columns: tableColumns,
-    state: { sorting, globalFilter, columnFilters },
+    state: { sorting, globalFilter, columnFilters, rowSelection },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onColumnFiltersChange: setColumnFilters,
+    onRowSelectionChange: setRowSelection,
+    getRowId: getRowId as ((row: TData) => string) | undefined,
+    enableRowSelection: !onSelectionChange ? false : canSelectRow ? (row) => canSelectRow(row.original) : true,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     manualSorting: isServer,
     manualFiltering: isServer,
   });
+
+  const onSelectionChangeRef = React.useRef(onSelectionChange);
+  onSelectionChangeRef.current = onSelectionChange;
+  const selectedRowModel = table.getSelectedRowModel();
+  // Deliberately depend on rowSelection (real state) rather than
+  // selectedRowModel (a fresh array every render) — the latter would fire
+  // this every render instead of only when selection actually changes.
+  React.useEffect(() => {
+    onSelectionChangeRef.current?.(selectedRowModel.rows.map((r) => r.original));
+  }, [rowSelection]);
 
   const isFiltered = columnFilters.length > 0 || globalFilter !== '';
 
