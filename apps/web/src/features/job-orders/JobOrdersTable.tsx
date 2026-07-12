@@ -34,7 +34,7 @@ const jobOrderFilters: DataGridFilter[] = [
   { columnId: 'status', title: 'Status', options: statusOptions },
 ];
 
-export function JobOrdersTable() {
+export function JobOrdersTable({ canCreate = true }: { canCreate?: boolean }) {
   const [jobOrders, setJobOrders] = React.useState<JobOrder[]>(mockJobOrders);
   const [editing, setEditing] = React.useState<JobOrder | null>(null);
 
@@ -54,7 +54,11 @@ export function JobOrdersTable() {
         onRowClick={setEditing}
         emptyState="No job orders yet. Create one against a client to get started."
         toolbar={
-          <Button size="lg">
+          <Button
+            size="lg"
+            disabled={!canCreate}
+            title={canCreate ? undefined : "You don't have permission to add job orders"}
+          >
             <Plus />
             Add job order
           </Button>

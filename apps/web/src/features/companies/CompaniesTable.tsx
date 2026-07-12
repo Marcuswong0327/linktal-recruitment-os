@@ -41,7 +41,7 @@ const companyFilters: DataGridFilter[] = [
   { columnId: 'tobStatus', title: 'TOB', options: tobOptions },
 ];
 
-export function CompaniesTable() {
+export function CompaniesTable({ canCreate = true }: { canCreate?: boolean }) {
   const [companies, setCompanies] = React.useState<Company[]>(mockCompanies);
   const [editing, setEditing] = React.useState<Company | null>(null);
 
@@ -61,7 +61,11 @@ export function CompaniesTable() {
         onRowClick={setEditing}
         emptyState="No companies yet. Add your first client to get started."
         toolbar={
-          <Button size="lg">
+          <Button
+            size="lg"
+            disabled={!canCreate}
+            title={canCreate ? undefined : "You don't have permission to add companies"}
+          >
             <Plus />
             Add company
           </Button>
