@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,52 +15,115 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { DataGrid, type DataGridFilter } from '@/components/DataGrid';
+import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
-import { companyColumns } from './columns';
-import { mockCompanies } from './mock';
-import {
-  type Company,
-  relationshipStatuses,
-  relationshipStatusLabels,
-  tobStatuses,
-  tobStatusLabels,
-} from './schema';
+import { getGetClientsQueryKey, useGetClients, useUpdateClient } from '@/lib/api/generated/clients/clients';
+import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
+import type { ConsultantEntity, GetClientsStatus } from '@/lib/api/generated/types';
+import { getCompanyColumns, statusVariant, tobVariant } from './columns';
+import { type ClientStatus, type Company, clientStatusLabels, clientStatuses } from './schema';
 
-const relationshipOptions = relationshipStatuses.map((value) => ({
+const PAGE_SIZE = 20;
+
+const statusOptions = clientStatuses.map((value) => ({
   value,
-  label: relationshipStatusLabels[value],
+  label: clientStatusLabels[value],
+  variant: statusVariant[value],
 }));
-const tobOptions = tobStatuses.map((value) => ({
-  value,
-  label: tobStatusLabels[value],
-}));
+
+const tobOptions = [
+  { value: 'true', label: 'Signed', variant: tobVariant.true },
+  { value: 'false', label: 'Not signed', variant: tobVariant.false },
+];
 
 const companyFilters: DataGridFilter[] = [
-  { columnId: 'relationshipStatus', title: 'Relationship', options: relationshipOptions },
-  { columnId: 'tobStatus', title: 'TOB', options: tobOptions },
+  { columnId: 'status', title: 'Relationship', single: true, options: statusOptions },
+  { columnId: 'tobSigned', title: 'TOB', single: true, options: tobOptions },
 ];
 
 export function CompaniesTable({ canCreate = true }: { canCreate?: boolean }) {
-  const [companies, setCompanies] = React.useState<Company[]>(mockCompanies);
+  const queryClient = useQueryClient();
+  const [page, setPage] = React.useState(1);
+  const [search, setSearch] = React.useState<string | undefined>();
+  const [status, setStatus] = React.useState<GetClientsStatus | undefined>();
+  const [tobSigned, setTobSigned] = React.useState<boolean | undefined>();
   const [editing, setEditing] = React.useState<Company | null>(null);
 
+  const { data, isLoading, isError, error } = useGetClients(
+    { page, pageSize: PAGE_SIZE, q: search, status, tobSigned },
+    { query: { placeholderData: keepPreviousData } },
+  );
+
+  // Client-side join: the API returns consultantId only, so pull the full
+  // consultant list once to resolve names for the table and edit form.
+  const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
+  const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
+  const consultantName = React.useCallback(
+    (id: string | null) => (id ? (consultants.find((c) => c.id === id)?.fullName ?? 'Unknown') : 'Unassigned'),
+    [consultants],
+  );
+
+  const updateClient = useUpdateClient({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey() });
+        toast.success('Saved changes');
+        setEditing(null);
+      },
+      onError: (err) => toast.error(err.message || 'Failed to update company'),
+    },
+  });
+
+  const result = data?.status === 200 ? data.data : undefined;
+  const companies = result?.data ?? [];
+
+  function handleQueryChange({ search, columnFilters }: DataGridQuery) {
+    const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as string[] | undefined;
+    const tobFilter = columnFilters.find((f) => f.id === 'tobSigned')?.value as string[] | undefined;
+    setSearch(search.trim() || undefined);
+    setStatus(statusFilter?.[0] as GetClientsStatus | undefined);
+    setTobSigned(tobFilter?.[0] === undefined ? undefined : tobFilter[0] === 'true');
+    setPage(1);
+  }
+
   function handleSave(updated: Company) {
-    setCompanies((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
-    setEditing(null);
-    toast.success(`Saved changes to ${updated.name}`);
+    updateClient.mutate({
+      id: updated.id,
+      data: {
+        companyName: updated.companyName,
+        industry: updated.industry ?? undefined,
+        city: updated.city ?? undefined,
+        country: updated.country ?? undefined,
+        status: updated.status,
+        tobSigned: updated.tobSigned,
+        feePercentage: updated.feePercentage ?? undefined,
+        consultantId: updated.consultantId ?? undefined,
+      },
+    });
+  }
+
+  const columns = React.useMemo(() => getCompanyColumns({ consultantName }), [consultantName]);
+
+  if (isError) {
+    return (
+      <p className="text-sm text-destructive">
+        Failed to load companies: {error?.message ?? 'Unknown error'}
+      </p>
+    );
   }
 
   return (
     <>
       <DataGrid
-        columns={companyColumns}
+        columns={columns}
         data={companies}
+        isLoading={isLoading}
         searchPlaceholder="Search companies…"
         filters={companyFilters}
         onRowClick={setEditing}
         emptyState="No companies yet. Add your first client to get started."
+        getRowId={(c) => c.id}
         toolbar={
           <Button
             size="lg"
@@ -70,6 +134,14 @@ export function CompaniesTable({ canCreate = true }: { canCreate?: boolean }) {
             Add company
           </Button>
         }
+        server={{
+          total: result?.total ?? 0,
+          page,
+          pageSize: PAGE_SIZE,
+          pageCount: result?.pageCount ?? 1,
+          onPageChange: setPage,
+          onQueryChange: handleQueryChange,
+        }}
       />
 
       <Sheet
@@ -81,6 +153,8 @@ export function CompaniesTable({ canCreate = true }: { canCreate?: boolean }) {
             <EditCompanyForm
               key={editing.id}
               company={editing}
+              consultants={consultants}
+              isSaving={updateClient.isPending}
               onSave={handleSave}
               onCancel={() => setEditing(null)}
             />
@@ -93,32 +167,45 @@ export function CompaniesTable({ canCreate = true }: { canCreate?: boolean }) {
 
 function EditCompanyForm({
   company,
+  consultants,
+  isSaving,
   onSave,
   onCancel,
 }: {
   company: Company;
+  consultants: ConsultantEntity[];
+  isSaving: boolean;
   onSave: (company: Company) => void;
   onCancel: () => void;
 }) {
-  const [name, setName] = React.useState(company.name);
-  const [industry, setIndustry] = React.useState(company.industry);
-  const [location, setLocation] = React.useState(company.location);
-  const [relationshipStatus, setRelationshipStatus] = React.useState(
-    company.relationshipStatus,
+  const [companyName, setCompanyName] = React.useState(company.companyName);
+  const [industry, setIndustry] = React.useState(company.industry ?? '');
+  const [city, setCity] = React.useState(company.city ?? '');
+  const [country, setCountry] = React.useState(company.country ?? '');
+  const [status, setStatus] = React.useState<ClientStatus>(company.status);
+  const [tobSigned, setTobSigned] = React.useState(company.tobSigned);
+  const [feePercentage, setFeePercentage] = React.useState(
+    company.feePercentage != null ? String(company.feePercentage) : '',
   );
-  const [tobStatus, setTobStatus] = React.useState(company.tobStatus);
-  const [owner, setOwner] = React.useState(company.owner);
+  const [consultantId, setConsultantId] = React.useState(company.consultantId ?? '');
+
+  const consultantOptions = [
+    { value: '', label: 'Unassigned' },
+    ...consultants.map((c) => ({ value: c.id, label: c.fullName })),
+  ];
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     onSave({
       ...company,
-      name,
-      industry,
-      location,
-      relationshipStatus,
-      tobStatus,
-      owner,
+      companyName,
+      industry: industry || null,
+      city: city || null,
+      country: country || null,
+      status,
+      tobSigned,
+      feePercentage: feePercentage === '' ? null : Number(feePercentage),
+      consultantId: consultantId || null,
     });
   }
 
@@ -127,7 +214,7 @@ function EditCompanyForm({
       <SheetHeader>
         <SheetTitle>Edit company</SheetTitle>
         <SheetDescription>
-          Update {company.name}’s account details.
+          Update {company.companyName}’s account details.
         </SheetDescription>
       </SheetHeader>
 
@@ -135,8 +222,8 @@ function EditCompanyForm({
         <FormField label="Company name" htmlFor="company-name">
           <Input
             id="company-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
           />
         </FormField>
         <FormField label="Industry" htmlFor="company-industry">
@@ -146,46 +233,61 @@ function EditCompanyForm({
             onChange={(e) => setIndustry(e.target.value)}
           />
         </FormField>
-        <FormField label="Location" htmlFor="company-location">
+        <FormField label="City" htmlFor="company-city">
           <Input
-            id="company-location"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
+            id="company-city"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
           />
         </FormField>
-        <FormField label="Relationship" htmlFor="company-relationship">
+        <FormField label="Country" htmlFor="company-country">
+          <Input
+            id="company-country"
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+          />
+        </FormField>
+        <FormField label="Relationship" htmlFor="company-status">
           <EnumSelect
-            id="company-relationship"
-            value={relationshipStatus}
-            onValueChange={(v) =>
-              setRelationshipStatus(v as Company['relationshipStatus'])
-            }
-            options={relationshipOptions}
+            id="company-status"
+            value={status}
+            onValueChange={(v) => setStatus(v as ClientStatus)}
+            options={statusOptions}
           />
         </FormField>
         <FormField label="Terms of Business" htmlFor="company-tob">
           <EnumSelect
             id="company-tob"
-            value={tobStatus}
-            onValueChange={(v) => setTobStatus(v as Company['tobStatus'])}
+            value={String(tobSigned)}
+            onValueChange={(v) => setTobSigned(v === 'true')}
             options={tobOptions}
           />
         </FormField>
-        <FormField label="Owner" htmlFor="company-owner">
+        <FormField label="Fee %" htmlFor="company-fee">
           <Input
-            id="company-owner"
-            value={owner}
-            onChange={(e) => setOwner(e.target.value)}
+            id="company-fee"
+            type="number"
+            value={feePercentage}
+            onChange={(e) => setFeePercentage(e.target.value)}
+          />
+        </FormField>
+        <FormField label="Consultant" htmlFor="company-consultant">
+          <EnumSelect
+            id="company-consultant"
+            value={consultantId}
+            onValueChange={setConsultantId}
+            options={consultantOptions}
+            placeholder="Unassigned"
           />
         </FormField>
       </div>
 
       <SheetFooter className="flex-row justify-end">
-        <Button type="button" variant="outline" size="lg" onClick={onCancel}>
+        <Button type="button" variant="outline" size="lg" onClick={onCancel} disabled={isSaving}>
           Cancel
         </Button>
-        <Button type="submit" size="lg">
-          Save changes
+        <Button type="submit" size="lg" disabled={isSaving}>
+          {isSaving ? 'Saving…' : 'Save changes'}
         </Button>
       </SheetFooter>
     </form>
