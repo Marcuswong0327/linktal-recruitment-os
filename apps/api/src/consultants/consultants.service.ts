@@ -13,6 +13,8 @@ import { QueryConsultantsDto } from './dto/query-consultants.dto';
 
 /** Every read embeds the resolved role so the directory can show it. */
 const withRole = { role: { select: { id: true, name: true } } } as const;
+// Never return the bcrypt hash — these queries feed API responses directly.
+const omitSecrets = { passwordHash: true } as const;
 
 const ADMIN_ROLE = 'admin';
 // Assigning either of these privileged roles is admin-only.
@@ -58,6 +60,7 @@ export class ConsultantsService {
         skip: (page - 1) * pageSize,
         take: pageSize,
         include: withRole,
+        omit: omitSecrets,
       }),
       this.prisma.consultant.count({ where }),
     ]);
@@ -69,6 +72,7 @@ export class ConsultantsService {
     const consultant = await this.prisma.consultant.findUnique({
       where: { id },
       include: withRole,
+      omit: omitSecrets,
     });
     if (!consultant) {
       throw new NotFoundException(`Consultant ${id} not found`);
@@ -80,6 +84,7 @@ export class ConsultantsService {
     const consultant = await this.prisma.consultant.findUnique({
       where: { displayId },
       include: withRole,
+      omit: omitSecrets,
     });
     if (!consultant) {
       throw new NotFoundException(`Consultant ${displayId} not found`);
@@ -95,7 +100,7 @@ export class ConsultantsService {
       });
     }
     // displayId is assigned by the DB (Consultant_displayId_seq default).
-    return this.prisma.consultant.create({ data: dto, include: withRole });
+    return this.prisma.consultant.create({ data: dto, include: withRole, omit: omitSecrets });
   }
 
   async update(id: string, dto: UpdateConsultantDto, actor: AuthUser) {
@@ -125,7 +130,7 @@ export class ConsultantsService {
       throw new ConflictException('Cannot demote or deactivate the last active admin.');
     }
 
-    return this.prisma.consultant.update({ where: { id }, data: dto, include: withRole });
+    return this.prisma.consultant.update({ where: { id }, data: dto, include: withRole, omit: omitSecrets });
   }
 
   async remove(id: string, actor: AuthUser) {
@@ -146,7 +151,7 @@ export class ConsultantsService {
       throw new ConflictException('Cannot delete the last active admin.');
     }
 
-    return this.prisma.consultant.delete({ where: { id } });
+    return this.prisma.consultant.delete({ where: { id }, omit: omitSecrets });
   }
 
   /** Update the caller's own profile — name only; never role or active status. */
@@ -156,6 +161,7 @@ export class ConsultantsService {
       where: { id },
       data: { fullName },
       include: withRole,
+      omit: omitSecrets,
     });
   }
 

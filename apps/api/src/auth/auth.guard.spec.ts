@@ -1,10 +1,10 @@
-import { ExecutionContext, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from './auth.decorators';
 import { AuthGuard } from './auth.guard';
 import { AuthUser, TokenClaims } from './auth.types';
 import { RbacService } from './rbac.service';
-import { TokenVerifierService } from './token-verifier.service';
+import { TokenService } from './token.service';
 
 function contextFor(headers: Record<string, string>): ExecutionContext {
   const req = { headers } as { headers: Record<string, string>; user?: AuthUser };
@@ -18,17 +18,17 @@ function contextFor(headers: Record<string, string>): ExecutionContext {
 function makeGuard(opts: {
   isPublic?: boolean;
   verify?: (t: string) => Promise<TokenClaims>;
-  resolve?: (c: TokenClaims) => Promise<AuthUser>;
+  resolve?: (consultantId: string) => Promise<AuthUser>;
 }) {
   const reflector = {
     getAllAndOverride: (key: string) =>
       key === IS_PUBLIC_KEY ? opts.isPublic : undefined,
   } as unknown as Reflector;
-  const verifier = {
-    verify: opts.verify ?? jest.fn(),
-  } as unknown as TokenVerifierService;
-  const rbac = { resolveUser: opts.resolve ?? jest.fn() } as unknown as RbacService;
-  return new AuthGuard(reflector, verifier, rbac);
+  const tokens = {
+    verifyAccessToken: opts.verify ?? jest.fn(),
+  } as unknown as TokenService;
+  const rbac = { resolveById: opts.resolve ?? jest.fn() } as unknown as RbacService;
+  return new AuthGuard(reflector, tokens, rbac);
 }
 
 describe('AuthGuard', () => {
@@ -47,7 +47,7 @@ describe('AuthGuard', () => {
   it('verifies the token and attaches the resolved user', async () => {
     const user = {
       consultantId: 'c1',
-      neonUserId: 'u1',
+      azureId: 'u1',
       email: 'a@b.com',
       fullName: 'A B',
       roleName: 'viewer',
@@ -55,32 +55,13 @@ describe('AuthGuard', () => {
       permissions: new Set(['candidate:read']),
     } as AuthUser;
     const guard = makeGuard({
-      verify: async () => ({ sub: 'u1', email: 'a@b.com' }),
+      verify: async () => ({ sub: 'c1', email: 'a@b.com' }),
       resolve: async () => user,
     });
 
     const ctx = contextFor({ authorization: 'Bearer abc.def.ghi' });
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
     expect(ctx.switchToHttp().getRequest().user).toBe(user);
-  });
-
-  it('rejects a deactivated (isActive=false) account despite a valid token', async () => {
-    const guard = makeGuard({
-      verify: async () => ({ sub: 'u1', email: 'a@b.com' }),
-      resolve: async () =>
-        ({
-          consultantId: 'c1',
-          neonUserId: 'u1',
-          email: 'a@b.com',
-          fullName: 'A B',
-          roleName: 'viewer',
-          isActive: false,
-          permissions: new Set<string>(),
-        }) as AuthUser,
-    });
-    await expect(
-      guard.canActivate(contextFor({ authorization: 'Bearer abc.def.ghi' })),
-    ).rejects.toThrow(ForbiddenException);
   });
 
   it('rejects a non-bearer authorization scheme', async () => {

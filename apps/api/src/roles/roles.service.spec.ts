@@ -5,7 +5,7 @@ import { AuthUser } from '../auth/auth.types';
 
 const actor = (roleName: string | null, permissions: string[] = []): AuthUser => ({
   consultantId: 'actor',
-  neonUserId: 'neon',
+  azureId: 'azure',
   email: 'actor@linktal.com',
   fullName: 'Actor',
   roleName,

@@ -1,7 +1,6 @@
 import {
   CanActivate,
   ExecutionContext,
-  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -9,7 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from './auth.decorators';
 import { RbacService } from './rbac.service';
-import { TokenVerifierService } from './token-verifier.service';
+import { TokenService } from './token.service';
 
 /**
  * Authenticates every request (globally) unless the route is @Public().
@@ -20,7 +19,7 @@ import { TokenVerifierService } from './token-verifier.service';
 export class AuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly verifier: TokenVerifierService,
+    private readonly tokens: TokenService,
     private readonly rbac: RbacService,
   ) {}
 
@@ -40,19 +39,12 @@ export class AuthGuard implements CanActivate {
       });
     }
 
-    const claims = await this.verifier.verify(token);
-    const user = await this.rbac.resolveUser(claims);
-
-    // Deactivated accounts are blocked even with a valid token — this is how
-    // access is revoked (deleting a consultant only re-provisions them).
-    if (!user.isActive) {
-      throw new ForbiddenException({
-        code: 'ACCOUNT_INACTIVE',
-        message: 'This account has been deactivated.',
-      });
-    }
-
-    request.user = user;
+    const claims = await this.tokens.verifyAccessToken(token);
+    // Our own access tokens always carry the Consultant id as `sub` (see
+    // TokenService callers) — resolve by primary key, not by re-running the
+    // Azure-specific JIT-provisioning lookup on every request. resolveById
+    // also rejects deactivated accounts (see RbacService.assertActive).
+    request.user = await this.rbac.resolveById(claims.sub);
     return true;
   }
 

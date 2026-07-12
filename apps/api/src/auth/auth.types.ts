@@ -1,6 +1,13 @@
-/** Identity extracted from a verified Neon Auth JWT. */
+/**
+ * Identity claims. Two different meanings depending on where this shows up:
+ * - Output of AzureTokenVerifierService.verify(): `sub` is the Azure AD
+ *   object id (`oid` claim) — used only to JIT-provision/link a Consultant
+ *   during POST /auth/login.
+ * - Payload of our own access token (TokenService sign/verifyAccessToken):
+ *   `sub` is always the Consultant's own id, regardless of how they signed
+ *   in — AuthGuard resolves every request by this id (RbacService.resolveById).
+ */
 export interface TokenClaims {
-  /** Neon Auth user id (JWT `sub`). */
   sub: string;
   email?: string;
   name?: string;
@@ -9,7 +16,7 @@ export interface TokenClaims {
 /** The authenticated principal attached to each request after the guards run. */
 export interface AuthUser {
   consultantId: string;
-  neonUserId: string;
+  azureId: string;
   email: string | null;
   fullName: string;
   roleName: string | null;

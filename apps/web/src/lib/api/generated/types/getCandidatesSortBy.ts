@@ -14,13 +14,5 @@ export const GetCandidatesSortBy = {
   fullName: 'fullName',
   familyName: 'familyName',
   givenName: 'givenName',
-  email: 'email',
-  city: 'city',
-  country: 'country',
-  industry: 'industry',
-  roleType: 'roleType',
-  currentCompany: 'currentCompany',
-  currentPosition: 'currentPosition',
   yearsExperience: 'yearsExperience',
-  status: 'status',
 } as const;

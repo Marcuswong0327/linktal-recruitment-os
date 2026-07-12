@@ -9,8 +9,6 @@ import type { CreateCandidateDtoStatus } from './createCandidateDtoStatus';
 import type { WorkHistoryItemDto } from './workHistoryItemDto';
 
 export interface CreateCandidateDto {
-  /** Display ID */
-  displayId: string;
   /** Full name */
   fullName: string;
   /** Given name */
