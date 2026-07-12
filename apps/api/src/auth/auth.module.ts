@@ -1,10 +1,12 @@
 import { Global, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { PrismaModule } from '../prisma/prisma.module';
+import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
+import { AzureTokenVerifierService } from './azure-token-verifier.service';
 import { PermissionsGuard } from './permissions.guard';
 import { RbacService } from './rbac.service';
-import { TokenVerifierService } from './token-verifier.service';
+import { TokenService } from './token.service';
 
 /**
  * Wires authentication + RBAC globally. Guard order matters: AuthGuard
@@ -13,12 +15,14 @@ import { TokenVerifierService } from './token-verifier.service';
 @Global()
 @Module({
   imports: [PrismaModule],
+  controllers: [AuthController],
   providers: [
-    TokenVerifierService,
+    AzureTokenVerifierService,
+    TokenService,
     RbacService,
     { provide: APP_GUARD, useClass: AuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
-  exports: [TokenVerifierService, RbacService],
+  exports: [TokenService, RbacService],
 })
 export class AuthModule {}

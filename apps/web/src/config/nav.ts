@@ -1,16 +1,23 @@
 import { LayoutDashboard, Users, Cog, ScrollText, Building2, type LucideIcon, Contact, Mail, ClipboardList, SquareCheck, BriefcaseBusiness, MessageSquare, FileText, UsersRound, BookA } from 'lucide-react';
 
+/** Same shape as the API's @RequirePermission(resource, action) decorator. */
+export type RequiredPermission = { resource: string; action: string };
+
 export type NavItem = {
   title: string;
   href: string;
   icon: LucideIcon;
   hidden?: boolean;
   disabled?: boolean;
+  /** Only shown to users whose permission set includes this — mirrors the API's own check. */
+  requiredPermission?: RequiredPermission;
 };
 
 export type NavGroup = {
   label?: string;
   items: NavItem[];
+  /** Hides the whole group (all items) unless the user has this permission. */
+  requiredPermission?: RequiredPermission;
 };
 
 /**
@@ -43,8 +50,12 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "ADMIN",
+    // Only `admin` has write access to users in the RBAC seed (manager/
+    // consultant are read-only on `user`) — use that as the "is this an
+    // admin" check rather than hardcoding a role name.
+    requiredPermission: { resource: "user", action: "update" },
     items: [
-      { title: "Users", href: "/users", icon: Users, disabled: true },
+      { title: "Users", href: "/users", icon: Users },
       { title: "Settings", href: "/settings", icon: Cog, disabled: true },
       { title: "Activity Log", href: '/activity-log', icon: ScrollText, disabled: true }],
   },

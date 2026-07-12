@@ -1,30 +1,33 @@
-// Roles map to the RBAC tiers in the spec (Workflow 1): Administrator, Manager, Consultant.
-export const userRoles = ['ADMINISTRATOR', 'MANAGER', 'CONSULTANT'] as const;
+import { UpdateUserDtoRoleName } from '@/lib/api/generated/types';
+import type { UserEntity } from '@/lib/api/generated/types';
+
+// Types come straight from the generated API client, which is derived from
+// the Prisma schema — the single source of truth. Don't hand-maintain shapes
+// here.
+export type User = UserEntity;
+
+// The 6 RBAC roles seeded in apps/api/prisma/seed.ts.
+export const userRoles = Object.values(UpdateUserDtoRoleName);
 export type UserRole = (typeof userRoles)[number];
 
-export const userStatuses = ['ACTIVE', 'INVITED', 'DISABLED'] as const;
-export type UserStatus = (typeof userStatuses)[number];
-
 export const userRoleLabels: Record<UserRole, string> = {
-  ADMINISTRATOR: 'Administrator',
-  MANAGER: 'Manager',
-  CONSULTANT: 'Consultant',
+  admin: 'Admin',
+  manager: 'Manager',
+  consultant: 'Consultant',
+  finance: 'Finance',
+  researcher: 'Researcher',
+  viewer: 'Viewer',
 };
 
-export const userStatusLabels: Record<UserStatus, string> = {
-  ACTIVE: 'Active',
-  INVITED: 'Invited',
-  DISABLED: 'Disabled',
-};
-
-export type User = {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  status: UserStatus;
-  /** Number of live job orders this consultant owns. */
-  openJobOrders: number;
-  lastActiveAt: string; // ISO date
-  createdAt: string; // ISO date
+// Semantic-token palette for the role select — success/destructive are
+// reserved for the Status column (active/inactive), so roles use the
+// remaining tokens, roughly by privilege level (admin = brand color, down to
+// viewer = lowest emphasis).
+export const userRoleTriggerClassName: Record<UserRole, string> = {
+  admin: 'border-primary/30 bg-primary/10 text-primary',
+  manager: 'border-info/30 bg-info/10 text-info',
+  finance: 'border-warning/30 bg-warning/10 text-warning',
+  consultant: 'border-transparent bg-secondary text-secondary-foreground',
+  researcher: 'border-transparent bg-accent text-accent-foreground',
+  viewer: 'border-transparent bg-muted text-muted-foreground',
 };

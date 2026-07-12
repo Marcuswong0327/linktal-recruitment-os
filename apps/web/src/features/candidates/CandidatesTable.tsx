@@ -37,7 +37,7 @@ const candidateFilters: DataGridFilter[] = [
 
 const PAGE_SIZE = 20;
 
-export function CandidatesTable() {
+export function CandidatesTable({ canCreate = true }: { canCreate?: boolean }) {
   const router = useRouter();
   const [page, setPage] = React.useState(1);
   const [query, setQuery] = React.useState<
@@ -95,7 +95,11 @@ export function CandidatesTable() {
       }}
       emptyState="No candidates yet. Add one to start building your pipeline."
       toolbar={
-        <Button size="lg">
+        <Button
+          size="lg"
+          disabled={!canCreate}
+          title={canCreate ? undefined : "You don't have permission to add candidates"}
+        >
           <Plus />
           Add candidate
         </Button>

@@ -1,157 +1,209 @@
 'use client';
 
 import * as React from 'react';
-import { Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { useSession } from 'next-auth/react';
+import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
+import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import { DataGrid } from '@/components/DataGrid';
-import { EnumSelect } from '@/components/EnumSelect';
-import { FormField } from '@/components/FormField';
-import { userColumns } from './columns';
-import { mockUsers } from './mock';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import {
-  type User,
-  userRoleLabels,
-  userRoles,
-  userStatusLabels,
-  userStatuses,
-} from './schema';
+  getGetUsersQueryKey,
+  updateUser as updateUserRequest,
+  useGetUsers,
+  useUpdateUser,
+} from '@/lib/api/generated/users/users';
+import type { GetUsersRole, UpdateUserDto } from '@/lib/api/generated/types';
+import { getUserColumns } from './columns';
+import { type User, type UserRole, userRoleLabels, userRoles } from './schema';
 
-const roleOptions = userRoles.map((value) => ({
-  value,
-  label: userRoleLabels[value],
-}));
-const statusOptions = userStatuses.map((value) => ({
-  value,
-  label: userStatusLabels[value],
-}));
+const PAGE_SIZE = 20;
+
+// Badge variants for the filter dropdown pills — a close approximation of
+// the select trigger palette in columns.tsx (Badge has a fixed variant set,
+// so "accent" for researcher maps to the closest neutral, "outline").
+const roleFilterVariant: Record<UserRole, 'default' | 'info' | 'warning' | 'secondary' | 'outline' | 'muted'> = {
+  admin: 'default',
+  manager: 'info',
+  finance: 'warning',
+  consultant: 'secondary',
+  researcher: 'outline',
+  viewer: 'muted',
+};
+
+const userFilters: DataGridFilter[] = [
+  {
+    columnId: 'roleName',
+    title: 'Role',
+    single: true,
+    options: userRoles.map((value) => ({
+      value,
+      label: userRoleLabels[value],
+      variant: roleFilterVariant[value],
+    })),
+  },
+  {
+    columnId: 'isActive',
+    title: 'Status',
+    single: true,
+    options: [
+      { value: 'true', label: 'Active', variant: 'success' },
+      { value: 'false', label: 'Inactive', variant: 'destructive' },
+    ],
+  },
+];
 
 export function UsersTable() {
-  const [users, setUsers] = React.useState<User[]>(mockUsers);
-  const [editing, setEditing] = React.useState<User | null>(null);
+  const { data: session } = useSession();
+  const queryClient = useQueryClient();
+  const [page, setPage] = React.useState(1);
+  const [search, setSearch] = React.useState<string | undefined>();
+  const [role, setRole] = React.useState<GetUsersRole | undefined>();
+  const [isActive, setIsActive] = React.useState<boolean | undefined>();
+  const [selectedUsers, setSelectedUsers] = React.useState<User[]>([]);
+  const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
 
-  function handleSave(updated: User) {
-    setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
-    setEditing(null);
-    toast.success(`Saved changes to ${updated.name}`);
-  }
+  const currentConsultantId = session?.user?.consultantId;
 
-  return (
-    <>
-      <DataGrid
-        columns={userColumns}
-        data={users}
-        searchPlaceholder="Search users…"
-        onRowClick={setEditing}
-        emptyState="No users yet. Invite your team to get started."
-        toolbar={
-          <Button size="lg">
-            <Plus />
-            Add User
-          </Button>
-        }
-      />
-
-      {/* Edit drawer — edit a record in place instead of a full page. */}
-      <Sheet
-        open={editing !== null}
-        onOpenChange={(open) => !open && setEditing(null)}
-      >
-        <SheetContent className="w-full sm:max-w-md">
-          {editing ? (
-            <EditUserForm
-              key={editing.id}
-              user={editing}
-              onSave={handleSave}
-              onCancel={() => setEditing(null)}
-            />
-          ) : null}
-        </SheetContent>
-      </Sheet>
-    </>
+  const { data, isLoading, isError, error } = useGetUsers(
+    { page, pageSize: PAGE_SIZE, q: search, role, isActive },
+    { query: { placeholderData: keepPreviousData } },
   );
-}
 
-function EditUserForm({
-  user,
-  onSave,
-  onCancel,
-}: {
-  user: User;
-  onSave: (user: User) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = React.useState(user.name);
-  const [email, setEmail] = React.useState(user.email);
-  const [role, setRole] = React.useState<User['role']>(user.role);
-  const [status, setStatus] = React.useState<User['status']>(user.status);
+  const updateUser = useUpdateUser({
+    mutation: {
+      onSuccess: (_data, variables) => {
+        queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
+        const label = variables.data.roleName !== undefined ? 'role' : 'status';
+        toast.success(`Updated ${label}`);
+      },
+      onError: (err) => {
+        toast.error(err.message || 'Failed to update user');
+      },
+    },
+  });
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    onSave({ ...user, name, email, role, status });
+  const result = data?.status === 200 ? data.data : undefined;
+  const users = result?.data ?? [];
+  const pendingId = updateUser.isPending ? (updateUser.variables?.id ?? null) : null;
+
+  function handleQueryChange({ search, columnFilters }: DataGridQuery) {
+    const roleFilter = columnFilters.find((f) => f.id === 'roleName')?.value as string[] | undefined;
+    const statusFilter = columnFilters.find((f) => f.id === 'isActive')?.value as string[] | undefined;
+    setSearch(search.trim() || undefined);
+    setRole(roleFilter?.[0] as GetUsersRole | undefined);
+    setIsActive(statusFilter?.[0] === undefined ? undefined : statusFilter[0] === 'true');
+    setPage(1);
+  }
+
+  // Bypasses the useUpdateUser hook (which only tracks one in-flight call at
+  // a time) — bulk fires several concurrent requests, and we want a single
+  // summary toast, not one per row.
+  async function handleBulkUpdate(data: UpdateUserDto, actionLabel: string) {
+    setIsBulkUpdating(true);
+    const results = await Promise.allSettled(
+      selectedUsers.map((u) => updateUserRequest(u.id, data)),
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    const succeeded = results.length - failed;
+    queryClient.invalidateQueries({ queryKey: getGetUsersQueryKey() });
+    if (succeeded > 0) toast.success(`${actionLabel} for ${succeeded} user${succeeded === 1 ? '' : 's'}`);
+    if (failed > 0) toast.error(`Failed for ${failed} user${failed === 1 ? '' : 's'}`);
+    setIsBulkUpdating(false);
+    setSelectedUsers([]);
+  }
+
+  const columns = React.useMemo(
+    () =>
+      getUserColumns({
+        pendingId,
+        isSelf: (user: User) => user.id === currentConsultantId,
+        onRoleChange: (user, newRole: UserRole) => updateUser.mutate({ id: user.id, data: { roleName: newRole } }),
+        onStatusChange: (user, newIsActive) => updateUser.mutate({ id: user.id, data: { isActive: newIsActive } }),
+      }),
+    [pendingId, currentConsultantId, updateUser],
+  );
+
+  if (isError) {
+    return (
+      <p className="text-sm text-destructive">
+        Failed to load users: {error?.message ?? 'Unknown error'}
+      </p>
+    );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex h-full flex-col">
-      <SheetHeader>
-        <SheetTitle>Edit user</SheetTitle>
-        <SheetDescription>
-          Update {user.name}’s details. Changes apply immediately.
-        </SheetDescription>
-      </SheetHeader>
-
-      <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
-        <FormField label="Name" htmlFor="user-name">
-          <Input
-            id="user-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </FormField>
-        <FormField label="Email" htmlFor="user-email">
-          <Input
-            id="user-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </FormField>
-        <FormField label="Role" htmlFor="user-role">
-          <EnumSelect
-            id="user-role"
-            value={role}
-            onValueChange={(v) => setRole(v as User['role'])}
-            options={roleOptions}
-          />
-        </FormField>
-        <FormField label="Status" htmlFor="user-status">
-          <EnumSelect
-            id="user-status"
-            value={status}
-            onValueChange={(v) => setStatus(v as User['status'])}
-            options={statusOptions}
-          />
-        </FormField>
-      </div>
-
-      <SheetFooter className="flex-row justify-end">
-        <Button type="button" variant="outline" size="lg" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" size="lg">
-          Save changes
-        </Button>
-      </SheetFooter>
-    </form>
+    <DataGrid
+      columns={columns}
+      data={users}
+      isLoading={isLoading}
+      searchPlaceholder="Search users…"
+      filters={userFilters}
+      emptyState="No users yet."
+      getRowId={(user) => user.id}
+      canSelectRow={(user) => user.id !== currentConsultantId}
+      onSelectionChange={setSelectedUsers}
+      toolbar={
+        selectedUsers.length > 0 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button variant="outline" size="lg" disabled={isBulkUpdating}>
+                  {isBulkUpdating ? 'Updating…' : `Bulk actions (${selectedUsers.length})`}
+                  <ChevronDown />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Set role</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  {userRoles.map((r) => (
+                    <DropdownMenuItem
+                      key={r}
+                      onClick={() => handleBulkUpdate({ roleName: r }, `Role set to ${userRoleLabels[r]}`)}
+                    >
+                      {userRoleLabels[r]}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Set status</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onClick={() => handleBulkUpdate({ isActive: true }, 'Activated')}>
+                    Active
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => handleBulkUpdate({ isActive: false }, 'Deactivated')}
+                  >
+                    Inactive
+                  </DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : undefined
+      }
+      server={{
+        total: result?.total ?? 0,
+        page,
+        pageSize: PAGE_SIZE,
+        pageCount: result?.pageCount ?? 1,
+        onPageChange: setPage,
+        onQueryChange: handleQueryChange,
+      }}
+    />
   );
 }

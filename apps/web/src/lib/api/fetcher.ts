@@ -27,9 +27,9 @@ export class ApiError extends Error {
  *
  * - Used directly for hand-written calls (`customFetch('/candidates')`).
  * - Wired into Orval as the `mutator`, so generated React Query hooks route
- *   through here too — inheriting the base URL and `credentials: 'include'`
- *   (needed to send the Neon Auth cookie). Orval passes a relative `url` (it
- *   has no `baseUrl` configured), which we prefix with NEXT_PUBLIC_API_URL.
+ *   through here too — inheriting the base URL and the Bearer token. Orval
+ *   passes a relative `url` (it has no `baseUrl` configured), which we
+ *   prefix with NEXT_PUBLIC_API_URL.
  */
 export const customFetch = async <T>(
   url: string,

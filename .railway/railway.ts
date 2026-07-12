@@ -31,6 +31,10 @@ export default defineRailway(() => {
       DATABASE_URL: { preserveExisting: true },
       DIRECT_URL: { preserveExisting: true },
       CORS_ORIGIN: { preserveExisting: true },
+      AZURE_TENANT_ID: { preserveExisting: true },
+      AZURE_CLIENT_ID: { preserveExisting: true },
+      JWT_ACCESS_SECRET: { preserveExisting: true },
+      JWT_REFRESH_SECRET: { preserveExisting: true },
     },
   });
 
@@ -57,8 +61,11 @@ export default defineRailway(() => {
     env: {
       NEXT_PUBLIC_API_URL: { preserveExisting: true },
       NEXT_PUBLIC_APP_URL: { preserveExisting: true },
-      NEON_AUTH_BASE_URL: { preserveExisting: true },
-      NEON_AUTH_COOKIE_SECRET: { preserveExisting: true },
+      API_INTERNAL_URL: { preserveExisting: true },
+      AUTH_SECRET: { preserveExisting: true },
+      AUTH_MICROSOFT_ENTRA_ID_ID: { preserveExisting: true },
+      AUTH_MICROSOFT_ENTRA_ID_SECRET: { preserveExisting: true },
+      AUTH_MICROSOFT_ENTRA_ID_ISSUER: { preserveExisting: true },
     },
   });
 
