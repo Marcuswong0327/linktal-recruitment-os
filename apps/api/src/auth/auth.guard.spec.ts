@@ -18,7 +18,7 @@ function contextFor(headers: Record<string, string>): ExecutionContext {
 function makeGuard(opts: {
   isPublic?: boolean;
   verify?: (t: string) => Promise<TokenClaims>;
-  resolve?: (c: TokenClaims) => Promise<AuthUser>;
+  resolve?: (consultantId: string) => Promise<AuthUser>;
 }) {
   const reflector = {
     getAllAndOverride: (key: string) =>
@@ -27,7 +27,7 @@ function makeGuard(opts: {
   const tokens = {
     verifyAccessToken: opts.verify ?? jest.fn(),
   } as unknown as TokenService;
-  const rbac = { resolveUser: opts.resolve ?? jest.fn() } as unknown as RbacService;
+  const rbac = { resolveById: opts.resolve ?? jest.fn() } as unknown as RbacService;
   return new AuthGuard(reflector, tokens, rbac);
 }
 
@@ -54,7 +54,7 @@ describe('AuthGuard', () => {
       permissions: new Set(['candidate:read']),
     } as AuthUser;
     const guard = makeGuard({
-      verify: async () => ({ sub: 'u1', email: 'a@b.com' }),
+      verify: async () => ({ sub: 'c1', email: 'a@b.com' }),
       resolve: async () => user,
     });
 

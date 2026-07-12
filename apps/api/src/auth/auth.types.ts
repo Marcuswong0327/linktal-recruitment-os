@@ -1,6 +1,13 @@
-/** Identity extracted from a verified Azure AD id_token. */
+/**
+ * Identity claims. Two different meanings depending on where this shows up:
+ * - Output of AzureTokenVerifierService.verify(): `sub` is the Azure AD
+ *   object id (`oid` claim) — used only to JIT-provision/link a Consultant
+ *   during POST /auth/login.
+ * - Payload of our own access token (TokenService sign/verifyAccessToken):
+ *   `sub` is always the Consultant's own id, regardless of how they signed
+ *   in — AuthGuard resolves every request by this id (RbacService.resolveById).
+ */
 export interface TokenClaims {
-  /** Azure AD object id (`oid` claim, falling back to `sub`). */
   sub: string;
   email?: string;
   name?: string;

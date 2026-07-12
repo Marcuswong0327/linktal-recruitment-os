@@ -40,7 +40,10 @@ export class AuthGuard implements CanActivate {
     }
 
     const claims = await this.tokens.verifyAccessToken(token);
-    request.user = await this.rbac.resolveUser(claims);
+    // Our own access tokens always carry the Consultant id as `sub` (see
+    // TokenService callers) — resolve by primary key, not by re-running the
+    // Azure-specific JIT-provisioning lookup on every request.
+    request.user = await this.rbac.resolveById(claims.sub);
     return true;
   }
 
