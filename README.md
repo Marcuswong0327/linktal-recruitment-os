@@ -2,10 +2,10 @@
 
 A TypeScript monorepo:
 
-| App          | Path        | Stack                                                                 | Deploy   |
-| ------------ | ----------- | --------------------------------------------------------------------- | -------- |
-| Web frontend | `apps/web`  | Next.js (App Router) · Tailwind CSS · Zod + React Hook Form · TanStack Query | Railway  |
-| API backend  | `apps/api`  | NestJS · Prisma ORM · PostgreSQL (Neon)                               | Railway  |
+| App          | Path       | Stack                                                                        | Deploy  |
+| ------------ | ---------- | ---------------------------------------------------------------------------- | ------- |
+| Web frontend | `apps/web` | Next.js (App Router) · Tailwind CSS · Zod + React Hook Form · TanStack Query | Railway |
+| API backend  | `apps/api` | NestJS · Prisma ORM · PostgreSQL (Neon)                                      | Railway |
 
 Tooling: **pnpm workspaces** + **Turborepo**. CI runs on **GitHub Actions**.
 
@@ -44,14 +44,14 @@ pnpm dev
 
 ## Monorepo scripts (run from the root)
 
-| Command           | What it does                                          |
-| ----------------- | ----------------------------------------------------- |
-| `pnpm dev`        | Runs `web` and `api` in watch mode via Turborepo      |
-| `pnpm build`      | Builds every app (`prisma generate` + `nest build`, `next build`) |
-| `pnpm lint`       | Lints every app                                       |
-| `pnpm typecheck`  | `tsc --noEmit` in every app                           |
-| `pnpm test`       | Runs unit tests                                       |
-| `pnpm format`     | Prettier write across the repo                        |
+| Command          | What it does                                                      |
+| ---------------- | ----------------------------------------------------------------- |
+| `pnpm dev`       | Runs `web` and `api` in watch mode via Turborepo                  |
+| `pnpm build`     | Builds every app (`prisma generate` + `nest build`, `next build`) |
+| `pnpm lint`      | Lints every app                                                   |
+| `pnpm typecheck` | `tsc --noEmit` in every app                                       |
+| `pnpm test`      | Runs unit tests                                                   |
+| `pnpm format`    | Prettier write across the repo                                    |
 
 Target a single app with a filter, e.g. `pnpm --filter @linktal/api dev`.
 
@@ -105,19 +105,30 @@ For **both** the `web` and `api` services, in the service **Settings**:
 ### Environment variables (set in Railway)
 
 **API service**
-| Var            | Value                                                       |
-| -------------- | ----------------------------------------------------------- |
-| `DATABASE_URL` | Neon pooled connection string                               |
-| `DIRECT_URL`   | Neon direct connection string                               |
-| `CORS_ORIGIN`  | Your web service URL, e.g. `https://web-xxxx.up.railway.app` |
+
+| Var                  | Value                                                        |
+| -------------------- | ------------------------------------------------------------ |
+| `DATABASE_URL`       | Neon pooled connection string                                |
+| `DIRECT_URL`         | Neon direct connection string                                |
+| `CORS_ORIGIN`        | Your web service URL, e.g. `https://web-xxxx.up.railway.app` |
+| `AZURE_TENANT_ID`    | Client's Azure Tenant ID                                     |
+| `AZURE_CLIENT_ID`    | Linktal Recruitment OS App Registration (Client Id)          |
+| `JWT_ACCESS_SECRET`  | Own API access token                                         |
+| `JWT_REFRESH_SECRET` | Own API refresh token                                        |
 
 > The API start command runs `prisma migrate deploy` before booting, so schema
 > changes ship automatically on deploy.
 
 **Web service**
-| Var                   | Value                                                  |
-| --------------------- | ------------------------------------------------------ |
-| `NEXT_PUBLIC_API_URL` | Your API service URL + `/api`, e.g. `https://api-xxxx.up.railway.app/api` |
+
+| Var                              | Value                                                                     |
+| -------------------------------- | ------------------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_URL`            | Your API service URL + `/api`, e.g. `https://api-xxxx.up.railway.app/api` |
+| `AUTH_SECRET`                    | Something here                                                            |
+| `AUTH_MICROSOFT_ENTRA_ID_ID `    | Same as `AZURE_CLIENT_ID`                                                 |
+| `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Client Secret Value (will expire in 2 years)                              |
+| `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Microsoft's Authentication Endpoint with Tenant ID                        |
+| `API_INTERNAL_URL `              | Used for NextAuth and runs on server side                                 |
 
 ### CI
 
