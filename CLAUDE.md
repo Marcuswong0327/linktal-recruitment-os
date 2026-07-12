@@ -197,7 +197,7 @@ Total Package × Fee% = Placement Fee + GST
 | # | Question | Decision |
 |---|----------|----------|
 | 9 | Data cleanup | Import as-is, handle duplicates during import |
-| 10 | Auth provider | NextAuth (Auth.js v5) with Microsoft Entra ID (Azure AD, single-tenant) OAuth; NestJS mints/verifies its own access+refresh JWTs. Neon is Postgres-only (no passwordHash, no Neon Auth) |
+| 10 | Auth provider | NextAuth (Auth.js v5): Microsoft Entra ID (Azure AD, single-tenant) OAuth, plus email+password (bcrypt `passwordHash` on `Consultant`, open self-registration) via a Credentials provider. NestJS mints/verifies its own access+refresh JWTs for both. Neon is Postgres-only (no Neon Auth) |
 | 11 | MVP scope | Excel Import + RBAC first |
 | 12 | Auto-updates | Implement all 17 service-level auto-updates |
 
