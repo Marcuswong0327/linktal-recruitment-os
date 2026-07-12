@@ -4,6 +4,12 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthController } from './health/health.controller';
 import { CandidatesModule } from './candidates/candidates.module';
+import { ClientsModule } from './clients/clients.module';
+import { StakeholdersModule } from './stakeholders/stakeholders.module';
+import { JobOrdersModule } from './job-orders/job-orders.module';
+import { ConsultantsModule } from './consultants/consultants.module';
+import { RolesModule } from './roles/roles.module';
+import { PermissionsModule } from './permissions/permissions.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
@@ -14,6 +20,12 @@ import { UsersModule } from './users/users.module';
     PrismaModule,
     AuthModule,
     CandidatesModule,
+    ClientsModule,
+    StakeholdersModule,
+    JobOrdersModule,
+    ConsultantsModule,
+    RolesModule,
+    PermissionsModule,
     UsersModule,
   ],
   controllers: [HealthController],

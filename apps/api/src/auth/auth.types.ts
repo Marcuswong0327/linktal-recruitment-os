@@ -20,6 +20,8 @@ export interface AuthUser {
   email: string | null;
   fullName: string;
   roleName: string | null;
+  /** When false the account is deactivated and login is rejected. */
+  isActive: boolean;
   /** Flat set of `resource:action` strings for O(1) permission checks. */
   permissions: Set<string>;
 }

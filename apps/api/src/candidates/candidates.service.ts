@@ -78,6 +78,7 @@ export class CandidatesService {
   }
 
   create(dto: CreateCandidateDto) {
+    // displayId is assigned by the DB (Candidate_displayId_seq default).
     return this.prisma.candidate.create({ data: this.toPrismaData(dto) });
   }
 

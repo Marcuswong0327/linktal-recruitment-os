@@ -3,21 +3,19 @@ import { Type } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { CandidateStatus } from '@prisma/client';
 
-/** Columns the list may be sorted by. Excludes JSON/free-text and timestamps. */
+/**
+ * Columns the list may be sorted by. Deliberately narrow: IDs, names, and
+ * numeric fields — the things with a meaningful order. Categorical / free-text
+ * columns (status, industry, roleType, country, city, currentCompany,
+ * currentPosition, email) are exposed as filters instead, since sorting by them
+ * only yields arbitrary alphabetical groupings.
+ */
 export enum CandidateSortField {
   displayId = 'displayId',
   fullName = 'fullName',
   familyName = 'familyName',
   givenName = 'givenName',
-  email = 'email',
-  city = 'city',
-  country = 'country',
-  industry = 'industry',
-  roleType = 'roleType',
-  currentCompany = 'currentCompany',
-  currentPosition = 'currentPosition',
   yearsExperience = 'yearsExperience',
-  status = 'status',
 }
 
 export enum SortOrder {

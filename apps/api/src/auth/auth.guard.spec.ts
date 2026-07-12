@@ -51,6 +51,7 @@ describe('AuthGuard', () => {
       email: 'a@b.com',
       fullName: 'A B',
       roleName: 'viewer',
+      isActive: true,
       permissions: new Set(['candidate:read']),
     } as AuthUser;
     const guard = makeGuard({

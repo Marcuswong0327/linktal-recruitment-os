@@ -15,12 +15,17 @@ const RESOURCES = [
   "consultant",
   "role",
   "permission",
-  "user",
   "report",
 ] as const;
 
 // Define all actions
 const ACTIONS = ["create", "read", "update", "delete"] as const;
+
+// Resources that only ever support `read` at runtime — there are no mutation
+// endpoints for them (the permission catalog is static, defined here in code).
+const READ_ONLY_RESOURCES = new Set<string>(["permission"]);
+const actionsFor = (resource: string): readonly string[] =>
+  READ_ONLY_RESOURCES.has(resource) ? ["read"] : ACTIONS;
 
 // Define role permissions matrix
 const ROLE_PERMISSIONS: Record<string, { resources: string[]; actions: string[] }[]> = {
@@ -29,15 +34,16 @@ const ROLE_PERMISSIONS: Record<string, { resources: string[]; actions: string[] 
     { resources: [...RESOURCES], actions: [...ACTIONS] },
   ],
   manager: [
-    // Full read access, limited write
+    // Read everything; full CRUD on business resources (incl. consultant).
+    // RBAC management (role/permission/user) stays admin-only.
     { resources: [...RESOURCES], actions: ["read"] },
-    { resources: ["candidate", "client", "stakeholder", "job_order", "job_research", "submission", "placement", "consultant"], actions: ["create", "update"] },
+    { resources: ["candidate", "client", "stakeholder", "job_order", "job_research", "submission", "placement", "consultant", "role"], actions: ["create", "update", "delete"] },
     { resources: ["report"], actions: ["create"] },
   ],
   consultant: [
-    // CRUD on core recruitment entities
+    // CRUD on core recruitment entities only. No consultant/role/permission
+    // read: the consultant directory and the role editor are admin/manager only.
     { resources: ["candidate", "client", "stakeholder", "job_order", "job_research", "submission", "placement"], actions: [...ACTIONS] },
-    { resources: ["consultant", "user", "role", "permission"], actions: ["read"] },
   ],
   finance: [
     // Read access to placements and reports, limited other access
@@ -63,7 +69,7 @@ async function main() {
   const permissions: { id: string; resource: string; action: string }[] = [];
 
   for (const resource of RESOURCES) {
-    for (const action of ACTIONS) {
+    for (const action of actionsFor(resource)) {
       const permission = await prisma.permission.upsert({
         where: { resource_action: { resource, action } },
         update: {},
@@ -120,6 +126,21 @@ async function main() {
       where: { roleId: role.id },
     });
     console.log(`✓ ${roleName}: ${count} permissions`);
+  }
+
+  // Prune stale permissions (their role links cascade away): resources no longer
+  // in the matrix (e.g. the removed 'user'), and non-read actions on read-only
+  // resources (e.g. permission:create/update/delete).
+  const pruned = await prisma.permission.deleteMany({
+    where: {
+      OR: [
+        { resource: { notIn: [...RESOURCES] } },
+        { resource: { in: [...READ_ONLY_RESOURCES] }, action: { not: "read" } },
+      ],
+    },
+  });
+  if (pruned.count > 0) {
+    console.log(`\n🧹 Pruned ${pruned.count} stale permission(s)`);
   }
 
   console.log("\n✅ RBAC seeding complete!");

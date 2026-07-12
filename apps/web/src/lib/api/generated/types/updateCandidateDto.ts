@@ -9,8 +9,6 @@ import type { UpdateCandidateDtoStatus } from './updateCandidateDtoStatus';
 import type { WorkHistoryItemDto } from './workHistoryItemDto';
 
 export interface UpdateCandidateDto {
-  /** Display ID */
-  displayId?: string;
   /** Full name */
   fullName?: string;
   /** Given name */

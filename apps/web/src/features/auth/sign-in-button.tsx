@@ -21,7 +21,7 @@ export function SignInButton() {
 
   const onClick = async () => {
     setPending(true);
-    await signIn('microsoft-entra-id', { callbackUrl: '/' });
+    await signIn('microsoft-entra-id', { callbackUrl: '/dashboard' });
   };
 
   return (

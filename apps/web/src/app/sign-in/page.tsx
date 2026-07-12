@@ -12,8 +12,8 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   const session = await auth();
   // Match (app)/layout.tsx's gate exactly, or a deactivated user (Azure
   // session present, but no API accessToken) hits a redirect loop: this page
-  // would send them to '/', which immediately bounces them back here.
-  if (session?.accessToken) redirect('/');
+  // would send them to '/dashboard', which immediately bounces them back here.
+  if (session?.accessToken) redirect('/dashboard');
 
   const { error } = await searchParams;
 

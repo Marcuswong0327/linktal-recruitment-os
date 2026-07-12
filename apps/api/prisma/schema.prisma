@@ -95,7 +95,7 @@ model RolePermission {
 
 model Consultant {
   id          String     @id @default(cuid())
-  displayId   String     @unique // Format: "consultant-XXXX"
+  displayId   String     @unique @default(dbgenerated("('consultant-'::text || lpad((nextval('\"Consultant_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: consultant-####
   azureId     String?    @unique // Azure AD object id (oid claim)
   passwordHash String?   // bcrypt hash; set when the consultant has email+password auth enabled
   email       String     @unique
@@ -115,14 +115,14 @@ model Consultant {
 
 model Client {
   id              String                @id @default(cuid())
-  displayId       String                @unique // Format: "Client-XXXX"
+  displayId       String                @unique @default(dbgenerated("('Client-'::text || lpad((nextval('\"Client_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Client-####
   companyName     String
   industry        String?
   country         String?
   city            String?
   website         String?
   tobSigned       Boolean               @default(false) // Terms of Business signed
-  feePercentage   Float?                @default(15) // Fee as percentage of package
+  feePercentage   Float?                // Fee as percentage of package (null until agreed)
   guaranteePeriod Int                   @default(90) // Guarantee period in days
   status          ClientStatus          @default(COLD)
   notes           String?
@@ -144,7 +144,7 @@ model Client {
 
 model Stakeholder {
   id             String                      @id @default(cuid())
-  displayId      String                      @unique // Format: "Stake-XXXX"
+  displayId      String                      @unique @default(dbgenerated("('Stake-'::text || lpad((nextval('\"Stakeholder_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Stake-####
   clientId       String
   client         Client                      @relation(fields: [clientId], references: [id], onDelete: Cascade)
   fullName       String
@@ -198,7 +198,7 @@ model ClientJobResearch {
 
 model Candidate {
   id              String                      @id @default(cuid())
-  displayId       String                      @unique // Format: "CDD-XXXX"
+  displayId       String                      @unique @default(dbgenerated("('CDD-'::text || lpad((nextval('\"Candidate_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: CDD-####
   fullName        String
   givenName       String?
   familyName      String?
@@ -244,7 +244,7 @@ model CandidateScreeningHistory {
 
 model JobOrder {
   id               String                @id @default(cuid())
-  displayId        String?               @unique // Format: auto-generated or custom
+  displayId        String                @unique @default(dbgenerated("('JO-'::text || lpad((nextval('\"JobOrder_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: JO-####
   clientId         String
   client           Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
   consultantId     String?
