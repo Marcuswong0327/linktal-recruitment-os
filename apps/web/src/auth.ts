@@ -27,24 +27,37 @@ interface ApiRefresh {
   user: ApiSessionUser;
 }
 
-async function exchangeIdTokenForApiSession(idToken: string): Promise<ApiSession | null> {
+/**
+ * Either the parsed response, or the API's error `code` (e.g.
+ * 'ACCOUNT_INACTIVE') — falls back to a generic code when the response
+ * isn't JSON (network error, API down, etc.) so callers always get *some*
+ * reason to surface, not just a silent failure.
+ */
+type ApiResult<T> = { ok: true; data: T } | { ok: false; code: string };
+
+async function readApiError(res: Response): Promise<string> {
+  const body = (await res.json().catch(() => null)) as { code?: string } | null;
+  return body?.code ?? 'API_ERROR';
+}
+
+async function exchangeIdTokenForApiSession(idToken: string): Promise<ApiResult<ApiSession>> {
   const res = await fetch(`${API_INTERNAL_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ idToken }),
   });
-  if (!res.ok) return null;
-  return res.json() as Promise<ApiSession>;
+  if (!res.ok) return { ok: false, code: await readApiError(res) };
+  return { ok: true, data: (await res.json()) as ApiSession };
 }
 
-async function refreshApiAccessToken(refreshToken: string): Promise<ApiRefresh | null> {
+async function refreshApiAccessToken(refreshToken: string): Promise<ApiResult<ApiRefresh>> {
   const res = await fetch(`${API_INTERNAL_URL}/auth/refresh`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken }),
   });
-  if (!res.ok) return null;
-  return res.json() as Promise<ApiRefresh>;
+  if (!res.ok) return { ok: false, code: await readApiError(res) };
+  return { ok: true, data: (await res.json()) as ApiRefresh };
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -65,14 +78,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // independently re-verifies this id_token against Microsoft's JWKS
       // before trusting anything in it (see apps/api's AzureTokenVerifierService).
       if (account?.id_token) {
-        const session = await exchangeIdTokenForApiSession(account.id_token);
-        if (!session) return { ...token, accessToken: undefined };
+        const result = await exchangeIdTokenForApiSession(account.id_token);
+        if (!result.ok) return { ...token, accessToken: undefined, error: result.code };
         return {
           ...token,
-          accessToken: session.accessToken,
-          accessTokenExpiresAt: session.accessTokenExpiresAt,
-          refreshToken: session.refreshToken,
-          user: session.user,
+          accessToken: result.data.accessToken,
+          accessTokenExpiresAt: result.data.accessTokenExpiresAt,
+          refreshToken: result.data.refreshToken,
+          user: result.data.user,
+          error: undefined,
         };
       }
 
@@ -84,19 +98,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // Near/past expiry — refresh. Also refreshes token.user (role,
       // permissions), so a role change or deactivation is reflected in the
       // session without needing a full re-login.
-      if (!token.refreshToken) return { ...token, accessToken: undefined };
+      if (!token.refreshToken) return { ...token, accessToken: undefined, error: 'API_ERROR' };
       const refreshed = await refreshApiAccessToken(token.refreshToken);
-      if (!refreshed) return { ...token, accessToken: undefined };
+      if (!refreshed.ok) return { ...token, accessToken: undefined, error: refreshed.code };
       return {
         ...token,
-        accessToken: refreshed.accessToken,
-        accessTokenExpiresAt: refreshed.accessTokenExpiresAt,
-        user: refreshed.user,
+        accessToken: refreshed.data.accessToken,
+        accessTokenExpiresAt: refreshed.data.accessTokenExpiresAt,
+        user: refreshed.data.user,
+        error: undefined,
       };
     },
     async session({ session, token }) {
       session.accessToken = token.accessToken;
       session.accessTokenExpiresAt = token.accessTokenExpiresAt;
+      session.error = token.error;
       if (token.user) {
         session.user = {
           ...session.user,

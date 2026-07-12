@@ -15,6 +15,8 @@ declare module 'next-auth' {
     accessToken?: string;
     /** Epoch ms. */
     accessTokenExpiresAt?: number;
+    /** API error code from the last login/refresh attempt (e.g. 'ACCOUNT_INACTIVE'). */
+    error?: string;
     user: DefaultSession['user'] & {
       consultantId?: string;
       roleName?: string | null;
@@ -33,5 +35,6 @@ declare module '@auth/core/jwt' {
     accessTokenExpiresAt?: number;
     refreshToken?: string;
     user?: ApiSessionUser;
+    error?: string;
   }
 }

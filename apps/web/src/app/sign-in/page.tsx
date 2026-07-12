@@ -1,11 +1,28 @@
 import { redirect } from 'next/navigation';
+import { TriangleAlert } from 'lucide-react';
 import { auth } from '@/auth';
 import { SignInButton } from '@/features/auth/sign-in-button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 
-export default async function SignInPage() {
+/**
+ * Maps the API's error `code` (surfaced via session.error, then carried here
+ * as a query param by SessionErrorHandler's forced sign-out — see that file
+ * for why it's a query param and not session state) to a user-facing reason.
+ */
+const ERROR_MESSAGES: Record<string, string> = {
+  ACCOUNT_INACTIVE: 'Your account has been deactivated. Contact your administrator for access.',
+};
+const DEFAULT_ERROR_MESSAGE = 'Something went wrong signing you in. Please contact the admin for further information';
+
+export default async function SignInPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const session = await auth();
-  if (session) redirect('/');
+  // Match (app)/layout.tsx's gate exactly, or a deactivated user (Azure
+  // session present, but no API accessToken) hits a redirect loop: this page
+  // would send them to '/', which immediately bounces them back here.
+  if (session?.accessToken) redirect('/');
+
+  const { error } = await searchParams;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/50 px-6">
@@ -19,6 +36,14 @@ export default async function SignInPage() {
             <p className="text-sm text-muted-foreground">Sign in with your work account to continue.</p>
           </div>
         </div>
+
+        {error && (
+          <Alert variant="destructive" className="w-full">
+            <TriangleAlert />
+            <AlertTitle>Sign-in failed</AlertTitle>
+            <AlertDescription>{ERROR_MESSAGES[error] ?? DEFAULT_ERROR_MESSAGE}</AlertDescription>
+          </Alert>
+        )}
 
         <Card className="w-full">
           <CardContent>

@@ -6,7 +6,11 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
-  if (!session) redirect('/sign-in');
+  // Azure OAuth succeeding only proves who they are, not that our own API
+  // accepted them (e.g. a deactivated consultant still completes Microsoft
+  // sign-in, but /auth/login 403s and leaves accessToken unset) — gate on
+  // the API token, not mere session presence.
+  if (!session?.accessToken) redirect('/sign-in');
 
   return (
     <TooltipProvider>
