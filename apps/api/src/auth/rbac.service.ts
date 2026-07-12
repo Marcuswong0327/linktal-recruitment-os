@@ -71,6 +71,12 @@ export class RbacService {
    * by email — imported from Excel, or already Azure-linked — this attaches
    * a password to that same row (so they can sign in either way) rather than
    * creating a duplicate; it only fails if that row already has a password.
+   * That row's isActive is left untouched — it's already a known consultant.
+   *
+   * A brand-new signup, by contrast, is always created inactive and rejected
+   * immediately (no session issued) pending admin approval — registration
+   * never proves the submitter actually owns the email address (even an
+   * @linktal.com.au one), so no domain gets auto-activated.
    */
   async registerWithPassword(input: { email: string; password: string; fullName: string }): Promise<AuthUser> {
     const passwordHash = await bcrypt.hash(input.password, BCRYPT_ROUNDS);
@@ -98,13 +104,18 @@ export class RbacService {
       return this.toAuthUser(linked);
     }
 
-    const created = await this.createConsultant({
+    await this.createConsultant({
       email: input.email,
       fullName: input.fullName,
       passwordHash,
       roleId: (await this.roleByName(DEFAULT_ROLE))?.id,
+      isActive: false,
     });
-    return this.toAuthUser(created);
+
+    throw new ForbiddenException({
+      code: 'ACCOUNT_PENDING_APPROVAL',
+      message: 'Your account has been created and is pending admin approval.',
+    });
   }
 
   /**
@@ -178,12 +189,16 @@ export class RbacService {
   }
 
   // displayId is assigned by the DB (Consultant_displayId_seq default).
+  // isActive is omitted for Azure provisioning (defaults to true — SSO
+  // already implies Microsoft vetted them) and set explicitly to false for
+  // email+password signups, which never prove email ownership.
   private async createConsultant(data: {
     azureId?: string;
     email: string;
     fullName: string;
     passwordHash?: string;
     roleId?: string | null;
+    isActive?: boolean;
   }): Promise<ConsultantWithRole> {
     return this.prisma.consultant.create({ data, include: withRole });
   }
