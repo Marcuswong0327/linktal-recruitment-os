@@ -5,10 +5,15 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Badge } from '@/components/ui/badge';
 import { type ClientStatus, type Company, clientStatusLabels } from './schema';
 
-const statusVariant: Record<ClientStatus, 'muted' | 'warning' | 'success'> = {
-  COLD: 'muted',
+export const statusVariant: Record<ClientStatus, 'info' | 'warning' | 'success'> = {
+  COLD: 'info',
   WARM: 'warning',
   TRADED: 'success',
+};
+
+export const tobVariant: Record<'true' | 'false', 'success' | 'muted'> = {
+  true: 'success',
+  false: 'muted',
 };
 
 interface CompanyColumnsOptions {
@@ -58,7 +63,7 @@ export function getCompanyColumns({ consultantName }: CompanyColumnsOptions): Co
       size: 120,
       meta: { align: 'center' },
       cell: ({ row }) => (
-        <Badge variant={row.original.tobSigned ? 'success' : 'muted'}>
+        <Badge variant={tobVariant[String(row.original.tobSigned) as 'true' | 'false']}>
           {row.original.tobSigned ? 'Signed' : 'Not signed'}
         </Badge>
       ),

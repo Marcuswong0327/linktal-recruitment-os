@@ -21,7 +21,7 @@ import { FormField } from '@/components/FormField';
 import { getGetClientsQueryKey, useGetClients, useUpdateClient } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import type { ConsultantEntity, GetClientsStatus } from '@/lib/api/generated/types';
-import { getCompanyColumns } from './columns';
+import { getCompanyColumns, statusVariant, tobVariant } from './columns';
 import { type ClientStatus, type Company, clientStatusLabels, clientStatuses } from './schema';
 
 const PAGE_SIZE = 20;
@@ -29,11 +29,12 @@ const PAGE_SIZE = 20;
 const statusOptions = clientStatuses.map((value) => ({
   value,
   label: clientStatusLabels[value],
+  variant: statusVariant[value],
 }));
 
 const tobOptions = [
-  { value: 'true', label: 'Signed' },
-  { value: 'false', label: 'Not signed' },
+  { value: 'true', label: 'Signed', variant: tobVariant.true },
+  { value: 'false', label: 'Not signed', variant: tobVariant.false },
 ];
 
 const companyFilters: DataGridFilter[] = [
