@@ -130,7 +130,7 @@ For **both** the `web` and `api` services, in the service **Settings**:
 | `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Microsoft's Authentication Endpoint with Tenant ID                        |
 | `API_INTERNAL_URL `              | Used for NextAuth and runs on server side                                 |
 
-### CI
+### CI Flow
 
 `.github/workflows/ci.yml` runs on every push/PR to `main`: install → build →
 lint → typecheck → test. Railway handles the actual deploy on merge to `main`.
