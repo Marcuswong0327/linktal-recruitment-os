@@ -1,12 +1,24 @@
+import { redirect } from 'next/navigation';
+import { auth } from '@/auth';
 import { AppSidebar } from '@/components/app-shell/AppSidebar';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+  if (!session) redirect('/sign-in');
+
   return (
     <TooltipProvider>
       <SidebarProvider>
-        <AppSidebar />
+        <AppSidebar
+          user={{
+            name: session.user?.name ?? 'Unknown',
+            email: session.user?.email ?? '',
+            avatar: session.user?.image ?? undefined,
+          }}
+          permissions={session.user?.permissions ?? []}
+        />
         {/* h-svh + min-h-0/overflow-auto below: lock the shell to the viewport
             so grids scroll their own rows instead of the page. */}
         <SidebarInset className="h-svh">

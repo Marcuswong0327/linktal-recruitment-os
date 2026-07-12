@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { navGroups } from '@/config/nav';
+import { navGroups, type RequiredPermission } from '@/config/nav';
 import { NavUser, type SidebarUser } from '@/components/app-shell/NavUser';
 import {
   Sidebar,
@@ -16,14 +16,11 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 
-// TODO: replace with the signed-in user once auth is wired up.
-const currentUser: SidebarUser = {
-  name: 'Johnson Chin',
-  email: 'johnson@linktal.com',
-};
-
-export function AppSidebar() {
+export function AppSidebar({ user, permissions }: { user: SidebarUser; permissions: string[] }) {
   const pathname = usePathname();
+
+  const hasPermission = (required?: RequiredPermission) =>
+    !required || permissions.includes(`${required.resource}:${required.action}`);
 
   return (
     <Sidebar collapsible="icon">
@@ -41,8 +38,13 @@ export function AppSidebar() {
 
       <SidebarContent>
         {navGroups.map((group, index) => {
-          // Feature flag: drop items marked `hidden`.
-          const items = group.items.filter((item) => !item.hidden);
+          if (!hasPermission(group.requiredPermission)) return null;
+
+          // Feature flag: drop items marked `hidden`; drop items the user
+          // lacks the required permission for.
+          const items = group.items.filter(
+            (item) => !item.hidden && hasPermission(item.requiredPermission),
+          );
           if (items.length === 0) return null;
 
           return (
@@ -78,7 +80,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
-        <NavUser user={currentUser} />
+        <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
   );
