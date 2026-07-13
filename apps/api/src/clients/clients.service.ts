@@ -25,8 +25,9 @@ export class ClientsService {
     where.country = contains(query.country);
     where.city = contains(query.city);
 
-    if (query.consultantId) {
-      where.consultantId = query.consultantId;
+    if (query.consultantId !== undefined) {
+      // '' is the frontend's "Unassigned" sentinel — maps to a null FK, not a no-op.
+      where.consultantId = query.consultantId === '' ? null : query.consultantId;
     }
 
     if (query.tobSigned != null) {

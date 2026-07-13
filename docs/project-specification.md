@@ -103,10 +103,10 @@ progress can be reviewed with the project manager on a weekly cadence.
 
 **Week 1 — Authentication, RBAC & data model (Workflow 1)**
 
-- [ ] Secure login, role-based access control (Admin / Manager / Consultant), user management
-- [ ] Full relational schema for all entities (Company, Stakeholder, Job Order, Candidate + relationships), migrated
-- [ ] Seed the database from the existing Excel export (96 companies, 132 stakeholders, 105 candidates, 28 job orders)
-- [ ] Client Demo: Log in as each role and see a role-gated app skeleton; Show the database populated with real Linktal data.
+- [x] Secure login, role-based access control (Admin / Manager / Consultant), user management
+- [x] Full relational schema for all entities (Company, Stakeholder, Job Order, Candidate + relationships), migrated
+- [x] Seed the database from the existing Excel export (96 companies, 132 stakeholders, 105 candidates, 28 job orders)
+- [x] Client Demo: Log in as each role and see a role-gated app skeleton; Show the database populated with real Linktal data.
 
 **Week 2 — Client Acquisition (Workflow 2)**
 
