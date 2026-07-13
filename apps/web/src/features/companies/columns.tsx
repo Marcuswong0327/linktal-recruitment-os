@@ -61,20 +61,18 @@ export function getCompanyColumns({
     {
       accessorKey: 'companyName',
       header: 'Company',
-      cell: ({ row }) => (
-        <span className="font-medium text-foreground">{row.original.companyName}</span>
-      ),
+      cell: ({ row }) => <span className="font-medium text-foreground">{row.original.companyName}</span>,
     },
     {
       accessorKey: 'industry',
       header: 'Industry',
-      cell: ({ row }) => (
-        <span className="text-muted-foreground">{row.original.industry ?? '—'}</span>
-      ),
+      enableSorting: false,
+      cell: ({ row }) => <span className="text-muted-foreground">{row.original.industry ?? '—'}</span>,
     },
     {
       id: 'location',
       header: 'Location',
+      enableSorting: false,
       accessorFn: (row) => [row.city, row.country].filter(Boolean).join(', '),
       cell: ({ row }) => {
         const location = [row.original.city, row.original.country].filter(Boolean).join(', ');
@@ -84,7 +82,7 @@ export function getCompanyColumns({
     {
       accessorKey: 'status',
       header: 'Relationship',
-      size: 150,
+      enableSorting: false,
       meta: { align: 'center' },
       cell: ({ row }) => {
         const company = row.original;
@@ -104,7 +102,7 @@ export function getCompanyColumns({
     {
       accessorKey: 'tobSigned',
       header: 'TOB',
-      size: 130,
+      enableSorting: false,
       meta: { align: 'center' },
       cell: ({ row }) => {
         const company = row.original;
@@ -124,7 +122,6 @@ export function getCompanyColumns({
     {
       accessorKey: 'feePercentage',
       header: 'Fee %',
-      size: 100,
       meta: { align: 'center' },
       cell: ({ row }) => (
         <span className="tabular-nums">
@@ -135,7 +132,7 @@ export function getCompanyColumns({
     {
       accessorKey: 'consultantId',
       header: 'Consultant',
-      size: 170,
+      enableSorting: false,
       meta: { align: 'center' },
       cell: ({ row }) => {
         const company = row.original;

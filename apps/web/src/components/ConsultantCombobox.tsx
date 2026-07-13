@@ -1,8 +1,8 @@
 'use client';
 
-import * as React from 'react';
+import { useMemo, useCallback } from 'react';
 import { Combobox } from '@base-ui/react/combobox';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronsUpDown, UserRound } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import type { ConsultantEntity } from '@/lib/api/generated/types';
@@ -38,23 +38,27 @@ export function ConsultantAvatar({
           : 'bg-primary/10 text-primary',
       )}
     >
-      {consultantId === UNASSIGNED ? '—' : initials(name ?? '?')}
+      {consultantId === UNASSIGNED ? (
+        <UserRound className={size === 6 ? 'size-3.5' : 'size-3'} />
+      ) : (
+        initials(name ?? '?')
+      )}
     </span>
   );
 }
 
 /** Shared lookup + display helpers for any Combobox picking a consultant. */
 export function useConsultantLookup(consultants: ConsultantEntity[]) {
-  const byId = React.useMemo(() => new Map(consultants.map((c) => [c.id, c])), [consultants]);
-  const items = React.useMemo(() => [UNASSIGNED, ...consultants.map((c) => c.id)], [consultants]);
+  const byId = useMemo(() => new Map(consultants.map((c) => [c.id, c])), [consultants]);
+  const items = useMemo(() => [UNASSIGNED, ...consultants.map((c) => c.id)], [consultants]);
 
-  const labelFor = React.useCallback(
+  const labelFor = useCallback(
     (consultantId: string) =>
       consultantId === UNASSIGNED ? 'Unassigned' : (byId.get(consultantId)?.fullName ?? 'Unknown'),
     [byId],
   );
   // Drives filtering — combine name + email so typing either finds the match.
-  const searchTextFor = React.useCallback(
+  const searchTextFor = useCallback(
     (consultantId: string) => {
       if (consultantId === UNASSIGNED) return 'Unassigned';
       const consultant = byId.get(consultantId);
@@ -66,23 +70,20 @@ export function useConsultantLookup(consultants: ConsultantEntity[]) {
   return { byId, items, labelFor, searchTextFor };
 }
 
-/**
- * The search input + filtered, avatar-rowed item list — shared popup body
- * for any `Combobox.Root` picking a consultant (field, filter, bulk action).
- */
-export function ConsultantComboboxPopup({
-  byId,
-  labelFor,
-  footer,
-  anchor,
-}: {
+interface ConsultantComboboxPopupProps {
   byId: Map<string, ConsultantEntity>;
   labelFor: (consultantId: string) => string;
   /** Extra content after the list — e.g. a "Clear" row for filter usage. */
   footer?: React.ReactNode;
   /** Positions the popup against an element other than Combobox.Trigger — e.g. when there's no trigger of our own. */
   anchor?: React.RefObject<Element | null>;
-}) {
+}
+
+/**
+ * The search input + filtered, avatar-rowed item list — shared popup body
+ * for any `Combobox.Root` picking a consultant (field, filter, bulk action).
+ */
+export function ConsultantComboboxPopup({ byId, labelFor, footer, anchor }: ConsultantComboboxPopupProps) {
   return (
     <Combobox.Portal>
       <Combobox.Positioner align="start" sideOffset={4} anchor={anchor} className="isolate z-50">
