@@ -2,10 +2,21 @@
 
 import * as React from 'react';
 import { Combobox } from '@base-ui/react/combobox';
-import { ChevronDown, Plus } from 'lucide-react';
+import { ChevronDown, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,6 +36,7 @@ import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import {
+  deleteClient as deleteClientRequest,
   getGetClientsQueryKey,
   updateClient as updateClientRequest,
   useGetClients,
@@ -48,7 +60,13 @@ const tobOptions = [
   { value: 'false', label: 'Not signed', variant: tobVariant.false },
 ];
 
-export function CompaniesTable({ canCreate = true }: { canCreate?: boolean }) {
+export function CompaniesTable({
+  canCreate = true,
+  canDelete = true,
+}: {
+  canCreate?: boolean;
+  canDelete?: boolean;
+}) {
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
@@ -58,6 +76,7 @@ export function CompaniesTable({ canCreate = true }: { canCreate?: boolean }) {
   const [editing, setEditing] = React.useState<Company | null>(null);
   const [selectedCompanies, setSelectedCompanies] = React.useState<Company[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = React.useState(false);
   const [consultantPickerOpen, setConsultantPickerOpen] = React.useState(false);
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
 
@@ -123,14 +142,18 @@ export function CompaniesTable({ canCreate = true }: { canCreate?: boolean }) {
       id: updated.id,
       data: {
         companyName: updated.companyName,
-        industry: updated.industry ?? undefined,
-        city: updated.city ?? undefined,
-        country: updated.country ?? undefined,
+        // Generated type omits null (the API accepts it to clear these
+        // fields) — `?? undefined` here would drop the key entirely from the
+        // request body, silently no-op'ing an intended clear while still
+        // reporting success.
+        industry: updated.industry,
+        city: updated.city,
+        country: updated.country,
         status: updated.status,
         tobSigned: updated.tobSigned,
-        feePercentage: updated.feePercentage ?? undefined,
-        consultantId: updated.consultantId ?? undefined,
-      },
+        feePercentage: updated.feePercentage,
+        consultantId: updated.consultantId,
+      } as unknown as UpdateClientDto,
     });
   }
 
@@ -146,6 +169,18 @@ export function CompaniesTable({ canCreate = true }: { canCreate?: boolean }) {
     if (succeeded > 0) toast.success(`${actionLabel} for ${succeeded} compan${succeeded === 1 ? 'y' : 'ies'}`);
     if (failed > 0) toast.error(`Failed for ${failed} compan${failed === 1 ? 'y' : 'ies'}`);
     setIsBulkUpdating(false);
+    setSelectedCompanies([]);
+  }
+
+  async function handleBulkDelete() {
+    setIsBulkDeleting(true);
+    const results = await Promise.allSettled(selectedCompanies.map((c) => deleteClientRequest(c.id)));
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    const succeeded = results.length - failed;
+    queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey() });
+    if (succeeded > 0) toast.success(`Deleted ${succeeded} compan${succeeded === 1 ? 'y' : 'ies'}`);
+    if (failed > 0) toast.error(`Failed to delete ${failed} compan${failed === 1 ? 'y' : 'ies'}`);
+    setIsBulkDeleting(false);
     setSelectedCompanies([]);
   }
 
@@ -222,7 +257,37 @@ export function CompaniesTable({ canCreate = true }: { canCreate?: boolean }) {
         onSelectionChange={setSelectedCompanies}
         toolbar={
           selectedCompanies.length > 0 ? (
-            <>
+            <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
+              <AlertDialog>
+                <AlertDialogTrigger
+                  render={
+                    <Button
+                      variant="destructive"
+                      size="lg"
+                      disabled={!canDelete || isBulkDeleting}
+                      title={canDelete ? undefined : "You don't have permission to delete companies"}
+                    >
+                      <Trash2 />
+                      Delete
+                    </Button>
+                  }
+                />
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Delete {selectedCompanies.length} compan{selectedCompanies.length === 1 ? 'y' : 'ies'}?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This permanently removes the selected companies and can't be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleBulkDelete}>Delete</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
@@ -270,12 +335,13 @@ export function CompaniesTable({ canCreate = true }: { canCreate?: boolean }) {
                   )
                 }
               />
-            </>
+            </div>
           ) : (
             <Button
               size="lg"
               disabled={!canCreate}
               title={canCreate ? undefined : "You don't have permission to add companies"}
+              className="animate-in fade-in-0 duration-200"
             >
               <Plus />
               Add company

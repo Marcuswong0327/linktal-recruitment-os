@@ -47,6 +47,13 @@ export interface DataGridFilter {
 export interface DataGridColumnMeta {
   /** Align header and cells; use center for narrow numeric/pill columns. */
   align?: 'left' | 'center' | 'right';
+  /**
+   * Resize floor is the column's full measured content (header + widest
+   * cell) instead of just its header. Use for columns rendering a pill/
+   * control (badge, Select, Combobox) — a half-visible control looks
+   * broken, unlike plain text, which is fine to shrink and clip.
+   */
+  strictMinSize?: boolean;
 }
 
 function columnAlignClass(meta: unknown): string | undefined {
@@ -184,14 +191,18 @@ export function DataGrid<TData>({
 
   // Natural width each column actually needs — the wider of its header
   // content (label + sort icon) and its widest rendered cell on the page
-  // that first loaded. Used both as the resize floor (can't shrink past it,
-  // since neither header nor cell clip the text) and, when a column doesn't
-  // hardcode a `size`, as its starting width — a fixed guess goes stale the
-  // moment a column's content changes (e.g. plain text becoming a pill), and
-  // a single flat default ignores that different columns need different
-  // amounts of room. Measuring the real DOM is the only thing that can't
-  // drift out of sync with what's actually rendered.
+  // that first loaded. Used, when a column doesn't hardcode a `size`, as its
+  // starting width — a fixed guess goes stale the moment a column's content
+  // changes (e.g. plain text becoming a pill), and a single flat default
+  // ignores that different columns need different amounts of room. Measuring
+  // the real DOM is the only thing that can't drift out of sync with what's
+  // actually rendered.
   const [measuredSizes, setMeasuredSizes] = React.useState<Record<string, number>>({});
+  // Header-only subset of the above — the resize floor for plain-text
+  // columns. Unlike a pill/control, clipped text isn't broken, so those
+  // columns should stay shrinkable well past their widest cell value; only
+  // `meta.strictMinSize` columns use the fuller `measuredSizes` floor instead.
+  const [headerOnlySizes, setHeaderOnlySizes] = React.useState<Record<string, number>>({});
 
   // Attach the faceted filter fn to whichever columns are declared filterable.
   const filterColumnIds = React.useMemo(() => new Set((filters ?? []).map((f) => f.columnId)), [filters]);
@@ -204,9 +215,11 @@ export function DataGrid<TData>({
       }
       const measured = id ? measuredSizes[id] : undefined;
       if (measured !== undefined) {
+        const strict = (result.meta as DataGridColumnMeta | undefined)?.strictMinSize;
+        const minFloor = strict ? measured : (id ? headerOnlySizes[id] : undefined);
         result = {
           ...result,
-          minSize: Math.max(measured, result.minSize ?? 0),
+          minSize: Math.max(minFloor ?? 0, result.minSize ?? 0),
           // An explicit columnDef.size is a deliberate override (e.g.
           // intentionally forcing truncation) — respect it. Otherwise the
           // measured width *is* the default, not a floor under a guess.
@@ -248,7 +261,7 @@ export function DataGrid<TData>({
       ),
     };
     return [selectColumn, ...withFilters];
-  }, [columns, filterColumnIds, onSelectionChange, measuredSizes]);
+  }, [columns, filterColumnIds, onSelectionChange, measuredSizes, headerOnlySizes]);
 
   const gridContainerRef = React.useRef<HTMLDivElement>(null);
 
@@ -268,6 +281,7 @@ export function DataGrid<TData>({
       next[id] = Math.ceil(el.scrollWidth) + 24;
     });
     setMeasuredSizes((prev) => raiseSizes(prev, next));
+    setHeaderOnlySizes((prev) => raiseSizes(prev, next));
   }, [columns]);
 
   // Re-measure pass 2 (see effect below) once per column set — header

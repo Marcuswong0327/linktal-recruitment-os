@@ -83,7 +83,7 @@ export function getCompanyColumns({
       accessorKey: 'status',
       header: 'Relationship',
       enableSorting: false,
-      meta: { align: 'center' },
+      meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => {
         const company = row.original;
         return (
@@ -103,7 +103,7 @@ export function getCompanyColumns({
       accessorKey: 'tobSigned',
       header: 'TOB',
       enableSorting: false,
-      meta: { align: 'center' },
+      meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => {
         const company = row.original;
         return (
@@ -133,7 +133,7 @@ export function getCompanyColumns({
       accessorKey: 'consultantId',
       header: 'Consultant',
       enableSorting: false,
-      meta: { align: 'center' },
+      meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => {
         const company = row.original;
         return (
