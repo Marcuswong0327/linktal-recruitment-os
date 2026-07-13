@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -51,7 +52,11 @@ export function EnumSelect({
       <SelectContent>
         {options.map((option) => (
           <SelectItem key={option.value} value={option.value}>
-            {option.label}
+            {option.triggerClassName ? (
+              <Badge className={option.triggerClassName}>{option.label}</Badge>
+            ) : (
+              option.label
+            )}
           </SelectItem>
         ))}
       </SelectContent>

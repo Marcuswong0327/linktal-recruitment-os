@@ -30,9 +30,16 @@ export interface DataGridFilter {
   columnId: string;
   /** Label on the filter button. */
   title: string;
-  options: FacetedFilterOption[];
+  /** Ignored when `render` is provided. */
+  options?: FacetedFilterOption[];
   /** Single-select instead of multi (e.g. when the API takes one value). */
   single?: boolean;
+  /**
+   * Overrides the default checkbox-list filter UI (e.g. a searchable
+   * combobox) while keeping this column's state, and the toolbar's
+   * Clear/isFiltered handling, unified with the other filters.
+   */
+  render?: (props: { selected: string[]; onChange: (values: string[]) => void }) => React.ReactNode;
 }
 
 /** Per-column presentation hints, set via `meta` on a ColumnDef. */
@@ -173,22 +180,29 @@ export function DataGrid<TData>({
       id: SELECT_COLUMN_ID,
       size: 40,
       header: ({ table }) => (
-        <Checkbox
-          checked={table.getIsAllPageRowsSelected()}
-          indeterminate={!table.getIsAllPageRowsSelected() && table.getIsSomePageRowsSelected()}
-          onCheckedChange={(checked) => table.toggleAllPageRowsSelected(!!checked)}
-          onClick={(e) => e.stopPropagation()}
-          aria-label="Select all"
-        />
+        // Checkbox renders a visible span *and* a hidden input as siblings —
+        // clicking the span re-dispatches a bubbling click on that sibling
+        // input, which stopPropagation on the Checkbox itself can't catch
+        // (it never passes back through the span). Stop it here instead,
+        // on a shared ancestor of both.
+        <div onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected()}
+            indeterminate={!table.getIsAllPageRowsSelected() && table.getIsSomePageRowsSelected()}
+            onCheckedChange={(checked) => table.toggleAllPageRowsSelected(!!checked)}
+            aria-label="Select all"
+          />
+        </div>
       ),
       cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(checked) => row.toggleSelected(!!checked)}
-          onClick={(e) => e.stopPropagation()}
-          disabled={!row.getCanSelect()}
-          aria-label="Select row"
-        />
+        <div onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(checked) => row.toggleSelected(!!checked)}
+            disabled={!row.getCanSelect()}
+            aria-label="Select row"
+          />
+        </div>
       ),
     };
     return [selectColumn, ...withFilters];
@@ -262,14 +276,18 @@ export function DataGrid<TData>({
             const column = table.getColumn(filter.columnId);
             if (!column) return null;
             const selected = (column.getFilterValue() as string[]) ?? [];
+            const onChange = (values: string[]) => column.setFilterValue(values.length ? values : undefined);
+            if (filter.render) {
+              return <React.Fragment key={filter.columnId}>{filter.render({ selected, onChange })}</React.Fragment>;
+            }
             return (
               <DataGridFacetedFilter
                 key={filter.columnId}
                 title={filter.title}
-                options={filter.options}
+                options={filter.options ?? []}
                 selected={selected}
                 single={filter.single}
-                onChange={(values) => column.setFilterValue(values.length ? values : undefined)}
+                onChange={onChange}
               />
             );
           })}
