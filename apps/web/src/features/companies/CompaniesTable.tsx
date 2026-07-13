@@ -45,25 +45,10 @@ import {
 } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import type { ConsultantEntity, GetClientsStatus, UpdateClientDto } from '@/lib/api/generated/types';
-import { getCompanyColumns, statusTriggerClassName, statusVariant, tobTriggerClassName, tobVariant } from './columns';
+import { getCompanyColumns, statusOptions, statusVariant, tobOptions } from './columns';
 import { type ClientStatus, type Company, clientStatusLabels, clientStatuses } from './schema';
 
 const PAGE_SIZE = 20;
-
-// Same option list drives the toolbar filter/bulk-action badges (`variant`)
-// and the drawer's Relationship/TOB selects (`triggerClassName`) — one
-// source for both instead of two color mappings that can drift apart.
-const statusOptions = clientStatuses.map((value) => ({
-  value,
-  label: clientStatusLabels[value],
-  variant: statusVariant[value],
-  triggerClassName: statusTriggerClassName[value],
-}));
-
-const tobOptions = [
-  { value: 'true', label: 'Signed', variant: tobVariant.true, triggerClassName: tobTriggerClassName.true },
-  { value: 'false', label: 'Not signed', variant: tobVariant.false, triggerClassName: tobTriggerClassName.false },
-];
 
 /** Editable fields shared by the create and edit forms — no `id`, since create doesn't have one yet. */
 interface CompanyFormValues {

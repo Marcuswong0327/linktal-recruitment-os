@@ -1,6 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
+import Link from 'next/link';
 
 import { EnumSelect } from '@/components/EnumSelect';
 import { ConsultantCombobox } from '@/components/ConsultantCombobox';
@@ -29,15 +30,19 @@ export const tobTriggerClassName: Record<'true' | 'false', string> = {
   false: 'border-transparent bg-muted text-muted-foreground',
 };
 
-const statusOptions = clientStatuses.map((value) => ({
+// Single option list per field — `variant` drives Badges/faceted filters,
+// `triggerClassName` drives the colored EnumSelect pills (table cell, drawer,
+// and detail page all share these instead of each rebuilding their own).
+export const statusOptions = clientStatuses.map((value) => ({
   value,
   label: clientStatusLabels[value],
+  variant: statusVariant[value],
   triggerClassName: statusTriggerClassName[value],
 }));
 
-const tobOptions = [
-  { value: 'true', label: 'Signed', triggerClassName: tobTriggerClassName.true },
-  { value: 'false', label: 'Not signed', triggerClassName: tobTriggerClassName.false },
+export const tobOptions = [
+  { value: 'true', label: 'Signed', variant: tobVariant.true, triggerClassName: tobTriggerClassName.true },
+  { value: 'false', label: 'Not signed', variant: tobVariant.false, triggerClassName: tobTriggerClassName.false },
 ];
 
 interface CompanyColumnsOptions {
@@ -61,7 +66,15 @@ export function getCompanyColumns({
     {
       accessorKey: 'companyName',
       header: 'Company',
-      cell: ({ row }) => <span className="font-medium text-foreground">{row.original.companyName}</span>,
+      cell: ({ row }) => (
+        <Link
+          href={`/companies/${row.original.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="font-medium text-foreground hover:underline"
+        >
+          {row.original.companyName}
+        </Link>
+      ),
     },
     {
       accessorKey: 'industry',
