@@ -18,13 +18,13 @@ export const tobVariant: Record<'true' | 'false', 'success' | 'muted'> = {
   false: 'muted',
 };
 
-const statusTriggerClassName: Record<ClientStatus, string> = {
+export const statusTriggerClassName: Record<ClientStatus, string> = {
   COLD: 'border-info/30 bg-info/10 text-info',
   WARM: 'border-warning/30 bg-warning/10 text-warning',
   TRADED: 'border-success/30 bg-success/10 text-success',
 };
 
-const tobTriggerClassName: Record<'true' | 'false', string> = {
+export const tobTriggerClassName: Record<'true' | 'false', string> = {
   true: 'border-success/30 bg-success/10 text-success',
   false: 'border-transparent bg-muted text-muted-foreground',
 };

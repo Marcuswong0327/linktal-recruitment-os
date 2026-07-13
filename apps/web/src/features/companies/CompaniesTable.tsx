@@ -39,26 +39,43 @@ import {
   deleteClient as deleteClientRequest,
   getGetClientsQueryKey,
   updateClient as updateClientRequest,
+  useCreateClient,
   useGetClients,
   useUpdateClient,
 } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import type { ConsultantEntity, GetClientsStatus, UpdateClientDto } from '@/lib/api/generated/types';
-import { getCompanyColumns, statusVariant, tobVariant } from './columns';
+import { getCompanyColumns, statusTriggerClassName, statusVariant, tobTriggerClassName, tobVariant } from './columns';
 import { type ClientStatus, type Company, clientStatusLabels, clientStatuses } from './schema';
 
 const PAGE_SIZE = 20;
 
+// Same option list drives the toolbar filter/bulk-action badges (`variant`)
+// and the drawer's Relationship/TOB selects (`triggerClassName`) — one
+// source for both instead of two color mappings that can drift apart.
 const statusOptions = clientStatuses.map((value) => ({
   value,
   label: clientStatusLabels[value],
   variant: statusVariant[value],
+  triggerClassName: statusTriggerClassName[value],
 }));
 
 const tobOptions = [
-  { value: 'true', label: 'Signed', variant: tobVariant.true },
-  { value: 'false', label: 'Not signed', variant: tobVariant.false },
+  { value: 'true', label: 'Signed', variant: tobVariant.true, triggerClassName: tobTriggerClassName.true },
+  { value: 'false', label: 'Not signed', variant: tobVariant.false, triggerClassName: tobTriggerClassName.false },
 ];
+
+/** Editable fields shared by the create and edit forms — no `id`, since create doesn't have one yet. */
+interface CompanyFormValues {
+  companyName: string;
+  industry: string | null;
+  city: string | null;
+  country: string | null;
+  status: ClientStatus;
+  tobSigned: boolean;
+  feePercentage: number | null;
+  consultantId: string | null;
+}
 
 export function CompaniesTable({
   canCreate = true,
@@ -74,6 +91,7 @@ export function CompaniesTable({
   const [tobSigned, setTobSigned] = React.useState<boolean | undefined>();
   const [consultantId, setConsultantId] = React.useState<string | undefined>();
   const [editing, setEditing] = React.useState<Company | null>(null);
+  const [creating, setCreating] = React.useState(false);
   const [selectedCompanies, setSelectedCompanies] = React.useState<Company[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = React.useState(false);
@@ -123,6 +141,17 @@ export function CompaniesTable({
     },
   });
 
+  const createClient = useCreateClient({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey() });
+        toast.success('Company added');
+        setCreating(false);
+      },
+      onError: (err) => toast.error(err.message || 'Failed to add company'),
+    },
+  });
+
   const result = data?.status === 200 ? data.data : undefined;
   const companies = result?.data ?? [];
 
@@ -137,23 +166,30 @@ export function CompaniesTable({
     setPage(1);
   }
 
-  function handleSave(updated: Company) {
+  function handleSave(values: CompanyFormValues) {
+    if (!editing) return;
     updateClient.mutate({
-      id: updated.id,
+      id: editing.id,
+      // Generated type omits null (the API accepts it to clear these
+      // fields) — `?? undefined` here would drop the key entirely from the
+      // request body, silently no-op'ing an intended clear while still
+      // reporting success.
+      data: values as unknown as UpdateClientDto,
+    });
+  }
+
+  function handleCreate(values: CompanyFormValues) {
+    createClient.mutate({
       data: {
-        companyName: updated.companyName,
-        // Generated type omits null (the API accepts it to clear these
-        // fields) — `?? undefined` here would drop the key entirely from the
-        // request body, silently no-op'ing an intended clear while still
-        // reporting success.
-        industry: updated.industry,
-        city: updated.city,
-        country: updated.country,
-        status: updated.status,
-        tobSigned: updated.tobSigned,
-        feePercentage: updated.feePercentage,
-        consultantId: updated.consultantId,
-      } as unknown as UpdateClientDto,
+        companyName: values.companyName,
+        industry: values.industry ?? undefined,
+        city: values.city ?? undefined,
+        country: values.country ?? undefined,
+        status: values.status,
+        tobSigned: values.tobSigned,
+        feePercentage: values.feePercentage ?? undefined,
+        consultantId: values.consultantId ?? undefined,
+      },
     });
   }
 
@@ -342,6 +378,7 @@ export function CompaniesTable({
               disabled={!canCreate}
               title={canCreate ? undefined : "You don't have permission to add companies"}
               className="animate-in fade-in-0 duration-200"
+              onClick={() => setCreating(true)}
             >
               <Plus />
               Add company
@@ -361,13 +398,26 @@ export function CompaniesTable({
       <Sheet open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <SheetContent className="w-full sm:max-w-md">
           {editing ? (
-            <EditCompanyForm
+            <CompanyForm
               key={editing.id}
               company={editing}
               consultants={consultants}
               isSaving={updateClient.isPending}
               onSave={handleSave}
               onCancel={() => setEditing(null)}
+            />
+          ) : null}
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={creating} onOpenChange={setCreating}>
+        <SheetContent className="w-full sm:max-w-md">
+          {creating ? (
+            <CompanyForm
+              consultants={consultants}
+              isSaving={createClient.isPending}
+              onSave={handleCreate}
+              onCancel={() => setCreating(false)}
             />
           ) : null}
         </SheetContent>
@@ -417,34 +467,36 @@ function BulkConsultantPicker({
   );
 }
 
-function EditCompanyForm({
+/** Shared by "Add company" and the row edit drawer — every field but the name is optional either way. */
+function CompanyForm({
   company,
   consultants,
   isSaving,
   onSave,
   onCancel,
 }: {
-  company: Company;
+  /** Omit for create; the form starts blank and reports back a fresh set of values. */
+  company?: Company;
   consultants: ConsultantEntity[];
   isSaving: boolean;
-  onSave: (company: Company) => void;
+  onSave: (values: CompanyFormValues) => void;
   onCancel: () => void;
 }) {
-  const [companyName, setCompanyName] = React.useState(company.companyName);
-  const [industry, setIndustry] = React.useState(company.industry ?? '');
-  const [city, setCity] = React.useState(company.city ?? '');
-  const [country, setCountry] = React.useState(company.country ?? '');
-  const [status, setStatus] = React.useState<ClientStatus>(company.status);
-  const [tobSigned, setTobSigned] = React.useState(company.tobSigned);
+  const isEditing = company !== undefined;
+  const [companyName, setCompanyName] = React.useState(company?.companyName ?? '');
+  const [industry, setIndustry] = React.useState(company?.industry ?? '');
+  const [city, setCity] = React.useState(company?.city ?? '');
+  const [country, setCountry] = React.useState(company?.country ?? '');
+  const [status, setStatus] = React.useState<ClientStatus>(company?.status ?? 'COLD');
+  const [tobSigned, setTobSigned] = React.useState(company?.tobSigned ?? false);
   const [feePercentage, setFeePercentage] = React.useState(
-    company.feePercentage != null ? String(company.feePercentage) : '',
+    company?.feePercentage != null ? String(company.feePercentage) : '',
   );
-  const [consultantId, setConsultantId] = React.useState(company.consultantId ?? '');
+  const [consultantId, setConsultantId] = React.useState(company?.consultantId ?? '');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     onSave({
-      ...company,
       companyName,
       industry: industry || null,
       city: city || null,
@@ -459,8 +511,10 @@ function EditCompanyForm({
   return (
     <form onSubmit={handleSubmit} className="flex h-full flex-col">
       <SheetHeader>
-        <SheetTitle>Edit company</SheetTitle>
-        <SheetDescription>Update {company.companyName}’s account details.</SheetDescription>
+        <SheetTitle>{isEditing ? 'Edit company' : 'Add company'}</SheetTitle>
+        <SheetDescription>
+          {isEditing ? `Update ${company.companyName}’s account details.` : 'Add a new client company.'}
+        </SheetDescription>
       </SheetHeader>
 
       <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
@@ -514,8 +568,8 @@ function EditCompanyForm({
         <Button type="button" variant="outline" size="lg" onClick={onCancel} disabled={isSaving}>
           Cancel
         </Button>
-        <Button type="submit" size="lg" disabled={isSaving}>
-          {isSaving ? 'Saving…' : 'Save changes'}
+        <Button type="submit" size="lg" disabled={isSaving || !companyName.trim()}>
+          {isSaving ? 'Saving…' : isEditing ? 'Save changes' : 'Add company'}
         </Button>
       </SheetFooter>
     </form>
