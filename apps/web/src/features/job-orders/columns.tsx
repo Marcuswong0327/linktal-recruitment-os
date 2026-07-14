@@ -39,6 +39,13 @@ interface JobOrderColumnsOptions {
 export function getJobOrderColumns({ clientName, consultantName }: JobOrderColumnsOptions): ColumnDef<JobOrder>[] {
   return [
     {
+      accessorKey: 'displayId',
+      header: 'ID',
+      size: 90,
+      meta: { align: 'center' },
+      cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.displayId}</span>,
+    },
+    {
       accessorKey: 'jobTitle',
       header: 'Role',
       cell: ({ row }) => (

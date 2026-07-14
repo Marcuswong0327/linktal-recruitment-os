@@ -64,6 +64,13 @@ export function getCompanyColumns({
 }: CompanyColumnsOptions): ColumnDef<Company>[] {
   return [
     {
+      accessorKey: 'displayId',
+      header: 'ID',
+      size: 90,
+      meta: { align: 'center' },
+      cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.displayId}</span>,
+    },
+    {
       accessorKey: 'companyName',
       header: 'Company',
       cell: ({ row }) => (

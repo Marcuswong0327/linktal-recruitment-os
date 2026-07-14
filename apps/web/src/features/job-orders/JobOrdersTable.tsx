@@ -7,14 +7,7 @@ import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
@@ -117,11 +110,7 @@ export function JobOrdersTable({ canCreate = true }: { canCreate?: boolean }) {
   const columns = React.useMemo(() => getJobOrderColumns({ clientName, consultantName }), [clientName, consultantName]);
 
   if (isError) {
-    return (
-      <p className="text-sm text-destructive">
-        Failed to load job orders: {error?.message ?? 'Unknown error'}
-      </p>
-    );
+    return <p className="text-sm text-destructive">Failed to load job orders: {error?.message ?? 'Unknown error'}</p>;
   }
 
   return (
@@ -138,11 +127,12 @@ export function JobOrdersTable({ canCreate = true }: { canCreate?: boolean }) {
         toolbar={
           <Button
             size="lg"
-            disabled={!canCreate}
+            // disabled={!canCreate}
+            disabled={true}
             title={canCreate ? undefined : "You don't have permission to add job orders"}
           >
             <Plus />
-            Add job order
+            Add Job Order
           </Button>
         }
         server={{
@@ -155,10 +145,7 @@ export function JobOrdersTable({ canCreate = true }: { canCreate?: boolean }) {
         }}
       />
 
-      <Sheet
-        open={editing !== null}
-        onOpenChange={(open) => !open && setEditing(null)}
-      >
+      <Sheet open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
         <SheetContent className="w-full sm:max-w-md">
           {editing ? (
             <EditJobOrderForm
@@ -237,19 +224,10 @@ function EditJobOrderForm({
 
       <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
         <FormField label="Role" htmlFor="jo-title">
-          <Input
-            id="jo-title"
-            value={jobTitle}
-            onChange={(e) => setJobTitle(e.target.value)}
-          />
+          <Input id="jo-title" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
         </FormField>
         <FormField label="Client" htmlFor="jo-client">
-          <EnumSelect
-            id="jo-client"
-            value={clientId}
-            onValueChange={setClientId}
-            options={clientOptions}
-          />
+          <EnumSelect id="jo-client" value={clientId} onValueChange={setClientId} options={clientOptions} />
         </FormField>
         <FormField label="Consultant" htmlFor="jo-consultant">
           <EnumSelect
@@ -261,25 +239,13 @@ function EditJobOrderForm({
           />
         </FormField>
         <FormField label="Department" htmlFor="jo-department">
-          <Input
-            id="jo-department"
-            value={department}
-            onChange={(e) => setDepartment(e.target.value)}
-          />
+          <Input id="jo-department" value={department} onChange={(e) => setDepartment(e.target.value)} />
         </FormField>
         <FormField label="Location" htmlFor="jo-location">
-          <Input
-            id="jo-location"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-          />
+          <Input id="jo-location" value={location} onChange={(e) => setLocation(e.target.value)} />
         </FormField>
         <FormField label="Job type" htmlFor="jo-job-type">
-          <Input
-            id="jo-job-type"
-            value={jobType}
-            onChange={(e) => setJobType(e.target.value)}
-          />
+          <Input id="jo-job-type" value={jobType} onChange={(e) => setJobType(e.target.value)} />
         </FormField>
         <FormField label="Status" htmlFor="jo-status">
           <EnumSelect
@@ -299,20 +265,10 @@ function EditJobOrderForm({
           />
         </FormField>
         <FormField label="Salary min" htmlFor="jo-salary-min">
-          <Input
-            id="jo-salary-min"
-            type="number"
-            value={salaryMin}
-            onChange={(e) => setSalaryMin(e.target.value)}
-          />
+          <Input id="jo-salary-min" type="number" value={salaryMin} onChange={(e) => setSalaryMin(e.target.value)} />
         </FormField>
         <FormField label="Salary max" htmlFor="jo-salary-max">
-          <Input
-            id="jo-salary-max"
-            type="number"
-            value={salaryMax}
-            onChange={(e) => setSalaryMax(e.target.value)}
-          />
+          <Input id="jo-salary-max" type="number" value={salaryMax} onChange={(e) => setSalaryMax(e.target.value)} />
         </FormField>
       </div>
 
