@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -96,7 +96,7 @@ export function DataGridFacetedFilter({
             )}
           </>
         ) : null}
-        <ChevronsUpDown className="opacity-50" />
+        <ChevronDown className="opacity-50" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-44">
         <DropdownMenuGroup>

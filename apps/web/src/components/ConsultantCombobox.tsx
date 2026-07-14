@@ -2,7 +2,7 @@
 
 import { useMemo, useCallback } from 'react';
 import { Combobox } from '@base-ui/react/combobox';
-import { Check, ChevronsUpDown, UserRound } from 'lucide-react';
+import { Check, ChevronDown, UserRound } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import type { ConsultantEntity } from '@/lib/api/generated/types';
@@ -175,7 +175,7 @@ export function ConsultantCombobox({
           <Combobox.Value>{() => labelFor(value)}</Combobox.Value>
         </span>
         <Combobox.Icon className="text-muted-foreground">
-          <ChevronsUpDown className="pointer-events-none size-4 shrink-0" />
+          <ChevronDown className="pointer-events-none size-4 shrink-0" />
         </Combobox.Icon>
       </Combobox.Trigger>
 
