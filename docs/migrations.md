@@ -82,15 +82,39 @@ at the repo root (set per service via Settings → *Config-as-code file path*):
 
 | Service | Config file | Runs migrations? |
 |---------|-------------|:----------------:|
-| API (NestJS) | `railway.json` | **yes** — `preDeployCommand` |
+| API (NestJS) | `railway.api.json` | **yes** — `preDeployCommand` |
 | Web (Next.js) | `railway.web.json` | **no** |
 
-> ⚠️ Both services default to `railway.json` if you don't set a path — which makes
-> the **web service run the API's migrate command** and fail on a missing
-> `DIRECT_URL`. Point the web service at `railway.web.json`. Migrations must run on
-> the **API service only**.
+> ⚠️ Both services' *Config-as-code file path* must be set **explicitly** —
+> Railway only auto-detects a file literally named `railway.json`, which neither
+> of these is. Leaving the path blank means Railway falls back to zero-config
+> auto-detection and silently drops `preDeployCommand`, the healthcheck, and the
+> restart policy. Set the API service to `/railway.api.json` and the web service
+> to `/railway.web.json`.
 
-### API config: `railway.json`
+### Two environments, one shared dev DB
+
+Railway has two environments for this project:
+
+| Environment | Branch | Neon DB | Runs `migrate deploy`? |
+|-------------|--------|---------|:----:|
+| production | `main` | prod Neon DB | **yes** |
+| dev | `dev` | the **same shared dev Neon DB** used locally | **no** |
+
+The dev environment intentionally does **not** run `prisma migrate deploy` on
+release. It uses the same shared dev database everyone migrates locally with
+`pnpm prisma migrate dev` (see §6) — by the time a change reaches the `dev`
+branch, the migration has already been authored and applied against that DB.
+Re-running `migrate deploy` there would (at best) be a no-op and (at worst) race
+a teammate's local `migrate dev` shadow-DB check. Production is the only
+environment where `migrate deploy` runs automatically.
+
+This is enforced by an `$RAILWAY_ENVIRONMENT_NAME` check inside `railway.api.json`'s
+`preDeployCommand` (see below). If a database migration needs to reach the dev
+environment without a teammate running `migrate dev` locally first, run it by
+hand: `railway run --environment dev -- pnpm --filter @linktal/api prisma:migrate:deploy`.
+
+### API config: `railway.api.json`
 
 Railway reads it on each deploy. The relevant parts:
 
@@ -100,7 +124,7 @@ Railway reads it on each deploy. The relevant parts:
     "buildCommand": "pnpm --filter @linktal/api build"     // prisma generate && nest build
   },
   "deploy": {
-    "preDeployCommand": "pnpm --filter @linktal/api prisma:migrate:deploy",
+    "preDeployCommand": "if [ \"$RAILWAY_ENVIRONMENT_NAME\" = \"production\" ]; then pnpm --filter @linktal/api prisma:migrate:deploy; fi",
     "startCommand": "pnpm --filter @linktal/api start",     // node dist/main.js
     "healthcheckPath": "/api/health"
   }
@@ -112,7 +136,9 @@ exactly **once** per release, **before** the new version serves traffic —
 avoiding the multi-instance race you'd get if every booting replica migrated.
 Migrations are owned **solely** by `preDeployCommand`; the app's start scripts
 (`start` / `start:prod`) only boot the server (`node dist/main.js`) and never
-migrate, so there's no double-migrate.
+migrate, so there's no double-migrate. The `$RAILWAY_ENVIRONMENT_NAME` guard
+additionally scopes that single run to the production environment only — see
+"Two environments, one shared dev DB" above.
 
 **If `preDeployCommand` (or the healthcheck) fails, Railway aborts the release
 and keeps the previous version serving** — the new code never goes live, so a bad
@@ -268,7 +294,10 @@ step individually reversible.
   (unpooled); the schema's `directUrl` is already configured for this.
 - **One shared dev DB.** History drift on it affects everyone — see §7 for the
   July 2026 baseline squash, which fixed drift with `migrate resolve` +
-  `migrate diff` without dropping data.
+  `migrate diff` without dropping data. Railway's **dev environment reads from
+  this same DB** and does not run `migrate deploy` on its own (§3) — migrations
+  reach it only via a teammate's local `migrate dev`, so a broken local
+  migration is everyone's problem immediately, not just at deploy time.
 
 ---
 
