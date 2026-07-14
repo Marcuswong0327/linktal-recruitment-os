@@ -106,6 +106,7 @@ export function getCompanyColumns({
               onValueChange={(v) => onStatusChange(company, v as ClientStatus)}
               options={statusOptions}
               disabled={pendingRowId === company.id}
+              size="badge"
               className="w-fit mx-auto"
             />
           </div>
@@ -126,6 +127,7 @@ export function getCompanyColumns({
               onValueChange={(v) => onTobSignedChange(company, v === 'true')}
               options={tobOptions}
               disabled={pendingRowId === company.id}
+              size="badge"
               className="w-fit mx-auto"
             />
           </div>

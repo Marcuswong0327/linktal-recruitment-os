@@ -1,6 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
+import Link from 'next/link';
 
 import { cn } from '@/lib/utils';
 import { CandidateStatusCell } from './StatusCell';
@@ -27,9 +28,14 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     header: 'Name',
     enableSorting: false,
     cell: ({ row }) => (
-      <span title={row.original.fullName} className="block truncate font-medium text-foreground">
+      <Link
+        href={`/candidates/${row.original.id}`}
+        onClick={(e) => e.stopPropagation()}
+        title={row.original.fullName}
+        className="block truncate font-medium text-foreground hover:underline"
+      >
         {row.original.fullName}
-      </span>
+      </Link>
     ),
   },
   {

@@ -15,7 +15,7 @@ import {
 import {
   useUpdateCandidate,
   getGetCandidatesQueryKey,
-  getGetCandidateByDisplayIdQueryKey,
+  getGetCandidateQueryKey,
 } from '@/lib/api/generated/candidates/candidates';
 import {
   type Candidate,
@@ -36,7 +36,7 @@ export function CandidateStatusCell({ candidate }: { candidate: Candidate }) {
       onSuccess: (_result, { data }) => {
         queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
         queryClient.invalidateQueries({
-          queryKey: getGetCandidateByDisplayIdQueryKey(candidate.displayId),
+          queryKey: getGetCandidateQueryKey(candidate.id),
         });
         toast.success(
           `${candidate.fullName} marked ${candidateStatusLabels[data.status ?? candidate.status]}`,

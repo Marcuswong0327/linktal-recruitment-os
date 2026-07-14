@@ -7,6 +7,7 @@ import type { CandidateEntity } from '@/lib/api/generated/types';
 export type Candidate = CandidateEntity;
 
 export const candidateStatuses = Object.values(CreateCandidateDtoStatus);
+export type CandidateStatus = (typeof candidateStatuses)[number];
 
 export const candidateStatusLabels: Record<
   (typeof candidateStatuses)[number],
@@ -28,6 +29,15 @@ export const candidateStatusVariants: Record<
   WARM: 'warning',
   HOT: 'destructive',
   PLACED: 'success',
+};
+
+// Drives the colored EnumSelect trigger pill (edit drawer) — matches
+// candidateStatusVariants so the pill and the status filter/table pill agree.
+export const candidateStatusTriggerClassName: Record<(typeof candidateStatuses)[number], string> = {
+  COLD: 'border-info/30 bg-info/10 text-info',
+  WARM: 'border-warning/30 bg-warning/10 text-warning',
+  HOT: 'border-destructive/30 bg-destructive/10 text-destructive',
+  PLACED: 'border-success/30 bg-success/10 text-success',
 };
 
 // Client-side validation for the create form. Fields and the status enum mirror
