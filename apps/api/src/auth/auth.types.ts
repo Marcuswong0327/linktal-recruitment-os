@@ -13,6 +13,19 @@ export interface TokenClaims {
   name?: string;
 }
 
+/**
+ * Payload of our own access token. Extends TokenClaims with the role +
+ * permission set resolved at mint time (login/refresh), so AuthGuard can
+ * authorize every other request from the token alone — no DB call.
+ * Trade-off: a role change or deactivation only takes effect once the
+ * current access token expires (<=15 min) or the user refreshes, not
+ * mid-token. See RbacService.resolveById's doc for the refresh-time re-check.
+ */
+export interface AccessTokenClaims extends TokenClaims {
+  roleName: string | null;
+  permissions: string[];
+}
+
 /** The authenticated principal attached to each request after the guards run. */
 export interface AuthUser {
   consultantId: string;
