@@ -17,12 +17,15 @@ import type {
   GetCandidatesSortBy,
   GetCandidatesStatus,
 } from '@/lib/api/generated/types';
+import type { ColumnDef } from '@tanstack/react-table';
 import {
   candidateStatuses,
   candidateStatusLabels,
   candidateStatusVariants,
+  type Candidate,
 } from './schema';
 import { candidateColumns } from './columns';
+import { CandidateRowActions } from './CandidateRowActions';
 
 const statusOptions = candidateStatuses.map((value) => ({
   value,
@@ -37,8 +40,30 @@ const candidateFilters: DataGridFilter[] = [
 
 const PAGE_SIZE = 20;
 
-export function CandidatesTable({ canCreate = true }: { canCreate?: boolean }) {
+export function CandidatesTable({
+  canCreate = true,
+  canDelete = false,
+}: {
+  canCreate?: boolean;
+  canDelete?: boolean;
+}) {
   const router = useRouter();
+
+  // Append a per-row delete action only when the user may delete.
+  const columns = React.useMemo<ColumnDef<Candidate>[]>(() => {
+    if (!canDelete) return candidateColumns;
+    return [
+      ...candidateColumns,
+      {
+        id: 'actions',
+        header: '',
+        size: 56,
+        enableSorting: false,
+        meta: { align: 'center' },
+        cell: ({ row }) => <CandidateRowActions candidate={row.original} />,
+      },
+    ];
+  }, [canDelete]);
   const [page, setPage] = React.useState(1);
   const [query, setQuery] = React.useState<
     Pick<GetCandidatesParams, 'q' | 'status' | 'sortBy' | 'sortOrder'>
@@ -79,7 +104,7 @@ export function CandidatesTable({ canCreate = true }: { canCreate?: boolean }) {
 
   return (
     <DataGrid
-      columns={candidateColumns}
+      columns={columns}
       data={candidates}
       isLoading={isLoading}
       searchPlaceholder="Search candidates…"

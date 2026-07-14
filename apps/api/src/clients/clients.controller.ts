@@ -16,7 +16,9 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
 import { ClientEntity } from './entities/client.entity';
 import { PaginatedClientsEntity } from './entities/paginated-clients.entity';
-import { RequirePermission } from '../auth/auth.decorators';
+import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
+import { AuthUser } from '../auth/auth.types';
+import { ForbiddenException } from '@nestjs/common';
 
 @ApiTags('Clients')
 @ApiBearerAuth()
@@ -70,9 +72,36 @@ export class ClientsController {
   @Delete(':id')
   @HttpCode(204)
   @RequirePermission('client', 'delete')
-  @ApiOperation({ operationId: 'deleteClient', summary: 'Delete a client' })
-  @ApiResponse({ status: 204, description: 'Client deleted' })
+  @ApiOperation({ operationId: 'deleteClient', summary: 'Soft-delete a client (recoverable, cascades)' })
+  @ApiResponse({ status: 204, description: 'Client soft-deleted' })
   remove(@Param('id') id: string) {
     return this.clients.remove(id);
+  }
+
+  @Post(':id/restore')
+  @RequirePermission('client', 'delete')
+  @ApiOperation({ operationId: 'restoreClient', summary: 'Restore a soft-deleted client' })
+  @ApiResponse({ status: 201, description: 'Client restored', type: ClientEntity })
+  restore(@Param('id') id: string) {
+    return this.clients.restore(id);
+  }
+
+  @Delete(':id/purge')
+  @HttpCode(204)
+  @RequirePermission('client', 'delete')
+  @ApiOperation({
+    operationId: 'purgeClient',
+    summary: 'Permanently erase a client + children (admin only)',
+  })
+  @ApiResponse({ status: 204, description: 'Client permanently deleted' })
+  purge(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    // Hard delete is irreversible + destroys history — restrict to admins.
+    if (user.roleName !== 'admin') {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Only an admin can permanently erase a client.',
+      });
+    }
+    return this.clients.purge(id);
   }
 }

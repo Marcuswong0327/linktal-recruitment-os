@@ -1,12 +1,12 @@
 import { StakeholdersService } from './stakeholders.service';
 import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
-import { PrismaService } from '../prisma/prisma.service';
+import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 
 describe('StakeholdersService.create', () => {
   it('creates without setting displayId (DB sequence owns it) and returns the row', async () => {
     const created = { id: 's1', displayId: 'Stake-0133', fullName: 'Jane Doe' };
     const create = jest.fn().mockResolvedValue(created);
-    const prisma = { stakeholder: { create } } as unknown as PrismaService;
+    const prisma = { stakeholder: { create } } as unknown as ExtendedPrismaClient;
     const service = new StakeholdersService(prisma);
 
     const dto: CreateStakeholderDto = { clientId: 'cl1', fullName: 'Jane Doe' };

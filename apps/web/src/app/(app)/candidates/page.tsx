@@ -11,7 +11,10 @@ export default async function CandidatesPage() {
     <PageLayout>
       <PageHeader title="Candidates" description="Your talent pool — screening status, salary and availability." />
       {hasPermission(session, 'candidate', 'read') ? (
-        <CandidatesTable canCreate={hasPermission(session, 'candidate', 'create')} />
+        <CandidatesTable
+          canCreate={hasPermission(session, 'candidate', 'create')}
+          canDelete={hasPermission(session, 'candidate', 'delete')}
+        />
       ) : (
         <AccessDenied resource="candidates" />
       )}

@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { UpdateConsultantDtoRoleName } from './updateConsultantDtoRoleName';
 
 export interface UpdateConsultantDto {
   /** Email address */
@@ -15,4 +16,5 @@ export interface UpdateConsultantDto {
   roleId?: string;
   /** Whether the consultant is active */
   isActive?: boolean;
+  roleName?: UpdateConsultantDtoRoleName;
 }

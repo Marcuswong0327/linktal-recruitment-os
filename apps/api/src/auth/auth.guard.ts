@@ -7,6 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from './auth.decorators';
+import { RequestContext } from '../common/request-context';
 import { RbacService } from './rbac.service';
 import { TokenService } from './token.service';
 
@@ -45,6 +46,8 @@ export class AuthGuard implements CanActivate {
     // Azure-specific JIT-provisioning lookup on every request. resolveById
     // also rejects deactivated accounts (see RbacService.assertActive).
     request.user = await this.rbac.resolveById(claims.sub);
+    // Attribute any writes made while handling this request to the caller.
+    RequestContext.setActor(request.user.consultantId);
     return true;
   }
 

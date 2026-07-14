@@ -1,11 +1,14 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
+import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { AuthUser } from '../auth/auth.types';
 import { CreateConsultantDto } from './dto/create-consultant.dto';
 import { UpdateConsultantDto } from './dto/update-consultant.dto';
@@ -22,7 +25,7 @@ const PRIVILEGED_ROLES = [ADMIN_ROLE, 'manager'];
 
 @Injectable()
 export class ConsultantsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(EXTENDED_PRISMA) private readonly prisma: ExtendedPrismaClient) {}
 
   async findAll(query: QueryConsultantsDto) {
     const { page, pageSize, sortBy, sortOrder, q } = query;
@@ -103,55 +106,105 @@ export class ConsultantsService {
     return this.prisma.consultant.create({ data: dto, include: withRole, omit: omitSecrets });
   }
 
+  /**
+   * Admin-only management of another consultant (role, active status, details).
+   * Self-service name edits go through `updateOwnProfile` (`/consultants/me`),
+   * not here. Guarded against self-lockout and removing the last active admin.
+   */
   async update(id: string, dto: UpdateConsultantDto, actor: AuthUser) {
     const existing = await this.findOne(id);
+
+    // Managing consultants (roles / status / details) is admin-only IAM.
     if (!this.isAdmin(actor)) {
-      if (existing.role?.name === ADMIN_ROLE) {
-        throw new ForbiddenException({
-          code: 'FORBIDDEN',
-          message: 'Only an admin can modify an admin consultant.',
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Only an admin can manage consultants.',
+      });
+    }
+
+    // Resolve an optional role *name* (admin UI) to its id; roleId still works too.
+    let roleId = dto.roleId;
+    if (dto.roleName !== undefined) {
+      const role = await this.prisma.role.findUnique({
+        where: { name: dto.roleName },
+        select: { id: true },
+      });
+      if (!role) {
+        throw new BadRequestException({ code: 'INVALID_ROLE', message: `Unknown role "${dto.roleName}"` });
+      }
+      roleId = role.id;
+    }
+
+    const changesRole = dto.roleId !== undefined || dto.roleName !== undefined;
+
+    // Self-lockout: you can't deactivate or de-admin your own account here.
+    if (id === actor.consultantId) {
+      if (dto.isActive === false) {
+        throw new BadRequestException({
+          code: 'CANNOT_MODIFY_SELF',
+          message: 'You cannot deactivate your own account.',
         });
       }
-      if (await this.roleIsPrivileged(dto.roleId)) {
-        throw new ForbiddenException({
-          code: 'FORBIDDEN',
-          message: 'Only an admin can assign the admin or manager role.',
+      if (changesRole && !(await this.roleIsAdmin(roleId))) {
+        throw new BadRequestException({
+          code: 'CANNOT_MODIFY_SELF',
+          message: 'You cannot change your own role away from admin.',
         });
       }
     }
 
-    // Last-admin protection: block demoting or deactivating the final active admin.
+    // Last-admin protection: block demoting/deactivating the final active admin.
     const demotesAdmin =
       existing.role?.name === ADMIN_ROLE &&
       existing.isActive &&
-      ((dto.roleId !== undefined && !(await this.roleIsAdmin(dto.roleId))) ||
-        dto.isActive === false);
+      ((changesRole && !(await this.roleIsAdmin(roleId))) || dto.isActive === false);
     if (demotesAdmin && (await this.countOtherActiveAdmins(id)) === 0) {
       throw new ConflictException('Cannot demote or deactivate the last active admin.');
     }
 
-    return this.prisma.consultant.update({ where: { id }, data: dto, include: withRole, omit: omitSecrets });
+    // Build the write payload: drop roleName, apply the resolved roleId.
+    const { roleName: _roleName, roleId: _roleId, ...rest } = dto;
+    const data: Prisma.ConsultantUncheckedUpdateInput = { ...rest };
+    if (changesRole) data.roleId = roleId ?? null;
+
+    return this.prisma.consultant.update({ where: { id }, data, include: withRole, omit: omitSecrets });
   }
 
+  /**
+   * "Deleting" a consultant deactivates them (isActive=false) rather than
+   * removing the row — consultants own clients/job orders whose ownership
+   * history we must keep, and deactivation already blocks login on every
+   * request (RbacService.assertActive). Audited as DEACTIVATE by the extension.
+   * Deactivation is an IAM change, so it's admin-only like `update`.
+   */
   async remove(id: string, actor: AuthUser) {
     const existing = await this.findOne(id);
-    if (!this.isAdmin(actor) && existing.role?.name === ADMIN_ROLE) {
+    if (!this.isAdmin(actor)) {
       throw new ForbiddenException({
         code: 'FORBIDDEN',
-        message: 'Only an admin can delete an admin consultant.',
+        message: 'Only an admin can deactivate a consultant.',
       });
     }
 
-    // Last-admin protection: block deleting the final active admin.
-    if (
-      existing.role?.name === ADMIN_ROLE &&
-      existing.isActive &&
-      (await this.countOtherActiveAdmins(id)) === 0
-    ) {
-      throw new ConflictException('Cannot delete the last active admin.');
+    // Already inactive — nothing to do (avoids a misleading DEACTIVATE audit row).
+    if (!existing.isActive) {
+      return existing;
     }
 
-    return this.prisma.consultant.delete({ where: { id }, omit: omitSecrets });
+    // Last-admin protection: block deactivating the final active admin.
+    if (
+      existing.role?.name === ADMIN_ROLE &&
+      (await this.countOtherActiveAdmins(id)) === 0
+    ) {
+      throw new ConflictException('Cannot deactivate the last active admin.');
+    }
+
+    return this.prisma.consultant.update({
+      where: { id },
+      data: { isActive: false },
+      include: withRole,
+      omit: omitSecrets,
+    });
   }
 
   /** Update the caller's own profile — name only; never role or active status. */

@@ -1,13 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
+import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
 import { UpdateStakeholderDto } from './dto/update-stakeholder.dto';
 import { QueryStakeholdersDto } from './dto/query-stakeholders.dto';
 
 @Injectable()
 export class StakeholdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(EXTENDED_PRISMA) private readonly prisma: ExtendedPrismaClient) {}
 
   async findAll(query: QueryStakeholdersDto) {
     const { page, pageSize, sortBy, sortOrder, q } = query;

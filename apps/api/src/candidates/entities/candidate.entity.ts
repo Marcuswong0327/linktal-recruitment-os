@@ -14,7 +14,7 @@ import { Candidate, CandidateStatus, Prisma } from '@prisma/client';
  * `T | null` union reflects as `Object` at runtime, which would otherwise emit
  * `type: object` instead of the real scalar type.
  */
-export class CandidateEntity implements Candidate {
+export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'CDD-0001' }) displayId!: string;
   @ApiProperty({ example: 'John Smith' }) fullName!: string;

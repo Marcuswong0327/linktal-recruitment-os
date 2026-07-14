@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../app.module';
 import { PrismaService } from '../prisma/prisma.service';
+import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 
 /**
  * Boots the real app (global guards + exception filter) to prove the auth
@@ -16,6 +17,11 @@ describe('Auth wiring (e2e)', () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(PrismaService)
       .useValue({ $connect: jest.fn(), $disconnect: jest.fn() })
+      // The extended-client factory calls base.$extends(), which the bare
+      // PrismaService mock above doesn't have — override it too (these tests
+      // never touch the DB).
+      .overrideProvider(EXTENDED_PRISMA)
+      .useValue({})
       .compile();
 
     app = moduleRef.createNestApplication();
