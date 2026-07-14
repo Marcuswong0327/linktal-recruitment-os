@@ -88,19 +88,25 @@ Target a single app with a filter, e.g. `pnpm --filter @linktal/api dev`.
 
 ## Deployment (Railway)
 
-Each app is a **separate Railway service** pointing at this repo. Railway auto-deploys
-on every push to `main`; GitHub Actions runs the CI checks in parallel.
+Each app is a **separate Railway service** pointing at this repo, deployed into two
+Railway environments: `production` (tracks `main`) and `dev` (tracks `dev`). GitHub
+Actions runs the CI checks in parallel; Railway waits for them before deploying. See
+`docs/migrations.md` for the full flow, including why the dev environment doesn't
+run `prisma migrate deploy`.
 
 ### One-time Railway setup (per service)
 
 For **both** the `web` and `api` services, in the service **Settings**:
 
 - **Root Directory:** `/` (the repo root — pnpm needs the workspace lockfile)
-- **Config-as-code path:**
-  - API service → `apps/api/railway.json`
-  - Web service → `apps/web/railway.json`
+- **Config-as-code path** (must be set explicitly — Railway only auto-detects a
+  file literally named `railway.json`, and neither of these is):
+  - API service → `/railway.api.json`
+  - Web service → `/railway.web.json`
 
-  These files already define the pnpm-filtered build/start commands and health checks.
+  These are root-level files (not `apps/api/railway.json` / `apps/web/railway.json` —
+  those don't exist; Root Directory is `/`, so Railway only ever looks at the repo
+  root). They already define the pnpm-filtered build/start commands and health checks.
 
 ### Environment variables (set in Railway)
 
@@ -116,8 +122,9 @@ For **both** the `web` and `api` services, in the service **Settings**:
 | `JWT_ACCESS_SECRET`  | Own API access token                                         |
 | `JWT_REFRESH_SECRET` | Own API refresh token                                        |
 
-> The API start command runs `prisma migrate deploy` before booting, so schema
-> changes ship automatically on deploy.
+> `railway.api.json`'s `preDeployCommand` runs `prisma migrate deploy` once, before
+> the new version takes traffic — production only. The dev environment skips
+> it (see `docs/migrations.md`). The start command itself never migrates.
 
 **Web service**
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS",
+    "builder": "RAILPACK",
     "buildCommand": "pnpm --filter @linktal/api build",
     "watchPatterns": [
       "apps/api/**",
@@ -9,11 +9,11 @@
       "package.json",
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
-      "railway.json"
+      "railway.api.json"
     ]
   },
   "deploy": {
-    "preDeployCommand": "pnpm --filter @linktal/api prisma:migrate:deploy",
+    "preDeployCommand": "if [ \"$RAILWAY_ENVIRONMENT_NAME\" = \"production\" ]; then pnpm --filter @linktal/api prisma:migrate:deploy; fi",
     "startCommand": "pnpm --filter @linktal/api start",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 300,
