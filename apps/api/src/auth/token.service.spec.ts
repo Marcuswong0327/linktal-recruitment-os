@@ -19,10 +19,18 @@ describe('TokenService', () => {
       sub: 'azure-oid-1',
       email: 'a@b.com',
       name: 'A B',
+      roleName: 'consultant',
+      permissions: ['candidate:read', 'client:read'],
     });
 
     const claims = await service.verifyAccessToken(token);
-    expect(claims).toEqual({ sub: 'azure-oid-1', email: 'a@b.com', name: 'A B' });
+    expect(claims).toEqual({
+      sub: 'azure-oid-1',
+      email: 'a@b.com',
+      name: 'A B',
+      roleName: 'consultant',
+      permissions: ['candidate:read', 'client:read'],
+    });
     expect(expiresAt).toBeGreaterThan(Date.now());
   });
 
@@ -61,7 +69,7 @@ describe('TokenService', () => {
     const refreshToken = await service.signRefreshToken('consultant-1');
     await expect(service.verifyAccessToken(refreshToken)).rejects.toThrow(UnauthorizedException);
 
-    const access = await service.signAccessToken({ sub: 'x' });
+    const access = await service.signAccessToken({ sub: 'x', roleName: null, permissions: [] });
     await expect(service.verifyRefreshToken(access.token)).rejects.toThrow(UnauthorizedException);
   });
 });

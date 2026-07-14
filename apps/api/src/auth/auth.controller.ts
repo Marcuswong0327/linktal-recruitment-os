@@ -7,7 +7,7 @@ import { PasswordLoginDto } from './dto/password-login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
 import { LoginResponseEntity, RefreshResponseEntity } from './entities/session.entity';
-import { AuthUser } from './auth.types';
+import { AccessTokenClaims, AuthUser } from './auth.types';
 import { RbacService } from './rbac.service';
 import { TokenService } from './token.service';
 
@@ -102,7 +102,13 @@ export class AuthController {
   }
 
   /** Our own access token's `sub` is always the Consultant id — see TokenClaims doc. */
-  private claimsFor(user: AuthUser) {
-    return { sub: user.consultantId, email: user.email ?? undefined, name: user.fullName };
+  private claimsFor(user: AuthUser): AccessTokenClaims {
+    return {
+      sub: user.consultantId,
+      email: user.email ?? undefined,
+      name: user.fullName,
+      roleName: user.roleName,
+      permissions: Array.from(user.permissions),
+    };
   }
 }

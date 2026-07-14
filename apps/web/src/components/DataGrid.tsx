@@ -14,7 +14,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Search, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, Search, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -115,6 +115,13 @@ interface DataGridProps<TData> {
   emptyState?: React.ReactNode;
   /** Renders shimmer rows instead of data — use while the query is fetching. */
   isLoading?: boolean;
+  /**
+   * A background refetch is in flight (e.g. changing page with
+   * `placeholderData: keepPreviousData`) — rows stay as-is (no skeleton
+   * flash), but pagination controls disable and show a small spinner so a
+   * page-change click isn't silently ignored while it resolves.
+   */
+  isFetching?: boolean;
   /** How many skeleton rows to show while loading. */
   skeletonRows?: number;
   /**
@@ -147,6 +154,7 @@ export function DataGrid<TData>({
   onRowClick,
   emptyState,
   isLoading = false,
+  isFetching = false,
   skeletonRows = 8,
   server,
   getRowId,
@@ -556,13 +564,16 @@ export function DataGrid<TData>({
                 : `${(server.page - 1) * server.pageSize + 1}–${Math.min(server.page * server.pageSize, server.total)} of ${server.total} ${server.total === 1 ? 'row' : 'rows'}`}
           </p>
           <div className="flex items-center gap-2">
-            <p className="text-xs text-muted-foreground">
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              {isFetching && !isLoading ? (
+                <Loader2 className="size-3 animate-spin" aria-hidden />
+              ) : null}
               Page {server.page} of {Math.max(server.pageCount, 1)}
             </p>
             <Button
               variant="outline"
               size="icon-sm"
-              disabled={isLoading || server.page <= 1}
+              disabled={isLoading || isFetching || server.page <= 1}
               onClick={() => server.onPageChange(server.page - 1)}
             >
               <ChevronLeft />
@@ -571,7 +582,7 @@ export function DataGrid<TData>({
             <Button
               variant="outline"
               size="icon-sm"
-              disabled={isLoading || server.page >= server.pageCount}
+              disabled={isLoading || isFetching || server.page >= server.pageCount}
               onClick={() => server.onPageChange(server.page + 1)}
             >
               <ChevronRight />

@@ -47,7 +47,10 @@ export class AuditService {
 
     const orderBy: Prisma.AuditLogOrderByWithRelationInput = { [sortBy ?? 'createdAt']: sortOrder };
 
-    const [rows, total] = await this.prisma.$transaction([
+    // Parallel, not $transaction: these two reads don't need one consistent
+    // DB snapshot, and running them concurrently instead of sequentially
+    // (BEGIN/Q1/Q2/COMMIT) roughly halves the network round trips to Neon.
+    const [rows, total] = await Promise.all([
       this.prisma.auditLog.findMany({
         where,
         orderBy,

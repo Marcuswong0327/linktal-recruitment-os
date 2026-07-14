@@ -2,8 +2,7 @@ import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { IS_PUBLIC_KEY } from './auth.decorators';
 import { AuthGuard } from './auth.guard';
-import { AuthUser, TokenClaims } from './auth.types';
-import { RbacService } from './rbac.service';
+import { AccessTokenClaims, AuthUser } from './auth.types';
 import { TokenService } from './token.service';
 
 function contextFor(headers: Record<string, string>): ExecutionContext {
@@ -17,8 +16,7 @@ function contextFor(headers: Record<string, string>): ExecutionContext {
 
 function makeGuard(opts: {
   isPublic?: boolean;
-  verify?: (t: string) => Promise<TokenClaims>;
-  resolve?: (consultantId: string) => Promise<AuthUser>;
+  verify?: (t: string) => Promise<AccessTokenClaims>;
 }) {
   const reflector = {
     getAllAndOverride: (key: string) =>
@@ -27,8 +25,7 @@ function makeGuard(opts: {
   const tokens = {
     verifyAccessToken: opts.verify ?? jest.fn(),
   } as unknown as TokenService;
-  const rbac = { resolveById: opts.resolve ?? jest.fn() } as unknown as RbacService;
-  return new AuthGuard(reflector, tokens, rbac);
+  return new AuthGuard(reflector, tokens);
 }
 
 describe('AuthGuard', () => {
@@ -44,24 +41,28 @@ describe('AuthGuard', () => {
     );
   });
 
-  it('verifies the token and attaches the resolved user', async () => {
-    const user = {
+  it('verifies the token and attaches the user built from its claims', async () => {
+    const guard = makeGuard({
+      verify: async () => ({
+        sub: 'c1',
+        email: 'a@b.com',
+        name: 'A B',
+        roleName: 'viewer',
+        permissions: ['candidate:read'],
+      }),
+    });
+
+    const ctx = contextFor({ authorization: 'Bearer abc.def.ghi' });
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    expect(ctx.switchToHttp().getRequest().user).toEqual({
       consultantId: 'c1',
-      azureId: 'u1',
+      azureId: '',
       email: 'a@b.com',
       fullName: 'A B',
       roleName: 'viewer',
       isActive: true,
       permissions: new Set(['candidate:read']),
-    } as AuthUser;
-    const guard = makeGuard({
-      verify: async () => ({ sub: 'c1', email: 'a@b.com' }),
-      resolve: async () => user,
     });
-
-    const ctx = contextFor({ authorization: 'Bearer abc.def.ghi' });
-    await expect(guard.canActivate(ctx)).resolves.toBe(true);
-    expect(ctx.switchToHttp().getRequest().user).toBe(user);
   });
 
   it('rejects a non-bearer authorization scheme', async () => {

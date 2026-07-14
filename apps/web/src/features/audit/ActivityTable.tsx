@@ -48,7 +48,7 @@ export function ActivityTable() {
     Pick<GetAuditLogsParams, 'action' | 'entityType' | 'sortBy' | 'sortOrder'>
   >({});
 
-  const { data, isLoading, isError, error } = useGetAuditLogs(
+  const { data, isLoading, isFetching, isError, error } = useGetAuditLogs(
     { page, pageSize: PAGE_SIZE, ...query },
     { query: { placeholderData: keepPreviousData } },
   );
@@ -83,6 +83,7 @@ export function ActivityTable() {
         columns={auditColumns}
         data={logs}
         isLoading={isLoading}
+        isFetching={isFetching}
         filters={activityFilters}
         onRowClick={setSelected}
         server={{
