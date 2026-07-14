@@ -1,7 +1,7 @@
 'use client';
 
 import { Combobox } from '@base-ui/react/combobox';
-import { ChevronsUpDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -50,7 +50,7 @@ export function ConsultantFilter({ value, onValueChange, consultants }: Consulta
             </Badge>
           </>
         ) : null}
-        <ChevronsUpDown className="opacity-50" />
+        <ChevronDown className="opacity-50" />
       </Combobox.Trigger>
 
       <ConsultantComboboxPopup
