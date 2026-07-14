@@ -22,6 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             avatar: session.user?.image ?? undefined,
           }}
           permissions={session.user?.permissions ?? []}
+          isAdmin={session.user?.roleName === 'admin'}
         />
         {/* h-svh + min-h-0/overflow-auto below: lock the shell to the viewport
             so grids scroll their own rows instead of the page. */}

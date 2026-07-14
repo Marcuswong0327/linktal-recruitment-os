@@ -1,6 +1,9 @@
 # dependencies
 node_modules/
 .pnpm-store/
+# this repo uses pnpm; npm/yarn lockfiles should never be committed
+package-lock.json
+yarn.lock
 
 # build output
 dist/

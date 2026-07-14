@@ -100,17 +100,21 @@ export class RbacService {
         },
         include: withRole,
       });
+      await this.logProvisioning('UPDATE', linked.id, 'password-link');
       this.assertActive(linked);
       return this.toAuthUser(linked);
     }
 
-    await this.createConsultant({
-      email: input.email,
-      fullName: input.fullName,
-      passwordHash,
-      roleId: (await this.roleByName(DEFAULT_ROLE))?.id,
-      isActive: false,
-    });
+    await this.createConsultant(
+      {
+        email: input.email,
+        fullName: input.fullName,
+        passwordHash,
+        roleId: (await this.roleByName(DEFAULT_ROLE))?.id,
+        isActive: false,
+      },
+      'password-registration',
+    );
 
     throw new ForbiddenException({
       code: 'ACCOUNT_PENDING_APPROVAL',
@@ -167,7 +171,7 @@ export class RbacService {
         include: withRole,
       });
       if (byEmail) {
-        return this.prisma.consultant.update({
+        const linked = await this.prisma.consultant.update({
           where: { id: byEmail.id },
           data: {
             azureId: claims.sub,
@@ -177,30 +181,58 @@ export class RbacService {
           },
           include: withRole,
         });
+        await this.logProvisioning('UPDATE', linked.id, 'azure-link');
+        return linked;
       }
     }
 
-    return this.createConsultant({
-      azureId: claims.sub,
-      email: claims.email ?? `${claims.sub}@users.noreply.local`,
-      fullName: claims.name ?? claims.email ?? 'New User',
-      roleId: (await this.roleByName(DEFAULT_ROLE))?.id,
-    });
+    return this.createConsultant(
+      {
+        azureId: claims.sub,
+        email: claims.email ?? `${claims.sub}@users.noreply.local`,
+        fullName: claims.name ?? claims.email ?? 'New User',
+        roleId: (await this.roleByName(DEFAULT_ROLE))?.id,
+      },
+      'azure-jit',
+    );
   }
 
   // displayId is assigned by the DB (Consultant_displayId_seq default).
   // isActive is omitted for Azure provisioning (defaults to true — SSO
   // already implies Microsoft vetted them) and set explicitly to false for
   // email+password signups, which never prove email ownership.
-  private async createConsultant(data: {
-    azureId?: string;
-    email: string;
-    fullName: string;
-    passwordHash?: string;
-    roleId?: string | null;
-    isActive?: boolean;
-  }): Promise<ConsultantWithRole> {
-    return this.prisma.consultant.create({ data, include: withRole });
+  private async createConsultant(
+    data: {
+      azureId?: string;
+      email: string;
+      fullName: string;
+      passwordHash?: string;
+      roleId?: string | null;
+      isActive?: boolean;
+    },
+    source: string,
+  ): Promise<ConsultantWithRole> {
+    const consultant = await this.prisma.consultant.create({ data, include: withRole });
+    await this.logProvisioning('CREATE', consultant.id, source);
+    return consultant;
+  }
+
+  /**
+   * Gap 2: the auth path runs on the base client (never the audited extension —
+   * it must read every consultant unfiltered and can't log on every request),
+   * so provisioning writes are audited explicitly here. The actor is the
+   * consultant themselves (self-provisioned during their own sign-in/register).
+   */
+  private logProvisioning(action: 'CREATE' | 'UPDATE', consultantId: string, source: string) {
+    return this.prisma.auditLog.create({
+      data: {
+        actorId: consultantId,
+        action,
+        entityType: 'Consultant',
+        entityId: consultantId,
+        metadata: { source },
+      },
+    });
   }
 
   private async roleByName(name: string) {

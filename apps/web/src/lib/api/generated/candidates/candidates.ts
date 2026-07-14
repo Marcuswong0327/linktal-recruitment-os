@@ -676,7 +676,7 @@ export const getDeleteCandidateUrl = (id: string,) => {
 }
 
 /**
- * @summary Delete a candidate
+ * @summary Soft-delete a candidate (recoverable)
  */
 export const deleteCandidate = async (id: string, options?: RequestInit): Promise<deleteCandidateResponse> => {
 
@@ -725,7 +725,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteCandidateMutationError = ErrorResponse
 
     /**
- * @summary Delete a candidate
+ * @summary Soft-delete a candidate (recoverable)
  */
 export const useDeleteCandidate = <TError = ErrorResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCandidate>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -736,4 +736,202 @@ export const useDeleteCandidate = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getDeleteCandidateMutationOptions(options), queryClient);
+    }
+    export type restoreCandidateResponse201 = {
+  data: CandidateEntity
+  status: 201
+}
+
+export type restoreCandidateResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type restoreCandidateResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type restoreCandidateResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type restoreCandidateResponseSuccess = (restoreCandidateResponse201) & {
+  headers: Headers;
+};
+export type restoreCandidateResponseError = (restoreCandidateResponse400 | restoreCandidateResponse404 | restoreCandidateResponse500) & {
+  headers: Headers;
+};
+
+export type restoreCandidateResponse = (restoreCandidateResponseSuccess | restoreCandidateResponseError)
+
+export const getRestoreCandidateUrl = (id: string,) => {
+
+
+
+
+  return `/candidates/${id}/restore`
+}
+
+/**
+ * @summary Restore a soft-deleted candidate
+ */
+export const restoreCandidate = async (id: string, options?: RequestInit): Promise<restoreCandidateResponse> => {
+
+  return customFetch<restoreCandidateResponse>(getRestoreCandidateUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRestoreCandidateMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreCandidate>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreCandidate>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['restoreCandidate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreCandidate>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  restoreCandidate(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreCandidateMutationResult = NonNullable<Awaited<ReturnType<typeof restoreCandidate>>>
+
+    export type RestoreCandidateMutationError = ErrorResponse
+
+    /**
+ * @summary Restore a soft-deleted candidate
+ */
+export const useRestoreCandidate = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreCandidate>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof restoreCandidate>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRestoreCandidateMutationOptions(options), queryClient);
+    }
+    export type purgeCandidateResponse204 = {
+  data: void
+  status: 204
+}
+
+export type purgeCandidateResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type purgeCandidateResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type purgeCandidateResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type purgeCandidateResponseSuccess = (purgeCandidateResponse204) & {
+  headers: Headers;
+};
+export type purgeCandidateResponseError = (purgeCandidateResponse400 | purgeCandidateResponse404 | purgeCandidateResponse500) & {
+  headers: Headers;
+};
+
+export type purgeCandidateResponse = (purgeCandidateResponseSuccess | purgeCandidateResponseError)
+
+export const getPurgeCandidateUrl = (id: string,) => {
+
+
+
+
+  return `/candidates/${id}/purge`
+}
+
+/**
+ * @summary Permanently erase a candidate + history (admin only)
+ */
+export const purgeCandidate = async (id: string, options?: RequestInit): Promise<purgeCandidateResponse> => {
+
+  return customFetch<purgeCandidateResponse>(getPurgeCandidateUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getPurgeCandidateMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof purgeCandidate>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof purgeCandidate>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['purgeCandidate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof purgeCandidate>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  purgeCandidate(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PurgeCandidateMutationResult = NonNullable<Awaited<ReturnType<typeof purgeCandidate>>>
+
+    export type PurgeCandidateMutationError = ErrorResponse
+
+    /**
+ * @summary Permanently erase a candidate + history (admin only)
+ */
+export const usePurgeCandidate = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof purgeCandidate>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof purgeCandidate>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getPurgeCandidateMutationOptions(options), queryClient);
     }

@@ -9,7 +9,7 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { RolesService } from './roles.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
@@ -65,9 +65,18 @@ export class RolesController {
   @Delete(':id')
   @HttpCode(204)
   @RequirePermission('role', 'delete')
-  @ApiOperation({ operationId: 'deleteRole', summary: 'Delete a custom role (built-ins are protected; must have no consultants)' })
+  @ApiOperation({
+    operationId: 'deleteRole',
+    summary:
+      'Delete a custom role (built-ins protected). If consultants hold it, pass ?reassignTo=<roleId> to move them to a fallback role first.',
+  })
+  @ApiQuery({ name: 'reassignTo', required: false, description: 'Role id to move holders to before deleting' })
   @ApiResponse({ status: 204, description: 'Role deleted' })
-  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.roles.remove(id, user);
+  remove(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Query('reassignTo') reassignTo?: string,
+  ) {
+    return this.roles.remove(id, user, reassignTo);
   }
 }

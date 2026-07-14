@@ -9,7 +9,7 @@ import { Stakeholder } from '@prisma/client';
  * truth). Nullable columns use `@ApiProperty({ nullable: true })` with an
  * explicit `type`, because Prisma always returns the column, just as `null`.
  */
-export class StakeholderEntity implements Stakeholder {
+export class StakeholderEntity implements Omit<Stakeholder, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'Stake-0001' }) displayId!: string;
   @ApiProperty() clientId!: string;

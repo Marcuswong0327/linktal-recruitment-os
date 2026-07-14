@@ -94,19 +94,19 @@ model RolePermission {
 // ============================================================================
 
 model Consultant {
-  id          String     @id @default(cuid())
-  displayId   String     @unique @default(dbgenerated("('consultant-'::text || lpad((nextval('\"Consultant_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: consultant-####
-  azureId     String?    @unique // Azure AD object id (oid claim)
-  passwordHash String?   // bcrypt hash; set when the consultant has email+password auth enabled
-  email       String     @unique
-  fullName    String
-  roleId      String?
-  role        Role?      @relation(fields: [roleId], references: [id])
-  isActive    Boolean    @default(true)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  clients     Client[]
-  jobOrders   JobOrder[]
+  id           String     @id @default(cuid())
+  displayId    String     @unique @default(dbgenerated("('consultant-'::text || lpad((nextval('\"Consultant_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: consultant-####
+  azureId      String?    @unique // Azure AD object id (oid claim)
+  passwordHash String? // bcrypt hash; set when the consultant has email+password auth enabled
+  email        String     @unique
+  fullName     String
+  roleId       String?
+  role         Role?      @relation(fields: [roleId], references: [id])
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  clients      Client[]
+  jobOrders    JobOrder[]
 }
 
 // ============================================================================
@@ -114,28 +114,31 @@ model Consultant {
 // ============================================================================
 
 model Client {
-  id              String                @id @default(cuid())
-  displayId       String                @unique @default(dbgenerated("('Client-'::text || lpad((nextval('\"Client_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Client-####
+  id              String              @id @default(cuid())
+  displayId       String              @unique @default(dbgenerated("('Client-'::text || lpad((nextval('\"Client_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Client-####
   companyName     String
   industry        String?
   country         String?
   city            String?
   website         String?
-  tobSigned       Boolean               @default(false) // Terms of Business signed
-  feePercentage   Float?                // Fee as percentage of package (null until agreed)
-  guaranteePeriod Int                   @default(90) // Guarantee period in days
-  status          ClientStatus          @default(COLD)
+  tobSigned       Boolean             @default(false) // Terms of Business signed
+  feePercentage   Float? // Fee as percentage of package (null until agreed)
+  guaranteePeriod Int                 @default(90) // Guarantee period in days
+  status          ClientStatus        @default(COLD)
   notes           String?
   consultantId    String?
-  consultant      Consultant?           @relation(fields: [consultantId], references: [id])
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  consultant      Consultant?         @relation(fields: [consultantId], references: [id])
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  deletedAt       DateTime? // Soft delete: null = live
+  deletedById     String? // Logical ref to Consultant.id (no FK)
   stakeholders    Stakeholder[]
   jobResearch     ClientJobResearch[]
   jobOrders       JobOrder[]
 
   @@index([status])
   @@index([consultantId])
+  @@index([deletedAt])
 }
 
 // ============================================================================
@@ -143,21 +146,24 @@ model Client {
 // ============================================================================
 
 model Stakeholder {
-  id             String                      @id @default(cuid())
-  displayId      String                      @unique @default(dbgenerated("('Stake-'::text || lpad((nextval('\"Stakeholder_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Stake-####
-  clientId       String
-  client         Client                      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  fullName       String
-  jobTitle       String?
-  email          String?
-  mobile         String?
-  isDecisionMaker Boolean                    @default(false)
-  notes          String?
-  createdAt      DateTime                    @default(now())
-  updatedAt      DateTime                    @updatedAt
-  contactHistory StakeholderContactHistory[]
+  id              String                      @id @default(cuid())
+  displayId       String                      @unique @default(dbgenerated("('Stake-'::text || lpad((nextval('\"Stakeholder_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Stake-####
+  clientId        String
+  client          Client                      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  fullName        String
+  jobTitle        String?
+  email           String?
+  mobile          String?
+  isDecisionMaker Boolean                     @default(false)
+  notes           String?
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+  deletedAt       DateTime? // Soft delete: null = live
+  deletedById     String? // Logical ref to Consultant.id (no FK)
+  contactHistory  StakeholderContactHistory[]
 
   @@index([clientId])
+  @@index([deletedAt])
 }
 
 model StakeholderContactHistory {
@@ -177,19 +183,22 @@ model StakeholderContactHistory {
 // ============================================================================
 
 model ClientJobResearch {
-  id              String   @id @default(cuid())
-  clientId        String
-  client          Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  jobTitle        String
-  sourceUrl       String?
-  salaryRange     String?
-  notes           String?
-  isContacted     Boolean  @default(false)
-  researchedAt    DateTime @default(now())
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id           String    @id @default(cuid())
+  clientId     String
+  client       Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  jobTitle     String
+  sourceUrl    String?
+  salaryRange  String?
+  notes        String?
+  isContacted  Boolean   @default(false)
+  researchedAt DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime? // Soft delete: null = live
+  deletedById  String? // Logical ref to Consultant.id (no FK)
 
   @@index([clientId])
+  @@index([deletedAt])
 }
 
 // ============================================================================
@@ -197,41 +206,44 @@ model ClientJobResearch {
 // ============================================================================
 
 model Candidate {
-  id              String                      @id @default(cuid())
-  displayId       String                      @unique @default(dbgenerated("('CDD-'::text || lpad((nextval('\"Candidate_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: CDD-####
-  fullName        String
-  givenName       String?
-  familyName      String?
-  email           String?
-  mobile          String?
-  country         String?
-  city            String?
-  industry        String?
-  roleType        String?
-  currentPosition String?
-  currentCompany  String?
-  yearsExperience Int?
+  id                String                      @id @default(cuid())
+  displayId         String                      @unique @default(dbgenerated("('CDD-'::text || lpad((nextval('\"Candidate_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: CDD-####
+  fullName          String
+  givenName         String?
+  familyName        String?
+  email             String?
+  mobile            String?
+  country           String?
+  city              String?
+  industry          String?
+  roleType          String?
+  currentPosition   String?
+  currentCompany    String?
+  yearsExperience   Int?
   salaryExpectation String?
-  linkedinUrl     String?
-  resumeUrl       String?
-  workHistory     Json?                       // JSONB: [{company, role, startDate, endDate}]
-  specializations Json?                       // JSONB: ["string"]
-  status          CandidateStatus             @default(COLD)
-  notes           String?
-  createdAt       DateTime                    @default(now())
-  updatedAt       DateTime                    @updatedAt
-  screeningHistory CandidateScreeningHistory[]
-  submissions     CandidateSubmission[]
+  linkedinUrl       String?
+  resumeUrl         String?
+  workHistory       Json? // JSONB: [{company, role, startDate, endDate}]
+  specializations   Json? // JSONB: ["string"]
+  status            CandidateStatus             @default(COLD)
+  notes             String?
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+  deletedAt         DateTime? // Soft delete: null = live
+  deletedById       String? // Logical ref to Consultant.id (no FK)
+  screeningHistory  CandidateScreeningHistory[]
+  submissions       CandidateSubmission[]
 
   @@index([status])
   @@index([email])
+  @@index([deletedAt])
 }
 
 model CandidateScreeningHistory {
   id          String    @id @default(cuid())
   candidateId String
   candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  notes       Json?     // JSONB: [{text, createdAt}]
+  notes       Json? // JSONB: [{text, createdAt}]
   screenedAt  DateTime  @default(now())
   createdAt   DateTime  @default(now())
 
@@ -243,34 +255,37 @@ model CandidateScreeningHistory {
 // ============================================================================
 
 model JobOrder {
-  id               String                @id @default(cuid())
-  displayId        String                @unique @default(dbgenerated("('JO-'::text || lpad((nextval('\"JobOrder_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: JO-####
-  clientId         String
-  client           Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  consultantId     String?
-  consultant       Consultant?           @relation(fields: [consultantId], references: [id])
-  jobTitle         String
-  department       String?
-  location         String?
-  jobType          String?               // Full-time, Part-time, Contract
-  salaryMin        Float?
-  salaryMax        Float?
-  salaryCurrency   String?               @default("AUD")
-  openings         Int                   @default(1)
-  filledCount      Int                   @default(0)
-  description      String?
-  requirements     String?
-  status           JobOrderStatus        @default(ACTIVE)
-  priorityLevel    Int?                  @default(2) // 1=High, 2=Medium, 3=Low
-  receivedAt       DateTime              @default(now())
-  closedAt         DateTime?
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
-  submissions      CandidateSubmission[]
+  id             String                @id @default(cuid())
+  displayId      String                @unique @default(dbgenerated("('JO-'::text || lpad((nextval('\"JobOrder_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: JO-####
+  clientId       String
+  client         Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  consultantId   String?
+  consultant     Consultant?           @relation(fields: [consultantId], references: [id])
+  jobTitle       String
+  department     String?
+  location       String?
+  jobType        String? // Full-time, Part-time, Contract
+  salaryMin      Float?
+  salaryMax      Float?
+  salaryCurrency String?               @default("AUD")
+  openings       Int                   @default(1)
+  filledCount    Int                   @default(0)
+  description    String?
+  requirements   String?
+  status         JobOrderStatus        @default(ACTIVE)
+  priorityLevel  Int?                  @default(2) // 1=High, 2=Medium, 3=Low
+  receivedAt     DateTime              @default(now())
+  closedAt       DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  deletedAt      DateTime? // Soft delete: null = live
+  deletedById    String? // Logical ref to Consultant.id (no FK)
+  submissions    CandidateSubmission[]
 
   @@index([clientId])
   @@index([consultantId])
   @@index([status])
+  @@index([deletedAt])
 }
 
 // ============================================================================
@@ -288,12 +303,17 @@ model CandidateSubmission {
   notes       String?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
+  deletedAt   DateTime? // Soft delete: null = live
+  deletedById String? // Logical ref to Consultant.id (no FK)
   placement   Placement?
 
+  // NOTE: unique is not partial (Fix 2 skipped) — a soft-deleted row still
+  // holds (candidateId, jobOrderId). Re-submit must restore the dead row.
   @@unique([candidateId, jobOrderId])
   @@index([candidateId])
   @@index([jobOrderId])
   @@index([status])
+  @@index([deletedAt])
 }
 
 // ============================================================================
@@ -301,22 +321,44 @@ model CandidateSubmission {
 // ============================================================================
 
 model Placement {
-  id                 String              @id @default(cuid())
-  displayId          String?             @unique // Format: "PLC-XXXX"
-  submissionId       String              @unique
-  submission         CandidateSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  salary             Float?
-  startDate          DateTime?
-  guaranteeEndDate   DateTime?           // Auto-calculated: startDate + client.guaranteePeriod
-  fee                Float?
-  feePercentage      Float?
-  status             PlacementStatus     @default(ACTIVE)
-  notes              String?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  id               String              @id @default(cuid())
+  displayId        String?             @unique // Format: "PLC-XXXX"
+  submissionId     String              @unique
+  submission       CandidateSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  salary           Float?
+  startDate        DateTime?
+  guaranteeEndDate DateTime? // Auto-calculated: startDate + client.guaranteePeriod
+  fee              Float?
+  feePercentage    Float?
+  status           PlacementStatus     @default(ACTIVE)
+  notes            String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  deletedAt        DateTime? // Soft delete: null = live
+  deletedById      String? // Logical ref to Consultant.id (no FK)
 
   @@index([displayId])
   @@index([status])
   @@index([startDate])
   @@index([guaranteeEndDate])
+  @@index([deletedAt])
+}
+
+// ============================================================================
+// AUDIT LOG (append-only — every write operation + its actor)
+// ============================================================================
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String? // Consultant.id who performed the action; null = system/import
+  action     String // CREATE | UPDATE | SOFT_DELETE | RESTORE | HARD_DELETE | DEACTIVATE
+  entityType String // "Candidate", "Client", ...
+  entityId   String
+  changes    Json? // { field: { from, to } } for updates; created row for creates
+  metadata   Json? // { requestId?, ip?, cascade?: true }
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
 }

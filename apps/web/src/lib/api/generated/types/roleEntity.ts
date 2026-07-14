@@ -15,4 +15,6 @@ export interface RoleEntity {
   createdAt: string;
   updatedAt: string;
   permissions: PermissionSummaryEntity[];
+  /** How many consultants currently hold this role */
+  consultantCount: number;
 }

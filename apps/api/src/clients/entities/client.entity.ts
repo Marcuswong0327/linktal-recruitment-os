@@ -12,7 +12,7 @@ import { Client, ClientStatus } from '@prisma/client';
  * nullable value) with an explicit `type`, because Prisma always returns the
  * column, just as `null` when empty.
  */
-export class ClientEntity implements Client {
+export class ClientEntity implements Omit<Client, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'Client-0001' }) displayId!: string;
   @ApiProperty({ example: 'Acme Corp' }) companyName!: string;

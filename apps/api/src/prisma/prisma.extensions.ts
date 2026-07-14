@@ -1,0 +1,283 @@
+import { Prisma, PrismaClient } from '@prisma/client';
+import { RequestContext } from '../common/request-context';
+
+/**
+ * A single Prisma Client extension that gives the app soft delete + an audit
+ * trail, driven by two model allow-lists:
+ *
+ *  - SOFT_DELETE_MODELS: reads hide `deletedAt != null` rows, and `delete`/
+ *    `deleteMany` are rewritten to stamp `deletedAt`/`deletedById` instead of
+ *    physically removing the row.
+ *  - AUDITED_MODELS: every write emits an `AuditLog` row (with a before→after
+ *    diff for single-row updates), attributed to the current RequestContext
+ *    actor.
+ *
+ * The extension closes over the *base* (unextended) client so its own helper
+ * queries — the soft-delete rewrite, the before-image fetch, and the audit
+ * insert — don't re-enter the extension (no recursion, no double logging).
+ */
+
+const SOFT_DELETE_MODELS = new Set([
+  'Client',
+  'Stakeholder',
+  'ClientJobResearch',
+  'Candidate',
+  'JobOrder',
+  'CandidateSubmission',
+  'Placement',
+]);
+
+// Soft-delete set plus the RBAC/identity tables (hard-deleted, but still audited).
+const AUDITED_MODELS = new Set([...SOFT_DELETE_MODELS, 'Consultant', 'Role', 'Permission']);
+
+const READ_MANY_OPS = new Set([
+  'findMany',
+  'findFirst',
+  'findFirstOrThrow',
+  'count',
+  'aggregate',
+  'groupBy',
+]);
+
+// Only these operations are audited — reads must never produce audit rows.
+const WRITE_OPS = new Set([
+  'create',
+  'createMany',
+  'update',
+  'updateMany',
+  'upsert',
+  'delete',
+  'deleteMany',
+]);
+
+type AnyArgs = Record<string, any>;
+
+/** "Candidate" → base.candidate delegate. */
+function delegateFor(base: PrismaClient, model: string): any {
+  const key = model.charAt(0).toLowerCase() + model.slice(1);
+  return (base as any)[key];
+}
+
+/** JSON-safe scalar (Date → ISO, Decimal/bigint → string). Exported for tests. */
+export function toJson(v: unknown): unknown {
+  if (v === null || v === undefined) return null;
+  if (v instanceof Date) return v.toISOString();
+  if (typeof v === 'bigint') return v.toString();
+  if (typeof v === 'object') {
+    const name = (v as { constructor?: { name?: string } }).constructor?.name;
+    if (name === 'Decimal') return String(v);
+    try {
+      return JSON.parse(JSON.stringify(v));
+    } catch {
+      return String(v);
+    }
+  }
+  return v;
+}
+
+/** Unwrap Prisma's atomic write forms (`{ set: x }`) to the plain value. */
+function resolveWriteValue(raw: unknown): { value: unknown; isScalar: boolean } {
+  if (raw !== null && typeof raw === 'object') {
+    if ('set' in (raw as AnyArgs)) return { value: (raw as AnyArgs).set, isScalar: true };
+    return { value: raw, isScalar: false }; // relation op / nested — skip in diff
+  }
+  return { value: raw, isScalar: true };
+}
+
+/** Field-level before→after diff over the scalar keys in an update payload. Exported for tests. */
+export function computeChanges(before: AnyArgs | null, data: AnyArgs | undefined) {
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  for (const [key, raw] of Object.entries(data ?? {})) {
+    const { value: to, isScalar } = resolveWriteValue(raw);
+    if (!isScalar) continue;
+    const from = before ? before[key] : undefined;
+    const fromJ = toJson(from);
+    const toJ = toJson(to);
+    if (JSON.stringify(fromJ) !== JSON.stringify(toJ)) changes[key] = { from: fromJ, to: toJ };
+  }
+  return changes;
+}
+
+function newDeletedAt(data: AnyArgs | undefined): unknown {
+  if (!data || !('deletedAt' in data)) return undefined;
+  return resolveWriteValue(data.deletedAt).value;
+}
+
+/** Derive the semantic action for a single-row write from its data + before-image. Exported for tests. */
+export function deriveAction(
+  model: string,
+  operation: string,
+  before: AnyArgs | null,
+  data: AnyArgs | undefined,
+): string {
+  if (operation === 'create' || operation === 'createMany' || operation === 'upsert') {
+    return 'CREATE';
+  }
+  if (operation === 'delete' || operation === 'deleteMany') return 'HARD_DELETE';
+
+  const setsDeletedAt = data != null && 'deletedAt' in data;
+  const nextDeletedAt = newDeletedAt(data);
+  const wasDeleted = before ? before.deletedAt != null : false;
+  if (setsDeletedAt && nextDeletedAt != null && !wasDeleted) return 'SOFT_DELETE';
+  if (setsDeletedAt && nextDeletedAt == null && wasDeleted) return 'RESTORE';
+
+  if (model === 'Consultant' && data && 'isActive' in data) {
+    if (resolveWriteValue(data.isActive).value === false) return 'DEACTIVATE';
+  }
+  return 'UPDATE';
+}
+
+function baseMetadata(extra?: AnyArgs) {
+  const requestId = RequestContext.getRequestId();
+  return { ...(requestId ? { requestId } : {}), ...extra };
+}
+
+async function writeAudit(
+  base: PrismaClient,
+  entry: {
+    action: string;
+    entityType: string;
+    entityId: string;
+    changes?: unknown;
+    metadata?: AnyArgs;
+  },
+): Promise<void> {
+  await base.auditLog.create({
+    data: {
+      actorId: RequestContext.getActorId() ?? null,
+      action: entry.action,
+      entityType: entry.entityType,
+      entityId: entry.entityId,
+      changes: (entry.changes ?? undefined) as Prisma.InputJsonValue | undefined,
+      metadata: baseMetadata(entry.metadata) as Prisma.InputJsonValue,
+    },
+  });
+}
+
+export function createDbExtension(base: PrismaClient) {
+  return Prisma.defineExtension({
+    name: 'soft-delete-audit',
+    query: {
+      $allModels: {
+        async $allOperations({ model, operation, args, query }) {
+          const isSoftDelete = SOFT_DELETE_MODELS.has(model);
+          const isAudited = AUDITED_MODELS.has(model);
+          const a = (args ?? {}) as AnyArgs;
+
+          // ---- 1. Reads on soft-delete models: hide deleted rows ----------
+          if (isSoftDelete && READ_MANY_OPS.has(operation)) {
+            a.where = { ...(a.where ?? {}), deletedAt: null };
+            return query(a);
+          }
+          if (isSoftDelete && (operation === 'findUnique' || operation === 'findUniqueOrThrow')) {
+            // findUnique's where can't carry deletedAt — run it as a filtered
+            // findFirst on the base client so deleted rows read as "not found".
+            const del = delegateFor(base, model);
+            const findArgs = {
+              where: { ...(a.where ?? {}), deletedAt: null },
+              ...(a.select ? { select: a.select } : {}),
+              ...(a.include ? { include: a.include } : {}),
+            };
+            return operation === 'findUniqueOrThrow'
+              ? del.findFirstOrThrow(findArgs)
+              : del.findFirst(findArgs);
+          }
+
+          // ---- 2. delete/deleteMany on soft-delete models → soft delete ---
+          if (isSoftDelete && operation === 'delete') {
+            const del = delegateFor(base, model);
+            const stamp = { deletedAt: new Date(), deletedById: RequestContext.getActorId() ?? null };
+            const updated = await del.update({ where: a.where, data: stamp });
+            await writeAudit(base, {
+              action: 'SOFT_DELETE',
+              entityType: model,
+              entityId: updated.id,
+              changes: { deletedAt: { from: null, to: toJson(stamp.deletedAt) } },
+            });
+            return updated;
+          }
+          if (isSoftDelete && operation === 'deleteMany') {
+            const del = delegateFor(base, model);
+            const stamp = { deletedAt: new Date(), deletedById: RequestContext.getActorId() ?? null };
+            const result = await del.updateMany({
+              where: { ...(a.where ?? {}), deletedAt: null },
+              data: stamp,
+            });
+            await writeAudit(base, {
+              action: 'SOFT_DELETE',
+              entityType: model,
+              entityId: '(bulk)',
+              changes: { deletedAt: { from: null, to: toJson(stamp.deletedAt) } },
+              metadata: { cascade: true, count: result.count, where: toJson(a.where ?? null) },
+            });
+            return result;
+          }
+
+          // ---- 3. Other writes on audited models: run, then audit --------
+          // Gate on WRITE_OPS so reads (findMany/count/etc.) on audited-but-
+          // not-soft-deleted models (Consultant/Role/Permission) pass straight
+          // through instead of being logged as bogus UPDATE rows.
+          if (isAudited && WRITE_OPS.has(operation)) {
+            // Bulk writes: one aggregate entry (no per-row before-image).
+            if (operation === 'updateMany' || operation === 'createMany') {
+              const result = await query(a);
+              const action =
+                operation === 'createMany'
+                  ? 'CREATE'
+                  : 'deletedAt' in (a.data ?? {})
+                    ? newDeletedAt(a.data) != null
+                      ? 'SOFT_DELETE'
+                      : 'RESTORE'
+                    : 'UPDATE';
+              await writeAudit(base, {
+                action,
+                entityType: model,
+                entityId: '(bulk)',
+                changes: toJson(a.data ?? null),
+                metadata: {
+                  cascade: true,
+                  count: (result as { count?: number })?.count,
+                  where: toJson(a.where ?? null),
+                },
+              });
+              return result;
+            }
+
+            // Single-row writes: capture before-image for a real diff.
+            let before: AnyArgs | null = null;
+            if ((operation === 'update' || operation === 'delete') && a.where) {
+              before = await delegateFor(base, model)
+                .findUnique({ where: a.where })
+                .catch(() => null);
+            }
+            const result = (await query(a)) as AnyArgs;
+            const action = deriveAction(model, operation, before, a.data);
+            const changes =
+              operation === 'create'
+                ? toJson(result)
+                : operation === 'delete'
+                  ? toJson(before)
+                  : computeChanges(before, a.data);
+            await writeAudit(base, {
+              action,
+              entityType: model,
+              entityId: (result?.id ?? before?.id ?? '(unknown)') as string,
+              changes,
+            });
+            return result;
+          }
+
+          return query(a);
+        },
+      },
+    },
+  });
+}
+
+/** Applies the soft-delete + audit extension to a base client. */
+export function extendPrismaClient(base: PrismaClient) {
+  return base.$extends(createDbExtension(base));
+}
+
+/** The extended client type injected across the app (see EXTENDED_PRISMA). */
+export type ExtendedPrismaClient = ReturnType<typeof extendPrismaClient>;
