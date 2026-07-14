@@ -1,7 +1,10 @@
-import { getAuthToken } from '../auth/client';
 import type { ErrorResponse } from './generated/types';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+// Same-origin BFF proxy (see src/proxy.ts). The browser hits this path with
+// just its httpOnly session cookie; proxy.ts reads the access token from that
+// cookie server-side and forwards to NestJS with a Bearer header — so no token
+// ever touches client JS and there's no /api/auth/token round-trip.
+const BASE_URL = '/api/backend';
 
 /**
  * Error thrown by customFetch on a non-2xx response. Extends Error (so
@@ -27,24 +30,21 @@ export class ApiError extends Error {
  *
  * - Used directly for hand-written calls (`customFetch('/candidates')`).
  * - Wired into Orval as the `mutator`, so generated React Query hooks route
- *   through here too — inheriting the base URL and the Bearer token. Orval
- *   passes a relative `url` (it has no `baseUrl` configured), which we
- *   prefix with NEXT_PUBLIC_API_URL.
+ *   through here too — inheriting the base URL. Orval passes a relative `url`
+ *   (it has no `baseUrl` configured), which we prefix with the /api/backend
+ *   proxy path.
  */
 export const customFetch = async <T>(
   url: string,
   options?: RequestInit,
 ): Promise<T> => {
-  const token = await getAuthToken();
-
   const response = await fetch(`${BASE_URL}${url}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
-    credentials: 'include', // include cookies for auth
+    credentials: 'include', // send the session cookie so proxy.ts can auth us
   });
 
   if (!response.ok) {
