@@ -11,7 +11,10 @@ export default async function CompaniesPage() {
     <PageLayout>
       <PageHeader title="Companies" description="Client accounts, relationship status and terms of business." />
       {hasPermission(session, 'client', 'read') ? (
-        <CompaniesTable canCreate={hasPermission(session, 'client', 'create')} />
+        <CompaniesTable
+          canCreate={hasPermission(session, 'client', 'create')}
+          canDelete={hasPermission(session, 'client', 'delete')}
+        />
       ) : (
         <AccessDenied resource="companies" />
       )}

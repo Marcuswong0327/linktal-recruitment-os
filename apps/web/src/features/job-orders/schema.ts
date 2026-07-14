@@ -18,8 +18,56 @@ export const jobOrderStatusLabels: Record<JobOrderStatus, string> = {
   CLOSED: 'Closed',
 };
 
+// Shared by the table's status column, the status filter, and the inline
+// status editor so the pills always match.
+export const statusVariant: Record<JobOrderStatus, 'info' | 'success' | 'muted' | 'destructive'> = {
+  ACTIVE: 'info',
+  PLACED: 'success',
+  ON_HOLD: 'muted',
+  CLOSED: 'destructive',
+};
+
+// Drives the colored EnumSelect trigger pill (edit drawer) — matches
+// statusVariant so the pill and the status filter/table pill agree.
+export const statusTriggerClassName: Record<JobOrderStatus, string> = {
+  ACTIVE: 'border-info/30 bg-info/10 text-info',
+  PLACED: 'border-success/30 bg-success/10 text-success',
+  ON_HOLD: 'border-transparent bg-muted text-muted-foreground',
+  CLOSED: 'border-destructive/30 bg-destructive/10 text-destructive',
+};
+
 export const priorityLabels: Record<number, string> = {
   1: 'High',
   2: 'Medium',
   3: 'Low',
 };
+
+export const priorityVariant: Record<number, 'destructive' | 'warning' | 'muted'> = {
+  1: 'destructive',
+  2: 'warning',
+  3: 'muted',
+};
+
+// Drives the colored EnumSelect trigger pill (edit drawer) — matches
+// priorityVariant so the pill and the priority filter/table pill agree.
+export const priorityTriggerClassName: Record<number, string> = {
+  1: 'border-destructive/30 bg-destructive/10 text-destructive',
+  2: 'border-warning/30 bg-warning/10 text-warning',
+  3: 'border-transparent bg-muted text-muted-foreground',
+};
+
+// Single option list per field — shared by the table's filter/bulk actions,
+// the row edit drawer, and the detail page instead of each rebuilding it.
+export const statusOptions = jobOrderStatuses.map((value) => ({
+  value,
+  label: jobOrderStatusLabels[value],
+  variant: statusVariant[value],
+  triggerClassName: statusTriggerClassName[value],
+}));
+
+export const priorityOptions = Object.entries(priorityLabels).map(([value, label]) => ({
+  value,
+  label,
+  variant: priorityVariant[Number(value)],
+  triggerClassName: priorityTriggerClassName[Number(value)],
+}));

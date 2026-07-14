@@ -1,6 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
+import Link from 'next/link';
 
 import { cn } from '@/lib/utils';
 import { CandidateStatusCell } from './StatusCell';
@@ -25,25 +26,34 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
   {
     accessorKey: 'fullName',
     header: 'Name',
+    enableSorting: false,
     cell: ({ row }) => (
-      <span title={row.original.fullName} className="block truncate font-medium text-foreground">
+      <Link
+        href={`/candidates/${row.original.id}`}
+        onClick={(e) => e.stopPropagation()}
+        title={row.original.fullName}
+        className="block truncate font-medium text-foreground hover:underline"
+      >
         {row.original.fullName}
-      </span>
+      </Link>
     ),
   },
   {
     accessorKey: 'currentPosition',
     header: 'Current Title',
+    enableSorting: false,
     cell: ({ row }) => <MutedCell value={row.original.currentPosition} className="block truncate" />,
   },
   {
     accessorKey: 'currentCompany',
     header: 'Company',
+    enableSorting: false,
     cell: ({ row }) => <MutedCell value={row.original.currentCompany} className="block truncate" />,
   },
   {
     accessorKey: 'city',
     header: 'Location',
+    enableSorting: false,
     size: 170,
     cell: ({ row }) => (
       <MutedCell
@@ -55,21 +65,10 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
   {
     accessorKey: 'status',
     header: 'Status',
+    enableSorting: false,
     size: 110,
     meta: { align: 'center' },
     cell: ({ row }) => <CandidateStatusCell candidate={row.original} />,
-  },
-  {
-    accessorKey: 'salaryExpectation',
-    header: 'Expected',
-    size: 130,
-    meta: { align: 'center' },
-    enableSorting: false,
-    cell: ({ row }) => (
-      <span title={row.original.salaryExpectation || undefined} className="block truncate tabular-nums">
-        {row.original.salaryExpectation || '—'}
-      </span>
-    ),
   },
   {
     accessorKey: 'yearsExperience',
@@ -79,6 +78,18 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     cell: ({ row }) => (
       <span className="tabular-nums">
         {row.original.yearsExperience != null ? `${row.original.yearsExperience} yrs` : '—'}
+      </span>
+    ),
+  },
+  {
+    accessorKey: 'salaryExpectation',
+    header: 'Expected',
+    enableSorting: false,
+    size: 130,
+    meta: { align: 'center' },
+    cell: ({ row }) => (
+      <span title={row.original.salaryExpectation || undefined} className="block truncate tabular-nums">
+        {row.original.salaryExpectation || '—'}
       </span>
     ),
   },

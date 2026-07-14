@@ -11,7 +11,10 @@ export default async function JobOrdersPage() {
     <PageLayout>
       <PageHeader title="Job Orders" description="Live roles — linked to a client and an assigned consultant." />
       {hasPermission(session, 'job_order', 'read') ? (
-        <JobOrdersTable canCreate={hasPermission(session, 'job_order', 'create')} />
+        <JobOrdersTable
+          canCreate={hasPermission(session, 'job_order', 'create')}
+          canDelete={hasPermission(session, 'job_order', 'delete')}
+        />
       ) : (
         <AccessDenied resource="job orders" />
       )}

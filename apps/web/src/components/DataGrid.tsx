@@ -4,6 +4,7 @@ import * as React from 'react';
 import {
   type ColumnDef,
   type ColumnFiltersState,
+  type ColumnSizingState,
   type FilterFn,
   type RowSelectionState,
   type SortingState,
@@ -30,15 +31,29 @@ export interface DataGridFilter {
   columnId: string;
   /** Label on the filter button. */
   title: string;
-  options: FacetedFilterOption[];
+  /** Ignored when `render` is provided. */
+  options?: FacetedFilterOption[];
   /** Single-select instead of multi (e.g. when the API takes one value). */
   single?: boolean;
+  /**
+   * Overrides the default checkbox-list filter UI (e.g. a searchable
+   * combobox) while keeping this column's state, and the toolbar's
+   * Clear/isFiltered handling, unified with the other filters.
+   */
+  render?: (props: { selected: string[]; onChange: (values: string[]) => void }) => React.ReactNode;
 }
 
 /** Per-column presentation hints, set via `meta` on a ColumnDef. */
 export interface DataGridColumnMeta {
   /** Align header and cells; use center for narrow numeric/pill columns. */
   align?: 'left' | 'center' | 'right';
+  /**
+   * Resize floor is the column's full measured content (header + widest
+   * cell) instead of just its header. Use for columns rendering a pill/
+   * control (badge, Select, Combobox) — a half-visible control looks
+   * broken, unlike plain text, which is fine to shrink and clip.
+   */
+  strictMinSize?: boolean;
 }
 
 function columnAlignClass(meta: unknown): string | undefined {
@@ -71,6 +86,19 @@ export interface DataGridServerProps {
 /** Keeps a row when its cell value is one of the selected filter values. */
 const facetedFilterFn: FilterFn<unknown> = (row, columnId, filterValue) =>
   !Array.isArray(filterValue) || filterValue.length === 0 ? true : filterValue.includes(row.getValue(columnId));
+
+/** Raise-only merge — a column's measured width should only ever grow (header pass vs. cell pass), never shrink back down. */
+function raiseSizes(prev: Record<string, number>, next: Record<string, number>) {
+  const merged = { ...prev };
+  let changed = false;
+  for (const id in next) {
+    if ((merged[id] ?? 0) < next[id]) {
+      merged[id] = next[id];
+      changed = true;
+    }
+  }
+  return changed ? merged : prev;
+}
 
 interface DataGridProps<TData> {
   columns: ColumnDef<TData, unknown>[];
@@ -128,6 +156,7 @@ export function DataGrid<TData>({
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
+  const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
 
   // Selection is page-scoped (see onSelectionChange doc) — drop it when the
   // visible rows change out from under it. Bails out when already empty:
@@ -160,50 +189,126 @@ export function DataGrid<TData>({
     return () => clearTimeout(timer);
   }, [isServer, globalFilter, sorting, columnFilters]);
 
+  // Natural width each column actually needs — the wider of its header
+  // content (label + sort icon) and its widest rendered cell on the page
+  // that first loaded. Used, when a column doesn't hardcode a `size`, as its
+  // starting width — a fixed guess goes stale the moment a column's content
+  // changes (e.g. plain text becoming a pill), and a single flat default
+  // ignores that different columns need different amounts of room. Measuring
+  // the real DOM is the only thing that can't drift out of sync with what's
+  // actually rendered.
+  const [measuredSizes, setMeasuredSizes] = React.useState<Record<string, number>>({});
+  // Header-only subset of the above — the resize floor for plain-text
+  // columns. Unlike a pill/control, clipped text isn't broken, so those
+  // columns should stay shrinkable well past their widest cell value; only
+  // `meta.strictMinSize` columns use the fuller `measuredSizes` floor instead.
+  const [headerOnlySizes, setHeaderOnlySizes] = React.useState<Record<string, number>>({});
+
   // Attach the faceted filter fn to whichever columns are declared filterable.
   const filterColumnIds = React.useMemo(() => new Set((filters ?? []).map((f) => f.columnId)), [filters]);
   const tableColumns = React.useMemo(() => {
     const withFilters = columns.map((col) => {
       const id = (col as { id?: string; accessorKey?: string }).id ?? (col as { accessorKey?: string }).accessorKey;
-      return id && filterColumnIds.has(id) ? { ...col, filterFn: facetedFilterFn as FilterFn<TData> } : col;
+      let result = col;
+      if (id && filterColumnIds.has(id)) {
+        result = { ...result, filterFn: facetedFilterFn as FilterFn<TData> };
+      }
+      const measured = id ? measuredSizes[id] : undefined;
+      if (measured !== undefined) {
+        const strict = (result.meta as DataGridColumnMeta | undefined)?.strictMinSize;
+        const minFloor = strict ? measured : (id ? headerOnlySizes[id] : undefined);
+        result = {
+          ...result,
+          minSize: Math.max(minFloor ?? 0, result.minSize ?? 0),
+          // An explicit columnDef.size is a deliberate override (e.g.
+          // intentionally forcing truncation) — respect it. Otherwise the
+          // measured width *is* the default, not a floor under a guess.
+          size: result.size ?? measured,
+        };
+      }
+      return result;
     });
     if (!onSelectionChange) return withFilters;
 
     const selectColumn: ColumnDef<TData, unknown> = {
       id: SELECT_COLUMN_ID,
       size: 40,
+      enableResizing: false,
       header: ({ table }) => (
-        <Checkbox
-          checked={table.getIsAllPageRowsSelected()}
-          indeterminate={!table.getIsAllPageRowsSelected() && table.getIsSomePageRowsSelected()}
-          onCheckedChange={(checked) => table.toggleAllPageRowsSelected(!!checked)}
-          onClick={(e) => e.stopPropagation()}
-          aria-label="Select all"
-        />
+        // Checkbox renders a visible span *and* a hidden input as siblings —
+        // clicking the span re-dispatches a bubbling click on that sibling
+        // input, which stopPropagation on the Checkbox itself can't catch
+        // (it never passes back through the span). Stop it here instead,
+        // on a shared ancestor of both.
+        <div onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected()}
+            indeterminate={!table.getIsAllPageRowsSelected() && table.getIsSomePageRowsSelected()}
+            onCheckedChange={(checked) => table.toggleAllPageRowsSelected(!!checked)}
+            aria-label="Select all"
+          />
+        </div>
       ),
       cell: ({ row }) => (
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(checked) => row.toggleSelected(!!checked)}
-          onClick={(e) => e.stopPropagation()}
-          disabled={!row.getCanSelect()}
-          aria-label="Select row"
-        />
+        <div onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(checked) => row.toggleSelected(!!checked)}
+            disabled={!row.getCanSelect()}
+            aria-label="Select row"
+          />
+        </div>
       ),
     };
     return [selectColumn, ...withFilters];
-  }, [columns, filterColumnIds, onSelectionChange]);
+  }, [columns, filterColumnIds, onSelectionChange, measuredSizes, headerOnlySizes]);
+
+  const gridContainerRef = React.useRef<HTMLDivElement>(null);
+
+  // Pass 1: header-only sizing. Runs as soon as headers render, independent
+  // of loading state — cell content isn't available yet while `isLoading`,
+  // and falling back to defaultColumn.size in the meantime made the loading
+  // skeleton render far wider than the eventual (properly fitted) table,
+  // producing a jarring wide-then-narrow snap once data arrived.
+  React.useLayoutEffect(() => {
+    const container = gridContainerRef.current;
+    if (!container) return;
+    const next: Record<string, number> = {};
+    container.querySelectorAll<HTMLElement>('thead [data-measure-column]').forEach((el) => {
+      const id = el.dataset.measureColumn;
+      if (!id) return;
+      // th padding (px-3 = 0.75rem each side) isn't part of the span itself.
+      next[id] = Math.ceil(el.scrollWidth) + 24;
+    });
+    setMeasuredSizes((prev) => raiseSizes(prev, next));
+    setHeaderOnlySizes((prev) => raiseSizes(prev, next));
+  }, [columns]);
+
+  // Re-measure pass 2 (see effect below) once per column set — header
+  // labels/cell kinds don't otherwise change; new columns showing up should
+  // still get properly fitted the same way.
+  const measuredOnceRef = React.useRef(false);
+  React.useEffect(() => {
+    measuredOnceRef.current = false;
+  }, [columns]);
 
   const table = useReactTable({
     data,
     columns: tableColumns,
-    state: { sorting, globalFilter, columnFilters, rowSelection },
+    state: { sorting, globalFilter, columnFilters, rowSelection, columnSizing },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     onColumnFiltersChange: setColumnFilters,
     onRowSelectionChange: setRowSelection,
+    onColumnSizingChange: setColumnSizing,
     getRowId: getRowId as ((row: TData) => string) | undefined,
     enableRowSelection: !onSelectionChange ? false : canSelectRow ? (row) => canSelectRow(row.original) : true,
+    enableColumnResizing: true,
+    columnResizeMode: 'onChange',
+    // Undeclared-size columns previously shared remaining space equally via
+    // table-fixed's own layout; resizing requires every column to carry an
+    // explicit width, so give those a sensible starting width instead.
+    defaultColumn: { size: 200, minSize: 60, maxSize: 600 },
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -241,6 +346,39 @@ export function DataGrid<TData>({
   const hasData = data.length > 0;
   const totalColumns = table.getAllLeafColumns().length;
 
+  // Pass 2: refine upward with actual cell content once real rows are
+  // available (a short header like "TOB" undersells the pill it holds). Cell
+  // content depends on which page/rows are loaded — measuring on every data
+  // change would make columns drift width as you page through, which
+  // table-fixed was chosen specifically to avoid. So this only runs once per
+  // column set: on the first successful render of actual rows, using
+  // whichever page happened to load. After that, sizes only change via
+  // explicit user resize (columnSizing state), never by re-measuring.
+  React.useLayoutEffect(() => {
+    if (measuredOnceRef.current || isLoading || rows.length === 0) return;
+    const container = gridContainerRef.current;
+    if (!container) return;
+    measuredOnceRef.current = true;
+
+    const next: Record<string, number> = {};
+    // td is a block-level box pinned to the column's *current* fixed width —
+    // a plain child fills that box and reports the box's own size back via
+    // scrollWidth, never a smaller one, so it can't reveal that a column has
+    // more room than it needs. Each [data-measure-column] span is
+    // inline-block instead (shrink-to-fit), so its scrollWidth is its actual
+    // natural content width — even when that's smaller *or* larger than the
+    // column's current size.
+    container.querySelectorAll<HTMLElement>('tbody [data-measure-column]').forEach((el) => {
+      const id = el.dataset.measureColumn;
+      if (!id) return;
+      // td padding (px-3 = 0.75rem each side) isn't part of the span itself.
+      const width = Math.ceil(el.scrollWidth) + 24;
+      next[id] = Math.max(next[id] ?? 0, width);
+    });
+
+    setMeasuredSizes((prev) => raiseSizes(prev, next));
+  }, [rows, isLoading]);
+
   return (
     // flex-1/min-h-0 let the grid fill a height-locked page and scroll its
     // own rows (which also makes the sticky header work); in an unconstrained
@@ -262,14 +400,18 @@ export function DataGrid<TData>({
             const column = table.getColumn(filter.columnId);
             if (!column) return null;
             const selected = (column.getFilterValue() as string[]) ?? [];
+            const onChange = (values: string[]) => column.setFilterValue(values.length ? values : undefined);
+            if (filter.render) {
+              return <React.Fragment key={filter.columnId}>{filter.render({ selected, onChange })}</React.Fragment>;
+            }
             return (
               <DataGridFacetedFilter
                 key={filter.columnId}
                 title={filter.title}
-                options={filter.options}
+                options={filter.options ?? []}
                 selected={selected}
                 single={filter.single}
-                onChange={(values) => column.setFilterValue(values.length ? values : undefined)}
+                onChange={onChange}
               />
             );
           })}
@@ -287,47 +429,67 @@ export function DataGrid<TData>({
         {toolbar ? <div className="flex items-center gap-2">{toolbar}</div> : null}
       </div>
       {/* Grid */}
-      <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card">
+      <div ref={gridContainerRef} className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card">
         {/* Vertical gridlines + tight rows for the spreadsheet look.
-            table-fixed: widths come from the header row (columnDef.size or an
-            equal share), never from cell content, so columns don't shift as
-            pages/filters change the data. */}
-        <Table className="table-fixed [&_td]:border-r [&_th]:border-r [&_td:last-child]:border-r-0 [&_th:last-child]:border-r-0 [&_td]:py-1.5">
+            table-fixed: widths come from the header row (header.getSize(),
+            resizable), never from cell content, so columns don't shift as
+            pages/filters change the data. The table's own width tracks the
+            sum of column widths rather than staying fixed at 100%, so
+            growing a column via resize expands the table — and scrolls —
+            instead of squeezing its neighbors; minWidth keeps it filling the
+            container the rest of the time, when that sum is narrower (columns
+            are now measured to fit their content, not padded out to 200px). */}
+        <Table
+          style={{ width: table.getTotalSize(), minWidth: '100%' }}
+          className="table-fixed [&_td]:border-r [&_th]:border-r [&_td:last-child]:border-r-0 [&_th:last-child]:border-r-0 [&_td]:py-1.5"
+        >
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id} className="hover:bg-transparent">
                 {headerGroup.headers.map((header) => {
                   const canSort = header.column.getCanSort();
                   const sorted = header.column.getIsSorted();
-                  // Only apply an explicit width when the column declares one;
-                  // undeclared columns share the remaining space equally.
-                  const declaredSize = header.column.columnDef.size;
+                  const canResize = header.column.getCanResize();
                   return (
                     <TableHead
                       key={header.id}
-                      style={declaredSize !== undefined ? { width: declaredSize } : undefined}
-                      className={columnAlignClass(header.column.columnDef.meta)}
+                      style={{ width: header.getSize() }}
+                      className={cn('relative', columnAlignClass(header.column.columnDef.meta))}
                     >
-                      {header.isPlaceholder ? null : canSort ? (
-                        <button
-                          type="button"
-                          onClick={header.column.getToggleSortingHandler()}
-                          // uppercase: Preflight sets text-transform:none on
-                          // buttons, cancelling the th's uppercase style.
-                          className="inline-flex items-center gap-1 rounded-sm uppercase hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                        >
-                          {flexRender(header.column.columnDef.header, header.getContext())}
-                          {sorted === 'asc' ? (
-                            <ArrowUp className="size-3" />
-                          ) : sorted === 'desc' ? (
-                            <ArrowDown className="size-3" />
-                          ) : (
-                            <ChevronsUpDown className="size-3 opacity-50" />
+                      <span data-measure-column={header.column.id} className="inline-block max-w-full">
+                        {header.isPlaceholder ? null : canSort ? (
+                          <button
+                            type="button"
+                            onClick={header.column.getToggleSortingHandler()}
+                            // uppercase: Preflight sets text-transform:none on
+                            // buttons, cancelling the th's uppercase style.
+                            className="inline-flex items-center gap-1 rounded-sm uppercase hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                          >
+                            {flexRender(header.column.columnDef.header, header.getContext())}
+                            {sorted === 'asc' ? (
+                              <ArrowUp className="size-3" />
+                            ) : sorted === 'desc' ? (
+                              <ArrowDown className="size-3" />
+                            ) : (
+                              <ChevronsUpDown className="size-3 opacity-50" />
+                            )}
+                          </button>
+                        ) : (
+                          flexRender(header.column.columnDef.header, header.getContext())
+                        )}
+                      </span>
+                      {canResize ? (
+                        <div
+                          onMouseDown={header.getResizeHandler()}
+                          onTouchStart={header.getResizeHandler()}
+                          onClick={(e) => e.stopPropagation()}
+                          className={cn(
+                            'absolute top-0 right-0 h-full w-2 -mr-1 cursor-col-resize touch-none select-none',
+                            'after:absolute after:top-0 after:right-1/2 after:h-full after:w-px after:translate-x-1/2 after:bg-transparent after:transition-colors hover:after:bg-ring',
+                            header.column.getIsResizing() && 'after:bg-ring',
                           )}
-                        </button>
-                      ) : (
-                        flexRender(header.column.columnDef.header, header.getContext())
-                      )}
+                        />
+                      ) : null}
                     </TableHead>
                   );
                 })}
@@ -355,7 +517,9 @@ export function DataGrid<TData>({
                   >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell key={cell.id} className={columnAlignClass(cell.column.columnDef.meta)}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        <span data-measure-column={cell.column.id} className="inline-block max-w-full">
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </span>
                       </TableCell>
                     ))}
                   </TableRow>

@@ -1,22 +1,11 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
+import Link from 'next/link';
 
-import { Badge } from '@/components/ui/badge';
-import { type JobOrder, type JobOrderStatus, jobOrderStatusLabels, priorityLabels } from './schema';
-
-export const statusVariant: Record<JobOrderStatus, 'info' | 'success' | 'muted' | 'destructive'> = {
-  ACTIVE: 'info',
-  PLACED: 'success',
-  ON_HOLD: 'muted',
-  CLOSED: 'destructive',
-};
-
-export const priorityVariant: Record<number, 'destructive' | 'warning' | 'muted'> = {
-  1: 'destructive',
-  2: 'warning',
-  3: 'muted',
-};
+import type { ConsultantEntity } from '@/lib/api/generated/types';
+import type { JobOrder } from './schema';
+import { JobOrderConsultantCell, JobOrderPriorityCell, JobOrderStatusCell } from './StatusCell';
 
 const numberFormatter = new Intl.NumberFormat('en-SG');
 
@@ -32,53 +21,61 @@ function formatSalary(min: number | null, max: number | null, currency: string |
 interface JobOrderColumnsOptions {
   /** Resolves a clientId to a display name (client-side join — the API returns IDs only). */
   clientName: (id: string) => string;
-  /** Resolves a consultantId to a display name (same reason). */
-  consultantName: (id: string | null) => string;
+  /** Full consultant roster for the inline assignment combobox. */
+  consultants: ConsultantEntity[];
 }
 
-export function getJobOrderColumns({ clientName, consultantName }: JobOrderColumnsOptions): ColumnDef<JobOrder>[] {
+export function getJobOrderColumns({ clientName, consultants }: JobOrderColumnsOptions): ColumnDef<JobOrder>[] {
   return [
+    {
+      accessorKey: 'displayId',
+      header: 'ID',
+      size: 90,
+      meta: { align: 'center' },
+      cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.displayId}</span>,
+    },
     {
       accessorKey: 'jobTitle',
       header: 'Role',
+      enableSorting: false,
+      size: 150,
       cell: ({ row }) => (
-        <span className="font-medium text-foreground">{row.original.jobTitle}</span>
+        <Link
+          href={`/job-orders/${row.original.id}`}
+          onClick={(e) => e.stopPropagation()}
+          title={row.original.jobTitle}
+          className="block truncate font-medium text-foreground hover:underline"
+        >
+          {row.original.jobTitle}
+        </Link>
       ),
     },
     {
       accessorKey: 'clientId',
       header: 'Client',
+      enableSorting: false,
       cell: ({ row }) => <span>{clientName(row.original.clientId)}</span>,
     },
     {
       accessorKey: 'status',
       header: 'Status',
+      enableSorting: false,
       size: 110,
       meta: { align: 'center' },
-      cell: ({ row }) => (
-        <Badge variant={statusVariant[row.original.status]}>
-          {jobOrderStatusLabels[row.original.status]}
-        </Badge>
-      ),
+      cell: ({ row }) => <JobOrderStatusCell jobOrder={row.original} />,
     },
     {
       accessorKey: 'priorityLevel',
       header: 'Priority',
-      size: 100,
+      enableSorting: false,
+      size: 110,
       meta: { align: 'center' },
-      cell: ({ row }) => {
-        const priority = row.original.priorityLevel;
-        return priority != null ? (
-          <Badge variant={priorityVariant[priority]}>{priorityLabels[priority] ?? priority}</Badge>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        );
-      },
+      cell: ({ row }) => <JobOrderPriorityCell jobOrder={row.original} />,
     },
     {
       id: 'salary',
       header: 'Salary Range',
-      size: 190,
+      size: 100,
       accessorFn: (row) => row.salaryMax ?? row.salaryMin ?? 0,
       cell: ({ row }) => (
         <span className="tabular-nums whitespace-nowrap">
@@ -89,6 +86,7 @@ export function getJobOrderColumns({ clientName, consultantName }: JobOrderColum
     {
       id: 'openings',
       header: 'Filled',
+      enableSorting: false,
       size: 100,
       meta: { align: 'center' },
       accessorFn: (row) => row.filledCount,
@@ -101,17 +99,16 @@ export function getJobOrderColumns({ clientName, consultantName }: JobOrderColum
     {
       accessorKey: 'location',
       header: 'Location',
+      enableSorting: false,
       size: 150,
-      cell: ({ row }) => (
-        <span className="text-muted-foreground">{row.original.location ?? '—'}</span>
-      ),
+      cell: ({ row }) => <span className="text-muted-foreground">{row.original.location ?? '—'}</span>,
     },
     {
       accessorKey: 'consultantId',
       header: 'Consultant',
-      cell: ({ row }) => (
-        <span className="text-muted-foreground">{consultantName(row.original.consultantId)}</span>
-      ),
+      enableSorting: false,
+      meta: { align: 'center', strictMinSize: true },
+      cell: ({ row }) => <JobOrderConsultantCell jobOrder={row.original} consultants={consultants} />,
     },
   ];
 }
