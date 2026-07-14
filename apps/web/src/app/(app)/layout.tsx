@@ -1,27 +1,24 @@
-import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { AppSidebar } from '@/components/app-shell/AppSidebar';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  // Gating on the API token (not mere session presence) already happens in
+  // proxy.ts, before this layout ever renders — this call is just to read
+  // session.user for the sidebar below.
   const session = await auth();
-  // Azure OAuth succeeding only proves who they are, not that our own API
-  // accepted them (e.g. a deactivated consultant still completes Microsoft
-  // sign-in, but /auth/login 403s and leaves accessToken unset) — gate on
-  // the API token, not mere session presence.
-  if (!session?.accessToken) redirect('/sign-in');
 
   return (
     <TooltipProvider>
       <SidebarProvider>
         <AppSidebar
           user={{
-            name: session.user?.name ?? 'Unknown',
-            email: session.user?.email ?? '',
-            avatar: session.user?.image ?? undefined,
+            name: session?.user?.name ?? 'Unknown',
+            email: session?.user?.email ?? '',
+            avatar: session?.user?.image ?? undefined,
           }}
-          permissions={session.user?.permissions ?? []}
+          permissions={session?.user?.permissions ?? []}
         />
         {/* h-svh + min-h-0/overflow-auto below: lock the shell to the viewport
             so grids scroll their own rows instead of the page. */}
