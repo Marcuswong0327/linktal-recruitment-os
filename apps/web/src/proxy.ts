@@ -78,8 +78,9 @@ export const config = {
   matcher: [
     // BFF proxy path.
     '/api/backend/:path*',
-    // App pages: everything except sign-in, NextAuth's own routes, Next
-    // internals, and files with an extension (static assets).
-    '/((?!sign-in|api/auth|_next/static|_next/image|favicon.ico|.*\\.).*)',
+    // App pages: everything except sign-in, NextAuth's own routes, the
+    // public healthcheck, Next internals, and files with an extension
+    // (static assets).
+    '/((?!sign-in|api/auth|api/health|_next/static|_next/image|favicon.ico|.*\\.).*)',
   ],
 };
