@@ -105,7 +105,7 @@ export function CandidatesTable({ canCreate = true, canDelete = true }: { canCre
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = React.useState(false);
 
-  const { data, isLoading, isError, error } = useGetCandidates(
+  const { data, isLoading, isFetching, isError, error } = useGetCandidates(
     { page, pageSize: PAGE_SIZE, ...query },
     // Keep the previous page's rows while the next one loads (no flash).
     { query: { placeholderData: keepPreviousData } },
@@ -181,6 +181,7 @@ export function CandidatesTable({ canCreate = true, canDelete = true }: { canCre
         columns={columns}
         data={candidates}
         isLoading={isLoading}
+        isFetching={isFetching}
         searchPlaceholder="Search candidates…"
         filters={candidateFilters}
         onRowClick={setEditing}

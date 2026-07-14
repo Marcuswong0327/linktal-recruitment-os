@@ -75,7 +75,7 @@ export function JobOrdersTable({ canCreate = true, canDelete = true }: { canCrea
   const [consultantPickerOpen, setConsultantPickerOpen] = React.useState(false);
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
 
-  const { data, isLoading, isError, error } = useGetJobOrders(
+  const { data, isLoading, isFetching, isError, error } = useGetJobOrders(
     { page, pageSize: PAGE_SIZE, q: search, status, priorityLevel, consultantId },
     { query: { placeholderData: keepPreviousData } },
   );
@@ -194,6 +194,7 @@ export function JobOrdersTable({ canCreate = true, canDelete = true }: { canCrea
         columns={columns}
         data={jobOrders}
         isLoading={isLoading}
+        isFetching={isFetching}
         searchPlaceholder="Search job orders…"
         filters={jobOrderFilters}
         onRowClick={setEditing}

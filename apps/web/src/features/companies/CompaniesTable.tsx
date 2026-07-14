@@ -77,7 +77,7 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
   const [consultantPickerOpen, setConsultantPickerOpen] = React.useState(false);
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
 
-  const { data, isLoading, isError, error } = useGetClients(
+  const { data, isLoading, isFetching, isError, error } = useGetClients(
     { page, pageSize: PAGE_SIZE, q: search, status, tobSigned, consultantId },
     { query: { placeholderData: keepPreviousData } },
   );
@@ -264,6 +264,7 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
         columns={columns}
         data={companies}
         isLoading={isLoading}
+        isFetching={isFetching}
         searchPlaceholder="Search Companies"
         filters={companyFilters}
         onRowClick={setEditing}

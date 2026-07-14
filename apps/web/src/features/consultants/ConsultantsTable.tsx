@@ -75,7 +75,7 @@ export function ConsultantsTable() {
 
   const currentConsultantId = session?.user?.consultantId;
 
-  const { data, isLoading, isError, error } = useGetConsultants(
+  const { data, isLoading, isFetching, isError, error } = useGetConsultants(
     { page, pageSize: PAGE_SIZE, q: search, roleName: role, isActive },
     { query: { placeholderData: keepPreviousData } },
   );
@@ -147,6 +147,7 @@ export function ConsultantsTable() {
       columns={columns}
       data={users}
       isLoading={isLoading}
+      isFetching={isFetching}
       searchPlaceholder="Search consultants…"
       filters={userFilters}
       emptyState="No consultants yet."
