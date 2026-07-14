@@ -7,7 +7,7 @@ import { CandidateDetail } from '@/features/candidates/CandidateDetail';
 export default async function CandidatePage({
   params,
 }: {
-  params: Promise<{ displayId: string }>;
+  params: Promise<{ id: string }>;
 }) {
   const session = await auth();
   if (!hasPermission(session, 'candidate', 'read')) {
@@ -18,6 +18,6 @@ export default async function CandidatePage({
     );
   }
 
-  const { displayId } = await params;
-  return <CandidateDetail displayId={displayId} />;
+  const { id } = await params;
+  return <CandidateDetail id={id} />;
 }

@@ -29,10 +29,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { FormField } from '@/components/FormField';
 import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
 import {
-  useGetCandidateByDisplayId,
+  useGetCandidate,
   useUpdateCandidate,
   getGetCandidatesQueryKey,
-  getGetCandidateByDisplayIdQueryKey,
+  getGetCandidateQueryKey,
 } from '@/lib/api/generated/candidates/candidates';
 import type { UpdateCandidateDto } from '@/lib/api/generated/types';
 import {
@@ -53,8 +53,8 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-export function CandidateDetail({ displayId }: { displayId: string }) {
-  const { data, isLoading, isError, error } = useGetCandidateByDisplayId(displayId);
+export function CandidateDetail({ id }: { id: string }) {
+  const { data, isLoading, isError, error } = useGetCandidate(id);
   const candidate = data?.status === 200 ? data.data : undefined;
 
   if (isLoading) {
@@ -71,7 +71,7 @@ export function CandidateDetail({ displayId }: { displayId: string }) {
       <PageLayout>
         <PageHeader
           title="Candidate not found"
-          description={error?.message ?? `No candidate with ID ${displayId}.`}
+          description={error?.message ?? `No candidate with ID ${id}.`}
         />
         <div>
           <Button variant="outline" nativeButton={false} render={<Link href="/candidates" />}>
@@ -127,7 +127,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
         queryClient.invalidateQueries({
-          queryKey: getGetCandidateByDisplayIdQueryKey(candidate.displayId),
+          queryKey: getGetCandidateQueryKey(candidate.id),
         });
         toast.success(`Saved changes to ${candidate.fullName}`);
       },
