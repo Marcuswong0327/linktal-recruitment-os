@@ -62,13 +62,7 @@ interface CompanyFormValues {
   consultantId: string | null;
 }
 
-export function CompaniesTable({
-  canCreate = true,
-  canDelete = true,
-}: {
-  canCreate?: boolean;
-  canDelete?: boolean;
-}) {
+export function CompaniesTable({ canCreate = true, canDelete = true }: { canCreate?: boolean; canDelete?: boolean }) {
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
@@ -366,7 +360,7 @@ export function CompaniesTable({
               onClick={() => setCreating(true)}
             >
               <Plus />
-              Add company
+              Add Company
             </Button>
           )
         }

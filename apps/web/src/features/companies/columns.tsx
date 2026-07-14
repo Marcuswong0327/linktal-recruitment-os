@@ -66,7 +66,6 @@ export function getCompanyColumns({
     {
       accessorKey: 'displayId',
       header: 'ID',
-      size: 90,
       meta: { align: 'center' },
       cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.displayId}</span>,
     },
