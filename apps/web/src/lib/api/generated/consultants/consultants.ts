@@ -895,7 +895,7 @@ export const getDeleteConsultantUrl = (id: string,) => {
 }
 
 /**
- * @summary Delete a consultant
+ * @summary Deactivate a consultant (soft — sets isActive=false, blocks login)
  */
 export const deleteConsultant = async (id: string, options?: RequestInit): Promise<deleteConsultantResponse> => {
 
@@ -944,7 +944,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteConsultantMutationError = ErrorResponse
 
     /**
- * @summary Delete a consultant
+ * @summary Deactivate a consultant (soft — sets isActive=false, blocks login)
  */
 export const useDeleteConsultant = <TError = ErrorResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteConsultant>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}

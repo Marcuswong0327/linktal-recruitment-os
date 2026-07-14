@@ -94,8 +94,11 @@ export class ConsultantsController {
   @Delete(':id')
   @HttpCode(204)
   @RequirePermission('consultant', 'delete')
-  @ApiOperation({ operationId: 'deleteConsultant', summary: 'Delete a consultant' })
-  @ApiResponse({ status: 204, description: 'Consultant deleted' })
+  @ApiOperation({
+    operationId: 'deleteConsultant',
+    summary: 'Deactivate a consultant (soft — sets isActive=false, blocks login)',
+  })
+  @ApiResponse({ status: 204, description: 'Consultant deactivated' })
   remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.consultants.remove(id, user);
   }

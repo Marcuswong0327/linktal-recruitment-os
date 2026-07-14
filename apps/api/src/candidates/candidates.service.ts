@@ -1,13 +1,21 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
+import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
+import { RequestContext } from '../common/request-context';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { CandidateStatusFilter, QueryCandidatesDto } from './dto/query-candidates.dto';
 
 @Injectable()
 export class CandidatesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    // Soft-delete + audit aware client for normal reads/writes.
+    @Inject(EXTENDED_PRISMA) private readonly prisma: ExtendedPrismaClient,
+    // Base (unfiltered) client — needed to see/erase soft-deleted rows (restore/purge).
+    private readonly base: PrismaService,
+  ) {}
 
   async findAll(query: QueryCandidatesDto) {
     const { page, pageSize, sortBy, sortOrder, q } = query;
@@ -87,9 +95,64 @@ export class CandidatesService {
     return this.prisma.candidate.update({ where: { id }, data: this.toPrismaData(dto) });
   }
 
+  /**
+   * Soft-deletes the candidate and cascades to its submissions + their
+   * placements. Runs as sequential soft-deletes on the extended client (each
+   * op is audited); not wrapped in an interactive transaction because the
+   * audit extension writes outside it. A partial failure is recoverable via
+   * `restore` — children are removed before the parent.
+   */
   async remove(id: string) {
     await this.findOne(id);
+    const submissions = await this.prisma.candidateSubmission.findMany({
+      where: { candidateId: id },
+      select: { id: true },
+    });
+    const submissionIds = submissions.map((s) => s.id);
+    if (submissionIds.length > 0) {
+      await this.prisma.placement.deleteMany({ where: { submissionId: { in: submissionIds } } });
+      await this.prisma.candidateSubmission.deleteMany({ where: { candidateId: id } });
+    }
     return this.prisma.candidate.delete({ where: { id } });
+  }
+
+  /** Restores a soft-deleted candidate (audited as RESTORE). Does not un-delete
+   * its children — the FE recovers those explicitly if needed. */
+  async restore(id: string) {
+    const existing = await this.base.candidate.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException(`Candidate ${id} not found`);
+    }
+    if (!existing.deletedAt) {
+      throw new BadRequestException(`Candidate ${id} is not deleted`);
+    }
+    return this.prisma.candidate.update({
+      where: { id },
+      data: { deletedAt: null, deletedById: null },
+    });
+  }
+
+  /**
+   * Permanently deletes the candidate + its screening/submission/placement
+   * history via the base client (bypasses the soft-delete rewrite). Admin-only
+   * — for genuine erasure (e.g. a data-removal request). Writes a HARD_DELETE
+   * audit row before the row is gone.
+   */
+  async purge(id: string) {
+    const existing = await this.base.candidate.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException(`Candidate ${id} not found`);
+    }
+    await this.base.auditLog.create({
+      data: {
+        actorId: RequestContext.getActorId() ?? null,
+        action: 'HARD_DELETE',
+        entityType: 'Candidate',
+        entityId: id,
+        metadata: { requestId: RequestContext.getRequestId() },
+      },
+    });
+    return this.base.candidate.delete({ where: { id } });
   }
 
   /**

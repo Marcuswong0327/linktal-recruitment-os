@@ -12,8 +12,11 @@ import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { QueryRolesDto } from './dto/query-roles.dto';
 
-/** Include the role's granted permissions on every read. */
-const withPermissions = { permissions: { include: { permission: true } } } as const;
+/** Include the role's granted permissions + how many consultants hold it. */
+const withPermissions = {
+  permissions: { include: { permission: true } },
+  _count: { select: { consultants: true } },
+} as const;
 
 type RoleWithPermissions = Prisma.RoleGetPayload<{ include: typeof withPermissions }>;
 
@@ -83,6 +86,12 @@ export class RolesService {
       },
       include: withPermissions,
     });
+    // Audited explicitly (not via the Prisma extension): RolesService uses the
+    // base client + batch transactions, which the audit hook can't safely wrap.
+    await this.logRoleChange('CREATE', role.id, actor, {
+      name: dto.name,
+      permissionIds: dto.permissionIds ?? [],
+    });
     return this.toEntity(role);
   }
 
@@ -114,10 +123,17 @@ export class RolesService {
       await this.prisma.role.update({ where: { id }, data: scalar });
     }
 
+    // Written after the transaction commits so it can't outlive a rollback.
+    await this.logRoleChange('UPDATE', id, actor, {
+      name: dto.name,
+      description: dto.description,
+      ...(perms ? { permissionIds: perms.map((p) => p.id) } : {}),
+    });
+
     return this.findOne(id);
   }
 
-  async remove(id: string, actor: AuthUser) {
+  async remove(id: string, actor: AuthUser, reassignToId?: string) {
     const existing = await this.prisma.role.findUnique({
       where: { id },
       include: { _count: { select: { consultants: true } } },
@@ -129,15 +145,56 @@ export class RolesService {
     this.assertCanMutateRole(actor, existing.name);
     this.assertRoleDeletable(existing.name);
 
-    // Refuse to orphan users: reassign them off the role first.
+    // A role can't be deleted while consultants hold it. Move them to a chosen
+    // fallback role first (their permissions become the fallback's), then delete.
+    let reassign: { toName: string; count: number } | null = null;
     if (existing._count.consultants > 0) {
-      throw new ConflictException(
-        `Role "${existing.name}" still has ${existing._count.consultants} consultant(s). Reassign them before deleting.`,
-      );
+      if (!reassignToId) {
+        throw new ConflictException(
+          `Role "${existing.name}" still has ${existing._count.consultants} consultant(s). Choose a role to reassign them to.`,
+        );
+      }
+      if (reassignToId === id) {
+        throw new BadRequestException('Cannot reassign consultants to the role being deleted.');
+      }
+      const target = await this.prisma.role.findUnique({
+        where: { id: reassignToId },
+        select: { name: true },
+      });
+      if (!target) {
+        throw new BadRequestException(`Unknown role to reassign to: ${reassignToId}`);
+      }
+      const moved = await this.prisma.consultant.updateMany({
+        where: { roleId: id },
+        data: { roleId: reassignToId },
+      });
+      reassign = { toName: target.name, count: moved.count };
     }
 
     // RolePermission rows cascade on role delete.
-    return this.prisma.role.delete({ where: { id } });
+    const deleted = await this.prisma.role.delete({ where: { id } });
+    await this.logRoleChange('HARD_DELETE', id, actor, {
+      name: existing.name,
+      ...(reassign ? { reassignedTo: reassign.toName, reassignedCount: reassign.count } : {}),
+    });
+    return deleted;
+  }
+
+  /**
+   * Writes an audit row for a role mutation. Explicit (not via the Prisma
+   * extension) because RolesService runs on the base client and uses batch
+   * transactions the audit hook can't wrap — see the two audit gaps in the docs.
+   */
+  private logRoleChange(action: string, roleId: string, actor: AuthUser, changes?: unknown) {
+    return this.prisma.auditLog.create({
+      data: {
+        actorId: actor.consultantId,
+        action,
+        entityType: 'Role',
+        entityId: roleId,
+        changes: (changes ?? undefined) as Prisma.InputJsonValue | undefined,
+      },
+    });
   }
 
   private isAdmin(actor: AuthUser): boolean {
@@ -211,9 +268,10 @@ export class RolesService {
 
   /** Flatten RolePermission[] into a plain permission list for the response. */
   private toEntity(role: RoleWithPermissions) {
-    const { permissions, ...rest } = role;
+    const { permissions, _count, ...rest } = role;
     return {
       ...rest,
+      consultantCount: _count.consultants,
       permissions: permissions.map((rp) => ({
         id: rp.permission.id,
         resource: rp.permission.resource,

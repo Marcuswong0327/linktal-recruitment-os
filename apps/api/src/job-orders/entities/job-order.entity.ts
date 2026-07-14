@@ -9,7 +9,7 @@ import { JobOrder, JobOrderStatus } from '@prisma/client';
  * truth). Nullable columns use `@ApiProperty({ nullable: true })` with an
  * explicit `type`, because Prisma always returns the column, just as `null`.
  */
-export class JobOrderEntity implements JobOrder {
+export class JobOrderEntity implements Omit<JobOrder, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'JO-0001' }) displayId!: string;
   @ApiProperty() clientId!: string;

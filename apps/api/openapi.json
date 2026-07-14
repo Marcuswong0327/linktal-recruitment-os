@@ -718,7 +718,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Candidate deleted"
+            "description": "Candidate soft-deleted"
           },
           "400": {
             "description": "Error",
@@ -756,7 +756,132 @@
             "bearer": []
           }
         ],
-        "summary": "Delete a candidate",
+        "summary": "Soft-delete a candidate (recoverable)",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
+    "/candidates/{id}/restore": {
+      "post": {
+        "operationId": "restoreCandidate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Candidate restored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Restore a soft-deleted candidate",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
+    "/candidates/{id}/purge": {
+      "delete": {
+        "operationId": "purgeCandidate",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Candidate permanently deleted"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Permanently erase a candidate + history (admin only)",
         "tags": [
           "Candidates"
         ]
@@ -1205,7 +1330,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Client deleted"
+            "description": "Client soft-deleted"
           },
           "400": {
             "description": "Error",
@@ -1243,7 +1368,132 @@
             "bearer": []
           }
         ],
-        "summary": "Delete a client",
+        "summary": "Soft-delete a client (recoverable, cascades)",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/{id}/restore": {
+      "post": {
+        "operationId": "restoreClient",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Client restored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Restore a soft-deleted client",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/{id}/purge": {
+      "delete": {
+        "operationId": "purgeClient",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Client permanently deleted"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Permanently erase a client + children (admin only)",
         "tags": [
           "Clients"
         ]
@@ -2736,7 +2986,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Consultant deleted"
+            "description": "Consultant deactivated"
           },
           "400": {
             "description": "Error",
@@ -2774,7 +3024,7 @@
             "bearer": []
           }
         ],
-        "summary": "Delete a consultant",
+        "summary": "Deactivate a consultant (soft — sets isActive=false, blocks login)",
         "tags": [
           "Consultants"
         ]
@@ -3090,6 +3340,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "reassignTo",
+            "required": false,
+            "in": "query",
+            "description": "Role id to move holders to before deleting",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3132,7 +3391,7 @@
             "bearer": []
           }
         ],
-        "summary": "Delete a custom role (built-ins are protected; must have no consultants)",
+        "summary": "Delete a custom role (built-ins protected). If consultants hold it, pass ?reassignTo=<roleId> to move them to a fallback role first.",
         "tags": [
           "Roles"
         ]
@@ -3188,9 +3447,9 @@
         ]
       }
     },
-    "/users": {
+    "/audit-logs": {
       "get": {
-        "operationId": "getUsers",
+        "operationId": "getAuditLogs",
         "parameters": [
           {
             "name": "page",
@@ -3219,14 +3478,13 @@
             "name": "sortBy",
             "required": false,
             "in": "query",
-            "description": "Column to sort by. Defaults to fullName.",
+            "description": "Column to sort by. Defaults to createdAt.",
             "schema": {
               "type": "string",
               "enum": [
-                "displayId",
-                "fullName",
-                "email",
-                "createdAt"
+                "createdAt",
+                "action",
+                "entityType"
               ]
             }
           },
@@ -3235,7 +3493,7 @@
             "required": false,
             "in": "query",
             "schema": {
-              "default": "asc",
+              "default": "desc",
               "type": "string",
               "enum": [
                 "asc",
@@ -3244,129 +3502,71 @@
             }
           },
           {
-            "name": "q",
+            "name": "action",
             "required": false,
             "in": "query",
-            "description": "Free-text search across fullName, email and displayId",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "isActive",
-            "required": false,
-            "in": "query",
-            "description": "Filter by active status",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "name": "role",
-            "required": false,
-            "in": "query",
-            "description": "Filter by role",
+            "description": "Filter by action",
             "schema": {
               "type": "string",
               "enum": [
-                "admin",
-                "manager",
-                "consultant",
-                "finance",
-                "researcher",
-                "viewer"
+                "CREATE",
+                "UPDATE",
+                "SOFT_DELETE",
+                "RESTORE",
+                "DEACTIVATE",
+                "HARD_DELETE"
               ]
             }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Paginated users",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PaginatedUsersEntity"
-                }
-              }
+          },
+          {
+            "name": "entityType",
+            "required": false,
+            "in": "query",
+            "description": "Filter by entity type, e.g. \"Candidate\"",
+            "schema": {
+              "type": "string"
             }
           },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
+          {
+            "name": "actorId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the acting consultant id",
+            "schema": {
+              "type": "string"
             }
           },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Only entries at/after this ISO date-time",
+            "schema": {
+              "type": "string"
             }
-          }
-        },
-        "security": [
+          },
           {
-            "bearer": []
-          }
-        ],
-        "summary": "List users (paginated, filterable, sortable)",
-        "tags": [
-          "Users"
-        ]
-      }
-    },
-    "/users/{id}": {
-      "patch": {
-        "operationId": "updateUser",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Only entries at/before this ISO date-time",
             "schema": {
               "type": "string"
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateUserDto"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
-            "description": "User updated",
+            "description": "Paginated audit logs",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserEntity"
+                  "$ref": "#/components/schemas/PaginatedAuditLogsEntity"
                 }
               }
             }
           },
           "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
             "description": "Error",
             "content": {
               "application/json": {
@@ -3392,9 +3592,9 @@
             "bearer": []
           }
         ],
-        "summary": "Update a user's role and/or active status",
+        "summary": "List activity-log entries (admin only, paginated, filterable, sortable)",
         "tags": [
-          "Users"
+          "Audit"
         ]
       }
     }
@@ -4913,6 +5113,17 @@
             "type": "boolean",
             "description": "Whether the consultant is active",
             "default": true
+          },
+          "roleName": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "manager",
+              "consultant",
+              "finance",
+              "researcher",
+              "viewer"
+            ]
           }
         }
       },
@@ -4964,6 +5175,11 @@
             "items": {
               "$ref": "#/components/schemas/PermissionSummaryEntity"
             }
+          },
+          "consultantCount": {
+            "type": "number",
+            "description": "How many consultants currently hold this role",
+            "example": 3
           }
         },
         "required": [
@@ -4972,7 +5188,8 @@
           "description",
           "createdAt",
           "updatedAt",
-          "permissions"
+          "permissions",
+          "consultantCount"
         ]
       },
       "PaginatedRolesEntity": {
@@ -5089,34 +5306,48 @@
           "createdAt"
         ]
       },
-      "UserEntity": {
+      "AuditLogEntity": {
         "type": "object",
         "properties": {
           "id": {
             "type": "string"
           },
-          "displayId": {
-            "type": "string",
-            "example": "consultant-0001"
-          },
-          "fullName": {
-            "type": "string",
-            "example": "John Smith"
-          },
-          "email": {
-            "type": "string"
-          },
-          "roleName": {
+          "actorId": {
             "type": "string",
             "nullable": true,
-            "description": "Null if no role is assigned yet"
+            "description": "Acting consultant id (null = system)"
           },
-          "isActive": {
-            "type": "boolean"
+          "actorName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Acting consultant name, resolved for display"
           },
-          "openJobOrders": {
-            "type": "number",
-            "description": "Count of this consultant's ACTIVE job orders"
+          "action": {
+            "type": "string",
+            "example": "SOFT_DELETE"
+          },
+          "entityType": {
+            "type": "string",
+            "example": "Candidate"
+          },
+          "entityId": {
+            "type": "string"
+          },
+          "entityLabel": {
+            "type": "string",
+            "nullable": true,
+            "example": "CDD-0042 · Jane Doe",
+            "description": "Human label (displayId + name); null if the entity was hard-deleted"
+          },
+          "changes": {
+            "type": "object",
+            "nullable": true,
+            "description": "Field-level diff { field: { from, to } }, or created snapshot"
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "description": "requestId / cascade / count etc."
           },
           "createdAt": {
             "format": "date-time",
@@ -5125,28 +5356,30 @@
         },
         "required": [
           "id",
-          "displayId",
-          "fullName",
-          "email",
-          "roleName",
-          "isActive",
-          "openJobOrders",
+          "actorId",
+          "actorName",
+          "action",
+          "entityType",
+          "entityId",
+          "entityLabel",
+          "changes",
+          "metadata",
           "createdAt"
         ]
       },
-      "PaginatedUsersEntity": {
+      "PaginatedAuditLogsEntity": {
         "type": "object",
         "properties": {
           "data": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/UserEntity"
+              "$ref": "#/components/schemas/AuditLogEntity"
             }
           },
           "total": {
             "type": "number",
             "description": "Total rows matching the filters",
-            "example": 17
+            "example": 128
           },
           "page": {
             "type": "number",
@@ -5161,7 +5394,7 @@
           "pageCount": {
             "type": "number",
             "description": "Total number of pages",
-            "example": 1
+            "example": 7
           }
         },
         "required": [
@@ -5171,25 +5404,6 @@
           "pageSize",
           "pageCount"
         ]
-      },
-      "UpdateUserDto": {
-        "type": "object",
-        "properties": {
-          "roleName": {
-            "type": "string",
-            "enum": [
-              "admin",
-              "manager",
-              "consultant",
-              "finance",
-              "researcher",
-              "viewer"
-            ]
-          },
-          "isActive": {
-            "type": "boolean"
-          }
-        }
       },
       "ErrorResponse": {
         "type": "object",

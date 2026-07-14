@@ -26,6 +26,7 @@ import type {
 
 import type {
   CreateRoleDto,
+  DeleteRoleParams,
   ErrorResponse,
   GetRolesParams,
   PaginatedRolesEntity,
@@ -538,20 +539,29 @@ export type deleteRoleResponseError = (deleteRoleResponse400 | deleteRoleRespons
 
 export type deleteRoleResponse = (deleteRoleResponseSuccess | deleteRoleResponseError)
 
-export const getDeleteRoleUrl = (id: string,) => {
+export const getDeleteRoleUrl = (id: string,
+    params?: DeleteRoleParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/roles/${id}`
+  return stringifiedParams.length > 0 ? `/roles/${id}?${stringifiedParams}` : `/roles/${id}`
 }
 
 /**
- * @summary Delete a custom role (built-ins are protected; must have no consultants)
+ * @summary Delete a custom role (built-ins protected). If consultants hold it, pass ?reassignTo=<roleId> to move them to a fallback role first.
  */
-export const deleteRole = async (id: string, options?: RequestInit): Promise<deleteRoleResponse> => {
+export const deleteRole = async (id: string,
+    params?: DeleteRoleParams, options?: RequestInit): Promise<deleteRoleResponse> => {
 
-  return customFetch<deleteRoleResponse>(getDeleteRoleUrl(id),
+  return customFetch<deleteRoleResponse>(getDeleteRoleUrl(id,params),
   {
     ...options,
     method: 'DELETE'
@@ -565,8 +575,8 @@ export const deleteRole = async (id: string, options?: RequestInit): Promise<del
 
 
 export const getDeleteRoleMutationOptions = <TError = ErrorResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRole>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteRole>>, TError,{id: string}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRole>>, TError,{id: string;params?: DeleteRoleParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteRole>>, TError,{id: string;params?: DeleteRoleParams}, TContext> => {
 
 const mutationKey = ['deleteRole'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -578,10 +588,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteRole>>, {id: string}> = (props) => {
-          const {id} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteRole>>, {id: string;params?: DeleteRoleParams}> = (props) => {
+          const {id,params} = props ?? {};
 
-          return  deleteRole(id,requestOptions)
+          return  deleteRole(id,params,requestOptions)
         }
 
 
@@ -596,14 +606,14 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteRoleMutationError = ErrorResponse
 
     /**
- * @summary Delete a custom role (built-ins are protected; must have no consultants)
+ * @summary Delete a custom role (built-ins protected). If consultants hold it, pass ?reassignTo=<roleId> to move them to a fallback role first.
  */
 export const useDeleteRole = <TError = ErrorResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRole>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRole>>, TError,{id: string;params?: DeleteRoleParams}, TContext>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof deleteRole>>,
         TError,
-        {id: string},
+        {id: string;params?: DeleteRoleParams},
         TContext
       > => {
       return useMutation(getDeleteRoleMutationOptions(options), queryClient);

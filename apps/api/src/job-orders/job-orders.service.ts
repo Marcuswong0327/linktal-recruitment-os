@@ -1,13 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
+import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { CreateJobOrderDto } from './dto/create-job-order.dto';
 import { UpdateJobOrderDto } from './dto/update-job-order.dto';
 import { JobOrderStatusFilter, QueryJobOrdersDto } from './dto/query-job-orders.dto';
 
 @Injectable()
 export class JobOrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(EXTENDED_PRISMA) private readonly prisma: ExtendedPrismaClient) {}
 
   async findAll(query: QueryJobOrdersDto) {
     const { page, pageSize, sortBy, sortOrder, q } = query;
@@ -96,8 +97,22 @@ export class JobOrdersService {
     return this.prisma.jobOrder.update({ where: { id }, data: dto });
   }
 
+  /**
+   * Soft-deletes the job order and cascades to its submissions + their
+   * placements (children first). Sequential soft-deletes on the extended
+   * client (each audited); recoverable via a restore if a step fails.
+   */
   async remove(id: string) {
     await this.findOne(id);
+    const submissions = await this.prisma.candidateSubmission.findMany({
+      where: { jobOrderId: id },
+      select: { id: true },
+    });
+    const submissionIds = submissions.map((s) => s.id);
+    if (submissionIds.length > 0) {
+      await this.prisma.placement.deleteMany({ where: { submissionId: { in: submissionIds } } });
+      await this.prisma.candidateSubmission.deleteMany({ where: { jobOrderId: id } });
+    }
     return this.prisma.jobOrder.delete({ where: { id } });
   }
 }
