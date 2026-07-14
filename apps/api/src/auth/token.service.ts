@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { jwtVerify, SignJWT } from 'jose';
-import { TokenClaims } from './auth.types';
+import { AccessTokenClaims } from './auth.types';
 
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60; // 15 minutes
 const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
@@ -52,9 +52,14 @@ export class TokenService {
     return this.refreshSecret;
   }
 
-  async signAccessToken(claims: TokenClaims): Promise<SignedToken> {
+  async signAccessToken(claims: AccessTokenClaims): Promise<SignedToken> {
     const expiresAt = Date.now() + ACCESS_TOKEN_TTL_SECONDS * 1000;
-    const token = await new SignJWT({ email: claims.email, name: claims.name })
+    const token = await new SignJWT({
+      email: claims.email,
+      name: claims.name,
+      roleName: claims.roleName,
+      permissions: claims.permissions,
+    })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject(claims.sub)
       .setIssuedAt()
@@ -72,7 +77,7 @@ export class TokenService {
       .sign(this.getRefreshSecret());
   }
 
-  async verifyAccessToken(token: string): Promise<TokenClaims> {
+  async verifyAccessToken(token: string): Promise<AccessTokenClaims> {
     try {
       const { payload } = await jwtVerify(token, this.getAccessSecret());
       if (!payload.sub) throw new Error('missing subject');
@@ -80,6 +85,8 @@ export class TokenService {
         sub: payload.sub,
         email: typeof payload.email === 'string' ? payload.email : undefined,
         name: typeof payload.name === 'string' ? payload.name : undefined,
+        roleName: typeof payload.roleName === 'string' ? payload.roleName : null,
+        permissions: Array.isArray(payload.permissions) ? (payload.permissions as string[]) : [],
       };
     } catch {
       throw new UnauthorizedException({

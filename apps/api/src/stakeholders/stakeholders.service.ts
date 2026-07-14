@@ -1,13 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
+import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
 import { UpdateStakeholderDto } from './dto/update-stakeholder.dto';
 import { QueryStakeholdersDto } from './dto/query-stakeholders.dto';
 
 @Injectable()
 export class StakeholdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(EXTENDED_PRISMA) private readonly prisma: ExtendedPrismaClient) {}
 
   async findAll(query: QueryStakeholdersDto) {
     const { page, pageSize, sortBy, sortOrder, q } = query;
@@ -39,7 +40,10 @@ export class StakeholdersService {
       ? { [sortBy]: sortOrder }
       : { createdAt: 'desc' };
 
-    const [data, total] = await this.prisma.$transaction([
+    // Parallel, not $transaction: these two reads don't need one consistent
+    // DB snapshot, and running them concurrently instead of sequentially
+    // (BEGIN/Q1/Q2/COMMIT) roughly halves the network round trips to Neon.
+    const [data, total] = await Promise.all([
       this.prisma.stakeholder.findMany({
         where,
         orderBy,

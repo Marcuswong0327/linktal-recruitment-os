@@ -12,27 +12,33 @@ permission table alone can't express.
 
 ## 1. How a request is authorized
 
-Every request passes two guards:
+Auth is NextAuth (Auth.js) on the web app — **Microsoft Entra ID (Azure AD) SSO**
+or **email + password** — which exchanges the sign-in for the API's own
+short-lived **access JWT** (its `sub` is always the `Consultant` id, regardless
+of sign-in method). Every API request then passes two guards:
 
-1. **`AuthGuard`** — verifies the Neon Auth JWT, resolves the caller to a
-   `Consultant`, and attaches `{ roleName, permissions, isActive, … }`.
-   - Identity is matched by `neonUserId`, then by `email` on first login (which
-     links a pre-created consultant), else a new consultant is provisioned as
-     **`viewer`**.
-   - **`isActive = false` → login is rejected** (`403 ACCOUNT_INACTIVE`), even
-     with a valid token. This is how access is revoked (see §5).
+1. **`AuthGuard`** — verifies the API access JWT and resolves the caller to a
+   `Consultant`, attaching `{ roleName, permissions, isActive, … }` to the request.
+   - Identity is matched by **`azureId`**, then by **`email`** on first login
+     (which links a pre-created/imported consultant), else a new consultant is
+     **just-in-time provisioned** as **`viewer`**. Provisioning and linking are
+     recorded in the audit log.
+   - **`isActive = false` → login is rejected** (`403 ACCOUNT_INACTIVE`), on
+     *every* request (not just at token mint), so deactivating takes effect
+     immediately. This is how access is revoked (see §5).
 2. **`PermissionsGuard`** — if the route declares `@RequirePermission(resource, action)`,
-   the caller must hold `resource:action` or gets **`403 FORBIDDEN`**.
+   the caller must hold `resource:action` or gets **`403 FORBIDDEN`**. There is no
+   implicit admin bypass — admins pass because the seed grants them everything.
 
-Routes with no `@RequirePermission` (e.g. `/consultants/me`, `/health`) only need
-authentication.
+Routes with no `@RequirePermission` (e.g. `/consultants/me`, `/health`, `/auth/*`)
+only need authentication (or are `@Public()`).
 
 ---
 
 ## 2. Permission matrix
 
 Actions: **C**reate · **R**ead · **U**pdate · **D**elete. `–` = no access.
-(The `permission` resource is read-only by design — see §4.)
+(The `permission` and `audit` resources are read-only by design — see §4.)
 
 | Resource | admin | manager | consultant | finance | researcher | viewer |
 |----------|:-----:|:-------:|:----------:|:-------:|:----------:|:------:|
@@ -43,18 +49,23 @@ Actions: **C**reate · **R**ead · **U**pdate · **D**elete. `–` = no access.
 | job_research  | CRUD | CRUD | CRUD | –  | CRU | R |
 | submission    | CRUD | CRUD | CRUD | –  | R   | R |
 | placement     | CRUD | CRUD | CRUD | R  | R   | R |
-| consultant    | CRUD | CRUD | –    | –  | –   | – |
+| consultant    | CRUD | CR¹  | –    | –  | –   | – |
 | role          | CRUD | CRUD | –    | –  | –   | – |
 | permission    | R    | R    | –    | –  | –   | – |
 | report        | CRUD | CR   | –    | CR | –   | – |
-| **Total perms** | **41** | **39** | **28** | **5** | **15** | **7** |
+| **audit**     | R    | –    | –    | –  | –   | – |
+
+¹ Managers **hold** `consultant:create/read/update/delete` in the seed, but a
+service guard restricts the mutations — see §3. In practice managers can **read**
+the directory (for the owner-picker) and **create** (onboard) a consultant, but
+**cannot update or deactivate** one — that's admin-only.
 
 Plain-English summary:
 
 | Role | Intent |
 |------|--------|
-| **admin** | Full system access, including user & role management. |
-| **manager** | Sees everything; full CRUD on business data + consultants + roles; **no** delete on RBAC internals, and constrained by the conditions in §3. |
+| **admin** | Full system access, including consultant/role management and the audit log. |
+| **manager** | Sees everything (except the audit log); full CRUD on business data; read + onboard consultants, but **no** editing/deactivating them; manages non-privileged roles. Constrained by §3. |
 | **consultant** | Full workflow CRUD on recruitment entities; no access to the consultant directory, roles, or permissions. |
 | **finance** | Read placements/clients/job orders; create/read reports. |
 | **researcher** | Create/read/update research + candidate/client/stakeholder uploads; read-only on the workflow. |
@@ -65,62 +76,73 @@ Plain-English summary:
 ## 3. Conditional rules (enforced in code, not the matrix)
 
 The permission table is resource-level; these rules depend on the *target's*
-state, so they live in the services.
+state or the *actor*, so they live in the services.
 
 ### Consultants (`/consultants`, guarded by `consultant`)
-- Only **admin/manager** reach these routes at all.
-- **Managers may not assign privileged roles or manage admins:** a manager cannot
-  create or promote anyone to the **admin or manager** role, and cannot edit or
-  delete an **admin**-role consultant. Those are admin-only (`403`).
-- **Last-admin protection:** no one can demote, deactivate, or delete the **final
-  active admin** (`409`). At least one active admin always exists.
+Managing a consultant is **admin-only IAM**, even though managers hold the
+`consultant` permissions:
+
+- **Read** (`GET`) — admin + manager (powers the owner-picker on job orders /
+  companies). This is the only consultant access managers actually use.
+- **Create** (`POST`) — admin + manager, but a manager **cannot** assign the
+  **admin or manager** role (privileged-role guard, `403`).
+- **Update** (`PATCH /consultants/:id`) — **admin only** (`403` otherwise). Covers
+  role, active status **and** details (name/email). A role may be given by
+  `roleName` (resolved to `roleId` server-side) or `roleId`.
+- **Deactivate** (`DELETE /consultants/:id`) — **admin only**. It sets
+  `isActive = false` (a soft deactivation), never a hard delete — consultants own
+  clients/job orders whose ownership history is preserved.
+- **Self-lockout:** an admin cannot deactivate **their own** account or change
+  their own role away from admin via these endpoints (`400 CANNOT_MODIFY_SELF`).
+- **Last-admin protection:** no one can demote or deactivate the **final active
+  admin** (`409`). At least one active admin always exists.
 - **Not settable via the API:** `displayId` (DB sequence `consultant-####`) and
-  `neonUserId` (set by auth on login-link).
-- **Editable fields:** `email`, `fullName`, `roleId`, `isActive` (subject to the
-  rules above).
+  `azureId` (set by auth on login-link).
+
+> The web "Consultants" admin page and the Activity Log are gated to the **admin
+> role** in the UI (not a permission), matching the admin-only server guards.
 
 ### Self-service (`/consultants/me`, any authenticated user)
 - `GET /consultants/me` — your own profile.
-- `PATCH /consultants/me` — edits **`fullName` only**. It can **never** change
-  your own `roleId` or `isActive`; privilege-affecting changes must go through the
-  admin/manager-guarded `/consultants/:id`.
+- `PATCH /consultants/me` — edits **`fullName` only**. It can **never** change your
+  own `roleId` or `isActive`; those go through the admin-guarded `/consultants/:id`.
 
 ### Roles (`/roles`, guarded by `role`)
-Two structural rules apply to everyone (incl. admins):
-- **The `admin` role is immutable** — nobody can edit or delete it (keeps the
-  superuser intact).
-- **Built-in roles are undeletable** — the six seeded roles (admin, manager,
-  consultant, finance, researcher, viewer) can't be deleted by anyone; only
-  **custom** roles created via the API can. Built-ins can still be *edited*
-  (except `admin`).
+Structural rules apply to everyone (incl. admins):
+- **The `admin` role is immutable** — nobody can edit or delete it.
+- **Built-in roles are undeletable** — the six seeded roles can't be deleted;
+  only **custom** roles can. Built-ins can still be *edited* (except `admin`).
 - **Delete needs an empty role** — a role with consultants assigned can't be
-  deleted (`409`); reassign those people first so no one is orphaned.
+  deleted (`409`); reassign those people first.
 
 On top of that:
 - **admin** — create custom roles (any permissions); read all; update any role
   except `admin`; delete custom roles (subject to the empty-role rule).
 - **manager** — create custom roles; read all; update/delete every role **except
-  `admin` and `manager`** (and only custom roles are deletable), and:
-  - **Escalation guard:** may only grant a role permissions the manager
-    *themselves hold* — so a manager can't mint a role more powerful than they
-    are.
+  `admin` and `manager`** (custom-only for delete), with an **escalation guard:**
+  may only grant permissions the manager *themselves hold*.
+
+Role create/update/delete are **audited** (written explicitly, since RolesService
+runs on the base client with batch transactions).
 
 ### Permissions (`/permissions`, guarded by `permission:read`)
-- **Read-only catalog.** No create/update/delete endpoints — the permission set
-  is static, defined in the seed. Used to populate the role editor's picker.
-- Visible to **admin/manager only**.
+- **Read-only catalog** — no create/update/delete; used to populate the role
+  editor's picker. Visible to **admin/manager only**.
+
+### Audit log (`/audit-logs`, guarded by `audit:read`)
+- **Admin-only, read-only.** Powers the Activity Log — every create/update/
+  delete/restore/deactivate on the audited entities, with actor + diff.
 
 ---
 
-## 4. Why `permission` is read-only, and `user` doesn't exist
+## 4. Read-only resources, and the retired `user` resource
 
-- **`permission`** is the fixed catalog of `resource:action` pairs. You never
-  create permissions at runtime — you attach existing ones to roles. So the
-  resource only has a `read` action; `permission:create/update/delete` were
-  removed from the seed.
-- There is **no `user` resource or model.** Login accounts live in Neon Auth; the
-  app's identity table is **`Consultant`**. The old `user` permission label was
-  vestigial and has been removed.
+- **`permission`** is the fixed catalog of `resource:action` pairs. You attach
+  existing ones to roles; you never create them at runtime — hence `read` only.
+- **`audit`** is the append-only activity log — `read` only, admin-only.
+- There is **no `user` resource.** The app's identity table is **`Consultant`**;
+  the admin "user management" screen was folded into **`/consultants`** and the
+  old `user` permission was removed from the seed and pruned from the database.
 
 ---
 
@@ -128,22 +150,25 @@ On top of that:
 
 | Goal | Do this | Not this |
 |------|---------|----------|
-| **Revoke someone's access** | Set `isActive = false` (blocks login immediately) | **Don't** delete the consultant — a hard delete just re-provisions them as a fresh `viewer` on next login |
-| **Pre-create a teammate** | `POST /consultants` with their email + role (no `neonUserId`). It auto-links on their first login | — |
-| **Change someone's role** | `PATCH /consultants/:id` (admin/manager, subject to §3) | Not via `/me` |
+| **Revoke someone's access** | Admin sets `isActive = false` (via `PATCH /consultants/:id` or the deactivate `DELETE`) — blocks login immediately | **Don't** try to hard-delete — deactivation is the model, and it keeps ownership history |
+| **Pre-create a teammate** | Admin/manager `POST /consultants` with email + (non-privileged) role. It auto-links on their first login by email | — |
+| **Change someone's role / status** | Admin `PATCH /consultants/:id` (subject to §3) | Not via `/me`; not by a manager |
 | **Let users fix their own name** | `PATCH /consultants/me` | — |
 
 ---
 
 ## 6. Endpoint → required permission
 
-| Endpoint | Permission | Roles with access |
-|----------|-----------|-------------------|
+| Endpoint | Permission | Effective access |
+|----------|-----------|------------------|
 | `GET/POST/PATCH/DELETE /candidates` | `candidate:*` | per matrix |
 | `GET/POST/PATCH/DELETE /clients` | `client:*` | per matrix |
 | `GET/POST/PATCH/DELETE /stakeholders` | `stakeholder:*` | per matrix |
 | `GET/POST/PATCH/DELETE /job-orders` | `job_order:*` | per matrix |
-| `GET/POST/PATCH/DELETE /consultants` | `consultant:*` | admin, manager |
+| `GET /consultants` | `consultant:read` | admin, manager |
+| `POST /consultants` | `consultant:create` | admin, manager (no privileged roles for managers) |
+| `PATCH/DELETE /consultants/:id` | `consultant:update` / `:delete` | **admin only** (service guard) |
 | `GET/PATCH /consultants/me` | — (auth only) | everyone |
 | `GET/POST/PATCH/DELETE /roles` | `role:*` | admin, manager |
 | `GET /permissions` | `permission:read` | admin, manager |
+| `GET /audit-logs` | `audit:read` | admin |

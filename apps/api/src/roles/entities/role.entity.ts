@@ -21,4 +21,6 @@ export class RoleEntity implements Role {
   @ApiProperty() updatedAt!: Date;
   @ApiProperty({ type: PermissionSummaryEntity, isArray: true })
   permissions!: PermissionSummaryEntity[];
+  @ApiProperty({ description: 'How many consultants currently hold this role', example: 3 })
+  consultantCount!: number;
 }

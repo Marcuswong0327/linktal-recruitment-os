@@ -16,7 +16,9 @@ import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { QueryCandidatesDto } from './dto/query-candidates.dto';
 import { CandidateEntity } from './entities/candidate.entity';
 import { PaginatedCandidatesEntity } from './entities/paginated-candidates.entity';
-import { RequirePermission } from '../auth/auth.decorators';
+import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
+import { AuthUser } from '../auth/auth.types';
+import { ForbiddenException } from '@nestjs/common';
 
 @ApiTags('Candidates')
 @ApiBearerAuth()
@@ -70,9 +72,36 @@ export class CandidatesController {
   @Delete(':id')
   @HttpCode(204)
   @RequirePermission('candidate', 'delete')
-  @ApiOperation({ operationId: 'deleteCandidate', summary: 'Delete a candidate' })
-  @ApiResponse({ status: 204, description: 'Candidate deleted' })
+  @ApiOperation({ operationId: 'deleteCandidate', summary: 'Soft-delete a candidate (recoverable)' })
+  @ApiResponse({ status: 204, description: 'Candidate soft-deleted' })
   remove(@Param('id') id: string) {
     return this.candidates.remove(id);
+  }
+
+  @Post(':id/restore')
+  @RequirePermission('candidate', 'delete')
+  @ApiOperation({ operationId: 'restoreCandidate', summary: 'Restore a soft-deleted candidate' })
+  @ApiResponse({ status: 201, description: 'Candidate restored', type: CandidateEntity })
+  restore(@Param('id') id: string) {
+    return this.candidates.restore(id);
+  }
+
+  @Delete(':id/purge')
+  @HttpCode(204)
+  @RequirePermission('candidate', 'delete')
+  @ApiOperation({
+    operationId: 'purgeCandidate',
+    summary: 'Permanently erase a candidate + history (admin only)',
+  })
+  @ApiResponse({ status: 204, description: 'Candidate permanently deleted' })
+  purge(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    // Hard delete is irreversible + destroys history — restrict to admins.
+    if (user.roleName !== 'admin') {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Only an admin can permanently erase a candidate.',
+      });
+    }
+    return this.candidates.purge(id);
   }
 }

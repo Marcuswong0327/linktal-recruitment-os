@@ -90,10 +90,11 @@ describe('RbacService', () => {
         consultant: {
           findUnique: jest.fn().mockResolvedValue(null),
           create: jest.fn().mockImplementation(({ data }) =>
-            Promise.resolve({ ...data, role: viewerRole }),
+            Promise.resolve({ ...data, id: 'new1', role: viewerRole }),
           ),
         },
         role: { findUnique: jest.fn().mockResolvedValue(viewerRole) },
+        auditLog: { create: jest.fn().mockResolvedValue({}) },
       } as unknown as PrismaService;
       const service = new RbacService(prisma);
 
@@ -107,6 +108,16 @@ describe('RbacService', () => {
       expect(prisma.consultant.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ isActive: false }) }),
       );
+      // Gap 2: the self-registration is audited (auth path is on the base client).
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'CREATE',
+            entityType: 'Consultant',
+            metadata: { source: 'password-registration' },
+          }),
+        }),
+      );
     });
 
     it('links password auth onto an existing passwordless row instead of duplicating', async () => {
@@ -119,6 +130,7 @@ describe('RbacService', () => {
           ),
         },
         role: { findUnique: jest.fn().mockResolvedValue(consultantRoleRow) },
+        auditLog: { create: jest.fn().mockResolvedValue({}) },
       } as unknown as PrismaService;
       const service = new RbacService(prisma);
 
@@ -132,6 +144,17 @@ describe('RbacService', () => {
       expect(prisma.consultant.update).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: 'c1' } }),
       );
+      // Gap 2: linking password auth onto an existing row is audited as UPDATE.
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'UPDATE',
+            entityType: 'Consultant',
+            entityId: 'c1',
+            metadata: { source: 'password-link' },
+          }),
+        }),
+      );
     });
 
     it('rejects when the email already has a password set', async () => {
@@ -142,6 +165,43 @@ describe('RbacService', () => {
       await expect(
         service.registerWithPassword({ email: 'a@b.com', password: 'x', fullName: 'A B' }),
       ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('provisioning audit trail (Gap 2)', () => {
+    it('audits a consultant auto-created on first Azure sign-in', async () => {
+      const created = {
+        id: 'new-azure',
+        azureId: 'azure-oid-9',
+        email: 'x@y.com',
+        fullName: 'X Y',
+        isActive: true,
+        role: viewerRole,
+      };
+      const prisma = {
+        consultant: {
+          // No azureId match and no email match → just-in-time provision.
+          findUnique: jest.fn().mockResolvedValue(null),
+          create: jest.fn().mockResolvedValue(created),
+        },
+        role: { findUnique: jest.fn().mockResolvedValue(viewerRole) },
+        auditLog: { create: jest.fn().mockResolvedValue({}) },
+      } as unknown as PrismaService;
+      const service = new RbacService(prisma);
+
+      const user = await service.resolveUser({ sub: 'azure-oid-9', email: 'x@y.com', name: 'X Y' });
+
+      expect(user.consultantId).toBe('new-azure');
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'CREATE',
+            entityType: 'Consultant',
+            entityId: 'new-azure',
+            metadata: { source: 'azure-jit' },
+          }),
+        }),
+      );
     });
   });
 });

@@ -16,7 +16,15 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 
-export function AppSidebar({ user, permissions }: { user: SidebarUser; permissions: string[] }) {
+export function AppSidebar({
+  user,
+  permissions,
+  isAdmin = false,
+}: {
+  user: SidebarUser;
+  permissions: string[];
+  isAdmin?: boolean;
+}) {
   const pathname = usePathname();
 
   const hasPermission = (required?: RequiredPermission) =>
@@ -38,6 +46,7 @@ export function AppSidebar({ user, permissions }: { user: SidebarUser; permissio
 
       <SidebarContent>
         {navGroups.map((group, index) => {
+          if (group.adminOnly && !isAdmin) return null;
           if (!hasPermission(group.requiredPermission)) return null;
 
           // Feature flag: drop items marked `hidden`; drop items the user

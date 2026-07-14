@@ -16,6 +16,7 @@ const RESOURCES = [
   "role",
   "permission",
   "report",
+  "audit",
 ] as const;
 
 // Define all actions
@@ -23,7 +24,14 @@ const ACTIONS = ["create", "read", "update", "delete"] as const;
 
 // Resources that only ever support `read` at runtime — there are no mutation
 // endpoints for them (the permission catalog is static, defined here in code).
-const READ_ONLY_RESOURCES = new Set<string>(["permission"]);
+// `audit` is read-only too: the activity log is append-only and admin-viewed.
+const READ_ONLY_RESOURCES = new Set<string>(["permission", "audit"]);
+
+// The activity log is sensitive — keep it admin-only, so it's excluded from the
+// "read everything" grants that managers otherwise get.
+const ADMIN_ONLY_RESOURCES = new Set<string>(["audit"]);
+const readableBy = (excludeAdminOnly: boolean): string[] =>
+  excludeAdminOnly ? RESOURCES.filter((r) => !ADMIN_ONLY_RESOURCES.has(r)) : [...RESOURCES];
 const actionsFor = (resource: string): readonly string[] =>
   READ_ONLY_RESOURCES.has(resource) ? ["read"] : ACTIONS;
 
@@ -34,9 +42,10 @@ const ROLE_PERMISSIONS: Record<string, { resources: string[]; actions: string[] 
     { resources: [...RESOURCES], actions: [...ACTIONS] },
   ],
   manager: [
-    // Read everything; full CRUD on business resources (incl. consultant).
-    // RBAC management (role/permission/user) stays admin-only.
-    { resources: [...RESOURCES], actions: ["read"] },
+    // Read everything except the admin-only activity log; full CRUD on business
+    // resources (incl. consultant). RBAC management (role/permission/user) and
+    // the audit log stay admin-only.
+    { resources: readableBy(true), actions: ["read"] },
     { resources: ["candidate", "client", "stakeholder", "job_order", "job_research", "submission", "placement", "consultant", "role"], actions: ["create", "update", "delete"] },
     { resources: ["report"], actions: ["create"] },
   ],

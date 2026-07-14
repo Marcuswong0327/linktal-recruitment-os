@@ -676,7 +676,7 @@ export const getDeleteClientUrl = (id: string,) => {
 }
 
 /**
- * @summary Delete a client
+ * @summary Soft-delete a client (recoverable, cascades)
  */
 export const deleteClient = async (id: string, options?: RequestInit): Promise<deleteClientResponse> => {
 
@@ -725,7 +725,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type DeleteClientMutationError = ErrorResponse
 
     /**
- * @summary Delete a client
+ * @summary Soft-delete a client (recoverable, cascades)
  */
 export const useDeleteClient = <TError = ErrorResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteClient>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -736,4 +736,202 @@ export const useDeleteClient = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getDeleteClientMutationOptions(options), queryClient);
+    }
+    export type restoreClientResponse201 = {
+  data: ClientEntity
+  status: 201
+}
+
+export type restoreClientResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type restoreClientResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type restoreClientResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type restoreClientResponseSuccess = (restoreClientResponse201) & {
+  headers: Headers;
+};
+export type restoreClientResponseError = (restoreClientResponse400 | restoreClientResponse404 | restoreClientResponse500) & {
+  headers: Headers;
+};
+
+export type restoreClientResponse = (restoreClientResponseSuccess | restoreClientResponseError)
+
+export const getRestoreClientUrl = (id: string,) => {
+
+
+
+
+  return `/clients/${id}/restore`
+}
+
+/**
+ * @summary Restore a soft-deleted client
+ */
+export const restoreClient = async (id: string, options?: RequestInit): Promise<restoreClientResponse> => {
+
+  return customFetch<restoreClientResponse>(getRestoreClientUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRestoreClientMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreClient>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreClient>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['restoreClient'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreClient>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  restoreClient(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreClientMutationResult = NonNullable<Awaited<ReturnType<typeof restoreClient>>>
+
+    export type RestoreClientMutationError = ErrorResponse
+
+    /**
+ * @summary Restore a soft-deleted client
+ */
+export const useRestoreClient = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreClient>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof restoreClient>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRestoreClientMutationOptions(options), queryClient);
+    }
+    export type purgeClientResponse204 = {
+  data: void
+  status: 204
+}
+
+export type purgeClientResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type purgeClientResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type purgeClientResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type purgeClientResponseSuccess = (purgeClientResponse204) & {
+  headers: Headers;
+};
+export type purgeClientResponseError = (purgeClientResponse400 | purgeClientResponse404 | purgeClientResponse500) & {
+  headers: Headers;
+};
+
+export type purgeClientResponse = (purgeClientResponseSuccess | purgeClientResponseError)
+
+export const getPurgeClientUrl = (id: string,) => {
+
+
+
+
+  return `/clients/${id}/purge`
+}
+
+/**
+ * @summary Permanently erase a client + children (admin only)
+ */
+export const purgeClient = async (id: string, options?: RequestInit): Promise<purgeClientResponse> => {
+
+  return customFetch<purgeClientResponse>(getPurgeClientUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getPurgeClientMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof purgeClient>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof purgeClient>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['purgeClient'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof purgeClient>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  purgeClient(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PurgeClientMutationResult = NonNullable<Awaited<ReturnType<typeof purgeClient>>>
+
+    export type PurgeClientMutationError = ErrorResponse
+
+    /**
+ * @summary Permanently erase a client + children (admin only)
+ */
+export const usePurgeClient = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof purgeClient>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof purgeClient>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getPurgeClientMutationOptions(options), queryClient);
     }

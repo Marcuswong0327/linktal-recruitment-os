@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Cog, ScrollText, Building2, type LucideIcon, Contact, Mail, ClipboardList, SquareCheck, BriefcaseBusiness, MessageSquare, FileText, UsersRound, BookA } from 'lucide-react';
+import { LayoutDashboard, Users, Cog, ScrollText, Building2, type LucideIcon, Contact, Mail, ClipboardList, SquareCheck, BriefcaseBusiness, MessageSquare, FileText, UsersRound, BookA, ShieldCheck } from 'lucide-react';
 
 /** Same shape as the API's @RequirePermission(resource, action) decorator. */
 export type RequiredPermission = { resource: string; action: string };
@@ -18,6 +18,8 @@ export type NavGroup = {
   items: NavItem[];
   /** Hides the whole group (all items) unless the user has this permission. */
   requiredPermission?: RequiredPermission;
+  /** Hides the whole group unless the user is an admin (role-based, not permission). */
+  adminOnly?: boolean;
 };
 
 /**
@@ -50,13 +52,19 @@ export const navGroups: NavGroup[] = [
   },
   {
     label: "ADMIN",
-    // Only `admin` has write access to users in the RBAC seed (manager/
-    // consultant are read-only on `user`) — use that as the "is this an
-    // admin" check rather than hardcoding a role name.
-    requiredPermission: { resource: "user", action: "update" },
+    // User management (roles + active status) and the activity log are admin-only
+    // IAM. The dedicated `user` permission was retired when /users folded into
+    // /consultants, so this gates on the admin role directly.
+    adminOnly: true,
     items: [
-      { title: "Users", href: "/users", icon: Users },
+      { title: "Consultants", href: "/consultants", icon: Users },
+      { title: "Roles", href: "/roles", icon: ShieldCheck },
       { title: "Settings", href: "/settings", icon: Cog, disabled: true },
-      { title: "Activity Log", href: '/activity-log', icon: ScrollText, disabled: true }],
+      {
+        title: "Activity Log",
+        href: '/activity-log',
+        icon: ScrollText,
+        requiredPermission: { resource: 'audit', action: 'read' },
+      }],
   },
 ];

@@ -7,20 +7,23 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from './auth.decorators';
-import { RbacService } from './rbac.service';
+import { RequestContext } from '../common/request-context';
 import { TokenService } from './token.service';
 
 /**
  * Authenticates every request (globally) unless the route is @Public().
- * Verifies the Bearer JWT, resolves the app user + permissions, and attaches
- * them to `request.user` for the PermissionsGuard and controllers.
+ * Verifies the Bearer JWT and attaches the role/permissions carried in its
+ * claims to `request.user` for the PermissionsGuard and controllers — no DB
+ * call here. Those claims are resolved fresh at login/refresh (see
+ * RbacService.resolveById), so a role change or deactivation takes effect
+ * within the access token's 15-minute lifetime, not instantly — see
+ * AccessTokenClaims' doc for that trade-off.
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly tokens: TokenService,
-    private readonly rbac: RbacService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -41,10 +44,19 @@ export class AuthGuard implements CanActivate {
 
     const claims = await this.tokens.verifyAccessToken(token);
     // Our own access tokens always carry the Consultant id as `sub` (see
-    // TokenService callers) — resolve by primary key, not by re-running the
-    // Azure-specific JIT-provisioning lookup on every request. resolveById
-    // also rejects deactivated accounts (see RbacService.assertActive).
-    request.user = await this.rbac.resolveById(claims.sub);
+    // TokenService callers) and the role/permissions resolved at mint time —
+    // build the principal from the token alone, no DB round trip per request.
+    request.user = {
+      consultantId: claims.sub,
+      azureId: '',
+      email: claims.email ?? null,
+      fullName: claims.name ?? '',
+      roleName: claims.roleName,
+      isActive: true, // guaranteed by RbacService.assertActive at mint time
+      permissions: new Set(claims.permissions),
+    };
+    // Attribute any writes made while handling this request to the caller.
+    RequestContext.setActor(request.user.consultantId);
     return true;
   }
 
