@@ -135,6 +135,7 @@ For **both** the `web` and `api` services, in the service **Settings**:
 | `AUTH_MICROSOFT_ENTRA_ID_ID `    | Same as `AZURE_CLIENT_ID`                                                 |
 | `AUTH_MICROSOFT_ENTRA_ID_SECRET` | Client Secret Value (will expire in 2 years)                              |
 | `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | Microsoft's Authentication Endpoint with Tenant ID                        |
+| `AUTH_URL`                       | Deployed frontend URL                                                     |
 | `API_INTERNAL_URL `              | Used for NextAuth and runs on server side                                 |
 
 ### CI Flow
