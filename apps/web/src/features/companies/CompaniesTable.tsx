@@ -41,7 +41,6 @@ import {
   updateClient as updateClientRequest,
   useCreateClient,
   useGetClients,
-  useUpdateClient,
 } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import type { ConsultantEntity, GetClientsStatus, UpdateClientDto } from '@/lib/api/generated/types';
@@ -70,7 +69,6 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
   const [status, setStatus] = React.useState<GetClientsStatus | undefined>();
   const [tobSigned, setTobSigned] = React.useState<boolean | undefined>();
   const [consultantId, setConsultantId] = React.useState<string | undefined>();
-  const [editing, setEditing] = React.useState<Company | null>(null);
   const [creating, setCreating] = React.useState(false);
   const [selectedCompanies, setSelectedCompanies] = React.useState<Company[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
@@ -110,17 +108,6 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
     [consultants],
   );
 
-  const updateClient = useUpdateClient({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey() });
-        toast.success('Saved changes');
-        setEditing(null);
-      },
-      onError: (err) => toast.error(err.message || 'Failed to update company'),
-    },
-  });
-
   const createClient = useCreateClient({
     mutation: {
       onSuccess: () => {
@@ -146,18 +133,6 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
     setPage(1);
   }
 
-  function handleSave(values: CompanyFormValues) {
-    if (!editing) return;
-    updateClient.mutate({
-      id: editing.id,
-      // Generated type omits null (the API accepts it to clear these
-      // fields) — `?? undefined` here would drop the key entirely from the
-      // request body, silently no-op'ing an intended clear while still
-      // reporting success.
-      data: values as unknown as UpdateClientDto,
-    });
-  }
-
   function handleCreate(values: CompanyFormValues) {
     createClient.mutate({
       data: {
@@ -174,9 +149,9 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
     });
   }
 
-  // Bypasses the useUpdateClient hook (which only tracks one in-flight call at
-  // a time) — bulk fires several concurrent requests, and we want a single
-  // summary toast, not one per row.
+  // Fires several concurrent requests directly (not via a mutation hook, which
+  // only tracks one in-flight call at a time) so bulk gets a single summary
+  // toast instead of one per row.
   async function handleBulkUpdate(data: UpdateClientDto, actionLabel: string) {
     setIsBulkUpdating(true);
     const results = await Promise.allSettled(selectedCompanies.map((c) => updateClientRequest(c.id, data)));
@@ -201,8 +176,6 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
     setSelectedCompanies([]);
   }
 
-  // Separate from useUpdateClient (used by the edit drawer) so an inline pill
-  // change doesn't fight the drawer's isSaving/onSuccess (which closes it).
   const handleInlineUpdate = React.useCallback(
     async (company: Company, data: UpdateClientDto, successLabel: string) => {
       setPendingRowId(company.id);
@@ -269,7 +242,6 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
         isFetching={isFetching}
         searchPlaceholder="Search Companies"
         filters={companyFilters}
-        onRowClick={setEditing}
         emptyState="No companies yet. Add your first client to get started."
         getRowId={(c) => c.id}
         onSelectionChange={setSelectedCompanies}
@@ -377,21 +349,6 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
         }}
       />
 
-      <Sheet open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
-        <SheetContent className="w-full sm:max-w-md">
-          {editing ? (
-            <CompanyForm
-              key={editing.id}
-              company={editing}
-              consultants={consultants}
-              isSaving={updateClient.isPending}
-              onSave={handleSave}
-              onCancel={() => setEditing(null)}
-            />
-          ) : null}
-        </SheetContent>
-      </Sheet>
-
       <Sheet open={creating} onOpenChange={setCreating}>
         <SheetContent className="w-full sm:max-w-md">
           {creating ? (
@@ -449,33 +406,27 @@ function BulkConsultantPicker({
   );
 }
 
-/** Shared by "Add company" and the row edit drawer — every field but the name is optional either way. */
+/** The "Add company" drawer form — every field but the name is optional. */
 function CompanyForm({
-  company,
   consultants,
   isSaving,
   onSave,
   onCancel,
 }: {
-  /** Omit for create; the form starts blank and reports back a fresh set of values. */
-  company?: Company;
   consultants: ConsultantEntity[];
   isSaving: boolean;
   onSave: (values: CompanyFormValues) => void;
   onCancel: () => void;
 }) {
-  const isEditing = company !== undefined;
-  const [companyName, setCompanyName] = React.useState(company?.companyName ?? '');
-  const [industry, setIndustry] = React.useState(company?.industry ?? '');
-  const [specialization, setSpecialization] = React.useState(company?.specialization ?? '');
-  const [city, setCity] = React.useState(company?.city ?? '');
-  const [country, setCountry] = React.useState(company?.country ?? '');
-  const [status, setStatus] = React.useState<ClientStatus>(company?.status ?? 'COLD');
-  const [tobSigned, setTobSigned] = React.useState(company?.tobSigned ?? false);
-  const [feePercentage, setFeePercentage] = React.useState(
-    company?.feePercentage != null ? String(company.feePercentage) : '',
-  );
-  const [consultantId, setConsultantId] = React.useState(company?.consultantId ?? '');
+  const [companyName, setCompanyName] = React.useState('');
+  const [industry, setIndustry] = React.useState('');
+  const [specialization, setSpecialization] = React.useState('');
+  const [city, setCity] = React.useState('');
+  const [country, setCountry] = React.useState('');
+  const [status, setStatus] = React.useState<ClientStatus>('COLD');
+  const [tobSigned, setTobSigned] = React.useState(false);
+  const [feePercentage, setFeePercentage] = React.useState('');
+  const [consultantId, setConsultantId] = React.useState('');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -495,10 +446,8 @@ function CompanyForm({
   return (
     <form onSubmit={handleSubmit} className="flex h-full flex-col">
       <SheetHeader>
-        <SheetTitle>{isEditing ? 'Edit company' : 'Add company'}</SheetTitle>
-        <SheetDescription>
-          {isEditing ? `Update ${company.companyName}’s account details.` : 'Add a new client company.'}
-        </SheetDescription>
+        <SheetTitle>Add company</SheetTitle>
+        <SheetDescription>Add a new client company.</SheetDescription>
       </SheetHeader>
 
       <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
@@ -560,7 +509,7 @@ function CompanyForm({
           Cancel
         </Button>
         <Button type="submit" size="lg" disabled={isSaving || !companyName.trim()}>
-          {isSaving ? 'Saving…' : isEditing ? 'Save changes' : 'Add company'}
+          {isSaving ? 'Saving…' : 'Add company'}
         </Button>
       </SheetFooter>
     </form>
