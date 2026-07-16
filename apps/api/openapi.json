@@ -977,6 +977,15 @@
             }
           },
           {
+            "name": "specialization",
+            "required": false,
+            "in": "query",
+            "description": "Filter by specialization (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "country",
             "required": false,
             "in": "query",
@@ -4190,6 +4199,10 @@
             "type": "string",
             "nullable": true
           },
+          "specialization": {
+            "type": "string",
+            "nullable": true
+          },
           "country": {
             "type": "string",
             "nullable": true
@@ -4245,6 +4258,7 @@
           "displayId",
           "companyName",
           "industry",
+          "specialization",
           "country",
           "city",
           "website",
@@ -4308,6 +4322,11 @@
             "type": "string",
             "description": "Industry",
             "example": "Manufacturing"
+          },
+          "specialization": {
+            "type": "string",
+            "description": "Specialization",
+            "example": "Heavy Machinery"
           },
           "country": {
             "type": "string",
@@ -4375,6 +4394,11 @@
             "type": "string",
             "description": "Industry",
             "example": "Manufacturing"
+          },
+          "specialization": {
+            "type": "string",
+            "description": "Specialization",
+            "example": "Heavy Machinery"
           },
           "country": {
             "type": "string",

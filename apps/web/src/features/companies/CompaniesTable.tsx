@@ -54,6 +54,7 @@ const PAGE_SIZE = 20;
 interface CompanyFormValues {
   companyName: string;
   industry: string | null;
+  specialization: string | null;
   city: string | null;
   country: string | null;
   status: ClientStatus;
@@ -162,6 +163,7 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
       data: {
         companyName: values.companyName,
         industry: values.industry ?? undefined,
+        specialization: values.specialization ?? undefined,
         city: values.city ?? undefined,
         country: values.country ?? undefined,
         status: values.status,
@@ -465,6 +467,7 @@ function CompanyForm({
   const isEditing = company !== undefined;
   const [companyName, setCompanyName] = React.useState(company?.companyName ?? '');
   const [industry, setIndustry] = React.useState(company?.industry ?? '');
+  const [specialization, setSpecialization] = React.useState(company?.specialization ?? '');
   const [city, setCity] = React.useState(company?.city ?? '');
   const [country, setCountry] = React.useState(company?.country ?? '');
   const [status, setStatus] = React.useState<ClientStatus>(company?.status ?? 'COLD');
@@ -479,6 +482,7 @@ function CompanyForm({
     onSave({
       companyName,
       industry: industry || null,
+      specialization: specialization || null,
       city: city || null,
       country: country || null,
       status,
@@ -503,6 +507,13 @@ function CompanyForm({
         </FormField>
         <FormField label="Industry" htmlFor="company-industry">
           <Input id="company-industry" value={industry} onChange={(e) => setIndustry(e.target.value)} />
+        </FormField>
+        <FormField label="Specialization" htmlFor="company-specialization">
+          <Input
+            id="company-specialization"
+            value={specialization}
+            onChange={(e) => setSpecialization(e.target.value)}
+          />
         </FormField>
         <FormField label="City" htmlFor="company-city">
           <Input id="company-city" value={city} onChange={(e) => setCity(e.target.value)} />

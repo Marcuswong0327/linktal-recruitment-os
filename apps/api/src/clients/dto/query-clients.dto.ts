@@ -81,6 +81,11 @@ export class QueryClientsDto {
   @IsString()
   industry?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by specialization (contains, case-insensitive)' })
+  @IsOptional()
+  @IsString()
+  specialization?: string;
+
   @ApiPropertyOptional({ description: 'Filter by country (contains, case-insensitive)' })
   @IsOptional()
   @IsString()

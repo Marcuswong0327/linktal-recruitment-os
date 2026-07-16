@@ -12,6 +12,8 @@ export interface UpdateClientDto {
   companyName?: string;
   /** Industry */
   industry?: string;
+  /** Specialization */
+  specialization?: string;
   /** Country */
   country?: string;
   /** City */

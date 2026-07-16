@@ -39,6 +39,10 @@ status?: GetClientsStatus;
  */
 industry?: string;
 /**
+ * Filter by specialization (contains, case-insensitive)
+ */
+specialization?: string;
+/**
  * Filter by country (contains, case-insensitive)
  */
 country?: string;

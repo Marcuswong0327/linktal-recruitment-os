@@ -118,6 +118,7 @@ model Client {
   displayId       String              @unique @default(dbgenerated("('Client-'::text || lpad((nextval('\"Client_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Client-####
   companyName     String
   industry        String?
+  specialization  String?
   country         String?
   city            String?
   website         String?

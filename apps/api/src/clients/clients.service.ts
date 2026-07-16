@@ -30,6 +30,7 @@ export class ClientsService {
     const contains = (value?: string) =>
       value ? { contains: value, mode: Prisma.QueryMode.insensitive } : undefined;
     where.industry = contains(query.industry);
+    where.specialization = contains(query.specialization);
     where.country = contains(query.country);
     where.city = contains(query.city);
 

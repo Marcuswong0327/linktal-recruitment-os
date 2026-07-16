@@ -14,6 +14,8 @@ export interface ClientEntity {
   /** @nullable */
   industry: string | null;
   /** @nullable */
+  specialization: string | null;
+  /** @nullable */
   country: string | null;
   /** @nullable */
   city: string | null;

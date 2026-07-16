@@ -26,6 +26,11 @@ export class CreateClientDto {
   @IsString()
   industry?: string;
 
+  @ApiPropertyOptional({ description: 'Specialization', example: 'Heavy Machinery' })
+  @IsOptional()
+  @IsString()
+  specialization?: string;
+
   @ApiPropertyOptional({ description: 'Country', example: 'Australia' })
   @IsOptional()
   @IsString()

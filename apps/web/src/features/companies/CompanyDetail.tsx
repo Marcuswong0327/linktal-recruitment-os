@@ -91,6 +91,7 @@ export function CompanyDetail({ id }: { id: string }) {
 function toPatch(values: {
   companyName: string;
   industry: string;
+  specialization: string;
   city: string;
   country: string;
   website: string;
@@ -104,6 +105,7 @@ function toPatch(values: {
   return {
     companyName: values.companyName,
     industry: values.industry || null,
+    specialization: values.specialization || null,
     city: values.city || null,
     country: values.country || null,
     website: values.website || null,
@@ -121,6 +123,7 @@ function CompanyEditForm({ company, consultants }: { company: Company; consultan
 
   const [companyName, setCompanyName] = React.useState(company.companyName);
   const [industry, setIndustry] = React.useState(company.industry ?? '');
+  const [specialization, setSpecialization] = React.useState(company.specialization ?? '');
   const [city, setCity] = React.useState(company.city ?? '');
   const [country, setCountry] = React.useState(company.country ?? '');
   const [website, setWebsite] = React.useState(company.website ?? '');
@@ -136,6 +139,7 @@ function CompanyEditForm({ company, consultants }: { company: Company; consultan
   const isDirty =
     companyName !== company.companyName ||
     industry !== (company.industry ?? '') ||
+    specialization !== (company.specialization ?? '') ||
     city !== (company.city ?? '') ||
     country !== (company.country ?? '') ||
     website !== (company.website ?? '') ||
@@ -166,6 +170,7 @@ function CompanyEditForm({ company, consultants }: { company: Company; consultan
       data: toPatch({
         companyName,
         industry,
+        specialization,
         city,
         country,
         website,
@@ -234,6 +239,13 @@ function CompanyEditForm({ company, consultants }: { company: Company; consultan
                 </FormField>
                 <FormField label="Industry" htmlFor="industry">
                   <Input id="industry" value={industry} onChange={(e) => setIndustry(e.target.value)} />
+                </FormField>
+                <FormField label="Specialization" htmlFor="specialization">
+                  <Input
+                    id="specialization"
+                    value={specialization}
+                    onChange={(e) => setSpecialization(e.target.value)}
+                  />
                 </FormField>
                 <FormField label="City" htmlFor="city">
                   <Input id="city" value={city} onChange={(e) => setCity(e.target.value)} />

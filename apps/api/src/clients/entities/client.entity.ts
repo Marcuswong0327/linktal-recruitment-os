@@ -17,6 +17,7 @@ export class ClientEntity implements Omit<Client, 'deletedAt' | 'deletedById'> {
   @ApiProperty({ example: 'Client-0001' }) displayId!: string;
   @ApiProperty({ example: 'Acme Corp' }) companyName!: string;
   @ApiProperty({ type: String, nullable: true }) industry!: string | null;
+  @ApiProperty({ type: String, nullable: true }) specialization!: string | null;
   @ApiProperty({ type: String, nullable: true }) country!: string | null;
   @ApiProperty({ type: String, nullable: true }) city!: string | null;
   @ApiProperty({ type: String, nullable: true }) website!: string | null;

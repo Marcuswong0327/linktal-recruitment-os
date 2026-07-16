@@ -89,6 +89,12 @@ export function getCompanyColumns({
       cell: ({ row }) => <span className="text-muted-foreground">{row.original.industry ?? '—'}</span>,
     },
     {
+      accessorKey: 'specialization',
+      header: 'Specialization',
+      enableSorting: false,
+      cell: ({ row }) => <span className="text-muted-foreground">{row.original.specialization ?? '—'}</span>,
+    },
+    {
       id: 'location',
       header: 'Location',
       enableSorting: false,
