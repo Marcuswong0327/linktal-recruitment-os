@@ -25,15 +25,11 @@ interface JobOrderColumnsOptions {
   consultants: ConsultantEntity[];
 }
 
-export function getJobOrderColumns({ clientName, consultants }: JobOrderColumnsOptions): ColumnDef<JobOrder>[] {
+export function getJobOrderColumns({
+  clientName,
+  consultants,
+}: JobOrderColumnsOptions): ColumnDef<JobOrder>[] {
   return [
-    {
-      accessorKey: 'displayId',
-      header: 'ID',
-      size: 90,
-      meta: { align: 'center' },
-      cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.displayId}</span>,
-    },
     {
       accessorKey: 'jobTitle',
       header: 'Role',
@@ -55,6 +51,15 @@ export function getJobOrderColumns({ clientName, consultants }: JobOrderColumnsO
       header: 'Client',
       enableSorting: false,
       cell: ({ row }) => <span>{clientName(row.original.clientId)}</span>,
+    },
+    {
+      accessorKey: 'location',
+      header: 'Location',
+      enableSorting: false,
+      size: 150,
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{row.original.location ?? '—'}</span>
+      ),
     },
     {
       accessorKey: 'status',
@@ -79,7 +84,11 @@ export function getJobOrderColumns({ clientName, consultants }: JobOrderColumnsO
       accessorFn: (row) => row.salaryMax ?? row.salaryMin ?? 0,
       cell: ({ row }) => (
         <span className="tabular-nums whitespace-nowrap">
-          {formatSalary(row.original.salaryMin, row.original.salaryMax, row.original.salaryCurrency)}
+          {formatSalary(
+            row.original.salaryMin,
+            row.original.salaryMax,
+            row.original.salaryCurrency,
+          )}
         </span>
       ),
     },
@@ -97,18 +106,13 @@ export function getJobOrderColumns({ clientName, consultants }: JobOrderColumnsO
       ),
     },
     {
-      accessorKey: 'location',
-      header: 'Location',
-      enableSorting: false,
-      size: 150,
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.location ?? '—'}</span>,
-    },
-    {
       accessorKey: 'consultantId',
       header: 'Consultant',
       enableSorting: false,
       meta: { align: 'center', strictMinSize: true },
-      cell: ({ row }) => <JobOrderConsultantCell jobOrder={row.original} consultants={consultants} />,
+      cell: ({ row }) => (
+        <JobOrderConsultantCell jobOrder={row.original} consultants={consultants} />
+      ),
     },
   ];
 }
