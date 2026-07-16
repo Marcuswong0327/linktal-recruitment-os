@@ -29,9 +29,20 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { ClientCombobox } from '@/components/ClientCombobox';
-import { ConsultantCombobox, ConsultantComboboxPopup, useConsultantLookup } from '@/components/ConsultantCombobox';
+import {
+  ConsultantCombobox,
+  ConsultantComboboxPopup,
+  useConsultantLookup,
+} from '@/components/ConsultantCombobox';
 import { ConsultantFilter } from '@/components/ConsultantFilter';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { EnumSelect } from '@/components/EnumSelect';
@@ -45,7 +56,12 @@ import {
   useGetJobOrders,
   useUpdateJobOrder,
 } from '@/lib/api/generated/job-orders/job-orders';
-import type { ClientEntity, ConsultantEntity, GetJobOrdersStatus, UpdateJobOrderDto } from '@/lib/api/generated/types';
+import type {
+  ClientEntity,
+  ConsultantEntity,
+  GetJobOrdersStatus,
+  UpdateJobOrderDto,
+} from '@/lib/api/generated/types';
 import { getJobOrderColumns } from './columns';
 import {
   type JobOrder,
@@ -61,7 +77,13 @@ import {
 
 const PAGE_SIZE = 20;
 
-export function JobOrdersTable({ canCreate = true, canDelete = true }: { canCreate?: boolean; canDelete?: boolean }) {
+export function JobOrdersTable({
+  canCreate = true,
+  canDelete = true,
+}: {
+  canCreate?: boolean;
+  canDelete?: boolean;
+}) {
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
@@ -127,9 +149,12 @@ export function JobOrdersTable({ canCreate = true, canDelete = true }: { canCrea
   const jobOrders = result?.data ?? [];
 
   function handleQueryChange({ search, columnFilters }: DataGridQuery) {
-    const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as string[] | undefined;
-    const priorityFilter = columnFilters.find((f) => f.id === 'priorityLevel')?.value as string[] | undefined;
-    const consultantFilter = columnFilters.find((f) => f.id === 'consultantId')?.value as string[] | undefined;
+    const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as
+      string[] | undefined;
+    const priorityFilter = columnFilters.find((f) => f.id === 'priorityLevel')?.value as
+      string[] | undefined;
+    const consultantFilter = columnFilters.find((f) => f.id === 'consultantId')?.value as
+      string[] | undefined;
     setSearch(search.trim() || undefined);
     setStatus(statusFilter?.[0] as GetJobOrdersStatus | undefined);
     setPriorityLevel(priorityFilter?.[0] === undefined ? undefined : Number(priorityFilter[0]));
@@ -160,11 +185,14 @@ export function JobOrdersTable({ canCreate = true, canDelete = true }: { canCrea
   // summary toast, not one per row.
   async function handleBulkUpdate(data: UpdateJobOrderDto, actionLabel: string) {
     setIsBulkUpdating(true);
-    const results = await Promise.allSettled(selectedJobOrders.map((j) => updateJobOrderRequest(j.id, data)));
+    const results = await Promise.allSettled(
+      selectedJobOrders.map((j) => updateJobOrderRequest(j.id, data)),
+    );
     const failed = results.filter((r) => r.status === 'rejected').length;
     const succeeded = results.length - failed;
     queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
-    if (succeeded > 0) toast.success(`${actionLabel} for ${succeeded} job order${succeeded === 1 ? '' : 's'}`);
+    if (succeeded > 0)
+      toast.success(`${actionLabel} for ${succeeded} job order${succeeded === 1 ? '' : 's'}`);
     if (failed > 0) toast.error(`Failed for ${failed} job order${failed === 1 ? '' : 's'}`);
     setIsBulkUpdating(false);
     setSelectedJobOrders([]);
@@ -172,7 +200,9 @@ export function JobOrdersTable({ canCreate = true, canDelete = true }: { canCrea
 
   async function handleBulkDelete() {
     setIsBulkDeleting(true);
-    const results = await Promise.allSettled(selectedJobOrders.map((j) => deleteJobOrderRequest(j.id)));
+    const results = await Promise.allSettled(
+      selectedJobOrders.map((j) => deleteJobOrderRequest(j.id)),
+    );
     const failed = results.filter((r) => r.status === 'rejected').length;
     const succeeded = results.length - failed;
     queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
@@ -182,10 +212,17 @@ export function JobOrdersTable({ canCreate = true, canDelete = true }: { canCrea
     setSelectedJobOrders([]);
   }
 
-  const columns = React.useMemo(() => getJobOrderColumns({ clientName, consultants }), [clientName, consultants]);
+  const columns = React.useMemo(
+    () => getJobOrderColumns({ clientName, consultants }),
+    [clientName, consultants],
+  );
 
   if (isError) {
-    return <p className="text-sm text-destructive">Failed to load job orders: {error?.message ?? 'Unknown error'}</p>;
+    return (
+      <p className="text-sm text-destructive">
+        Failed to load job orders: {error?.message ?? 'Unknown error'}
+      </p>
+    );
   }
 
   return (
@@ -200,7 +237,6 @@ export function JobOrdersTable({ canCreate = true, canDelete = true }: { canCrea
         onRowClick={setEditing}
         emptyState="No job orders yet. Create one against a client to get started."
         getRowId={(j) => j.id}
-        onSelectionChange={setSelectedJobOrders}
         toolbar={
           selectedJobOrders.length > 0 ? (
             <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
@@ -211,7 +247,9 @@ export function JobOrdersTable({ canCreate = true, canDelete = true }: { canCrea
                       variant="destructive"
                       size="lg"
                       disabled={!canDelete || isBulkDeleting}
-                      title={canDelete ? undefined : "You don't have permission to delete job orders"}
+                      title={
+                        canDelete ? undefined : "You don't have permission to delete job orders"
+                      }
                     >
                       <Trash2 />
                       Delete
@@ -221,7 +259,8 @@ export function JobOrdersTable({ canCreate = true, canDelete = true }: { canCrea
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>
-                      Delete {selectedJobOrders.length} job order{selectedJobOrders.length === 1 ? '' : 's'}?
+                      Delete {selectedJobOrders.length} job order
+                      {selectedJobOrders.length === 1 ? '' : 's'}?
                     </AlertDialogTitle>
                     <AlertDialogDescription>
                       This permanently removes the selected job orders and can't be undone.
@@ -250,7 +289,9 @@ export function JobOrdersTable({ canCreate = true, canDelete = true }: { canCrea
                       {jobOrderStatuses.map((s) => (
                         <DropdownMenuItem
                           key={s}
-                          onClick={() => handleBulkUpdate({ status: s }, `Marked ${jobOrderStatusLabels[s]}`)}
+                          onClick={() =>
+                            handleBulkUpdate({ status: s }, `Marked ${jobOrderStatusLabels[s]}`)
+                          }
                         >
                           <Badge variant={statusVariant[s]}>{jobOrderStatusLabels[s]}</Badge>
                         </DropdownMenuItem>
@@ -264,7 +305,10 @@ export function JobOrdersTable({ canCreate = true, canDelete = true }: { canCrea
                         <DropdownMenuItem
                           key={value}
                           onClick={() =>
-                            handleBulkUpdate({ priorityLevel: Number(value) }, `Set to ${label} priority`)
+                            handleBulkUpdate(
+                              { priorityLevel: Number(value) },
+                              `Set to ${label} priority`,
+                            )
                           }
                         >
                           <Badge variant={priorityVariant[Number(value)]}>{label}</Badge>
@@ -272,7 +316,9 @@ export function JobOrdersTable({ canCreate = true, canDelete = true }: { canCrea
                       ))}
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
-                  <DropdownMenuItem onClick={() => setConsultantPickerOpen(true)}>Set consultant</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setConsultantPickerOpen(true)}>
+                    Set consultant
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -400,8 +446,12 @@ function EditJobOrderForm({
   const [location, setLocation] = React.useState(jobOrder.location ?? '');
   const [jobType, setJobType] = React.useState(jobOrder.jobType ?? '');
   const [status, setStatus] = React.useState<JobOrderStatus>(jobOrder.status);
-  const [salaryMin, setSalaryMin] = React.useState(jobOrder.salaryMin != null ? String(jobOrder.salaryMin) : '');
-  const [salaryMax, setSalaryMax] = React.useState(jobOrder.salaryMax != null ? String(jobOrder.salaryMax) : '');
+  const [salaryMin, setSalaryMin] = React.useState(
+    jobOrder.salaryMin != null ? String(jobOrder.salaryMin) : '',
+  );
+  const [salaryMax, setSalaryMax] = React.useState(
+    jobOrder.salaryMax != null ? String(jobOrder.salaryMax) : '',
+  );
   const [priorityLevel, setPriorityLevel] = React.useState(
     jobOrder.priorityLevel != null ? String(jobOrder.priorityLevel) : '',
   );
@@ -435,7 +485,12 @@ function EditJobOrderForm({
           <Input id="jo-title" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
         </FormField>
         <FormField label="Client" htmlFor="jo-client">
-          <ClientCombobox id="jo-client" value={clientId} onValueChange={setClientId} clients={clients} />
+          <ClientCombobox
+            id="jo-client"
+            value={clientId}
+            onValueChange={setClientId}
+            clients={clients}
+          />
         </FormField>
         <FormField label="Consultant" htmlFor="jo-consultant">
           <ConsultantCombobox
@@ -446,7 +501,11 @@ function EditJobOrderForm({
           />
         </FormField>
         <FormField label="Department" htmlFor="jo-department">
-          <Input id="jo-department" value={department} onChange={(e) => setDepartment(e.target.value)} />
+          <Input
+            id="jo-department"
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
+          />
         </FormField>
         <FormField label="Location" htmlFor="jo-location">
           <Input id="jo-location" value={location} onChange={(e) => setLocation(e.target.value)} />
@@ -472,10 +531,20 @@ function EditJobOrderForm({
           />
         </FormField>
         <FormField label="Salary min" htmlFor="jo-salary-min">
-          <Input id="jo-salary-min" type="number" value={salaryMin} onChange={(e) => setSalaryMin(e.target.value)} />
+          <Input
+            id="jo-salary-min"
+            type="number"
+            value={salaryMin}
+            onChange={(e) => setSalaryMin(e.target.value)}
+          />
         </FormField>
         <FormField label="Salary max" htmlFor="jo-salary-max">
-          <Input id="jo-salary-max" type="number" value={salaryMax} onChange={(e) => setSalaryMax(e.target.value)} />
+          <Input
+            id="jo-salary-max"
+            type="number"
+            value={salaryMax}
+            onChange={(e) => setSalaryMax(e.target.value)}
+          />
         </FormField>
       </div>
 
