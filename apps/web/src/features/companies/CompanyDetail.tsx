@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Building2, FileText, Handshake, Info } from 'lucide-react';
+import { ArrowLeft, Building2, CornerDownLeft, FileText, Handshake, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConsultantCombobox } from '@/components/ConsultantCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
@@ -215,8 +216,24 @@ function CompanyEditForm({ company, consultants }: { company: Company; consultan
             {isDirty && !updateClient.isPending ? (
               <span className="text-xs text-muted-foreground">Unsaved changes</span>
             ) : null}
-            <Button type="submit" form="company-form" size="lg" disabled={updateClient.isPending || !isDirty}>
-              {updateClient.isPending ? 'Saving…' : 'Save changes'}
+            <Button
+              type="submit"
+              form="company-form"
+              size="lg"
+              disabled={updateClient.isPending || !isDirty}
+            >
+              {updateClient.isPending ? (
+                'Saving…'
+              ) : (
+                <>
+                  Save changes
+                  {isDirty ? (
+                    <Kbd className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground">
+                      <CornerDownLeft className="size-2.5" />
+                    </Kbd>
+                  ) : null}
+                </>
+              )}
             </Button>
           </div>
         </div>

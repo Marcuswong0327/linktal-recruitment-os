@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DataGridFacetedFilter, type FacetedFilterOption } from '@/components/DataGridFacetedFilter';
@@ -165,6 +166,29 @@ export function DataGrid<TData>({
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
+
+  // ⌘K/Ctrl+K focuses the search box, matching the convention used by
+  // GitHub/Linear/Slack/Vercel. Defaults to the Windows/Linux label until
+  // mounted (avoids an SSR/client hydration mismatch), then flips to ⌘ on
+  // Mac. The listener itself accepts either modifier regardless of detected
+  // platform, since a Mac user on an external Windows keyboard still expects
+  // Ctrl+K to work.
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const [isMac, setIsMac] = React.useState(false);
+  React.useEffect(() => {
+    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform ?? navigator.userAgent));
+  }, []);
+  React.useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // Selection is page-scoped (see onSelectionChange doc) — drop it when the
   // visible rows change out from under it. Bails out when already empty:
@@ -398,11 +422,18 @@ export function DataGrid<TData>({
           <div className="relative w-full max-w-xs">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
+              ref={searchInputRef}
               value={globalFilter}
               onChange={(e) => setGlobalFilter(e.target.value)}
               placeholder={searchPlaceholder}
-              className="pl-8"
+              className="pl-8 pr-12"
             />
+            {!globalFilter && (
+              <div className="pointer-events-none absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-0.5">
+                <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
+                <Kbd>K</Kbd>
+              </div>
+            )}
           </div>
           {(filters ?? []).map((filter) => {
             const column = table.getColumn(filter.columnId);
