@@ -1,4 +1,19 @@
-import { LayoutDashboard, Users, Cog, ScrollText, Building2, type LucideIcon, Contact, Mail, ClipboardList, SquareCheck, BriefcaseBusiness, MessageSquare, FileText, UsersRound, BookA, ShieldCheck } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Users,
+  Cog,
+  ScrollText,
+  Building2,
+  type LucideIcon,
+  Mail,
+  SquareCheck,
+  BriefcaseBusiness,
+  MessageSquare,
+  FileText,
+  UsersRound,
+  BookA,
+  ShieldCheck,
+} from 'lucide-react';
 
 /** Same shape as the API's @RequirePermission(resource, action) decorator. */
 export type RequiredPermission = { resource: string; action: string };
@@ -31,40 +46,37 @@ export type NavGroup = {
 
 export const navGroups: NavGroup[] = [
   {
-    items: [
-      { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    ]
+    items: [{ title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard }],
   },
   {
-    label: "OPERATIONS",
+    label: 'OPERATIONS',
     items: [
-      { title: "Companies", href: "/companies", icon: Building2 },
-      { title: "Contacts", href: "/contacts", icon: Contact, disabled: true },
-      { title: "Job Orders", href: "/job-orders", icon: BookA },
-      { title: "Candidates", href: "/candidates", icon: UsersRound },
-      { title: "Submissions", href: "/submissions", icon: FileText, disabled: true },
-      { title: "Interviews", href: "/interviews", icon: MessageSquare, disabled: true },
-      { title: "Placements", href: "/placements", icon: BriefcaseBusiness, disabled: true },
-      { title: "Tasks", href: "/tasks", icon: SquareCheck, disabled: true },
-      { title: "Inbox", href: "/inbox", icon: Mail, disabled: true },
-      { title: "Reports", href: "/reports", icon: ClipboardList, disabled: true },
+      { title: 'Companies', href: '/companies', icon: Building2 },
+      { title: 'Job Orders', href: '/job-orders', icon: BookA },
+      { title: 'Candidates', href: '/candidates', icon: UsersRound },
+      { title: 'Submissions', href: '/submissions', icon: FileText, disabled: true },
+      { title: 'Interviews', href: '/interviews', icon: MessageSquare, disabled: true },
+      { title: 'Placements', href: '/placements', icon: BriefcaseBusiness, disabled: true },
+      { title: 'Tasks', href: '/tasks', icon: SquareCheck, disabled: true },
+      { title: 'Inbox', href: '/inbox', icon: Mail, disabled: true },
     ],
   },
   {
-    label: "ADMIN",
+    label: 'ADMIN',
     // User management (roles + active status) and the activity log are admin-only
     // IAM. The dedicated `user` permission was retired when /users folded into
     // /consultants, so this gates on the admin role directly.
     adminOnly: true,
     items: [
-      { title: "Consultants", href: "/consultants", icon: Users },
-      { title: "Roles", href: "/roles", icon: ShieldCheck },
-      { title: "Settings", href: "/settings", icon: Cog, disabled: true },
+      { title: 'Consultants', href: '/consultants', icon: Users },
+      { title: 'Roles', href: '/roles', icon: ShieldCheck },
+      { title: 'Settings', href: '/settings', icon: Cog, disabled: true },
       {
-        title: "Activity Log",
+        title: 'Activity Log',
         href: '/activity-log',
         icon: ScrollText,
         requiredPermission: { resource: 'audit', action: 'read' },
-      }],
+      },
+    ],
   },
 ];
