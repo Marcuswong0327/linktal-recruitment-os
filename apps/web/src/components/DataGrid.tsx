@@ -6,6 +6,7 @@ import {
   type ColumnFiltersState,
   type ColumnSizingState,
   type FilterFn,
+  type Row,
   type RowSelectionState,
   type SortingState,
   flexRender,
@@ -14,7 +15,16 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, Search, X } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsUpDown,
+  Loader2,
+  Search,
+  X,
+} from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -22,8 +32,18 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { DataGridFacetedFilter, type FacetedFilterOption } from '@/components/DataGridFacetedFilter';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  DataGridFacetedFilter,
+  type FacetedFilterOption,
+} from '@/components/DataGridFacetedFilter';
 
 const SELECT_COLUMN_ID = '__select';
 
@@ -86,7 +106,9 @@ export interface DataGridServerProps {
 
 /** Keeps a row when its cell value is one of the selected filter values. */
 const facetedFilterFn: FilterFn<unknown> = (row, columnId, filterValue) =>
-  !Array.isArray(filterValue) || filterValue.length === 0 ? true : filterValue.includes(row.getValue(columnId));
+  !Array.isArray(filterValue) || filterValue.length === 0
+    ? true
+    : filterValue.includes(row.getValue(columnId));
 
 /** Raise-only merge — a column's measured width should only ever grow (header pass vs. cell pass), never shrink back down. */
 function raiseSizes(prev: Record<string, number>, next: Record<string, number>) {
@@ -144,6 +166,13 @@ interface DataGridProps<TData> {
   onSelectionChange?: (rows: TData[]) => void;
   /** Per-row override for whether a row's checkbox can be selected (default: all can). */
   canSelectRow?: (row: TData) => boolean;
+  /**
+   * Click-and-drag across rows to range-select, like a spreadsheet (mousedown
+   * on one row, drag to another, release). Requires `onSelectionChange`.
+   * Starting the drag on an interactive cell (marked `data-no-row-drag`) is
+   * ignored so it doesn't fight that control's own click/open behavior.
+   */
+  enableRowRangeSelect?: boolean;
 }
 
 export function DataGrid<TData>({
@@ -161,6 +190,7 @@ export function DataGrid<TData>({
   getRowId,
   onSelectionChange,
   canSelectRow,
+  enableRowRangeSelect = false,
 }: DataGridProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
@@ -237,10 +267,15 @@ export function DataGrid<TData>({
   const [headerOnlySizes, setHeaderOnlySizes] = React.useState<Record<string, number>>({});
 
   // Attach the faceted filter fn to whichever columns are declared filterable.
-  const filterColumnIds = React.useMemo(() => new Set((filters ?? []).map((f) => f.columnId)), [filters]);
+  const filterColumnIds = React.useMemo(
+    () => new Set((filters ?? []).map((f) => f.columnId)),
+    [filters],
+  );
   const tableColumns = React.useMemo(() => {
     const withFilters = columns.map((col) => {
-      const id = (col as { id?: string; accessorKey?: string }).id ?? (col as { accessorKey?: string }).accessorKey;
+      const id =
+        (col as { id?: string; accessorKey?: string }).id ??
+        (col as { accessorKey?: string }).accessorKey;
       let result = col;
       if (id && filterColumnIds.has(id)) {
         result = { ...result, filterFn: facetedFilterFn as FilterFn<TData> };
@@ -248,7 +283,7 @@ export function DataGrid<TData>({
       const measured = id ? measuredSizes[id] : undefined;
       if (measured !== undefined) {
         const strict = (result.meta as DataGridColumnMeta | undefined)?.strictMinSize;
-        const minFloor = strict ? measured : (id ? headerOnlySizes[id] : undefined);
+        const minFloor = strict ? measured : id ? headerOnlySizes[id] : undefined;
         result = {
           ...result,
           minSize: Math.max(minFloor ?? 0, result.minSize ?? 0),
@@ -282,7 +317,7 @@ export function DataGrid<TData>({
         </div>
       ),
       cell: ({ row }) => (
-        <div onClick={(e) => e.stopPropagation()}>
+        <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
           <Checkbox
             checked={row.getIsSelected()}
             onCheckedChange={(checked) => row.toggleSelected(!!checked)}
@@ -334,7 +369,11 @@ export function DataGrid<TData>({
     onRowSelectionChange: setRowSelection,
     onColumnSizingChange: setColumnSizing,
     getRowId: getRowId as ((row: TData) => string) | undefined,
-    enableRowSelection: !onSelectionChange ? false : canSelectRow ? (row) => canSelectRow(row.original) : true,
+    enableRowSelection: !onSelectionChange
+      ? false
+      : canSelectRow
+        ? (row) => canSelectRow(row.original)
+        : true,
     enableColumnResizing: true,
     columnResizeMode: 'onChange',
     // Undeclared-size columns previously shared remaining space equally via
@@ -377,6 +416,72 @@ export function DataGrid<TData>({
   const rows = table.getRowModel().rows;
   const hasData = data.length > 0;
   const totalColumns = table.getAllLeafColumns().length;
+
+  // Row range-select: mousedown on a row, drag to another, release — like
+  // dragging across cells in a spreadsheet. `dragStateRef` (not state) tracks
+  // the gesture without re-rendering on every pixel of mouse movement;
+  // `moved` distinguishes a genuine drag from a plain click so a click still
+  // reaches `onRowClick` (e.g. navigating to the row's detail page)
+  // untouched, and a drag suppresses that click instead of also navigating.
+  const dragStateRef = React.useRef<{ anchorId: string; moved: boolean } | null>(null);
+  const suppressNextClickRef = React.useRef(false);
+  const [isRowDragging, setIsRowDragging] = React.useState(false);
+
+  const rowIndexById = React.useMemo(() => {
+    const map = new Map<string, number>();
+    rows.forEach((r, i) => map.set(r.id, i));
+    return map;
+  }, [rows]);
+
+  const handleRowMouseDown = React.useCallback(
+    (e: React.MouseEvent, row: Row<TData>) => {
+      if (!enableRowRangeSelect || e.button !== 0) return;
+      // Let interactive cells (pills, comboboxes, the row's own link) handle
+      // their own mousedown — starting a drag from inside one would fight
+      // its click/open behavior.
+      if ((e.target as HTMLElement).closest('[data-no-row-drag]')) return;
+      e.preventDefault(); // suppress native text selection while dragging
+      dragStateRef.current = { anchorId: row.id, moved: false };
+    },
+    [enableRowRangeSelect],
+  );
+
+  const handleRowMouseEnter = React.useCallback(
+    (row: Row<TData>) => {
+      const state = dragStateRef.current;
+      if (!state) return;
+      state.moved = true;
+      setIsRowDragging(true);
+      const anchorIdx = rowIndexById.get(state.anchorId);
+      const currentIdx = rowIndexById.get(row.id);
+      if (anchorIdx === undefined || currentIdx === undefined) return;
+      const [lo, hi] = anchorIdx <= currentIdx ? [anchorIdx, currentIdx] : [currentIdx, anchorIdx];
+      const next: RowSelectionState = {};
+      for (let i = lo; i <= hi; i++) {
+        const r = rows[i];
+        if (r.getCanSelect()) next[r.id] = true;
+      }
+      setRowSelection(next);
+    },
+    [rowIndexById, rows],
+  );
+
+  // Ends the drag wherever the mouse is released, even outside the table.
+  // Marking a completed drag here (rather than in the row's own onMouseUp)
+  // is what lets the row under the cursor suppress its onClick — the click
+  // that follows mouseup would otherwise also fire `onRowClick`.
+  React.useEffect(() => {
+    if (!enableRowRangeSelect) return;
+    function handleMouseUp() {
+      if (dragStateRef.current?.moved) {
+        suppressNextClickRef.current = true;
+      }
+      dragStateRef.current = null;
+      setIsRowDragging(false);
+    }
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => document.removeEventListener('mouseup', handleMouseUp);
+  }, [enableRowRangeSelect]);
 
   // Pass 2: refine upward with actual cell content once real rows are
   // available (a short header like "TOB" undersells the pill it holds). Cell
@@ -439,9 +544,14 @@ export function DataGrid<TData>({
             const column = table.getColumn(filter.columnId);
             if (!column) return null;
             const selected = (column.getFilterValue() as string[]) ?? [];
-            const onChange = (values: string[]) => column.setFilterValue(values.length ? values : undefined);
+            const onChange = (values: string[]) =>
+              column.setFilterValue(values.length ? values : undefined);
             if (filter.render) {
-              return <React.Fragment key={filter.columnId}>{filter.render({ selected, onChange })}</React.Fragment>;
+              return (
+                <React.Fragment key={filter.columnId}>
+                  {filter.render({ selected, onChange })}
+                </React.Fragment>
+              );
             }
             return (
               <DataGridFacetedFilter
@@ -468,7 +578,10 @@ export function DataGrid<TData>({
         {toolbar ? <div className="flex items-center gap-2">{toolbar}</div> : null}
       </div>
       {/* Grid */}
-      <div ref={gridContainerRef} className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card">
+      <div
+        ref={gridContainerRef}
+        className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card"
+      >
         {/* Vertical gridlines + tight rows for the spreadsheet look.
             table-fixed: widths come from the header row (header.getSize(),
             resizable), never from cell content, so columns don't shift as
@@ -495,7 +608,10 @@ export function DataGrid<TData>({
                       style={{ width: header.getSize() }}
                       className={cn('relative', columnAlignClass(header.column.columnDef.meta))}
                     >
-                      <span data-measure-column={header.column.id} className="inline-block max-w-full">
+                      <span
+                        data-measure-column={header.column.id}
+                        className="inline-block max-w-full"
+                      >
                         {header.isPlaceholder ? null : canSort ? (
                           <button
                             type="button"
@@ -535,7 +651,7 @@ export function DataGrid<TData>({
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody>
+          <TableBody className={cn(isRowDragging && 'select-none')}>
             {isLoading ? (
               Array.from({ length: skeletonRows }).map((_, rowIndex) => (
                 <TableRow key={`skeleton-${rowIndex}`} className="hover:bg-transparent">
@@ -551,12 +667,33 @@ export function DataGrid<TData>({
                 {rows.map((row) => (
                   <TableRow
                     key={row.id}
-                    onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                    data-state={row.getIsSelected() ? 'selected' : undefined}
+                    onMouseDown={
+                      enableRowRangeSelect ? (e) => handleRowMouseDown(e, row) : undefined
+                    }
+                    onMouseEnter={enableRowRangeSelect ? () => handleRowMouseEnter(row) : undefined}
+                    onClick={
+                      onRowClick
+                        ? () => {
+                            if (suppressNextClickRef.current) {
+                              suppressNextClickRef.current = false;
+                              return;
+                            }
+                            onRowClick(row.original);
+                          }
+                        : undefined
+                    }
                     className={cn(onRowClick && 'cursor-pointer')}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className={columnAlignClass(cell.column.columnDef.meta)}>
-                        <span data-measure-column={cell.column.id} className="inline-block max-w-full">
+                      <TableCell
+                        key={cell.id}
+                        className={columnAlignClass(cell.column.columnDef.meta)}
+                      >
+                        <span
+                          data-measure-column={cell.column.id}
+                          className="inline-block max-w-full"
+                        >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </span>
                       </TableCell>
@@ -568,7 +705,10 @@ export function DataGrid<TData>({
                     (the primitive strips it from :last-child). */}
                 {!server || server.page >= server.pageCount ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={totalColumns} className="py-3 text-center text-xs text-muted-foreground">
+                    <TableCell
+                      colSpan={totalColumns}
+                      className="py-3 text-center text-xs text-muted-foreground"
+                    >
                       -- END OF LIST --
                     </TableCell>
                   </TableRow>
@@ -576,8 +716,13 @@ export function DataGrid<TData>({
               </>
             ) : (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={totalColumns} className="h-32 text-center text-sm text-muted-foreground">
-                  {!hasData && !isFiltered ? (emptyState ?? 'No records yet.') : 'No results match your search.'}
+                <TableCell
+                  colSpan={totalColumns}
+                  className="h-32 text-center text-sm text-muted-foreground"
+                >
+                  {!hasData && !isFiltered
+                    ? (emptyState ?? 'No records yet.')
+                    : 'No results match your search.'}
                 </TableCell>
               </TableRow>
             )}
@@ -623,7 +768,9 @@ export function DataGrid<TData>({
         </div>
       ) : (
         <p className="px-1 text-xs text-muted-foreground">
-          {isLoading ? 'Loading…' : `${rows.length} of ${data.length} ${data.length === 1 ? 'row' : 'rows'}`}
+          {isLoading
+            ? 'Loading…'
+            : `${rows.length} of ${data.length} ${data.length === 1 ? 'row' : 'rows'}`}
         </p>
       )}
     </div>

@@ -41,8 +41,18 @@ export const statusOptions = clientStatuses.map((value) => ({
 }));
 
 export const tobOptions = [
-  { value: 'true', label: 'Signed', variant: tobVariant.true, triggerClassName: tobTriggerClassName.true },
-  { value: 'false', label: 'Not signed', variant: tobVariant.false, triggerClassName: tobTriggerClassName.false },
+  {
+    value: 'true',
+    label: 'Signed',
+    variant: tobVariant.true,
+    triggerClassName: tobTriggerClassName.true,
+  },
+  {
+    value: 'false',
+    label: 'Not signed',
+    variant: tobVariant.false,
+    triggerClassName: tobTriggerClassName.false,
+  },
 ];
 
 interface CompanyColumnsOptions {
@@ -67,7 +77,9 @@ export function getCompanyColumns({
       accessorKey: 'displayId',
       header: 'ID',
       meta: { align: 'center' },
-      cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.displayId}</span>,
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-muted-foreground">{row.original.displayId}</span>
+      ),
     },
     {
       accessorKey: 'companyName',
@@ -76,6 +88,7 @@ export function getCompanyColumns({
         <Link
           href={`/companies/${row.original.id}`}
           onClick={(e) => e.stopPropagation()}
+          data-no-row-drag
           className="font-medium text-foreground hover:underline"
         >
           {row.original.companyName}
@@ -86,13 +99,17 @@ export function getCompanyColumns({
       accessorKey: 'industry',
       header: 'Industry',
       enableSorting: false,
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.industry ?? '—'}</span>,
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{row.original.industry ?? '—'}</span>
+      ),
     },
     {
       accessorKey: 'specialization',
       header: 'Specialization',
       enableSorting: false,
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.specialization ?? '—'}</span>,
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{row.original.specialization ?? '—'}</span>
+      ),
     },
     {
       id: 'location',
@@ -112,7 +129,7 @@ export function getCompanyColumns({
       cell: ({ row }) => {
         const company = row.original;
         return (
-          <div onClick={(e) => e.stopPropagation()}>
+          <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
             <EnumSelect
               value={company.status}
               onValueChange={(v) => onStatusChange(company, v as ClientStatus)}
@@ -133,7 +150,7 @@ export function getCompanyColumns({
       cell: ({ row }) => {
         const company = row.original;
         return (
-          <div onClick={(e) => e.stopPropagation()}>
+          <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
             <EnumSelect
               value={String(company.tobSigned)}
               onValueChange={(v) => onTobSignedChange(company, v === 'true')}
@@ -164,7 +181,7 @@ export function getCompanyColumns({
       cell: ({ row }) => {
         const company = row.original;
         return (
-          <div onClick={(e) => e.stopPropagation()}>
+          <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
             <ConsultantCombobox
               value={company.consultantId ?? ''}
               onValueChange={(v) => onConsultantChange(company, v)}

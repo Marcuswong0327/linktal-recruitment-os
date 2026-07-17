@@ -9,7 +9,10 @@ export default async function CompaniesPage() {
 
   return (
     <PageLayout>
-      <PageHeader title="Companies" description="Client accounts, relationship status and terms of business." />
+      <PageHeader
+        title="Companies"
+        description="Client accounts, relationship status and terms of business. Click on any row to access more details"
+      />
       {hasPermission(session, 'client', 'read') ? (
         <CompaniesTable
           canCreate={hasPermission(session, 'client', 'create')}
