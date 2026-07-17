@@ -290,6 +290,7 @@ export function CompaniesTable({
         filters={companyFilters}
         onRowClick={(company) => router.push(`/companies/${company.id}`)}
         enableRowRangeSelect
+        hideSelectColumn
         emptyState="No companies yet. Add your first client to get started."
         getRowId={(c) => c.id}
         onSelectionChange={setSelectedCompanies}

@@ -173,6 +173,12 @@ interface DataGridProps<TData> {
    * ignored so it doesn't fight that control's own click/open behavior.
    */
   enableRowRangeSelect?: boolean;
+  /**
+   * Hides the checkbox column while keeping `onSelectionChange`/selection
+   * state itself — for tables where drag range-select is the only way rows
+   * get picked, so the checkboxes would just be redundant UI.
+   */
+  hideSelectColumn?: boolean;
 }
 
 export function DataGrid<TData>({
@@ -191,6 +197,7 @@ export function DataGrid<TData>({
   onSelectionChange,
   canSelectRow,
   enableRowRangeSelect = false,
+  hideSelectColumn = false,
 }: DataGridProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
@@ -295,7 +302,7 @@ export function DataGrid<TData>({
       }
       return result;
     });
-    if (!onSelectionChange) return withFilters;
+    if (!onSelectionChange || hideSelectColumn) return withFilters;
 
     const selectColumn: ColumnDef<TData, unknown> = {
       id: SELECT_COLUMN_ID,
@@ -328,9 +335,20 @@ export function DataGrid<TData>({
       ),
     };
     return [selectColumn, ...withFilters];
-  }, [columns, filterColumnIds, onSelectionChange, measuredSizes, headerOnlySizes]);
+  }, [
+    columns,
+    filterColumnIds,
+    onSelectionChange,
+    hideSelectColumn,
+    measuredSizes,
+    headerOnlySizes,
+  ]);
 
   const gridContainerRef = React.useRef<HTMLDivElement>(null);
+  // Wraps the whole component (toolbar + grid + footer) — used to detect
+  // clicks outside the entire DataGrid, not just the bordered rows box, so
+  // e.g. clicking the search input doesn't count as "outside".
+  const rootRef = React.useRef<HTMLDivElement>(null);
 
   // Pass 1: header-only sizing. Runs as soon as headers render, independent
   // of loading state — cell content isn't available yet while `isLoading`,
@@ -483,6 +501,29 @@ export function DataGrid<TData>({
     return () => document.removeEventListener('mouseup', handleMouseUp);
   }, [enableRowRangeSelect]);
 
+  // Clicking outside the whole component clears the current selection, like
+  // a spreadsheet. Popup content (menus, dialogs, comboboxes, tooltips) is
+  // portaled elsewhere in the DOM, so it wouldn't otherwise be seen as
+  // "inside" — excluded by role instead, so e.g. confirming a bulk-delete in
+  // its dialog doesn't clear the selection out from under the action.
+  React.useEffect(() => {
+    if (!onSelectionChange) return;
+    function handlePointerDown(e: PointerEvent) {
+      const target = e.target as HTMLElement;
+      if (rootRef.current?.contains(target)) return;
+      if (
+        target.closest(
+          '[role="menu"], [role="dialog"], [role="alertdialog"], [role="listbox"], [role="tooltip"]',
+        )
+      ) {
+        return;
+      }
+      setRowSelection((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+    }
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [onSelectionChange]);
+
   // Pass 2: refine upward with actual cell content once real rows are
   // available (a short header like "TOB" undersells the pill it holds). Cell
   // content depends on which page/rows are loaded — measuring on every data
@@ -520,7 +561,7 @@ export function DataGrid<TData>({
     // flex-1/min-h-0 let the grid fill a height-locked page and scroll its
     // own rows (which also makes the sticky header work); in an unconstrained
     // parent they're inert and the grid sizes to its content as before.
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div ref={rootRef} className="flex min-h-0 flex-1 flex-col gap-3">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-1 flex-wrap items-center gap-2">
