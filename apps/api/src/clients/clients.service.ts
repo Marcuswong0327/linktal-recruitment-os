@@ -81,6 +81,27 @@ export class ClientsService {
     return { data, total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }
 
+  /** Distinct, non-null values already in use for a free-text field — backs the "pick existing or add new" combobox on Industry/Specialization instead of a fixed enum (both stay plain text on the record). */
+  private async findDistinctTextValues(field: 'industry' | 'specialization'): Promise<string[]> {
+    const where: Prisma.ClientWhereInput =
+      field === 'industry' ? { industry: { not: null } } : { specialization: { not: null } };
+    const rows = await this.prisma.client.findMany({
+      where,
+      select: { industry: true, specialization: true },
+      distinct: [field],
+      orderBy: { [field]: 'asc' },
+    });
+    return rows.map((r) => r[field]).filter((v): v is string => v != null);
+  }
+
+  getIndustryOptions() {
+    return this.findDistinctTextValues('industry');
+  }
+
+  getSpecializationOptions() {
+    return this.findDistinctTextValues('specialization');
+  }
+
   async findOne(id: string) {
     const client = await this.prisma.client.findUnique({ where: { id } });
     if (!client) {

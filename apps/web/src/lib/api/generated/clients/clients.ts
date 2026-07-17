@@ -412,6 +412,254 @@ export function useGetClientByDisplayId<TData = Awaited<ReturnType<typeof getCli
 
 
 
+export type getClientIndustryOptionsResponse200 = {
+  data: string[]
+  status: 200
+}
+
+export type getClientIndustryOptionsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getClientIndustryOptionsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getClientIndustryOptionsResponseSuccess = (getClientIndustryOptionsResponse200) & {
+  headers: Headers;
+};
+export type getClientIndustryOptionsResponseError = (getClientIndustryOptionsResponse400 | getClientIndustryOptionsResponse500) & {
+  headers: Headers;
+};
+
+export type getClientIndustryOptionsResponse = (getClientIndustryOptionsResponseSuccess | getClientIndustryOptionsResponseError)
+
+export const getGetClientIndustryOptionsUrl = () => {
+
+
+
+
+  return `/clients/options/industries`
+}
+
+/**
+ * @summary Distinct industry values already in use, for the Industry autocomplete
+ */
+export const getClientIndustryOptions = async ( options?: RequestInit): Promise<getClientIndustryOptionsResponse> => {
+
+  return customFetch<getClientIndustryOptionsResponse>(getGetClientIndustryOptionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClientIndustryOptionsQueryKey = () => {
+    return [
+    `/clients/options/industries`
+    ] as const;
+    }
+
+
+export const getGetClientIndustryOptionsQueryOptions = <TData = Awaited<ReturnType<typeof getClientIndustryOptions>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientIndustryOptions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClientIndustryOptionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientIndustryOptions>>> = ({ signal }) => getClientIndustryOptions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClientIndustryOptions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetClientIndustryOptionsQueryResult = NonNullable<Awaited<ReturnType<typeof getClientIndustryOptions>>>
+export type GetClientIndustryOptionsQueryError = ErrorResponse
+
+
+export function useGetClientIndustryOptions<TData = Awaited<ReturnType<typeof getClientIndustryOptions>>, TError = ErrorResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientIndustryOptions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getClientIndustryOptions>>,
+          TError,
+          Awaited<ReturnType<typeof getClientIndustryOptions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetClientIndustryOptions<TData = Awaited<ReturnType<typeof getClientIndustryOptions>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientIndustryOptions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getClientIndustryOptions>>,
+          TError,
+          Awaited<ReturnType<typeof getClientIndustryOptions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetClientIndustryOptions<TData = Awaited<ReturnType<typeof getClientIndustryOptions>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientIndustryOptions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Distinct industry values already in use, for the Industry autocomplete
+ */
+
+export function useGetClientIndustryOptions<TData = Awaited<ReturnType<typeof getClientIndustryOptions>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientIndustryOptions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetClientIndustryOptionsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getClientSpecializationOptionsResponse200 = {
+  data: string[]
+  status: 200
+}
+
+export type getClientSpecializationOptionsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getClientSpecializationOptionsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getClientSpecializationOptionsResponseSuccess = (getClientSpecializationOptionsResponse200) & {
+  headers: Headers;
+};
+export type getClientSpecializationOptionsResponseError = (getClientSpecializationOptionsResponse400 | getClientSpecializationOptionsResponse500) & {
+  headers: Headers;
+};
+
+export type getClientSpecializationOptionsResponse = (getClientSpecializationOptionsResponseSuccess | getClientSpecializationOptionsResponseError)
+
+export const getGetClientSpecializationOptionsUrl = () => {
+
+
+
+
+  return `/clients/options/specializations`
+}
+
+/**
+ * @summary Distinct specialization values already in use, for the Specialization autocomplete
+ */
+export const getClientSpecializationOptions = async ( options?: RequestInit): Promise<getClientSpecializationOptionsResponse> => {
+
+  return customFetch<getClientSpecializationOptionsResponse>(getGetClientSpecializationOptionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClientSpecializationOptionsQueryKey = () => {
+    return [
+    `/clients/options/specializations`
+    ] as const;
+    }
+
+
+export const getGetClientSpecializationOptionsQueryOptions = <TData = Awaited<ReturnType<typeof getClientSpecializationOptions>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientSpecializationOptions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClientSpecializationOptionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientSpecializationOptions>>> = ({ signal }) => getClientSpecializationOptions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClientSpecializationOptions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetClientSpecializationOptionsQueryResult = NonNullable<Awaited<ReturnType<typeof getClientSpecializationOptions>>>
+export type GetClientSpecializationOptionsQueryError = ErrorResponse
+
+
+export function useGetClientSpecializationOptions<TData = Awaited<ReturnType<typeof getClientSpecializationOptions>>, TError = ErrorResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientSpecializationOptions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getClientSpecializationOptions>>,
+          TError,
+          Awaited<ReturnType<typeof getClientSpecializationOptions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetClientSpecializationOptions<TData = Awaited<ReturnType<typeof getClientSpecializationOptions>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientSpecializationOptions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getClientSpecializationOptions>>,
+          TError,
+          Awaited<ReturnType<typeof getClientSpecializationOptions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetClientSpecializationOptions<TData = Awaited<ReturnType<typeof getClientSpecializationOptions>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientSpecializationOptions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Distinct specialization values already in use, for the Specialization autocomplete
+ */
+
+export function useGetClientSpecializationOptions<TData = Awaited<ReturnType<typeof getClientSpecializationOptions>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientSpecializationOptions>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetClientSpecializationOptionsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 export type getClientResponse200 = {
   data: ClientEntity
   status: 200

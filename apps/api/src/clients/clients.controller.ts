@@ -1,14 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  Param,
-  Patch,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
@@ -40,10 +30,35 @@ export class ClientsController {
 
   @Get('by-display-id/:displayId')
   @RequirePermission('client', 'read')
-  @ApiOperation({ operationId: 'getClientByDisplayId', summary: 'Get client by display ID (Client-XXXX)' })
+  @ApiOperation({
+    operationId: 'getClientByDisplayId',
+    summary: 'Get client by display ID (Client-XXXX)',
+  })
   @ApiResponse({ status: 200, description: 'Client found', type: ClientEntity })
   findByDisplayId(@Param('displayId') displayId: string) {
     return this.clients.findByDisplayId(displayId);
+  }
+
+  @Get('options/industries')
+  @RequirePermission('client', 'read')
+  @ApiOperation({
+    operationId: 'getClientIndustryOptions',
+    summary: 'Distinct industry values already in use, for the Industry autocomplete',
+  })
+  @ApiResponse({ status: 200, description: 'Distinct industry values', type: [String] })
+  getIndustryOptions() {
+    return this.clients.getIndustryOptions();
+  }
+
+  @Get('options/specializations')
+  @RequirePermission('client', 'read')
+  @ApiOperation({
+    operationId: 'getClientSpecializationOptions',
+    summary: 'Distinct specialization values already in use, for the Specialization autocomplete',
+  })
+  @ApiResponse({ status: 200, description: 'Distinct specialization values', type: [String] })
+  getSpecializationOptions() {
+    return this.clients.getSpecializationOptions();
   }
 
   @Get(':id')
@@ -113,7 +128,10 @@ export class ClientsController {
   @Delete(':id')
   @HttpCode(204)
   @RequirePermission('client', 'delete')
-  @ApiOperation({ operationId: 'deleteClient', summary: 'Soft-delete a client (recoverable, cascades)' })
+  @ApiOperation({
+    operationId: 'deleteClient',
+    summary: 'Soft-delete a client (recoverable, cascades)',
+  })
   @ApiResponse({ status: 204, description: 'Client soft-deleted' })
   remove(@Param('id') id: string) {
     return this.clients.remove(id);

@@ -36,6 +36,7 @@ import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ConsultantCombobox, useConsultantLookup } from '@/components/ConsultantCombobox';
+import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { PageLayout } from '@/components/app-shell/PageLayout';
@@ -46,6 +47,8 @@ import {
   useAddClientNote,
   useDeleteClientNote,
   useGetClient,
+  useGetClientIndustryOptions,
+  useGetClientSpecializationOptions,
   useUpdateClient,
   useUpdateClientNote,
 } from '@/lib/api/generated/clients/clients';
@@ -85,6 +88,43 @@ function initials(name: string) {
     .toUpperCase();
 }
 
+/** Field-level validators — mirror the API's own rules (create-client.dto.ts) so a bad edit is caught before Save instead of bouncing back as a raw server error. */
+function validateCompanyName(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return 'Company name is required.';
+  if (trimmed.length > 200) return 'Must be 200 characters or fewer.';
+  return undefined;
+}
+
+function validateWebsite(value: string): string | undefined {
+  if (!value.trim()) return undefined; // optional
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('bad protocol');
+  } catch {
+    return 'Enter a full URL, e.g. https://acme.com.';
+  }
+  return undefined;
+}
+
+function validateFeePercentage(value: string): string | undefined {
+  if (value === '') return undefined; // optional
+  const n = Number(value);
+  if (Number.isNaN(n)) return 'Must be a number.';
+  if (n < 0 || n > 100) return 'Must be between 0 and 100.';
+  return undefined;
+}
+
+// guaranteePeriod is NOT NULL in the database (defaults to 90) — unlike the
+// other fields here, clearing this one can't be saved as null, so it's
+// validated as required rather than optional.
+function validateGuaranteePeriod(value: string): string | undefined {
+  if (value === '') return 'Guarantee period is required.';
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0) return 'Must be a whole number of days, 0 or more.';
+  return undefined;
+}
+
 export function CompanyDetail({ id }: { id: string }) {
   const { data, isLoading, isError, error } = useGetClient(id);
   const company = data?.status === 200 ? data.data : undefined;
@@ -106,7 +146,9 @@ export function CompanyDetail({ id }: { id: string }) {
       <PageLayout>
         <div className="flex flex-col gap-2">
           <h1 className="font-heading text-xl font-semibold">Company not found</h1>
-          <p className="text-sm text-muted-foreground">{error?.message ?? `No company with ID ${id}.`}</p>
+          <p className="text-sm text-muted-foreground">
+            {error?.message ?? `No company with ID ${id}.`}
+          </p>
         </div>
         <div>
           <Button variant="outline" nativeButton={false} render={<Link href="/companies" />}>
@@ -146,13 +188,25 @@ function toPatch(values: {
     status: values.status,
     tobSigned: values.tobSigned,
     feePercentage: values.feePercentage === '' ? null : Number(values.feePercentage),
-    guaranteePeriod: values.guaranteePeriod === '' ? null : Number(values.guaranteePeriod),
+    // Not nullable in the DB — validated as required before this ever runs.
+    guaranteePeriod: Number(values.guaranteePeriod),
     consultantId: values.consultantId || null,
   } as unknown as UpdateClientDto;
 }
 
-function CompanyEditForm({ company, consultants }: { company: Company; consultants: ConsultantEntity[] }) {
+function CompanyEditForm({
+  company,
+  consultants,
+}: {
+  company: Company;
+  consultants: ConsultantEntity[];
+}) {
   const queryClient = useQueryClient();
+
+  const { data: industryData } = useGetClientIndustryOptions();
+  const industryOptions = industryData?.status === 200 ? industryData.data : [];
+  const { data: specializationData } = useGetClientSpecializationOptions();
+  const specializationOptions = specializationData?.status === 200 ? specializationData.data : [];
 
   const [companyName, setCompanyName] = React.useState(company.companyName);
   const [industry, setIndustry] = React.useState(company.industry ?? '');
@@ -178,6 +232,21 @@ function CompanyEditForm({ company, consultants }: { company: Company; consultan
   const [editingNoteVersion, setEditingNoteVersion] = React.useState<string | null>(null);
   const [deletingNoteId, setDeletingNoteId] = React.useState<string | null>(null);
   const [deletingNoteVersion, setDeletingNoteVersion] = React.useState<string | null>(null);
+
+  // Errors are always computed live, but only shown for a field once the user
+  // has left it (or tried to Save) — otherwise pre-existing legacy data
+  // (e.g. an imported website that isn't quite a valid URL) would show as an
+  // error the instant the page loads, before anyone's touched anything.
+  const [touched, setTouched] = React.useState<Record<string, boolean>>({});
+  const markTouched = (field: string) => setTouched((prev) => ({ ...prev, [field]: true }));
+
+  const fieldErrors = {
+    companyName: validateCompanyName(companyName),
+    website: validateWebsite(website),
+    feePercentage: validateFeePercentage(feePercentage),
+    guaranteePeriod: validateGuaranteePeriod(guaranteePeriod),
+  };
+  const hasErrors = Object.values(fieldErrors).some(Boolean);
 
   const isDirty =
     companyName !== company.companyName ||
@@ -279,6 +348,18 @@ function CompanyEditForm({ company, consultants }: { company: Company; consultan
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (hasErrors) {
+      // Reveal every error at once (not just touched ones) so a blocked Save
+      // attempt always explains itself instead of silently doing nothing.
+      setTouched((prev) => ({
+        ...prev,
+        companyName: true,
+        website: true,
+        feePercentage: true,
+        guaranteePeriod: true,
+      }));
+      return;
+    }
     updateClient.mutate({
       id: company.id,
       data: toPatch({
@@ -318,14 +399,20 @@ function CompanyEditForm({ company, consultants }: { company: Company; consultan
             </span>
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-3">
-                <h1 className="font-heading text-2xl font-semibold tracking-tight">{company.companyName}</h1>
-                <Badge variant={statusVariant[company.status]}>{clientStatusLabels[company.status]}</Badge>
+                <h1 className="font-heading text-2xl font-semibold tracking-tight">
+                  {company.companyName}
+                </h1>
+                <Badge variant={statusVariant[company.status]}>
+                  {clientStatusLabels[company.status]}
+                </Badge>
               </div>
               <span className="font-mono text-xs text-muted-foreground">{company.displayId}</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {isDirty && !updateClient.isPending ? (
+            {hasErrors && Object.keys(touched).length > 0 ? (
+              <span className="text-xs text-destructive">Fix the highlighted fields to save</span>
+            ) : isDirty && !updateClient.isPending ? (
               <span className="text-xs text-muted-foreground">Unsaved changes</span>
             ) : null}
             <Button
@@ -363,32 +450,66 @@ function CompanyEditForm({ company, consultants }: { company: Company; consultan
                 <CardDescription>Identity, industry and location.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Company name" htmlFor="companyName">
-                  <Input id="companyName" value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
-                </FormField>
-                <FormField label="Industry" htmlFor="industry">
-                  <Input id="industry" value={industry} onChange={(e) => setIndustry(e.target.value)} />
-                </FormField>
-                <FormField label="Specialization" htmlFor="specialization">
+                <FormField
+                  label="Company Name"
+                  htmlFor="companyName"
+                  required
+                  error={touched.companyName ? fieldErrors.companyName : undefined}
+                >
                   <Input
+                    id="companyName"
+                    value={companyName}
+                    onChange={(e) => setCompanyName(e.target.value)}
+                    onBlur={() => markTouched('companyName')}
+                  />
+                </FormField>
+                <FormField
+                  label="Industry"
+                  htmlFor="industry"
+                  description="The company's primary industry or sector."
+                >
+                  <CreatableCombobox
+                    id="industry"
+                    value={industry}
+                    onValueChange={setIndustry}
+                    options={industryOptions}
+                  />
+                </FormField>
+                <FormField
+                  label="Specialization"
+                  htmlFor="specialization"
+                  description="Niche within the industry, e.g. Heavy Machinery."
+                >
+                  <CreatableCombobox
                     id="specialization"
                     value={specialization}
-                    onChange={(e) => setSpecialization(e.target.value)}
+                    onValueChange={setSpecialization}
+                    options={specializationOptions}
                   />
                 </FormField>
                 <FormField label="City" htmlFor="city">
                   <Input id="city" value={city} onChange={(e) => setCity(e.target.value)} />
                 </FormField>
                 <FormField label="Country" htmlFor="country">
-                  <Input id="country" value={country} onChange={(e) => setCountry(e.target.value)} />
+                  <Input
+                    id="country"
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                  />
                 </FormField>
-                <FormField label="Website" htmlFor="website">
+                <FormField
+                  label="Website"
+                  htmlFor="website"
+                  description="Include the protocol, e.g. https://acme.com."
+                  error={touched.website ? fieldErrors.website : undefined}
+                >
                   <Input
                     id="website"
                     type="url"
                     placeholder="https://…"
                     value={website}
                     onChange={(e) => setWebsite(e.target.value)}
+                    onBlur={() => markTouched('website')}
                   />
                 </FormField>
               </CardContent>
@@ -403,7 +524,11 @@ function CompanyEditForm({ company, consultants }: { company: Company; consultan
                 <CardDescription>Relationship, terms and fee.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Relationship" htmlFor="status">
+                <FormField
+                  label="Relationship"
+                  htmlFor="status"
+                  tooltip="Cold = No Contact Yet. Warm = In Active Conversation. Traded = Placed at least One Candidate."
+                >
                   <EnumSelect
                     id="status"
                     value={status}
@@ -411,7 +536,11 @@ function CompanyEditForm({ company, consultants }: { company: Company; consultan
                     options={statusOptions}
                   />
                 </FormField>
-                <FormField label="Terms of Business" htmlFor="tobSigned">
+                <FormField
+                  label="Terms of Business"
+                  htmlFor="tobSigned"
+                  tooltip="Whether this client has signed your Terms of Business agreement."
+                >
                   <EnumSelect
                     id="tobSigned"
                     value={String(tobSigned)}
@@ -419,7 +548,12 @@ function CompanyEditForm({ company, consultants }: { company: Company; consultan
                     options={tobOptions}
                   />
                 </FormField>
-                <FormField label="Fee %" htmlFor="feePercentage">
+                <FormField
+                  label="Fee %"
+                  htmlFor="feePercentage"
+                  description="Percentage of the candidate's total package charged as placement fee."
+                  error={touched.feePercentage ? fieldErrors.feePercentage : undefined}
+                >
                   <Input
                     id="feePercentage"
                     type="number"
@@ -427,18 +561,30 @@ function CompanyEditForm({ company, consultants }: { company: Company; consultan
                     max={100}
                     value={feePercentage}
                     onChange={(e) => setFeePercentage(e.target.value)}
+                    onBlur={() => markTouched('feePercentage')}
                   />
                 </FormField>
-                <FormField label="Guarantee period (days)" htmlFor="guaranteePeriod">
+                <FormField
+                  label="Guarantee period (days)"
+                  htmlFor="guaranteePeriod"
+                  required
+                  description="Replacement window from the candidate's start date. Defaults to 90."
+                  error={touched.guaranteePeriod ? fieldErrors.guaranteePeriod : undefined}
+                >
                   <Input
                     id="guaranteePeriod"
                     type="number"
                     min={0}
                     value={guaranteePeriod}
                     onChange={(e) => setGuaranteePeriod(e.target.value)}
+                    onBlur={() => markTouched('guaranteePeriod')}
                   />
                 </FormField>
-                <FormField label="Consultant" htmlFor="consultantId">
+                <FormField
+                  label="Consultant"
+                  htmlFor="consultantId"
+                  description="The consultant who owns this client relationship."
+                >
                   <ConsultantCombobox
                     id="consultantId"
                     value={consultantId}

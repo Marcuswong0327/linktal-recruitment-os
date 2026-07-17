@@ -1186,6 +1186,106 @@
         ]
       }
     },
+    "/clients/options/industries": {
+      "get": {
+        "operationId": "getClientIndustryOptions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Distinct industry values",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Distinct industry values already in use, for the Industry autocomplete",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/options/specializations": {
+      "get": {
+        "operationId": "getClientSpecializationOptions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Distinct specialization values",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Distinct specialization values already in use, for the Specialization autocomplete",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
     "/clients/{id}": {
       "get": {
         "operationId": "getClient",

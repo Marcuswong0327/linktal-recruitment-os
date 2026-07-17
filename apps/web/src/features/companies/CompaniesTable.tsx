@@ -44,6 +44,7 @@ import {
   useConsultantLookup,
 } from '@/components/ConsultantCombobox';
 import { ConsultantFilter } from '@/components/ConsultantFilter';
+import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
@@ -52,7 +53,9 @@ import {
   getGetClientsQueryKey,
   updateClient as updateClientRequest,
   useCreateClient,
+  useGetClientIndustryOptions,
   useGetClients,
+  useGetClientSpecializationOptions,
 } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import type {
@@ -471,6 +474,11 @@ function CompanyForm({
   onSave: (values: CompanyFormValues) => void;
   onCancel: () => void;
 }) {
+  const { data: industryData } = useGetClientIndustryOptions();
+  const industryOptions = industryData?.status === 200 ? industryData.data : [];
+  const { data: specializationData } = useGetClientSpecializationOptions();
+  const specializationOptions = specializationData?.status === 200 ? specializationData.data : [];
+
   const [companyName, setCompanyName] = React.useState('');
   const [industry, setIndustry] = React.useState('');
   const [specialization, setSpecialization] = React.useState('');
@@ -512,17 +520,19 @@ function CompanyForm({
           />
         </FormField>
         <FormField label="Industry" htmlFor="company-industry">
-          <Input
+          <CreatableCombobox
             id="company-industry"
             value={industry}
-            onChange={(e) => setIndustry(e.target.value)}
+            onValueChange={setIndustry}
+            options={industryOptions}
           />
         </FormField>
         <FormField label="Specialization" htmlFor="company-specialization">
-          <Input
+          <CreatableCombobox
             id="company-specialization"
             value={specialization}
-            onChange={(e) => setSpecialization(e.target.value)}
+            onValueChange={setSpecialization}
+            options={specializationOptions}
           />
         </FormField>
         <FormField label="City" htmlFor="company-city">
