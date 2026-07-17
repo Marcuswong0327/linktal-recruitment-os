@@ -6,6 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 import type { ClientEntityStatus } from './clientEntityStatus';
+import type { ClientNoteDto } from './clientNoteDto';
 
 export interface ClientEntity {
   id: string;
@@ -27,7 +28,7 @@ export interface ClientEntity {
   guaranteePeriod: number;
   status: ClientEntityStatus;
   /** @nullable */
-  notes: string | null;
+  notes: ClientNoteDto[] | null;
   /** @nullable */
   consultantId: string | null;
   createdAt: string;

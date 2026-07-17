@@ -126,7 +126,7 @@ model Client {
   feePercentage   Float? // Fee as percentage of package (null until agreed)
   guaranteePeriod Int                 @default(90) // Guarantee period in days
   status          ClientStatus        @default(COLD)
-  notes           String?
+  notes           Json? // JSONB: [{id, content, timestamp, by, editedAt, editedBy}] — internal note timeline, newest last; edit/delete restricted to the note's author (or an admin)
   consultantId    String?
   consultant      Consultant?         @relation(fields: [consultantId], references: [id])
   createdAt       DateTime            @default(now())

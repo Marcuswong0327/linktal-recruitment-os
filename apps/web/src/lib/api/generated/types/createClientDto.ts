@@ -28,8 +28,6 @@ export interface CreateClientDto {
   guaranteePeriod?: number;
   /** Status; defaults to COLD when omitted */
   status?: CreateClientDtoStatus;
-  /** Notes */
-  notes?: string;
   /** Owning consultant ID */
   consultantId?: string;
 }

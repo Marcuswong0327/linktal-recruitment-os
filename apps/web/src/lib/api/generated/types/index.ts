@@ -6,6 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 
+export * from './addClientNoteDto';
 export * from './auditLogEntity';
 export * from './auditLogEntityChanges';
 export * from './auditLogEntityMetadata';
@@ -14,6 +15,7 @@ export * from './candidateEntityStatus';
 export * from './candidateEntityWorkHistoryItem';
 export * from './clientEntity';
 export * from './clientEntityStatus';
+export * from './clientNoteDto';
 export * from './consultantEntity';
 export * from './createCandidateDto';
 export * from './createCandidateDtoStatus';
@@ -24,6 +26,7 @@ export * from './createJobOrderDto';
 export * from './createJobOrderDtoStatus';
 export * from './createRoleDto';
 export * from './createStakeholderDto';
+export * from './deleteClientNoteParams';
 export * from './deleteRoleParams';
 export * from './errorResponse';
 export * from './getAuditLogsAction';
@@ -77,6 +80,7 @@ export * from './updateCandidateDto';
 export * from './updateCandidateDtoStatus';
 export * from './updateClientDto';
 export * from './updateClientDtoStatus';
+export * from './updateClientNoteDto';
 export * from './updateConsultantDto';
 export * from './updateConsultantDtoRoleName';
 export * from './updateJobOrderDto';

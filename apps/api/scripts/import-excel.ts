@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { PrismaClient, CandidateStatus, ClientStatus, JobOrderStatus, SubmissionStatus, PlacementStatus } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { dataFile } from './data-dir';
 
 const prisma = new PrismaClient();
@@ -22,6 +23,24 @@ function parseExcelDate(value: unknown): Date | null {
     return isNaN(parsed.getTime()) ? null : parsed;
   }
   return null;
+}
+
+// Client.notes is now a JSONB timeline ([{id, content, timestamp, by, editedAt, editedBy}])
+// — wraps a single legacy free-text value as its first (only) entry. `by` is
+// null since imported notes have no consultant attribution.
+function toNoteTimeline(content: string | null) {
+  return content
+    ? [
+        {
+          id: randomUUID(),
+          content,
+          timestamp: new Date().toISOString(),
+          by: null,
+          editedAt: null,
+          editedBy: null,
+        },
+      ]
+    : undefined;
 }
 
 // Helper to clean string values
@@ -148,7 +167,7 @@ async function importClients() {
           industry: cleanString(row.Industry),
           city: cleanString(row.City),
           website: cleanString(row.Website),
-          notes: cleanString(row.Notes),
+          notes: toNoteTimeline(cleanString(row.Notes)),
           status: mapClientStatus(cleanString(row['Status '])),
           feePercentage,
           guaranteePeriod: row['Guarantee Period '] || 90,
@@ -565,7 +584,7 @@ async function ensureClientAndJobOrder(companyName: string): Promise<{ clientId:
         displayId,
         companyName,
         status: 'WARM', // They have submissions, so at least warm
-        notes: 'Auto-created from Job Interviewing History import',
+        notes: toNoteTimeline('Auto-created from Job Interviewing History import'),
       },
     });
     console.log(`  📝 Created missing client: ${companyName} (${displayId})`);
