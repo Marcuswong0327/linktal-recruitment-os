@@ -18,13 +18,23 @@ import { ClientNoteDto } from '../dto/client-note.dto';
  * concrete shape (`JsonObject` requires a string index signature a real class
  * doesn't have), so checking it structurally against `Client` would just
  * force `notes` back down to untyped JSON.
+ *
+ * `industry`/`specialization` aren't part of the raw `Client` model (only
+ * `industryId`/`specializationId` are) — they're the FK's resolved name,
+ * added here so callers keep getting a plain string instead of having to
+ * join against `/industries`/`/specializations` themselves just to display
+ * what's already set.
  */
 export class ClientEntity implements Omit<Client, 'deletedAt' | 'deletedById' | 'notes'> {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'Client-0001' }) displayId!: string;
   @ApiProperty({ example: 'Acme Corp' }) companyName!: string;
-  @ApiProperty({ type: String, nullable: true }) industry!: string | null;
-  @ApiProperty({ type: String, nullable: true }) specialization!: string | null;
+  @ApiProperty({ type: String, nullable: true }) industryId!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Resolved industry name' })
+  industry!: string | null;
+  @ApiProperty({ type: String, nullable: true }) specializationId!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Resolved specialization name' })
+  specialization!: string | null;
   @ApiProperty({ type: String, nullable: true }) country!: string | null;
   @ApiProperty({ type: String, nullable: true }) city!: string | null;
   @ApiProperty({ type: String, nullable: true }) website!: string | null;

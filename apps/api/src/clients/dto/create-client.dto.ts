@@ -21,15 +21,15 @@ export class CreateClientDto {
   @MaxLength(200)
   companyName!: string;
 
-  @ApiPropertyOptional({ description: 'Industry', example: 'Manufacturing' })
+  @ApiPropertyOptional({ description: 'Industry ID' })
   @IsOptional()
   @IsString()
-  industry?: string;
+  industryId?: string;
 
-  @ApiPropertyOptional({ description: 'Specialization', example: 'Heavy Machinery' })
+  @ApiPropertyOptional({ description: 'Specialization ID' })
   @IsOptional()
   @IsString()
-  specialization?: string;
+  specializationId?: string;
 
   @ApiPropertyOptional({ description: 'Country', example: 'Australia' })
   @IsOptional()

@@ -18,6 +18,25 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { ClientStatusFilter, QueryClientsDto } from './dto/query-clients.dto';
 import { AddClientNoteDto, ClientNoteDto, UpdateClientNoteDto } from './dto/client-note.dto';
 
+// Industry/specialization are FK relations now, not scalars — every read
+// needs this to get the resolved name back, and every write needs it to
+// return one (ClientEntity documents them as plain `string | null`, not the
+// nested `{id, name, ...}` object Prisma would otherwise hand back).
+const CLIENT_INCLUDE = {
+  industry: { select: { name: true } },
+  specialization: { select: { name: true } },
+} satisfies Prisma.ClientInclude;
+
+type ClientWithNames = { industry: { name: string } | null; specialization: { name: string } | null };
+
+function toEntity<T extends ClientWithNames>(client: T) {
+  return {
+    ...client,
+    industry: client.industry?.name ?? null,
+    specialization: client.specialization?.name ?? null,
+  };
+}
+
 @Injectable()
 export class ClientsService {
   constructor(
@@ -39,8 +58,12 @@ export class ClientsService {
     // contains/insensitive text filters
     const contains = (value?: string) =>
       value ? { contains: value, mode: Prisma.QueryMode.insensitive } : undefined;
-    where.industry = contains(query.industry);
-    where.specialization = contains(query.specialization);
+    const containsName = (value?: string) => {
+      const filter = contains(value);
+      return filter ? { name: filter } : undefined;
+    };
+    where.industry = containsName(query.industry);
+    where.specialization = containsName(query.specialization);
     where.country = contains(query.country);
     where.city = contains(query.city);
 
@@ -74,69 +97,56 @@ export class ClientsService {
         orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
+        include: CLIENT_INCLUDE,
       }),
       this.prisma.client.count({ where }),
     ]);
 
-    return { data, total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
-  }
-
-  /** Distinct, non-null values already in use for a free-text field — backs the "pick existing or add new" combobox on Industry/Specialization instead of a fixed enum (both stay plain text on the record). */
-  private async findDistinctTextValues(field: 'industry' | 'specialization'): Promise<string[]> {
-    const where: Prisma.ClientWhereInput =
-      field === 'industry' ? { industry: { not: null } } : { specialization: { not: null } };
-    const rows = await this.prisma.client.findMany({
-      where,
-      select: { industry: true, specialization: true },
-      distinct: [field],
-      orderBy: { [field]: 'asc' },
-    });
-    return rows.map((r) => r[field]).filter((v): v is string => v != null);
-  }
-
-  getIndustryOptions() {
-    return this.findDistinctTextValues('industry');
-  }
-
-  getSpecializationOptions() {
-    return this.findDistinctTextValues('specialization');
+    return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }
 
   async findOne(id: string) {
-    const client = await this.prisma.client.findUnique({ where: { id } });
+    const client = await this.prisma.client.findUnique({ where: { id }, include: CLIENT_INCLUDE });
     if (!client) {
       throw new NotFoundException(`Client ${id} not found`);
     }
-    return client;
+    return toEntity(client);
   }
 
   async findByDisplayId(displayId: string) {
-    const client = await this.prisma.client.findUnique({ where: { displayId } });
+    const client = await this.prisma.client.findUnique({
+      where: { displayId },
+      include: CLIENT_INCLUDE,
+    });
     if (!client) {
       throw new NotFoundException(`Client ${displayId} not found`);
     }
-    return client;
+    return toEntity(client);
   }
 
-  create(dto: CreateClientDto) {
+  async create(dto: CreateClientDto) {
     // displayId is assigned by the DB (Client_displayId_seq default).
-    return this.prisma.client.create({ data: dto });
+    const client = await this.prisma.client.create({ data: dto, include: CLIENT_INCLUDE });
+    return toEntity(client);
   }
 
   async update(id: string, dto: UpdateClientDto) {
     await this.findOne(id);
-    return this.prisma.client.update({ where: { id }, data: dto });
+    const client = await this.prisma.client.update({ where: { id }, data: dto, include: CLIENT_INCLUDE });
+    return toEntity(client);
   }
 
   private getNotes(client: { notes: unknown }): ClientNoteDto[] {
     return Array.isArray(client.notes) ? (client.notes as unknown as ClientNoteDto[]) : [];
   }
 
-  private saveNotes(id: string, notes: ClientNoteDto[]) {
-    return this.prisma.client.update({
+  private async saveNotes(id: string, notes: ClientNoteDto[]) {
+    const client = await this.prisma.client.update({
       where: { id },
       data: { notes: notes as unknown as Prisma.InputJsonValue },
+      include: CLIENT_INCLUDE,
     });
+    return toEntity(client);
   }
 
   /** Only the note's own author, or an admin, may edit/delete it. */
@@ -268,10 +278,12 @@ export class ClientsService {
     if (!existing.deletedAt) {
       throw new BadRequestException(`Client ${id} is not deleted`);
     }
-    return this.prisma.client.update({
+    const client = await this.prisma.client.update({
       where: { id },
       data: { deletedAt: null, deletedById: null },
+      include: CLIENT_INCLUDE,
     });
+    return toEntity(client);
   }
 
   /**

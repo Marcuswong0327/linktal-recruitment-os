@@ -10,10 +10,10 @@ import type { UpdateClientDtoStatus } from './updateClientDtoStatus';
 export interface UpdateClientDto {
   /** Company name */
   companyName?: string;
-  /** Industry */
-  industry?: string;
-  /** Specialization */
-  specialization?: string;
+  /** Industry ID */
+  industryId?: string;
+  /** Specialization ID */
+  specializationId?: string;
   /** Country */
   country?: string;
   /** City */

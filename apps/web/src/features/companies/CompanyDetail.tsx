@@ -47,12 +47,20 @@ import {
   useAddClientNote,
   useDeleteClientNote,
   useGetClient,
-  useGetClientIndustryOptions,
-  useGetClientSpecializationOptions,
   useUpdateClient,
   useUpdateClientNote,
 } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
+import {
+  getGetIndustriesQueryKey,
+  useCreateIndustry,
+  useGetIndustries,
+} from '@/lib/api/generated/industries/industries';
+import {
+  getGetSpecializationsQueryKey,
+  useCreateSpecialization,
+  useGetSpecializations,
+} from '@/lib/api/generated/specializations/specializations';
 import type { ConsultantEntity, UpdateClientDto } from '@/lib/api/generated/types';
 import { statusOptions, statusVariant, tobOptions } from './columns';
 import { type ClientStatus, type Company, clientStatusLabels } from './schema';
@@ -75,7 +83,9 @@ function noteVersion(note: { editedAt: string | null; timestamp: string }) {
 }
 
 function isConflictError(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === 409;
+  return (
+    typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === 409
+  );
 }
 
 function initials(name: string) {
@@ -167,8 +177,8 @@ export function CompanyDetail({ id }: { id: string }) {
 /** Empty strings/inputs become `null` (not omitted) so a cleared field actually saves as cleared. */
 function toPatch(values: {
   companyName: string;
-  industry: string;
-  specialization: string;
+  industryId: string;
+  specializationId: string;
   city: string;
   country: string;
   website: string;
@@ -180,8 +190,8 @@ function toPatch(values: {
 }) {
   return {
     companyName: values.companyName,
-    industry: values.industry || null,
-    specialization: values.specialization || null,
+    industryId: values.industryId || null,
+    specializationId: values.specializationId || null,
     city: values.city || null,
     country: values.country || null,
     website: values.website || null,
@@ -203,14 +213,37 @@ function CompanyEditForm({
 }) {
   const queryClient = useQueryClient();
 
-  const { data: industryData } = useGetClientIndustryOptions();
-  const industryOptions = industryData?.status === 200 ? industryData.data : [];
-  const { data: specializationData } = useGetClientSpecializationOptions();
-  const specializationOptions = specializationData?.status === 200 ? specializationData.data : [];
+  const { data: industryData } = useGetIndustries();
+  const industries = industryData?.status === 200 ? industryData.data : [];
+  const { data: specializationData } = useGetSpecializations();
+  const specializations = specializationData?.status === 200 ? specializationData.data : [];
+
+  const createIndustry = useCreateIndustry({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetIndustriesQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to add industry'),
+    },
+  });
+  const createSpecialization = useCreateSpecialization({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetSpecializationsQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to add specialization'),
+    },
+  });
+  async function handleCreateIndustry(name: string) {
+    const res = await createIndustry.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add industry');
+    return res.data;
+  }
+  async function handleCreateSpecialization(name: string) {
+    const res = await createSpecialization.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add specialization');
+    return res.data;
+  }
 
   const [companyName, setCompanyName] = React.useState(company.companyName);
-  const [industry, setIndustry] = React.useState(company.industry ?? '');
-  const [specialization, setSpecialization] = React.useState(company.specialization ?? '');
+  const [industryId, setIndustryId] = React.useState(company.industryId ?? '');
+  const [specializationId, setSpecializationId] = React.useState(company.specializationId ?? '');
   const [city, setCity] = React.useState(company.city ?? '');
   const [country, setCountry] = React.useState(company.country ?? '');
   const [website, setWebsite] = React.useState(company.website ?? '');
@@ -250,8 +283,8 @@ function CompanyEditForm({
 
   const isDirty =
     companyName !== company.companyName ||
-    industry !== (company.industry ?? '') ||
-    specialization !== (company.specialization ?? '') ||
+    industryId !== (company.industryId ?? '') ||
+    specializationId !== (company.specializationId ?? '') ||
     city !== (company.city ?? '') ||
     country !== (company.country ?? '') ||
     website !== (company.website ?? '') ||
@@ -329,7 +362,12 @@ function CompanyEditForm({
     },
   });
 
-  function startEditingNote(note: { id: string; content: string; editedAt: string | null; timestamp: string }) {
+  function startEditingNote(note: {
+    id: string;
+    content: string;
+    editedAt: string | null;
+    timestamp: string;
+  }) {
     setEditingNoteId(note.id);
     setEditDraft(note.content);
     setEditingNoteVersion(noteVersion(note));
@@ -364,8 +402,8 @@ function CompanyEditForm({
       id: company.id,
       data: toPatch({
         companyName,
-        industry,
-        specialization,
+        industryId,
+        specializationId,
         city,
         country,
         website,
@@ -470,9 +508,10 @@ function CompanyEditForm({
                 >
                   <CreatableCombobox
                     id="industry"
-                    value={industry}
-                    onValueChange={setIndustry}
-                    options={industryOptions}
+                    value={industryId}
+                    onValueChange={setIndustryId}
+                    options={industries}
+                    onCreate={handleCreateIndustry}
                   />
                 </FormField>
                 <FormField
@@ -482,9 +521,10 @@ function CompanyEditForm({
                 >
                   <CreatableCombobox
                     id="specialization"
-                    value={specialization}
-                    onValueChange={setSpecialization}
-                    options={specializationOptions}
+                    value={specializationId}
+                    onValueChange={setSpecializationId}
+                    options={specializations}
+                    onCreate={handleCreateSpecialization}
                   />
                 </FormField>
                 <FormField label="City" htmlFor="city">
@@ -703,7 +743,9 @@ function CompanyEditForm({
                               <>
                                 {' '}
                                 · edited by{' '}
-                                {note.editedBy ? consultantLabelFor(note.editedBy) : 'Imported'} ·{' '}
+                                {note.editedBy
+                                  ? consultantLabelFor(note.editedBy)
+                                  : 'Imported'} ·{' '}
                                 {noteDateFormatter.format(new Date(note.editedAt))}
                               </>
                             ) : null}

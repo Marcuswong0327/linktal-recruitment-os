@@ -39,28 +39,6 @@ export class ClientsController {
     return this.clients.findByDisplayId(displayId);
   }
 
-  @Get('options/industries')
-  @RequirePermission('client', 'read')
-  @ApiOperation({
-    operationId: 'getClientIndustryOptions',
-    summary: 'Distinct industry values already in use, for the Industry autocomplete',
-  })
-  @ApiResponse({ status: 200, description: 'Distinct industry values', type: [String] })
-  getIndustryOptions() {
-    return this.clients.getIndustryOptions();
-  }
-
-  @Get('options/specializations')
-  @RequirePermission('client', 'read')
-  @ApiOperation({
-    operationId: 'getClientSpecializationOptions',
-    summary: 'Distinct specialization values already in use, for the Specialization autocomplete',
-  })
-  @ApiResponse({ status: 200, description: 'Distinct specialization values', type: [String] })
-  getSpecializationOptions() {
-    return this.clients.getSpecializationOptions();
-  }
-
   @Get(':id')
   @RequirePermission('client', 'read')
   @ApiOperation({ operationId: 'getClient', summary: 'Get client by ID' })

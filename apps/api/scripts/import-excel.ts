@@ -157,6 +157,19 @@ async function importClients() {
       if (match) feePercentage = parseInt(match[1], 10);
     }
 
+    // Industry is now a reference table, not free text — upsert-by-name to
+    // reuse an existing row (or create one) and link by id.
+    const industryName = cleanString(row.Industry);
+    const industryId = industryName
+      ? (
+          await prisma.industry.upsert({
+            where: { name: industryName },
+            create: { name: industryName },
+            update: {},
+          })
+        ).id
+      : undefined;
+
     try {
       await prisma.client.upsert({
         where: { displayId },
@@ -164,7 +177,7 @@ async function importClients() {
           displayId,
           companyName,
           country: cleanString(row.Country),
-          industry: cleanString(row.Industry),
+          industryId,
           city: cleanString(row.City),
           website: cleanString(row.Website),
           notes: toNoteTimeline(cleanString(row.Notes)),
@@ -175,7 +188,7 @@ async function importClients() {
         update: {
           companyName,
           country: cleanString(row.Country),
-          industry: cleanString(row.Industry),
+          industryId,
           city: cleanString(row.City),
           status: mapClientStatus(cleanString(row['Status '])),
         },

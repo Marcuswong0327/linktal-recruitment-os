@@ -53,11 +53,19 @@ import {
   getGetClientsQueryKey,
   updateClient as updateClientRequest,
   useCreateClient,
-  useGetClientIndustryOptions,
   useGetClients,
-  useGetClientSpecializationOptions,
 } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
+import {
+  getGetIndustriesQueryKey,
+  useCreateIndustry,
+  useGetIndustries,
+} from '@/lib/api/generated/industries/industries';
+import {
+  getGetSpecializationsQueryKey,
+  useCreateSpecialization,
+  useGetSpecializations,
+} from '@/lib/api/generated/specializations/specializations';
 import type {
   ConsultantEntity,
   GetClientsStatus,
@@ -71,8 +79,8 @@ const PAGE_SIZE = 20;
 /** Editable fields shared by the create and edit forms — no `id`, since create doesn't have one yet. */
 interface CompanyFormValues {
   companyName: string;
-  industry: string | null;
-  specialization: string | null;
+  industryId: string | null;
+  specializationId: string | null;
   city: string | null;
   country: string | null;
   status: ClientStatus;
@@ -166,8 +174,8 @@ export function CompaniesTable({
     createClient.mutate({
       data: {
         companyName: values.companyName,
-        industry: values.industry ?? undefined,
-        specialization: values.specialization ?? undefined,
+        industryId: values.industryId ?? undefined,
+        specializationId: values.specializationId ?? undefined,
         city: values.city ?? undefined,
         country: values.country ?? undefined,
         status: values.status,
@@ -475,14 +483,39 @@ function CompanyForm({
   onSave: (values: CompanyFormValues) => void;
   onCancel: () => void;
 }) {
-  const { data: industryData } = useGetClientIndustryOptions();
-  const industryOptions = industryData?.status === 200 ? industryData.data : [];
-  const { data: specializationData } = useGetClientSpecializationOptions();
-  const specializationOptions = specializationData?.status === 200 ? specializationData.data : [];
+  const queryClient = useQueryClient();
+
+  const { data: industryData } = useGetIndustries();
+  const industries = industryData?.status === 200 ? industryData.data : [];
+  const { data: specializationData } = useGetSpecializations();
+  const specializations = specializationData?.status === 200 ? specializationData.data : [];
+
+  const createIndustry = useCreateIndustry({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetIndustriesQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to add industry'),
+    },
+  });
+  const createSpecialization = useCreateSpecialization({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetSpecializationsQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to add specialization'),
+    },
+  });
+  async function handleCreateIndustry(name: string) {
+    const res = await createIndustry.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add industry');
+    return res.data;
+  }
+  async function handleCreateSpecialization(name: string) {
+    const res = await createSpecialization.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add specialization');
+    return res.data;
+  }
 
   const [companyName, setCompanyName] = React.useState('');
-  const [industry, setIndustry] = React.useState('');
-  const [specialization, setSpecialization] = React.useState('');
+  const [industryId, setIndustryId] = React.useState('');
+  const [specializationId, setSpecializationId] = React.useState('');
   const [city, setCity] = React.useState('');
   const [country, setCountry] = React.useState('');
   const [status, setStatus] = React.useState<ClientStatus>('COLD');
@@ -494,8 +527,8 @@ function CompanyForm({
     e.preventDefault();
     onSave({
       companyName,
-      industry: industry || null,
-      specialization: specialization || null,
+      industryId: industryId || null,
+      specializationId: specializationId || null,
       city: city || null,
       country: country || null,
       status,
@@ -523,17 +556,19 @@ function CompanyForm({
         <FormField label="Industry" htmlFor="company-industry">
           <CreatableCombobox
             id="company-industry"
-            value={industry}
-            onValueChange={setIndustry}
-            options={industryOptions}
+            value={industryId}
+            onValueChange={setIndustryId}
+            options={industries}
+            onCreate={handleCreateIndustry}
           />
         </FormField>
         <FormField label="Specialization" htmlFor="company-specialization">
           <CreatableCombobox
             id="company-specialization"
-            value={specialization}
-            onValueChange={setSpecialization}
-            options={specializationOptions}
+            value={specializationId}
+            onValueChange={setSpecializationId}
+            options={specializations}
+            onCreate={handleCreateSpecialization}
           />
         </FormField>
         <FormField label="City" htmlFor="company-city">

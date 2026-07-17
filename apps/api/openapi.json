@@ -1186,106 +1186,6 @@
         ]
       }
     },
-    "/clients/options/industries": {
-      "get": {
-        "operationId": "getClientIndustryOptions",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Distinct industry values",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Distinct industry values already in use, for the Industry autocomplete",
-        "tags": [
-          "Clients"
-        ]
-      }
-    },
-    "/clients/options/specializations": {
-      "get": {
-        "operationId": "getClientSpecializationOptions",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Distinct specialization values",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Distinct specialization values already in use, for the Specialization autocomplete",
-        "tags": [
-          "Clients"
-        ]
-      }
-    },
     "/clients/{id}": {
       "get": {
         "operationId": "getClient",
@@ -3797,6 +3697,216 @@
         ]
       }
     },
+    "/industries": {
+      "get": {
+        "operationId": "getIndustries",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Active industries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IndustryEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List active industries",
+        "tags": [
+          "Industries"
+        ]
+      },
+      "post": {
+        "operationId": "createIndustry",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIndustryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Industry created (or already existed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndustryEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create an industry, or return the existing one with that name",
+        "tags": [
+          "Industries"
+        ]
+      }
+    },
+    "/specializations": {
+      "get": {
+        "operationId": "getSpecializations",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Active specializations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SpecializationEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List active specializations",
+        "tags": [
+          "Specializations"
+        ]
+      },
+      "post": {
+        "operationId": "createSpecialization",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSpecializationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Specialization created (or already existed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecializationEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a specialization, or return the existing one with that name",
+        "tags": [
+          "Specializations"
+        ]
+      }
+    },
     "/audit-logs": {
       "get": {
         "operationId": "getAuditLogs",
@@ -4577,13 +4687,23 @@
             "type": "string",
             "example": "Acme Corp"
           },
+          "industryId": {
+            "type": "string",
+            "nullable": true
+          },
           "industry": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved industry name"
+          },
+          "specializationId": {
             "type": "string",
             "nullable": true
           },
           "specialization": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "description": "Resolved specialization name"
           },
           "country": {
             "type": "string",
@@ -4642,7 +4762,9 @@
           "id",
           "displayId",
           "companyName",
+          "industryId",
           "industry",
+          "specializationId",
           "specialization",
           "country",
           "city",
@@ -4703,15 +4825,13 @@
             "description": "Company name",
             "example": "Acme Corp"
           },
-          "industry": {
+          "industryId": {
             "type": "string",
-            "description": "Industry",
-            "example": "Manufacturing"
+            "description": "Industry ID"
           },
-          "specialization": {
+          "specializationId": {
             "type": "string",
-            "description": "Specialization",
-            "example": "Heavy Machinery"
+            "description": "Specialization ID"
           },
           "country": {
             "type": "string",
@@ -4771,15 +4891,13 @@
             "description": "Company name",
             "example": "Acme Corp"
           },
-          "industry": {
+          "industryId": {
             "type": "string",
-            "description": "Industry",
-            "example": "Manufacturing"
+            "description": "Industry ID"
           },
-          "specialization": {
+          "specializationId": {
             "type": "string",
-            "description": "Specialization",
-            "example": "Heavy Machinery"
+            "description": "Specialization ID"
           },
           "country": {
             "type": "string",
@@ -5735,6 +5853,92 @@
           "action",
           "description",
           "createdAt"
+        ]
+      },
+      "IndustryEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "Manufacturing"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateIndustryDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Industry name",
+            "example": "Manufacturing"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "SpecializationEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "Blockchain Services"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateSpecializationDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Specialization name",
+            "example": "Blockchain Services"
+          }
+        },
+        "required": [
+          "name"
         ]
       },
       "AuditLogEntity": {

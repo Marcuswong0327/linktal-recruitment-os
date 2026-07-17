@@ -13,8 +13,18 @@ export interface ClientEntity {
   displayId: string;
   companyName: string;
   /** @nullable */
+  industryId: string | null;
+  /**
+     * Resolved industry name
+     * @nullable
+     */
   industry: string | null;
   /** @nullable */
+  specializationId: string | null;
+  /**
+     * Resolved specialization name
+     * @nullable
+     */
   specialization: string | null;
   /** @nullable */
   country: string | null;

@@ -7,7 +7,13 @@ import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 
 describe('ClientsService.create', () => {
   it('creates without setting displayId (DB sequence owns it) and returns the row', async () => {
-    const created = { id: 'cl1', displayId: 'Client-0101', companyName: 'Acme Corp' };
+    const created = {
+      id: 'cl1',
+      displayId: 'Client-0101',
+      companyName: 'Acme Corp',
+      industry: null,
+      specialization: null,
+    };
     const create = jest.fn().mockResolvedValue(created);
     const prisma = { client: { create } } as unknown as ExtendedPrismaClient;
     const base = {} as unknown as PrismaService;
@@ -18,7 +24,7 @@ describe('ClientsService.create', () => {
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0].data).not.toHaveProperty('displayId');
-    expect(result).toBe(created);
+    expect(result).toEqual(created);
   });
 });
 
@@ -87,7 +93,7 @@ describe('ClientsService.update', () => {
     // runtime) — same gap the frontend casts around.
     const dto = {
       consultantId: null,
-      industry: null,
+      industryId: null,
       city: null,
       country: null,
       feePercentage: null,
@@ -95,10 +101,14 @@ describe('ClientsService.update', () => {
 
     await service.update('cl1', dto);
 
-    expect(update).toHaveBeenCalledWith({ where: { id: 'cl1' }, data: dto });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'cl1' },
+      data: dto,
+      include: expect.any(Object),
+    });
     const savedData = update.mock.calls[0][0].data;
     expect(savedData.consultantId).toBeNull();
-    expect(savedData.industry).toBeNull();
+    expect(savedData.industryId).toBeNull();
     expect(savedData.city).toBeNull();
     expect(savedData.country).toBeNull();
     expect(savedData.feePercentage).toBeNull();

@@ -113,33 +113,62 @@ model Consultant {
 // CLIENT (Companies hiring)
 // ============================================================================
 
+// Reference table for Client.industry — a fixed row instead of free text, so
+// values stay consistent and reusable. No admin management page: the company
+// form's combobox doubles as the catalog editor (pick existing or type new,
+// which creates a row here). isActive isn't surfaced anywhere yet — it's
+// forward-looking, for when hiding one from the picker without deleting it
+// (and orphaning clients that reference it) becomes a real need.
+model Industry {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  clients   Client[]
+}
+
+// Same as Industry, for Client.specialization.
+model Specialization {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  clients   Client[]
+}
+
 model Client {
-  id              String              @id @default(cuid())
-  displayId       String              @unique @default(dbgenerated("('Client-'::text || lpad((nextval('\"Client_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Client-####
-  companyName     String
-  industry        String?
-  specialization  String?
-  country         String?
-  city            String?
-  website         String?
-  tobSigned       Boolean             @default(false) // Terms of Business signed
-  feePercentage   Float? // Fee as percentage of package (null until agreed)
-  guaranteePeriod Int                 @default(90) // Guarantee period in days
-  status          ClientStatus        @default(COLD)
-  notes           Json? // JSONB: [{id, content, timestamp, by, editedAt, editedBy}] — internal note timeline, newest last; edit/delete restricted to the note's author (or an admin)
-  consultantId    String?
-  consultant      Consultant?         @relation(fields: [consultantId], references: [id])
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  deletedAt       DateTime? // Soft delete: null = live
-  deletedById     String? // Logical ref to Consultant.id (no FK)
-  stakeholders    Stakeholder[]
-  jobResearch     ClientJobResearch[]
-  jobOrders       JobOrder[]
+  id               String              @id @default(cuid())
+  displayId        String              @unique @default(dbgenerated("('Client-'::text || lpad((nextval('\"Client_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Client-####
+  companyName      String
+  industryId       String?
+  industry         Industry?           @relation(fields: [industryId], references: [id], onDelete: SetNull)
+  specializationId String?
+  specialization   Specialization?     @relation(fields: [specializationId], references: [id], onDelete: SetNull)
+  country          String?
+  city             String?
+  website          String?
+  tobSigned        Boolean             @default(false) // Terms of Business signed
+  feePercentage    Float? // Fee as percentage of package (null until agreed)
+  guaranteePeriod  Int                 @default(90) // Guarantee period in days
+  status           ClientStatus        @default(COLD)
+  notes            Json? // JSONB: [{id, content, timestamp, by, editedAt, editedBy}] — internal note timeline, newest last; edit/delete restricted to the note's author (or an admin)
+  consultantId     String?
+  consultant       Consultant?         @relation(fields: [consultantId], references: [id])
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  deletedAt        DateTime? // Soft delete: null = live
+  deletedById      String? // Logical ref to Consultant.id (no FK)
+  stakeholders     Stakeholder[]
+  jobResearch      ClientJobResearch[]
+  jobOrders        JobOrder[]
 
   @@index([status])
   @@index([consultantId])
   @@index([deletedAt])
+  @@index([industryId])
+  @@index([specializationId])
 }
 
 // ============================================================================
