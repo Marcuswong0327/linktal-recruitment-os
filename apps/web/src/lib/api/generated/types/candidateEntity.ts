@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { CandidateEntityNotesItem } from './candidateEntityNotesItem';
 import type { CandidateEntityStatus } from './candidateEntityStatus';
 import type { CandidateEntityWorkHistoryItem } from './candidateEntityWorkHistoryItem';
 
@@ -25,8 +26,18 @@ export interface CandidateEntity {
   /** @nullable */
   city: string | null;
   /** @nullable */
+  industryId: string | null;
+  /**
+     * Resolved industry name
+     * @nullable
+     */
   industry: string | null;
   /** @nullable */
+  roleTypeId: string | null;
+  /**
+     * Resolved role type name
+     * @nullable
+     */
   roleType: string | null;
   /** @nullable */
   currentPosition: string | null;
@@ -45,11 +56,21 @@ export interface CandidateEntity {
      * @nullable
      */
   workHistory: CandidateEntityWorkHistoryItem[] | null;
-  /** @nullable */
-  specializations: string[] | null;
+  /**
+     * Free-entry skill tags
+     * @nullable
+     */
+  skills: string[] | null;
+  /** Resolved specialization names */
+  specializations: string[];
+  /** Specialization IDs backing `specializations` — what an editable multi-select actually binds to */
+  specializationIds: string[];
   status: CandidateEntityStatus;
-  /** @nullable */
-  notes: string | null;
+  /**
+     * [{ content, timestamp, by }]
+     * @nullable
+     */
+  notes: CandidateEntityNotesItem[] | null;
   /** @nullable */
   consultantId: string | null;
   /**

@@ -32,6 +32,8 @@ interface DataGridFacetedFilterProps {
   onChange: (values: string[]) => void;
   /** Selecting a value replaces the selection instead of adding to it. */
   single?: boolean;
+  /** Overrides the trigger button's layout (e.g. `w-full justify-between` for a full-width search-gate dropdown instead of the compact toolbar pill). */
+  triggerClassName?: string;
 }
 
 export function DataGridFacetedFilter({
@@ -40,6 +42,7 @@ export function DataGridFacetedFilter({
   selected,
   onChange,
   single = false,
+  triggerClassName,
 }: DataGridFacetedFilterProps) {
   const selectedSet = new Set(selected);
 
@@ -69,6 +72,7 @@ export function DataGridFacetedFilter({
               // Active state stays neutral — the selected value's own pill
               // carries the semantic color.
               selectedSet.size > 0 && 'border-solid',
+              triggerClassName,
             )}
           />
         }

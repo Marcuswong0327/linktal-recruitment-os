@@ -11,6 +11,7 @@ import {
   Phone,
   Tag,
   User,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -27,6 +28,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { FormField } from '@/components/FormField';
 import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
 import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
@@ -37,6 +39,17 @@ import {
   getGetCandidatesQueryKey,
   getGetCandidateQueryKey,
 } from '@/lib/api/generated/candidates/candidates';
+import {
+  getGetCandidateRoleTypesQueryKey,
+  useCreateCandidateRoleType,
+  useGetCandidateRoleTypes,
+} from '@/lib/api/generated/candidate-role-types/candidate-role-types';
+import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@/lib/api/generated/industries/industries';
+import {
+  getGetSpecializationsQueryKey,
+  useCreateSpecialization,
+  useGetSpecializations,
+} from '@/lib/api/generated/specializations/specializations';
 import type { CreateCandidateContactHistoryDto, UpdateCandidateDto } from '@/lib/api/generated/types';
 import { contactTypeLabels, type ContactType } from '@/lib/contact-types';
 import {
@@ -44,9 +57,6 @@ import {
   candidateStatusLabels,
   candidateStatusVariants,
 } from './schema';
-
-const textareaClass =
-  'min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30';
 
 function initials(name: string) {
   return name
@@ -101,6 +111,14 @@ function cleanPatch(values: UpdateCandidateDto): UpdateCandidateDto {
   ) as UpdateCandidateDto;
 }
 
+/** True when two id arrays hold the same set, ignoring order. */
+function sameIds(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((id, i) => id === sortedB[i]);
+}
+
 function CandidateEditForm({ candidate }: { candidate: Candidate }) {
   const queryClient = useQueryClient();
 
@@ -114,17 +132,71 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
         mobile: candidate.mobile ?? '',
         country: candidate.country ?? '',
         city: candidate.city ?? '',
-        industry: candidate.industry ?? '',
-        roleType: candidate.roleType ?? '',
         currentPosition: candidate.currentPosition ?? '',
         currentCompany: candidate.currentCompany ?? '',
         yearsExperience: candidate.yearsExperience ?? undefined,
         salaryExpectation: candidate.salaryExpectation ?? '',
         linkedinUrl: candidate.linkedinUrl ?? '',
         resumeUrl: candidate.resumeUrl ?? '',
-        notes: candidate.notes ?? '',
       },
     });
+
+  // Industry/role type/specializations are reference-table pickers, not
+  // plain registered inputs — tracked as their own state (like
+  // CompanyDetail's industryId/specializationId) and merged into the patch
+  // on submit, since RHF's dirty-tracking doesn't see them.
+  const [industryId, setIndustryId] = React.useState(candidate.industryId ?? '');
+  const [roleTypeId, setRoleTypeId] = React.useState(candidate.roleTypeId ?? '');
+  const [specializationIds, setSpecializationIds] = React.useState(candidate.specializationIds);
+
+  const { data: industryData } = useGetIndustries();
+  const industries = industryData?.status === 200 ? industryData.data : [];
+  const { data: roleTypeData } = useGetCandidateRoleTypes();
+  const roleTypes = roleTypeData?.status === 200 ? roleTypeData.data : [];
+  const { data: specializationData } = useGetSpecializations();
+  const specializations = specializationData?.status === 200 ? specializationData.data : [];
+  const specializationById = React.useMemo(() => new Map(specializations.map((s) => [s.id, s])), [specializations]);
+
+  const createIndustry = useCreateIndustry({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetIndustriesQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to add industry'),
+    },
+  });
+  const createRoleType = useCreateCandidateRoleType({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetCandidateRoleTypesQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to add role type'),
+    },
+  });
+  const createSpecialization = useCreateSpecialization({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetSpecializationsQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to add specialization'),
+    },
+  });
+
+  async function handleCreateIndustry(name: string) {
+    const res = await createIndustry.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add industry');
+    return res.data;
+  }
+  async function handleCreateRoleType(name: string) {
+    const res = await createRoleType.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add role type');
+    return res.data;
+  }
+  async function handleCreateSpecialization(name: string) {
+    const res = await createSpecialization.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add specialization');
+    return res.data;
+  }
+
+  const isDirty =
+    formState.isDirty ||
+    industryId !== (candidate.industryId ?? '') ||
+    roleTypeId !== (candidate.roleTypeId ?? '') ||
+    !sameIds(specializationIds, candidate.specializationIds);
 
   const updateCandidate = useUpdateCandidate({
     mutation: {
@@ -142,7 +214,15 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
   });
 
   const onSubmit = handleSubmit((values) => {
-    updateCandidate.mutate({ id: candidate.id, data: cleanPatch(values) });
+    updateCandidate.mutate({
+      id: candidate.id,
+      data: {
+        ...cleanPatch(values),
+        industryId: industryId || null,
+        roleTypeId: roleTypeId || null,
+        specializationIds,
+      } as UpdateCandidateDto,
+    });
   });
 
   const [loggingContact, setLoggingContact] = React.useState(false);
@@ -206,7 +286,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {formState.isDirty && !updateCandidate.isPending ? (
+            {isDirty && !updateCandidate.isPending ? (
               <span className="text-xs text-muted-foreground">Unsaved changes</span>
             ) : null}
             <Button type="button" variant="outline" size="lg" onClick={() => setLoggingContact(true)}>
@@ -217,7 +297,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
               type="submit"
               form="candidate-form"
               size="lg"
-              disabled={updateCandidate.isPending || !formState.isDirty}
+              disabled={updateCandidate.isPending || !isDirty}
             >
               {updateCandidate.isPending ? 'Saving…' : 'Save changes'}
             </Button>
@@ -278,10 +358,24 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   <Input id="currentCompany" {...register('currentCompany')} />
                 </FormField>
                 <FormField label="Industry" htmlFor="industry">
-                  <Input id="industry" {...register('industry')} />
+                  <CreatableCombobox
+                    id="industry"
+                    value={industryId}
+                    onValueChange={setIndustryId}
+                    options={industries}
+                    onCreate={handleCreateIndustry}
+                    placeholder="Select industry…"
+                  />
                 </FormField>
                 <FormField label="Role type" htmlFor="roleType">
-                  <Input id="roleType" {...register('roleType')} />
+                  <CreatableCombobox
+                    id="roleType"
+                    value={roleTypeId}
+                    onValueChange={setRoleTypeId}
+                    options={roleTypes}
+                    onCreate={handleCreateRoleType}
+                    placeholder="Select role type…"
+                  />
                 </FormField>
                 <FormField label="Years of experience" htmlFor="yearsExperience">
                   <Input
@@ -312,12 +406,25 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                 <CardDescription>Internal notes — not visible to clients.</CardDescription>
               </CardHeader>
               <CardContent>
-                <textarea
-                  id="notes"
-                  aria-label="Notes"
-                  className={textareaClass}
-                  {...register('notes')}
-                />
+                {candidate.notes?.length ? (
+                  <ul className="flex flex-col gap-3">
+                    {[...candidate.notes].reverse().map((raw, i) => {
+                      const note = raw as { content?: string; timestamp?: string };
+                      return (
+                        <li key={i} className="rounded-md border border-border bg-muted/30 px-3 py-2">
+                          <p className="text-sm whitespace-pre-wrap">{note.content ?? '—'}</p>
+                          {note.timestamp ? (
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(note.timestamp).toLocaleString()}
+                            </span>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No notes yet.</p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -369,16 +476,35 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   Specializations
                 </CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-wrap gap-1.5">
-                {candidate.specializations?.length ? (
-                  candidate.specializations.map((tag) => (
-                    <Badge key={tag} variant="muted">
-                      {tag}
-                    </Badge>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">No specializations recorded.</p>
-                )}
+              <CardContent className="flex flex-col gap-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {specializationIds.length > 0 ? (
+                    specializationIds.map((id) => (
+                      <Badge key={id} variant="muted" className="gap-1">
+                        {specializationById.get(id)?.name ?? id}
+                        <button
+                          type="button"
+                          aria-label="Remove specialization"
+                          onClick={() => setSpecializationIds((prev) => prev.filter((s) => s !== id))}
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </Badge>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No specializations recorded.</p>
+                  )}
+                </div>
+                {/* value is always '' — this is an "add one" picker, not a
+                    single-select; onCreate/onValueChange append instead of
+                    replacing, and already-selected options are filtered out. */}
+                <CreatableCombobox
+                  value=""
+                  onValueChange={(id) => setSpecializationIds((prev) => (prev.includes(id) ? prev : [...prev, id]))}
+                  options={specializations.filter((s) => !specializationIds.includes(s.id))}
+                  onCreate={handleCreateSpecialization}
+                  placeholder="Add a specialization…"
+                />
               </CardContent>
             </Card>
 

@@ -78,15 +78,15 @@ export class CreateCandidateDto {
   @IsString()
   city?: string;
 
-  @ApiPropertyOptional({ description: 'Industry', example: 'Manufacturing' })
+  @ApiPropertyOptional({ description: 'Industry ID (see /industries)' })
   @IsOptional()
   @IsString()
-  industry?: string;
+  industryId?: string;
 
-  @ApiPropertyOptional({ description: 'Role type', example: 'Production Lead' })
+  @ApiPropertyOptional({ description: 'Role type ID (see /candidate-role-types)' })
   @IsOptional()
   @IsString()
-  roleType?: string;
+  roleTypeId?: string;
 
   @ApiPropertyOptional({ description: 'Current position', example: 'Production Manager' })
   @IsOptional()
@@ -126,21 +126,22 @@ export class CreateCandidateDto {
   @Type(() => WorkHistoryItemDto)
   workHistory?: WorkHistoryItemDto[];
 
-  @ApiPropertyOptional({ description: 'Specialization tags', type: String, isArray: true, example: ['CNC', 'Welding'] })
+  @ApiPropertyOptional({ description: 'Specialization IDs (see /specializations)', type: String, isArray: true })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  specializations?: string[];
+  specializationIds?: string[];
+
+  @ApiPropertyOptional({ description: 'Free-entry skill tags', type: String, isArray: true, example: ['CNC', 'Welding'] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  skills?: string[];
 
   @ApiPropertyOptional({ description: 'Status; defaults to COLD when omitted', enum: CandidateStatus, example: 'COLD' })
   @IsOptional()
   @IsEnum(CandidateStatus)
   status?: CandidateStatus;
-
-  @ApiPropertyOptional({ description: 'Notes' })
-  @IsOptional()
-  @IsString()
-  notes?: string;
 
   @ApiPropertyOptional({ description: 'Owning consultant ID' })
   @IsOptional()

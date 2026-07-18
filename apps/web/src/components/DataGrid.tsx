@@ -128,6 +128,8 @@ interface DataGridProps<TData> {
   data: TData[];
   /** Placeholder for the global search box. */
   searchPlaceholder?: string;
+  /** Hides the built-in search box — for pages where search lives elsewhere (e.g. a dedicated search-first landing above the grid) so it isn't duplicated. Sorting/filtering still work as normal. */
+  hideSearch?: boolean;
   /** Faceted (multi-select) filters shown in the toolbar. */
   filters?: DataGridFilter[];
   /** Rendered on the right side of the toolbar (filters, "Add" button, etc.). */
@@ -185,6 +187,7 @@ export function DataGrid<TData>({
   columns,
   data,
   searchPlaceholder = 'Search…',
+  hideSearch = false,
   filters,
   toolbar,
   onRowClick,
@@ -565,22 +568,24 @@ export function DataGrid<TData>({
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-1 flex-wrap items-center gap-2">
-          <div className="relative w-full max-w-xs">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              ref={searchInputRef}
-              value={globalFilter}
-              onChange={(e) => setGlobalFilter(e.target.value)}
-              placeholder={searchPlaceholder}
-              className="pl-8 pr-12"
-            />
-            {!globalFilter && (
-              <div className="pointer-events-none absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-0.5">
-                <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
-                <Kbd>K</Kbd>
-              </div>
-            )}
-          </div>
+          {!hideSearch ? (
+            <div className="relative w-full max-w-xs">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                ref={searchInputRef}
+                value={globalFilter}
+                onChange={(e) => setGlobalFilter(e.target.value)}
+                placeholder={searchPlaceholder}
+                className="pl-8 pr-12"
+              />
+              {!globalFilter && (
+                <div className="pointer-events-none absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-0.5">
+                  <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
+                  <Kbd>K</Kbd>
+                </div>
+              )}
+            </div>
+          ) : null}
           {(filters ?? []).map((filter) => {
             const column = table.getColumn(filter.columnId);
             if (!column) return null;

@@ -21,6 +21,13 @@ import { Candidate, CandidateStatus, Prisma } from '@prisma/client';
  * is the exception: it's a real denormalized column (needed for sorting), the
  * other three are resolved live from that latest row since they're
  * display-only.
+ *
+ * `industry`/`roleType`/`specializations` aren't part of the raw `Candidate`
+ * model either (only `industryId`/`roleTypeId` are, and specializations is a
+ * many-to-many relation with no scalar column at all) — same reasoning as
+ * StakeholderEntity.roleType: the resolved name(s) are added here so callers
+ * get plain strings instead of joining against /industries,
+ * /candidate-role-types or /specializations themselves.
  */
 export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
@@ -32,8 +39,12 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
   @ApiProperty({ type: String, nullable: true }) mobile!: string | null;
   @ApiProperty({ type: String, nullable: true }) country!: string | null;
   @ApiProperty({ type: String, nullable: true }) city!: string | null;
-  @ApiProperty({ type: String, nullable: true }) industry!: string | null;
-  @ApiProperty({ type: String, nullable: true }) roleType!: string | null;
+  @ApiProperty({ type: String, nullable: true }) industryId!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Resolved industry name' })
+  industry!: string | null;
+  @ApiProperty({ type: String, nullable: true }) roleTypeId!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Resolved role type name' })
+  roleType!: string | null;
   @ApiProperty({ type: String, nullable: true }) currentPosition!: string | null;
   @ApiProperty({ type: String, nullable: true }) currentCompany!: string | null;
   @ApiProperty({ type: Number, nullable: true }) yearsExperience!: number | null;
@@ -47,10 +58,33 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
     description: '[{ company, role, startDate, endDate }]',
   })
   workHistory!: Prisma.JsonValue;
-  @ApiProperty({ type: 'array', items: { type: 'string' }, nullable: true })
-  specializations!: Prisma.JsonValue;
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'string' },
+    nullable: true,
+    description: 'Free-entry skill tags',
+  })
+  skills!: Prisma.JsonValue;
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'string' },
+    description: 'Resolved specialization names',
+  })
+  specializations!: string[];
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'string' },
+    description: 'Specialization IDs backing `specializations` — what an editable multi-select actually binds to',
+  })
+  specializationIds!: string[];
   @ApiProperty({ enum: CandidateStatus }) status!: CandidateStatus;
-  @ApiProperty({ type: String, nullable: true }) notes!: string | null;
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'object' },
+    nullable: true,
+    description: '[{ content, timestamp, by }]',
+  })
+  notes!: Prisma.JsonValue;
   @ApiProperty({ type: String, nullable: true }) consultantId!: string | null;
   @ApiProperty({
     type: Date,

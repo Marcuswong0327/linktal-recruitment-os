@@ -14,6 +14,7 @@ import { PermissionsModule } from './permissions/permissions.module';
 import { IndustriesModule } from './industries/industries.module';
 import { SpecializationsModule } from './specializations/specializations.module';
 import { StakeholderRoleTypesModule } from './stakeholder-role-types/stakeholder-role-types.module';
+import { CandidateRoleTypesModule } from './candidate-role-types/candidate-role-types.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { AuthModule } from './auth/auth.module';
 import { AuditModule } from './audit/audit.module';
@@ -33,6 +34,7 @@ import { AuditModule } from './audit/audit.module';
     IndustriesModule,
     SpecializationsModule,
     StakeholderRoleTypesModule,
+    CandidateRoleTypesModule,
     AuditModule,
   ],
   controllers: [HealthController],
