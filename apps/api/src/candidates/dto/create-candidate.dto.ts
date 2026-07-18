@@ -137,11 +137,6 @@ export class CreateCandidateDto {
   @IsEnum(CandidateStatus)
   status?: CandidateStatus;
 
-  @ApiPropertyOptional({ description: 'Notes' })
-  @IsOptional()
-  @IsString()
-  notes?: string;
-
   @ApiPropertyOptional({ description: 'Owning consultant ID' })
   @IsOptional()
   @IsString()

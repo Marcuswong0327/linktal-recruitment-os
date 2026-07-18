@@ -132,21 +132,6 @@ export function CandidateForm() {
         </select>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="notes" className="text-sm font-medium">
-          Notes
-        </label>
-        <textarea
-          id="notes"
-          rows={3}
-          className={fieldClass}
-          {...register('notes')}
-        />
-        {errors.notes && (
-          <p className="text-xs text-red-500">{errors.notes.message}</p>
-        )}
-      </div>
-
       {createCandidate.isError && (
         <p className="text-sm text-red-500">
           {createCandidate.error?.message ?? 'Failed to create'}

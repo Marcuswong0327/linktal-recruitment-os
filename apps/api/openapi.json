@@ -762,6 +762,316 @@
         ]
       }
     },
+    "/candidates/{id}/pipeline-timeline": {
+      "get": {
+        "operationId": "getCandidatePipelineTimeline",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pipeline events, oldest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineTimelineEventEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "This candidate's submission/stage history across every job order",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
+    "/candidates/{id}/notes": {
+      "post": {
+        "operationId": "addCandidateNote",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCandidateNoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Candidate updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Append a note to a candidate's timeline",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
+    "/candidates/{id}/notes/{noteId}": {
+      "patch": {
+        "operationId": "updateCandidateNote",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCandidateNoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Candidate updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edit one note in a candidate's timeline (author or admin only)",
+        "tags": [
+          "Candidates"
+        ]
+      },
+      "delete": {
+        "operationId": "deleteCandidateNote",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expectedVersion",
+            "required": false,
+            "in": "query",
+            "description": "Optimistic concurrency check: the note's own `editedAt ?? timestamp` as last seen by the caller. If it no longer matches, the note was changed by someone else in the meantime and the request is rejected with 409.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Candidate updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove one note from a candidate's timeline (author or admin only)",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
     "/candidates/{id}/restore": {
       "post": {
         "operationId": "restoreCandidate",
@@ -960,6 +1270,157 @@
         "summary": "Log a contact with a candidate — the calling consultant is recorded automatically",
         "tags": [
           "Candidates"
+        ]
+      }
+    },
+    "/audit-logs": {
+      "get": {
+        "operationId": "getAuditLogs",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (1-based)",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Items per page",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to createdAt.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "action",
+                "entityType"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "description": "Filter by action",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CREATE",
+                "UPDATE",
+                "SOFT_DELETE",
+                "RESTORE",
+                "DEACTIVATE",
+                "HARD_DELETE"
+              ]
+            }
+          },
+          {
+            "name": "entityType",
+            "required": false,
+            "in": "query",
+            "description": "Filter by entity type, e.g. \"Candidate\"",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the acting consultant id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Only entries at/after this ISO date-time",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Only entries at/before this ISO date-time",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated audit logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedAuditLogsEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List activity-log entries (admin only, paginated, filterable, sortable)",
+        "tags": [
+          "Audit"
         ]
       }
     },
@@ -2919,6 +3380,75 @@
         ]
       }
     },
+    "/job-orders/{id}/pipeline-timeline": {
+      "get": {
+        "operationId": "getJobOrderPipelineTimeline",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Pipeline events, oldest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PipelineTimelineEventEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every candidate submission/stage change for this job order",
+        "tags": [
+          "Job Orders"
+        ]
+      }
+    },
     "/consultants": {
       "get": {
         "operationId": "getConsultants",
@@ -4207,109 +4737,24 @@
         ]
       }
     },
-    "/audit-logs": {
+    "/candidate-submissions": {
       "get": {
-        "operationId": "getAuditLogs",
+        "operationId": "getSubmissions",
         "parameters": [
           {
-            "name": "page",
+            "name": "candidateId",
             "required": false,
             "in": "query",
-            "description": "Page number (1-based)",
-            "schema": {
-              "minimum": 1,
-              "default": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "pageSize",
-            "required": false,
-            "in": "query",
-            "description": "Items per page",
-            "schema": {
-              "minimum": 1,
-              "maximum": 100,
-              "default": 20,
-              "type": "number"
-            }
-          },
-          {
-            "name": "sortBy",
-            "required": false,
-            "in": "query",
-            "description": "Column to sort by. Defaults to createdAt.",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "createdAt",
-                "action",
-                "entityType"
-              ]
-            }
-          },
-          {
-            "name": "sortOrder",
-            "required": false,
-            "in": "query",
-            "schema": {
-              "default": "desc",
-              "type": "string",
-              "enum": [
-                "asc",
-                "desc"
-              ]
-            }
-          },
-          {
-            "name": "action",
-            "required": false,
-            "in": "query",
-            "description": "Filter by action",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "CREATE",
-                "UPDATE",
-                "SOFT_DELETE",
-                "RESTORE",
-                "DEACTIVATE",
-                "HARD_DELETE"
-              ]
-            }
-          },
-          {
-            "name": "entityType",
-            "required": false,
-            "in": "query",
-            "description": "Filter by entity type, e.g. \"Candidate\"",
+            "description": "Filter by candidate ID",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "actorId",
+            "name": "jobOrderId",
             "required": false,
             "in": "query",
-            "description": "Filter by the acting consultant id",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "from",
-            "required": false,
-            "in": "query",
-            "description": "Only entries at/after this ISO date-time",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "to",
-            "required": false,
-            "in": "query",
-            "description": "Only entries at/before this ISO date-time",
+            "description": "Filter by job order ID",
             "schema": {
               "type": "string"
             }
@@ -4317,11 +4762,14 @@
         ],
         "responses": {
           "200": {
-            "description": "Paginated audit logs",
+            "description": "Submissions",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PaginatedAuditLogsEntity"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SubmissionEntity"
+                  }
                 }
               }
             }
@@ -4352,9 +4800,261 @@
             "bearer": []
           }
         ],
-        "summary": "List activity-log entries (admin only, paginated, filterable, sortable)",
+        "summary": "List submissions, filtered by candidateId and/or jobOrderId",
         "tags": [
-          "Audit"
+          "Submissions"
+        ]
+      },
+      "post": {
+        "operationId": "createSubmission",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSubmissionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Submission created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Submit a candidate to a job order (restores a prior removed submission for the same pair instead of erroring)",
+        "tags": [
+          "Submissions"
+        ]
+      }
+    },
+    "/candidate-submissions/{id}": {
+      "get": {
+        "operationId": "getSubmission",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Submission found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get submission by ID",
+        "tags": [
+          "Submissions"
+        ]
+      },
+      "patch": {
+        "operationId": "updateSubmission",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSubmissionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Submission updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmissionEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a submission (e.g. move to a new stage)",
+        "tags": [
+          "Submissions"
+        ]
+      },
+      "delete": {
+        "operationId": "deleteSubmission",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Submission removed"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove a candidate from a job order (soft-delete, recoverable)",
+        "tags": [
+          "Submissions"
         ]
       }
     }
@@ -4511,6 +5211,47 @@
           "user"
         ]
       },
+      "CandidateNoteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable id, unique within this candidate’s notes (for edit/delete)"
+          },
+          "content": {
+            "type": "string",
+            "example": "Called to confirm availability for the panel interview."
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "ISO 8601 timestamp",
+            "example": "2026-07-16T18:58:34.123Z"
+          },
+          "by": {
+            "type": "string",
+            "nullable": true,
+            "description": "Authoring consultant ID"
+          },
+          "editedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "ISO 8601 timestamp of the last edit, null if never edited"
+          },
+          "editedBy": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant ID who made the last edit, null if never edited (may differ from `by`, e.g. an admin editing someone else’s note)"
+          }
+        },
+        "required": [
+          "id",
+          "content",
+          "timestamp",
+          "by",
+          "editedAt",
+          "editedBy"
+        ]
+      },
       "CandidateEntity": {
         "type": "object",
         "properties": {
@@ -4606,8 +5347,11 @@
             ]
           },
           "notes": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CandidateNoteDto"
+            }
           },
           "consultantId": {
             "type": "string",
@@ -4710,6 +5454,75 @@
           "page",
           "pageSize",
           "pageCount"
+        ]
+      },
+      "PipelineTimelineEventEntity": {
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string"
+          },
+          "candidateId": {
+            "type": "string"
+          },
+          "candidateName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved candidate name"
+          },
+          "jobOrderId": {
+            "type": "string"
+          },
+          "jobOrderTitle": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved job order title"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "STAGE_CHANGE",
+              "REMOVED",
+              "RESTORED"
+            ],
+            "description": "SUBMITTED = candidate submitted to this job order; STAGE_CHANGE = status transition (incl. moving backward); REMOVED = taken off the job order (soft-deleted); RESTORED = re-added after removal"
+          },
+          "previousStage": {
+            "type": "string",
+            "nullable": true
+          },
+          "newStage": {
+            "type": "string",
+            "nullable": true
+          },
+          "actorId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant who made the change"
+          },
+          "actorName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved consultant name"
+          },
+          "occurredAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "submissionId",
+          "candidateId",
+          "candidateName",
+          "jobOrderId",
+          "jobOrderTitle",
+          "kind",
+          "previousStage",
+          "newStage",
+          "actorId",
+          "actorName",
+          "occurredAt"
         ]
       },
       "WorkHistoryItemDto": {
@@ -4841,10 +5654,6 @@
             ],
             "example": "COLD"
           },
-          "notes": {
-            "type": "string",
-            "description": "Notes"
-          },
           "consultantId": {
             "type": "string",
             "description": "Owning consultant ID"
@@ -4960,15 +5769,41 @@
             ],
             "example": "COLD"
           },
-          "notes": {
-            "type": "string",
-            "description": "Notes"
-          },
           "consultantId": {
             "type": "string",
             "description": "Owning consultant ID"
           }
         }
+      },
+      "AddCandidateNoteDto": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "Note content",
+            "example": "Called to confirm availability for the panel interview."
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "UpdateCandidateNoteDto": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "New note content",
+            "example": "Called to confirm availability for the panel interview."
+          },
+          "expectedVersion": {
+            "type": "string",
+            "description": "Optimistic concurrency check: the note's own `editedAt ?? timestamp` as last seen by the caller. If it no longer matches, the note was changed by someone else in the meantime and the request is rejected with 409."
+          }
+        },
+        "required": [
+          "content"
+        ]
       },
       "CreateCandidateContactHistoryDto": {
         "type": "object",
@@ -5037,6 +5872,105 @@
           "notes",
           "contactedAt",
           "createdAt"
+        ]
+      },
+      "AuditLogEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "actorId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Acting consultant id (null = system)"
+          },
+          "actorName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Acting consultant name, resolved for display"
+          },
+          "action": {
+            "type": "string",
+            "example": "SOFT_DELETE"
+          },
+          "entityType": {
+            "type": "string",
+            "example": "Candidate"
+          },
+          "entityId": {
+            "type": "string"
+          },
+          "entityLabel": {
+            "type": "string",
+            "nullable": true,
+            "example": "CDD-0042 · Jane Doe",
+            "description": "Human label (displayId + name); null if the entity was hard-deleted"
+          },
+          "changes": {
+            "type": "object",
+            "nullable": true,
+            "description": "Field-level diff { field: { from, to } }, or created snapshot"
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "description": "requestId / cascade / count etc."
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "actorId",
+          "actorName",
+          "action",
+          "entityType",
+          "entityId",
+          "entityLabel",
+          "changes",
+          "metadata",
+          "createdAt"
+        ]
+      },
+      "PaginatedAuditLogsEntity": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditLogEntity"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Total rows matching the filters",
+            "example": 128
+          },
+          "page": {
+            "type": "number",
+            "description": "Current page (1-based)",
+            "example": 1
+          },
+          "pageSize": {
+            "type": "number",
+            "description": "Items per page",
+            "example": 20
+          },
+          "pageCount": {
+            "type": "number",
+            "description": "Total number of pages",
+            "example": 7
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "page",
+          "pageSize",
+          "pageCount"
         ]
       },
       "ClientNoteDto": {
@@ -6564,104 +7498,126 @@
           "name"
         ]
       },
-      "AuditLogEntity": {
+      "SubmissionEntity": {
         "type": "object",
         "properties": {
           "id": {
             "type": "string"
           },
-          "actorId": {
-            "type": "string",
-            "nullable": true,
-            "description": "Acting consultant id (null = system)"
-          },
-          "actorName": {
-            "type": "string",
-            "nullable": true,
-            "description": "Acting consultant name, resolved for display"
-          },
-          "action": {
-            "type": "string",
-            "example": "SOFT_DELETE"
-          },
-          "entityType": {
-            "type": "string",
-            "example": "Candidate"
-          },
-          "entityId": {
+          "candidateId": {
             "type": "string"
           },
-          "entityLabel": {
+          "candidateName": {
             "type": "string",
             "nullable": true,
-            "example": "CDD-0042 · Jane Doe",
-            "description": "Human label (displayId + name); null if the entity was hard-deleted"
+            "description": "Resolved candidate name"
           },
-          "changes": {
-            "type": "object",
-            "nullable": true,
-            "description": "Field-level diff { field: { from, to } }, or created snapshot"
+          "jobOrderId": {
+            "type": "string"
           },
-          "metadata": {
-            "type": "object",
+          "jobOrderTitle": {
+            "type": "string",
             "nullable": true,
-            "description": "requestId / cascade / count etc."
+            "description": "Resolved job order title"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "INTERVIEWING",
+              "REJECTED",
+              "PLACED"
+            ]
+          },
+          "submittedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
           },
           "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
             "format": "date-time",
             "type": "string"
           }
         },
         "required": [
           "id",
-          "actorId",
-          "actorName",
-          "action",
-          "entityType",
-          "entityId",
-          "entityLabel",
-          "changes",
-          "metadata",
-          "createdAt"
+          "candidateId",
+          "candidateName",
+          "jobOrderId",
+          "jobOrderTitle",
+          "status",
+          "submittedAt",
+          "notes",
+          "createdAt",
+          "updatedAt"
         ]
       },
-      "PaginatedAuditLogsEntity": {
+      "CreateSubmissionDto": {
         "type": "object",
         "properties": {
-          "data": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AuditLogEntity"
-            }
+          "candidateId": {
+            "type": "string",
+            "description": "Candidate being submitted"
           },
-          "total": {
-            "type": "number",
-            "description": "Total rows matching the filters",
-            "example": 128
+          "jobOrderId": {
+            "type": "string",
+            "description": "Job order being submitted to"
           },
-          "page": {
-            "type": "number",
-            "description": "Current page (1-based)",
-            "example": 1
+          "status": {
+            "type": "string",
+            "description": "Status; defaults to SUBMITTED when omitted",
+            "enum": [
+              "SUBMITTED",
+              "INTERVIEWING",
+              "REJECTED",
+              "PLACED"
+            ],
+            "example": "SUBMITTED"
           },
-          "pageSize": {
-            "type": "number",
-            "description": "Items per page",
-            "example": 20
-          },
-          "pageCount": {
-            "type": "number",
-            "description": "Total number of pages",
-            "example": 7
+          "notes": {
+            "type": "string",
+            "description": "Notes"
           }
         },
         "required": [
-          "data",
-          "total",
-          "page",
-          "pageSize",
-          "pageCount"
+          "candidateId",
+          "jobOrderId"
         ]
+      },
+      "UpdateSubmissionDto": {
+        "type": "object",
+        "properties": {
+          "candidateId": {
+            "type": "string",
+            "description": "Candidate being submitted"
+          },
+          "jobOrderId": {
+            "type": "string",
+            "description": "Job order being submitted to"
+          },
+          "status": {
+            "type": "string",
+            "description": "Status; defaults to SUBMITTED when omitted",
+            "enum": [
+              "SUBMITTED",
+              "INTERVIEWING",
+              "REJECTED",
+              "PLACED"
+            ],
+            "example": "SUBMITTED"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes"
+          }
+        }
       },
       "ErrorResponse": {
         "type": "object",

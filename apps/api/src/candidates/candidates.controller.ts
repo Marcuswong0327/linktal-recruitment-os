@@ -11,10 +11,17 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CandidatesService } from './candidates.service';
+import { AuditService } from '../audit/audit.service';
+import { PipelineTimelineEventEntity } from '../audit/entities/pipeline-timeline-event.entity';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { QueryCandidatesDto } from './dto/query-candidates.dto';
 import { CreateCandidateContactHistoryDto } from './dto/create-candidate-contact-history.dto';
+import {
+  AddCandidateNoteDto,
+  DeleteCandidateNoteQueryDto,
+  UpdateCandidateNoteDto,
+} from './dto/candidate-note.dto';
 import { CandidateEntity } from './entities/candidate.entity';
 import { PaginatedCandidatesEntity } from './entities/paginated-candidates.entity';
 import { CandidateContactHistoryEntity } from './entities/candidate-contact-history.entity';
@@ -26,7 +33,10 @@ import { ForbiddenException } from '@nestjs/common';
 @ApiBearerAuth()
 @Controller('candidates')
 export class CandidatesController {
-  constructor(private readonly candidates: CandidatesService) {}
+  constructor(
+    private readonly candidates: CandidatesService,
+    private readonly audit: AuditService,
+  ) {}
 
   @Get()
   @RequirePermission('candidate', 'read')
@@ -55,6 +65,17 @@ export class CandidatesController {
     return this.candidates.findOne(id);
   }
 
+  @Get(':id/pipeline-timeline')
+  @RequirePermission('candidate', 'read')
+  @ApiOperation({
+    operationId: 'getCandidatePipelineTimeline',
+    summary: "This candidate's submission/stage history across every job order",
+  })
+  @ApiResponse({ status: 200, description: 'Pipeline events, oldest first', type: PipelineTimelineEventEntity, isArray: true })
+  getPipelineTimeline(@Param('id') id: string) {
+    return this.audit.getPipelineTimeline({ candidateId: id });
+  }
+
   @Post()
   @RequirePermission('candidate', 'create')
   @ApiOperation({ operationId: 'createCandidate', summary: 'Create a new candidate' })
@@ -69,6 +90,46 @@ export class CandidatesController {
   @ApiResponse({ status: 200, description: 'Candidate updated', type: CandidateEntity })
   update(@Param('id') id: string, @Body() dto: UpdateCandidateDto) {
     return this.candidates.update(id, dto);
+  }
+
+  @Post(':id/notes')
+  @RequirePermission('candidate', 'update')
+  @ApiOperation({ operationId: 'addCandidateNote', summary: "Append a note to a candidate's timeline" })
+  @ApiResponse({ status: 201, description: 'Candidate updated', type: CandidateEntity })
+  addNote(@Param('id') id: string, @Body() dto: AddCandidateNoteDto, @CurrentUser() user: AuthUser) {
+    return this.candidates.addNote(id, dto, user.consultantId);
+  }
+
+  @Patch(':id/notes/:noteId')
+  @RequirePermission('candidate', 'update')
+  @ApiOperation({
+    operationId: 'updateCandidateNote',
+    summary: "Edit one note in a candidate's timeline (author or admin only)",
+  })
+  @ApiResponse({ status: 200, description: 'Candidate updated', type: CandidateEntity })
+  updateNote(
+    @Param('id') id: string,
+    @Param('noteId') noteId: string,
+    @Body() dto: UpdateCandidateNoteDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.candidates.updateNote(id, noteId, dto, user);
+  }
+
+  @Delete(':id/notes/:noteId')
+  @RequirePermission('candidate', 'update')
+  @ApiOperation({
+    operationId: 'deleteCandidateNote',
+    summary: "Remove one note from a candidate's timeline (author or admin only)",
+  })
+  @ApiResponse({ status: 200, description: 'Candidate updated', type: CandidateEntity })
+  deleteNote(
+    @Param('id') id: string,
+    @Param('noteId') noteId: string,
+    @Query() query: DeleteCandidateNoteQueryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.candidates.deleteNote(id, noteId, user, query.expectedVersion);
   }
 
   @Delete(':id')

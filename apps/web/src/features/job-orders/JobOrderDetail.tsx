@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Briefcase, DollarSign, FileText, Info } from 'lucide-react';
+import { ArrowLeft, Briefcase, DollarSign, FileText, Info, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -25,16 +25,22 @@ import { ClientCombobox } from '@/components/ClientCombobox';
 import { ConsultantCombobox } from '@/components/ConsultantCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
+import { PipelineTimeline } from '@/components/PipelineTimeline';
+import { SubmissionsCard } from '@/components/SubmissionsCard';
 import { PageLayout } from '@/components/app-shell/PageLayout';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
+import { useGetCandidates } from '@/lib/api/generated/candidates/candidates';
 import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import {
+  getGetJobOrderPipelineTimelineQueryKey,
   getGetJobOrderQueryKey,
   getGetJobOrdersQueryKey,
   useGetJobOrder,
+  useGetJobOrderPipelineTimeline,
   useUpdateJobOrder,
 } from '@/lib/api/generated/job-orders/job-orders';
+import { contactTypeLabels, type ContactType } from '@/lib/contact-types';
 import type { ClientEntity, ConsultantEntity, UpdateJobOrderDto } from '@/lib/api/generated/types';
 import {
   type JobOrder,
@@ -172,6 +178,18 @@ function JobOrderEditForm({
     requirements !== (jobOrder.requirements ?? '');
 
   const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty);
+
+  // A job order isn't contacted independently — you contact stakeholders at
+  // the client company — so "last contacted" here is just a read of the
+  // client's own (org-wide) value, already in `clients` from the combobox
+  // fetch above; no separate job-order-level tracking.
+  const client = clients.find((c) => c.id === jobOrder.clientId);
+
+  const { data: pipelineData, isLoading: pipelineLoading } = useGetJobOrderPipelineTimeline(jobOrder.id);
+  const pipelineEvents = pipelineData?.status === 200 ? pipelineData.data : undefined;
+
+  const { data: candidatesData } = useGetCandidates({ pageSize: 100 });
+  const candidates = candidatesData?.status === 200 ? candidatesData.data.data : [];
 
   const updateJobOrder = useUpdateJobOrder({
     mutation: {
@@ -387,6 +405,68 @@ function JobOrderEditForm({
           </div>
 
           <div className="flex flex-col gap-5">
+            <Card size="sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Briefcase className="size-4 text-muted-foreground" />
+                  Submissions
+                </CardTitle>
+                <CardDescription>Candidates submitted to this job order.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SubmissionsCard
+                  mode="jobOrder"
+                  jobOrderId={jobOrder.id}
+                  candidates={candidates}
+                  onChanged={() =>
+                    queryClient.invalidateQueries({
+                      queryKey: getGetJobOrderPipelineTimelineQueryKey(jobOrder.id),
+                    })
+                  }
+                />
+              </CardContent>
+            </Card>
+
+            <Card size="sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Workflow className="size-4 text-muted-foreground" />
+                  Pipeline history
+                </CardTitle>
+                <CardDescription>Submission and stage changes for every candidate on this job order.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <PipelineTimeline events={pipelineEvents} isLoading={pipelineLoading} showCandidate />
+              </CardContent>
+            </Card>
+
+            <Card size="sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Info className="size-4 text-muted-foreground" />
+                  Client contact
+                </CardTitle>
+                <CardDescription>
+                  A job order isn&apos;t contacted directly — this reflects the client company&apos;s
+                  own org-wide last contact.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+                <span className="text-muted-foreground">Last contacted</span>
+                <span>
+                  {client?.lastContactedAt ? new Date(client.lastContactedAt).toLocaleString() : '—'}
+                </span>
+                <span className="text-muted-foreground">Method</span>
+                <span>
+                  {client?.lastContactType
+                    ? (contactTypeLabels[client.lastContactType as ContactType] ?? client.lastContactType)
+                    : '—'}
+                </span>
+                <span className="text-muted-foreground">Contacted by</span>
+                <span>{client?.lastContactedBy ?? '—'}</span>
+              </CardContent>
+            </Card>
+
             <Card size="sm">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">

@@ -1,13 +1,23 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { RequestContext } from '../common/request-context';
+import { AuthUser } from '../auth/auth.types';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { CandidateStatusFilter, QueryCandidatesDto } from './dto/query-candidates.dto';
 import { CreateCandidateContactHistoryDto } from './dto/create-candidate-contact-history.dto';
+import { AddCandidateNoteDto, CandidateNoteDto, UpdateCandidateNoteDto } from './dto/candidate-note.dto';
 
 // lastContactedAt is a plain scalar column (see schema.prisma) — denormalized
 // for sorting, same reasoning as Client/Stakeholder.lastContactedAt. The rest
@@ -237,6 +247,104 @@ export class CandidatesService {
     }
 
     return created;
+  }
+
+  private getNotes(candidate: { notes: unknown }): CandidateNoteDto[] {
+    return Array.isArray(candidate.notes) ? (candidate.notes as unknown as CandidateNoteDto[]) : [];
+  }
+
+  private async saveNotes(id: string, notes: CandidateNoteDto[]) {
+    const candidate = await this.prisma.candidate.update({
+      where: { id },
+      data: { notes: notes as unknown as Prisma.InputJsonValue },
+      include: CANDIDATE_INCLUDE,
+    });
+    return toEntity(candidate);
+  }
+
+  /** Only the note's own author, or an admin, may edit/delete it. */
+  private assertCanModifyNote(note: CandidateNoteDto, user: AuthUser) {
+    if (note.by !== user.consultantId && user.roleName !== 'admin') {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: "Only the note's author or an admin can modify it.",
+      });
+    }
+  }
+
+  private findNoteOrThrow(notes: CandidateNoteDto[], noteId: string) {
+    const index = notes.findIndex((n) => n.id === noteId);
+    if (index === -1) {
+      throw new NotFoundException(`Note ${noteId} not found`);
+    }
+    return index;
+  }
+
+  /** A note's own last-modified marker — its `editedAt`, or `timestamp` if never edited. */
+  private noteVersion(note: CandidateNoteDto): string {
+    return note.editedAt ?? note.timestamp;
+  }
+
+  /**
+   * Optimistic concurrency check: rejects the request if the note changed
+   * since the caller last read it (detected by comparing `noteVersion`), so a
+   * second edit/delete can't silently clobber one that landed moments before
+   * it. Skipped when the caller doesn't pass `expectedVersion` at all.
+   */
+  private assertNotStale(note: CandidateNoteDto, expectedVersion: string | undefined) {
+    if (expectedVersion !== undefined && this.noteVersion(note) !== expectedVersion) {
+      throw new ConflictException({
+        code: 'NOTE_CONFLICT',
+        message: 'This note was changed by someone else. Reload and try again.',
+      });
+    }
+  }
+
+  /** Appends one entry to the candidate's note timeline (never overwrites prior entries). */
+  async addNote(id: string, dto: AddCandidateNoteDto, consultantId: string) {
+    const candidate = await this.findOne(id);
+    const next: CandidateNoteDto[] = [
+      ...this.getNotes(candidate),
+      {
+        id: randomUUID(),
+        content: dto.content,
+        timestamp: new Date().toISOString(),
+        by: consultantId,
+        editedAt: null,
+        editedBy: null,
+      },
+    ];
+    return this.saveNotes(id, next);
+  }
+
+  /** Edits one note's content in place; restricted to its author or an admin. */
+  async updateNote(id: string, noteId: string, dto: UpdateCandidateNoteDto, user: AuthUser) {
+    const candidate = await this.findOne(id);
+    const notes = this.getNotes(candidate);
+    const index = this.findNoteOrThrow(notes, noteId);
+    this.assertCanModifyNote(notes[index], user);
+    this.assertNotStale(notes[index], dto.expectedVersion);
+
+    const next = [...notes];
+    next[index] = {
+      ...next[index],
+      content: dto.content,
+      editedAt: new Date().toISOString(),
+      editedBy: user.consultantId,
+    };
+    return this.saveNotes(id, next);
+  }
+
+  /** Removes one note from the timeline; restricted to its author or an admin. */
+  async deleteNote(id: string, noteId: string, user: AuthUser, expectedVersion?: string) {
+    const candidate = await this.findOne(id);
+    const notes = this.getNotes(candidate);
+    const index = this.findNoteOrThrow(notes, noteId);
+    this.assertCanModifyNote(notes[index], user);
+    this.assertNotStale(notes[index], expectedVersion);
+
+    const next = notes.filter((n) => n.id !== noteId);
+    return this.saveNotes(id, next);
   }
 
   /**

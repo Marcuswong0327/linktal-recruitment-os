@@ -7,6 +7,7 @@
  */
 import type { CandidateEntityStatus } from './candidateEntityStatus';
 import type { CandidateEntityWorkHistoryItem } from './candidateEntityWorkHistoryItem';
+import type { CandidateNoteDto } from './candidateNoteDto';
 
 export interface CandidateEntity {
   id: string;
@@ -49,7 +50,7 @@ export interface CandidateEntity {
   specializations: string[] | null;
   status: CandidateEntityStatus;
   /** @nullable */
-  notes: string | null;
+  notes: CandidateNoteDto[] | null;
   /** @nullable */
   consultantId: string | null;
   /**

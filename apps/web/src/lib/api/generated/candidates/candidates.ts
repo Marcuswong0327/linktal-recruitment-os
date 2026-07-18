@@ -25,14 +25,18 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AddCandidateNoteDto,
   CandidateContactHistoryEntity,
   CandidateEntity,
   CreateCandidateContactHistoryDto,
   CreateCandidateDto,
+  DeleteCandidateNoteParams,
   ErrorResponse,
   GetCandidatesParams,
   PaginatedCandidatesEntity,
-  UpdateCandidateDto
+  PipelineTimelineEventEntity,
+  UpdateCandidateDto,
+  UpdateCandidateNoteDto
 } from '../types';
 
 import { customFetch } from '../../fetcher';
@@ -738,6 +742,447 @@ export const useDeleteCandidate = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getDeleteCandidateMutationOptions(options), queryClient);
+    }
+    export type getCandidatePipelineTimelineResponse200 = {
+  data: PipelineTimelineEventEntity[]
+  status: 200
+}
+
+export type getCandidatePipelineTimelineResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getCandidatePipelineTimelineResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type getCandidatePipelineTimelineResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getCandidatePipelineTimelineResponseSuccess = (getCandidatePipelineTimelineResponse200) & {
+  headers: Headers;
+};
+export type getCandidatePipelineTimelineResponseError = (getCandidatePipelineTimelineResponse400 | getCandidatePipelineTimelineResponse404 | getCandidatePipelineTimelineResponse500) & {
+  headers: Headers;
+};
+
+export type getCandidatePipelineTimelineResponse = (getCandidatePipelineTimelineResponseSuccess | getCandidatePipelineTimelineResponseError)
+
+export const getGetCandidatePipelineTimelineUrl = (id: string,) => {
+
+
+
+
+  return `/candidates/${id}/pipeline-timeline`
+}
+
+/**
+ * @summary This candidate's submission/stage history across every job order
+ */
+export const getCandidatePipelineTimeline = async (id: string, options?: RequestInit): Promise<getCandidatePipelineTimelineResponse> => {
+
+  return customFetch<getCandidatePipelineTimelineResponse>(getGetCandidatePipelineTimelineUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCandidatePipelineTimelineQueryKey = (id: string,) => {
+    return [
+    `/candidates/${id}/pipeline-timeline`
+    ] as const;
+    }
+
+
+export const getGetCandidatePipelineTimelineQueryOptions = <TData = Awaited<ReturnType<typeof getCandidatePipelineTimeline>>, TError = ErrorResponse>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidatePipelineTimeline>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCandidatePipelineTimelineQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCandidatePipelineTimeline>>> = ({ signal }) => getCandidatePipelineTimeline(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCandidatePipelineTimeline>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCandidatePipelineTimelineQueryResult = NonNullable<Awaited<ReturnType<typeof getCandidatePipelineTimeline>>>
+export type GetCandidatePipelineTimelineQueryError = ErrorResponse
+
+
+export function useGetCandidatePipelineTimeline<TData = Awaited<ReturnType<typeof getCandidatePipelineTimeline>>, TError = ErrorResponse>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidatePipelineTimeline>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCandidatePipelineTimeline>>,
+          TError,
+          Awaited<ReturnType<typeof getCandidatePipelineTimeline>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCandidatePipelineTimeline<TData = Awaited<ReturnType<typeof getCandidatePipelineTimeline>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidatePipelineTimeline>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCandidatePipelineTimeline>>,
+          TError,
+          Awaited<ReturnType<typeof getCandidatePipelineTimeline>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCandidatePipelineTimeline<TData = Awaited<ReturnType<typeof getCandidatePipelineTimeline>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidatePipelineTimeline>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary This candidate's submission/stage history across every job order
+ */
+
+export function useGetCandidatePipelineTimeline<TData = Awaited<ReturnType<typeof getCandidatePipelineTimeline>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidatePipelineTimeline>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetCandidatePipelineTimelineQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type addCandidateNoteResponse201 = {
+  data: CandidateEntity
+  status: 201
+}
+
+export type addCandidateNoteResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type addCandidateNoteResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type addCandidateNoteResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type addCandidateNoteResponseSuccess = (addCandidateNoteResponse201) & {
+  headers: Headers;
+};
+export type addCandidateNoteResponseError = (addCandidateNoteResponse400 | addCandidateNoteResponse404 | addCandidateNoteResponse500) & {
+  headers: Headers;
+};
+
+export type addCandidateNoteResponse = (addCandidateNoteResponseSuccess | addCandidateNoteResponseError)
+
+export const getAddCandidateNoteUrl = (id: string,) => {
+
+
+
+
+  return `/candidates/${id}/notes`
+}
+
+/**
+ * @summary Append a note to a candidate's timeline
+ */
+export const addCandidateNote = async (id: string,
+    addCandidateNoteDto: AddCandidateNoteDto, options?: RequestInit): Promise<addCandidateNoteResponse> => {
+
+  return customFetch<addCandidateNoteResponse>(getAddCandidateNoteUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(addCandidateNoteDto)
+  }
+);}
+
+
+
+
+
+export const getAddCandidateNoteMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCandidateNote>>, TError,{id: string;data: AddCandidateNoteDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addCandidateNote>>, TError,{id: string;data: AddCandidateNoteDto}, TContext> => {
+
+const mutationKey = ['addCandidateNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addCandidateNote>>, {id: string;data: AddCandidateNoteDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  addCandidateNote(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddCandidateNoteMutationResult = NonNullable<Awaited<ReturnType<typeof addCandidateNote>>>
+    export type AddCandidateNoteMutationBody = AddCandidateNoteDto
+    export type AddCandidateNoteMutationError = ErrorResponse
+
+    /**
+ * @summary Append a note to a candidate's timeline
+ */
+export const useAddCandidateNote = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCandidateNote>>, TError,{id: string;data: AddCandidateNoteDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addCandidateNote>>,
+        TError,
+        {id: string;data: AddCandidateNoteDto},
+        TContext
+      > => {
+      return useMutation(getAddCandidateNoteMutationOptions(options), queryClient);
+    }
+    export type updateCandidateNoteResponse200 = {
+  data: CandidateEntity
+  status: 200
+}
+
+export type updateCandidateNoteResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type updateCandidateNoteResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type updateCandidateNoteResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type updateCandidateNoteResponseSuccess = (updateCandidateNoteResponse200) & {
+  headers: Headers;
+};
+export type updateCandidateNoteResponseError = (updateCandidateNoteResponse400 | updateCandidateNoteResponse404 | updateCandidateNoteResponse500) & {
+  headers: Headers;
+};
+
+export type updateCandidateNoteResponse = (updateCandidateNoteResponseSuccess | updateCandidateNoteResponseError)
+
+export const getUpdateCandidateNoteUrl = (id: string,
+    noteId: string,) => {
+
+
+
+
+  return `/candidates/${id}/notes/${noteId}`
+}
+
+/**
+ * @summary Edit one note in a candidate's timeline (author or admin only)
+ */
+export const updateCandidateNote = async (id: string,
+    noteId: string,
+    updateCandidateNoteDto: UpdateCandidateNoteDto, options?: RequestInit): Promise<updateCandidateNoteResponse> => {
+
+  return customFetch<updateCandidateNoteResponse>(getUpdateCandidateNoteUrl(id,noteId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateCandidateNoteDto)
+  }
+);}
+
+
+
+
+
+export const getUpdateCandidateNoteMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCandidateNote>>, TError,{id: string;noteId: string;data: UpdateCandidateNoteDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCandidateNote>>, TError,{id: string;noteId: string;data: UpdateCandidateNoteDto}, TContext> => {
+
+const mutationKey = ['updateCandidateNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCandidateNote>>, {id: string;noteId: string;data: UpdateCandidateNoteDto}> = (props) => {
+          const {id,noteId,data} = props ?? {};
+
+          return  updateCandidateNote(id,noteId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCandidateNoteMutationResult = NonNullable<Awaited<ReturnType<typeof updateCandidateNote>>>
+    export type UpdateCandidateNoteMutationBody = UpdateCandidateNoteDto
+    export type UpdateCandidateNoteMutationError = ErrorResponse
+
+    /**
+ * @summary Edit one note in a candidate's timeline (author or admin only)
+ */
+export const useUpdateCandidateNote = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCandidateNote>>, TError,{id: string;noteId: string;data: UpdateCandidateNoteDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateCandidateNote>>,
+        TError,
+        {id: string;noteId: string;data: UpdateCandidateNoteDto},
+        TContext
+      > => {
+      return useMutation(getUpdateCandidateNoteMutationOptions(options), queryClient);
+    }
+    export type deleteCandidateNoteResponse200 = {
+  data: CandidateEntity
+  status: 200
+}
+
+export type deleteCandidateNoteResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type deleteCandidateNoteResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type deleteCandidateNoteResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type deleteCandidateNoteResponseSuccess = (deleteCandidateNoteResponse200) & {
+  headers: Headers;
+};
+export type deleteCandidateNoteResponseError = (deleteCandidateNoteResponse400 | deleteCandidateNoteResponse404 | deleteCandidateNoteResponse500) & {
+  headers: Headers;
+};
+
+export type deleteCandidateNoteResponse = (deleteCandidateNoteResponseSuccess | deleteCandidateNoteResponseError)
+
+export const getDeleteCandidateNoteUrl = (id: string,
+    noteId: string,
+    params?: DeleteCandidateNoteParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/candidates/${id}/notes/${noteId}?${stringifiedParams}` : `/candidates/${id}/notes/${noteId}`
+}
+
+/**
+ * @summary Remove one note from a candidate's timeline (author or admin only)
+ */
+export const deleteCandidateNote = async (id: string,
+    noteId: string,
+    params?: DeleteCandidateNoteParams, options?: RequestInit): Promise<deleteCandidateNoteResponse> => {
+
+  return customFetch<deleteCandidateNoteResponse>(getDeleteCandidateNoteUrl(id,noteId,params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteCandidateNoteMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCandidateNote>>, TError,{id: string;noteId: string;params?: DeleteCandidateNoteParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCandidateNote>>, TError,{id: string;noteId: string;params?: DeleteCandidateNoteParams}, TContext> => {
+
+const mutationKey = ['deleteCandidateNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCandidateNote>>, {id: string;noteId: string;params?: DeleteCandidateNoteParams}> = (props) => {
+          const {id,noteId,params} = props ?? {};
+
+          return  deleteCandidateNote(id,noteId,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCandidateNoteMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCandidateNote>>>
+
+    export type DeleteCandidateNoteMutationError = ErrorResponse
+
+    /**
+ * @summary Remove one note from a candidate's timeline (author or admin only)
+ */
+export const useDeleteCandidateNote = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCandidateNote>>, TError,{id: string;noteId: string;params?: DeleteCandidateNoteParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCandidateNote>>,
+        TError,
+        {id: string;noteId: string;params?: DeleteCandidateNoteParams},
+        TContext
+      > => {
+      return useMutation(getDeleteCandidateNoteMutationOptions(options), queryClient);
     }
     export type restoreCandidateResponse201 = {
   data: CandidateEntity

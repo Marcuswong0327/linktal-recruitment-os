@@ -45,6 +45,38 @@ describe('computeChanges', () => {
       fullName: { from: null, to: 'New' },
     });
   });
+
+  it('diffs a bare-array Json field (e.g. a note timeline), not just primitives', () => {
+    const before = { notes: [{ id: '1', content: 'old' }] };
+    const data = { notes: [{ id: '1', content: 'old' }, { id: '2', content: 'new' }] };
+    expect(computeChanges(before, data)).toEqual({
+      notes: { from: before.notes, to: data.notes },
+    });
+  });
+
+  it('no-ops when a Json array field is unchanged', () => {
+    const before = { notes: [{ id: '1', content: 'same' }] };
+    const data = { notes: [{ id: '1', content: 'same' }] };
+    expect(computeChanges(before, data)).toEqual({});
+  });
+
+  it('diffs a plain-object Json field written directly (no relation-op keys)', () => {
+    const before = { metadata: { flag: false } };
+    const data = { metadata: { flag: true } };
+    expect(computeChanges(before, data)).toEqual({
+      metadata: { from: { flag: false }, to: { flag: true } },
+    });
+  });
+
+  it('still skips genuine relation nested-writes', () => {
+    const before = { status: 'COLD' };
+    const changes = computeChanges(before, {
+      status: 'WARM',
+      stakeholders: { create: [{ fullName: 'Jane' }] },
+      client: { connect: { id: 'c1' } },
+    });
+    expect(changes).toEqual({ status: { from: 'COLD', to: 'WARM' } });
+  });
 });
 
 describe('deriveAction', () => {

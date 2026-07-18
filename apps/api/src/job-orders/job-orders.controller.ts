@@ -17,12 +17,17 @@ import { QueryJobOrdersDto } from './dto/query-job-orders.dto';
 import { JobOrderEntity } from './entities/job-order.entity';
 import { PaginatedJobOrdersEntity } from './entities/paginated-job-orders.entity';
 import { RequirePermission } from '../auth/auth.decorators';
+import { AuditService } from '../audit/audit.service';
+import { PipelineTimelineEventEntity } from '../audit/entities/pipeline-timeline-event.entity';
 
 @ApiTags('Job Orders')
 @ApiBearerAuth()
 @Controller('job-orders')
 export class JobOrdersController {
-  constructor(private readonly jobOrders: JobOrdersService) {}
+  constructor(
+    private readonly jobOrders: JobOrdersService,
+    private readonly audit: AuditService,
+  ) {}
 
   @Get()
   @RequirePermission('job_order', 'read')
@@ -49,6 +54,17 @@ export class JobOrdersController {
   @ApiResponse({ status: 200, description: 'Job order found', type: JobOrderEntity })
   findOne(@Param('id') id: string) {
     return this.jobOrders.findOne(id);
+  }
+
+  @Get(':id/pipeline-timeline')
+  @RequirePermission('job_order', 'read')
+  @ApiOperation({
+    operationId: 'getJobOrderPipelineTimeline',
+    summary: 'Every candidate submission/stage change for this job order',
+  })
+  @ApiResponse({ status: 200, description: 'Pipeline events, oldest first', type: PipelineTimelineEventEntity, isArray: true })
+  getPipelineTimeline(@Param('id') id: string) {
+    return this.audit.getPipelineTimeline({ jobOrderId: id });
   }
 
   @Post()

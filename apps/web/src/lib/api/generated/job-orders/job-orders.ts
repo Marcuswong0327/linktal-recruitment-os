@@ -30,6 +30,7 @@ import type {
   GetJobOrdersParams,
   JobOrderEntity,
   PaginatedJobOrdersEntity,
+  PipelineTimelineEventEntity,
   UpdateJobOrderDto
 } from '../types';
 
@@ -737,3 +738,132 @@ export const useDeleteJobOrder = <TError = ErrorResponse,
       > => {
       return useMutation(getDeleteJobOrderMutationOptions(options), queryClient);
     }
+    export type getJobOrderPipelineTimelineResponse200 = {
+  data: PipelineTimelineEventEntity[]
+  status: 200
+}
+
+export type getJobOrderPipelineTimelineResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getJobOrderPipelineTimelineResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type getJobOrderPipelineTimelineResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getJobOrderPipelineTimelineResponseSuccess = (getJobOrderPipelineTimelineResponse200) & {
+  headers: Headers;
+};
+export type getJobOrderPipelineTimelineResponseError = (getJobOrderPipelineTimelineResponse400 | getJobOrderPipelineTimelineResponse404 | getJobOrderPipelineTimelineResponse500) & {
+  headers: Headers;
+};
+
+export type getJobOrderPipelineTimelineResponse = (getJobOrderPipelineTimelineResponseSuccess | getJobOrderPipelineTimelineResponseError)
+
+export const getGetJobOrderPipelineTimelineUrl = (id: string,) => {
+
+
+
+
+  return `/job-orders/${id}/pipeline-timeline`
+}
+
+/**
+ * @summary Every candidate submission/stage change for this job order
+ */
+export const getJobOrderPipelineTimeline = async (id: string, options?: RequestInit): Promise<getJobOrderPipelineTimelineResponse> => {
+
+  return customFetch<getJobOrderPipelineTimelineResponse>(getGetJobOrderPipelineTimelineUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetJobOrderPipelineTimelineQueryKey = (id: string,) => {
+    return [
+    `/job-orders/${id}/pipeline-timeline`
+    ] as const;
+    }
+
+
+export const getGetJobOrderPipelineTimelineQueryOptions = <TData = Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>, TError = ErrorResponse>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetJobOrderPipelineTimelineQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>> = ({ signal }) => getJobOrderPipelineTimeline(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetJobOrderPipelineTimelineQueryResult = NonNullable<Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>>
+export type GetJobOrderPipelineTimelineQueryError = ErrorResponse
+
+
+export function useGetJobOrderPipelineTimeline<TData = Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>, TError = ErrorResponse>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>,
+          TError,
+          Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetJobOrderPipelineTimeline<TData = Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>,
+          TError,
+          Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetJobOrderPipelineTimeline<TData = Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Every candidate submission/stage change for this job order
+ */
+
+export function useGetJobOrderPipelineTimeline<TData = Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobOrderPipelineTimeline>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetJobOrderPipelineTimelineQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+

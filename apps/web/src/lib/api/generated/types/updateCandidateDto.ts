@@ -45,8 +45,6 @@ export interface UpdateCandidateDto {
   specializations?: string[];
   /** Status; defaults to COLD when omitted */
   status?: UpdateCandidateDtoStatus;
-  /** Notes */
-  notes?: string;
   /** Owning consultant ID */
   consultantId?: string;
 }

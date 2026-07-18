@@ -296,7 +296,7 @@ model Candidate {
   workHistory       Json? // JSONB: [{company, role, startDate, endDate}]
   specializations   Json? // JSONB: ["string"]
   status            CandidateStatus             @default(COLD)
-  notes             String?
+  notes             Json? // JSONB: [{id, content, timestamp, by, editedAt, editedBy}] — internal note timeline, newest last; edit/delete restricted to the note's author (or an admin). Mirrors Client.notes.
   consultantId      String? // Owning consultant — same shape as Client.consultantId, distinct from CandidateContactHistory.contactedById (who actually made a given contact).
   consultant        Consultant?                 @relation(fields: [consultantId], references: [id])
   lastContactedAt   DateTime? // Denormalized: max(CandidateContactHistory.contactedAt). Same reasoning as Client/Stakeholder.lastContactedAt — sorting needs a real column, not a live aggregate join.

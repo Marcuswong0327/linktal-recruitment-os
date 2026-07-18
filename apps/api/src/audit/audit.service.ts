@@ -104,4 +104,89 @@ export class AuditService {
 
     return { data, total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }
+
+  /**
+   * Reshapes CandidateSubmission's generic audit trail into a friendly
+   * pipeline-stage timeline — no separate write-side table, since
+   * CandidateSubmission is already an audited model and every status change
+   * already lands in AuditLog as a `{status: {from, to}}` diff. Scope by
+   * `candidateId` (that candidate's journey across every job order) or
+   * `jobOrderId` (everyone's journey through that one job order), or both.
+   */
+  async getPipelineTimeline(params: { candidateId?: string; jobOrderId?: string }) {
+    const submissions = await this.prisma.candidateSubmission.findMany({
+      where: {
+        ...(params.candidateId ? { candidateId: params.candidateId } : {}),
+        ...(params.jobOrderId ? { jobOrderId: params.jobOrderId } : {}),
+      },
+      select: { id: true, candidateId: true, jobOrderId: true },
+    });
+    if (submissions.length === 0) return [];
+    const submissionById = new Map(submissions.map((s) => [s.id, s]));
+
+    const logs = await this.prisma.auditLog.findMany({
+      where: { entityType: 'CandidateSubmission', entityId: { in: [...submissionById.keys()] } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Resolve actor + candidate + job order names in one lookup each,
+    // mirroring findAll's label-resolution approach above.
+    const actorIds = [...new Set(logs.map((l) => l.actorId).filter((id): id is string => !!id))];
+    const candidateIds = [...new Set(submissions.map((s) => s.candidateId))];
+    const jobOrderIds = [...new Set(submissions.map((s) => s.jobOrderId))];
+    const actors = actorIds.length
+      ? await this.prisma.consultant.findMany({
+          where: { id: { in: actorIds } },
+          select: { id: true, fullName: true },
+        })
+      : [];
+    const [candidates, jobOrders] = await Promise.all([
+      this.prisma.candidate.findMany({ where: { id: { in: candidateIds } }, select: { id: true, fullName: true } }),
+      this.prisma.jobOrder.findMany({ where: { id: { in: jobOrderIds } }, select: { id: true, jobTitle: true } }),
+    ]);
+    const actorNameById = new Map(actors.map((a) => [a.id, a.fullName]));
+    const candidateNameById = new Map(candidates.map((c) => [c.id, c.fullName]));
+    const jobOrderTitleById = new Map(jobOrders.map((j) => [j.id, j.jobTitle]));
+
+    const events = logs.map((log) => {
+      const submission = submissionById.get(log.entityId);
+      if (!submission) return null;
+
+      let kind: 'SUBMITTED' | 'STAGE_CHANGE' | 'REMOVED' | 'RESTORED';
+      let previousStage: string | null = null;
+      let newStage: string | null = null;
+
+      if (log.action === 'CREATE') {
+        kind = 'SUBMITTED';
+        const created = log.changes as Record<string, unknown> | null;
+        newStage = (created?.status as string) ?? null;
+      } else if (log.action === 'SOFT_DELETE') {
+        kind = 'REMOVED';
+      } else if (log.action === 'RESTORE') {
+        kind = 'RESTORED';
+      } else {
+        const diff = log.changes as Record<string, { from: unknown; to: unknown }> | null;
+        if (!diff?.status) return null; // an update that didn't touch status isn't a pipeline event
+        kind = 'STAGE_CHANGE';
+        previousStage = (diff.status.from as string) ?? null;
+        newStage = (diff.status.to as string) ?? null;
+      }
+
+      return {
+        submissionId: submission.id,
+        candidateId: submission.candidateId,
+        candidateName: candidateNameById.get(submission.candidateId) ?? null,
+        jobOrderId: submission.jobOrderId,
+        jobOrderTitle: jobOrderTitleById.get(submission.jobOrderId) ?? null,
+        kind,
+        previousStage,
+        newStage,
+        actorId: log.actorId,
+        actorName: log.actorId ? (actorNameById.get(log.actorId) ?? null) : null,
+        occurredAt: log.createdAt,
+      };
+    });
+
+    return events.filter((e): e is NonNullable<typeof e> => e !== null);
+  }
 }
