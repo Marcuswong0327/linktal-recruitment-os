@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { UpdateClientDtoQuality } from './updateClientDtoQuality';
 import type { UpdateClientDtoStatus } from './updateClientDtoStatus';
 
 export interface UpdateClientDto {
@@ -28,6 +29,8 @@ export interface UpdateClientDto {
   guaranteePeriod?: number;
   /** Status; defaults to COLD when omitted */
   status?: UpdateClientDtoStatus;
+  /** Lead quality; defaults to MEDIUM when omitted */
+  quality?: UpdateClientDtoQuality;
   /** Owning consultant ID */
   consultantId?: string;
 }

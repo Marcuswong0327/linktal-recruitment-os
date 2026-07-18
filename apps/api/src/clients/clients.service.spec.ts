@@ -1,7 +1,7 @@
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { ClientStatusFilter, QueryClientsDto, SortOrder } from './dto/query-clients.dto';
+import { ClientQualityFilter, ClientStatusFilter, QueryClientsDto, SortOrder } from './dto/query-clients.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 
@@ -13,6 +13,7 @@ describe('ClientsService.create', () => {
       companyName: 'Acme Corp',
       industry: null,
       specialization: null,
+      stakeholders: [],
     };
     const create = jest.fn().mockResolvedValue(created);
     const prisma = { client: { create } } as unknown as ExtendedPrismaClient;
@@ -24,7 +25,16 @@ describe('ClientsService.create', () => {
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0].data).not.toHaveProperty('displayId');
-    expect(result).toEqual(created);
+    expect(result).toEqual({
+      id: 'cl1',
+      displayId: 'Client-0101',
+      companyName: 'Acme Corp',
+      industry: null,
+      specialization: null,
+      lastContactType: null,
+      lastContactNotes: null,
+      lastContactedBy: null,
+    });
   });
 });
 
@@ -32,7 +42,7 @@ describe('ClientsService.remove (cascade soft-delete)', () => {
   it('cascades to job orders + their submissions/placements, stakeholders and research', async () => {
     const prisma = {
       client: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'cl1', companyName: 'Acme' }),
+        findUnique: jest.fn().mockResolvedValue({ id: 'cl1', companyName: 'Acme', stakeholders: [] }),
         delete: jest.fn().mockResolvedValue({ id: 'cl1' }),
       },
       jobOrder: {
@@ -79,9 +89,9 @@ describe('ClientsService.remove (cascade soft-delete)', () => {
 // through, unmangled) so a future refactor here can't reintroduce the same
 // class of bug from the other direction.
 describe('ClientsService.update', () => {
-  function makeService(existing: unknown = { id: 'cl1' }) {
+  function makeService(existing: unknown = { id: 'cl1', stakeholders: [] }) {
     const findUnique = jest.fn().mockResolvedValue(existing);
-    const update = jest.fn().mockResolvedValue({ id: 'cl1' });
+    const update = jest.fn().mockResolvedValue({ id: 'cl1', stakeholders: [] });
     const prisma = { client: { findUnique, update } } as unknown as ExtendedPrismaClient;
     const base = {} as unknown as PrismaService;
     return { service: new ClientsService(prisma, base), update };
@@ -139,6 +149,7 @@ describe('ClientsService.findAll — consultantId filter', () => {
     pageSize: 20,
     sortOrder: SortOrder.asc,
     status: ClientStatusFilter.ALL,
+    quality: ClientQualityFilter.ALL,
   };
 
   it('does not filter by consultant when consultantId is omitted', async () => {

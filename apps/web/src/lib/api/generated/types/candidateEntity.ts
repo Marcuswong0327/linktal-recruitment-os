@@ -50,6 +50,28 @@ export interface CandidateEntity {
   status: CandidateEntityStatus;
   /** @nullable */
   notes: string | null;
+  /** @nullable */
+  consultantId: string | null;
+  /**
+     * Latest contactedAt across this candidate's contact history; null if never contacted
+     * @nullable
+     */
+  lastContactedAt: string | null;
+  /**
+     * Contact method of the most recent contact (email, call, meeting, linkedin)
+     * @nullable
+     */
+  lastContactType: string | null;
+  /**
+     * Notes from the most recent contact
+     * @nullable
+     */
+  lastContactNotes: string | null;
+  /**
+     * Resolved name of the consultant who made the most recent contact
+     * @nullable
+     */
+  lastContactedBy: string | null;
   createdAt: string;
   updatedAt: string;
 }

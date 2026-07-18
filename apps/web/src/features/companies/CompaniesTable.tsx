@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { Combobox } from '@base-ui/react/combobox';
-import { ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Download, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
@@ -66,13 +66,24 @@ import {
   useCreateSpecialization,
   useGetSpecializations,
 } from '@/lib/api/generated/specializations/specializations';
-import type {
-  ConsultantEntity,
-  GetClientsStatus,
-  UpdateClientDto,
+import {
+  GetClientsSortBy,
+  GetClientsSortOrder,
+  type ConsultantEntity,
+  type GetClientsQuality,
+  type GetClientsStatus,
+  type UpdateClientDto,
 } from '@/lib/api/generated/types';
-import { getCompanyColumns, statusOptions, statusVariant, tobOptions } from './columns';
-import { type ClientStatus, type Company, clientStatusLabels, clientStatuses } from './schema';
+import { getCompanyColumns, qualityOptions, statusOptions, statusVariant, tobOptions } from './columns';
+import { exportCompaniesToExcel } from './exportToExcel';
+import {
+  type ClientQuality,
+  type ClientStatus,
+  type Company,
+  clientQualityLabels,
+  clientStatusLabels,
+  clientStatuses,
+} from './schema';
 
 const PAGE_SIZE = 20;
 
@@ -84,6 +95,7 @@ interface CompanyFormValues {
   city: string | null;
   country: string | null;
   status: ClientStatus;
+  quality: ClientQuality;
   tobSigned: boolean;
   feePercentage: number | null;
   consultantId: string | null;
@@ -101,8 +113,11 @@ export function CompaniesTable({
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
   const [status, setStatus] = React.useState<GetClientsStatus | undefined>();
+  const [quality, setQuality] = React.useState<GetClientsQuality | undefined>();
   const [tobSigned, setTobSigned] = React.useState<boolean | undefined>();
   const [consultantId, setConsultantId] = React.useState<string | undefined>();
+  const [sortBy, setSortBy] = React.useState<GetClientsSortBy | undefined>();
+  const [sortOrder, setSortOrder] = React.useState<GetClientsSortOrder>(GetClientsSortOrder.desc);
   const [creating, setCreating] = React.useState(false);
   const [selectedCompanies, setSelectedCompanies] = React.useState<Company[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
@@ -111,7 +126,7 @@ export function CompaniesTable({
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
 
   const { data, isLoading, isFetching, isError, error } = useGetClients(
-    { page, pageSize: PAGE_SIZE, q: search, status, tobSigned, consultantId },
+    { page, pageSize: PAGE_SIZE, q: search, status, quality, tobSigned, consultantId, sortBy, sortOrder },
     { query: { placeholderData: keepPreviousData } },
   );
 
@@ -119,12 +134,14 @@ export function CompaniesTable({
   // consultant list once to resolve names for the table and edit form.
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
+  const { labelFor: consultantLabelFor } = useConsultantLookup(consultants);
   // Disables a row's inline pills (relationship/TOB/consultant) while any one of them is saving.
   const [pendingRowId, setPendingRowId] = React.useState<string | null>(null);
 
   const companyFilters: DataGridFilter[] = React.useMemo(
     () => [
       { columnId: 'status', title: 'Relationship', single: true, options: statusOptions },
+      { columnId: 'quality', title: 'Quality', single: true, options: qualityOptions },
       { columnId: 'tobSigned', title: 'TOB', single: true, options: tobOptions },
       {
         columnId: 'consultantId',
@@ -156,17 +173,27 @@ export function CompaniesTable({
   const result = data?.status === 200 ? data.data : undefined;
   const companies = result?.data ?? [];
 
-  function handleQueryChange({ search, columnFilters }: DataGridQuery) {
+  function handleQueryChange({ search, sorting, columnFilters }: DataGridQuery) {
     const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as
+      string[] | undefined;
+    const qualityFilter = columnFilters.find((f) => f.id === 'quality')?.value as
       string[] | undefined;
     const tobFilter = columnFilters.find((f) => f.id === 'tobSigned')?.value as
       string[] | undefined;
     const consultantFilter = columnFilters.find((f) => f.id === 'consultantId')?.value as
       string[] | undefined;
+    const sort = sorting[0];
+    // Only forward column ids the backend actually knows how to sort by
+    // (see ClientSortField) — every sortable column here is named after its
+    // ClientSortField counterpart, so this is a plain membership check.
+    const sortField = sort && sort.id in GetClientsSortBy ? (sort.id as GetClientsSortBy) : undefined;
     setSearch(search.trim() || undefined);
     setStatus(statusFilter?.[0] as GetClientsStatus | undefined);
+    setQuality(qualityFilter?.[0] as GetClientsQuality | undefined);
     setTobSigned(tobFilter?.[0] === undefined ? undefined : tobFilter[0] === 'true');
     setConsultantId(consultantFilter?.[0]);
+    setSortBy(sortField);
+    setSortOrder(sort?.desc ? GetClientsSortOrder.desc : GetClientsSortOrder.asc);
     setPage(1);
   }
 
@@ -179,6 +206,7 @@ export function CompaniesTable({
         city: values.city ?? undefined,
         country: values.country ?? undefined,
         status: values.status,
+        quality: values.quality,
         tobSigned: values.tobSigned,
         feePercentage: values.feePercentage ?? undefined,
         consultantId: values.consultantId ?? undefined,
@@ -202,6 +230,15 @@ export function CompaniesTable({
     if (failed > 0) toast.error(`Failed for ${failed} compan${failed === 1 ? 'y' : 'ies'}`);
     setIsBulkUpdating(false);
     setSelectedCompanies([]);
+  }
+
+  function handleExport() {
+    exportCompaniesToExcel(selectedCompanies, consultantLabelFor);
+  }
+
+  function handleEnrichStakeholders() {
+    const clientIds = selectedCompanies.map((c) => c.id).join(',');
+    router.push(`/companies/stakeholder-workspace?clientIds=${encodeURIComponent(clientIds)}`);
   }
 
   async function handleBulkDelete() {
@@ -257,6 +294,16 @@ export function CompaniesTable({
     [handleInlineUpdate],
   );
 
+  const handleQualityChange = React.useCallback(
+    (company: Company, newQuality: ClientQuality) =>
+      handleInlineUpdate(
+        company,
+        { quality: newQuality },
+        `Quality set to ${clientQualityLabels[newQuality]}`,
+      ),
+    [handleInlineUpdate],
+  );
+
   const handleTobSignedChange = React.useCallback(
     (company: Company, newTobSigned: boolean) =>
       handleInlineUpdate(
@@ -273,10 +320,18 @@ export function CompaniesTable({
         consultants,
         onConsultantChange: handleConsultantChange,
         onStatusChange: handleStatusChange,
+        onQualityChange: handleQualityChange,
         onTobSignedChange: handleTobSignedChange,
         pendingRowId,
       }),
-    [consultants, handleConsultantChange, handleStatusChange, handleTobSignedChange, pendingRowId],
+    [
+      consultants,
+      handleConsultantChange,
+      handleStatusChange,
+      handleQualityChange,
+      handleTobSignedChange,
+      pendingRowId,
+    ],
   );
 
   if (isError) {
@@ -305,6 +360,11 @@ export function CompaniesTable({
         toolbar={
           selectedCompanies.length > 0 ? (
             <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
+              <Button size="lg" variant="outline" onClick={handleExport}>
+                <Download />
+                Export to Excel
+              </Button>
+
               <AlertDialog>
                 <AlertDialogTrigger
                   render={
@@ -368,6 +428,9 @@ export function CompaniesTable({
                   </DropdownMenuSub>
                   <DropdownMenuItem onClick={() => setConsultantPickerOpen(true)}>
                     Set consultant
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleEnrichStakeholders}>
+                    Enrich Data with Stakeholders
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -519,6 +582,7 @@ function CompanyForm({
   const [city, setCity] = React.useState('');
   const [country, setCountry] = React.useState('');
   const [status, setStatus] = React.useState<ClientStatus>('COLD');
+  const [quality, setQuality] = React.useState<ClientQuality>('MEDIUM');
   const [tobSigned, setTobSigned] = React.useState(false);
   const [feePercentage, setFeePercentage] = React.useState('');
   const [consultantId, setConsultantId] = React.useState('');
@@ -532,6 +596,7 @@ function CompanyForm({
       city: city || null,
       country: country || null,
       status,
+      quality,
       tobSigned,
       feePercentage: feePercentage === '' ? null : Number(feePercentage),
       consultantId: consultantId || null,
@@ -587,6 +652,14 @@ function CompanyForm({
             value={status}
             onValueChange={(v) => setStatus(v as ClientStatus)}
             options={statusOptions}
+          />
+        </FormField>
+        <FormField label="Quality" htmlFor="company-quality">
+          <EnumSelect
+            id="company-quality"
+            value={quality}
+            onValueChange={(v) => setQuality(v as ClientQuality)}
+            options={qualityOptions}
           />
         </FormField>
         <FormField label="Terms of Business" htmlFor="company-tob">

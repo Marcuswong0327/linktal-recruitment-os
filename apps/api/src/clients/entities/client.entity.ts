@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Client, ClientStatus } from '@prisma/client';
+import { Client, ClientQuality, ClientStatus } from '@prisma/client';
 import { ClientNoteDto } from '../dto/client-note.dto';
 
 /**
@@ -42,7 +42,20 @@ export class ClientEntity implements Omit<Client, 'deletedAt' | 'deletedById' | 
   @ApiProperty({ type: Number, nullable: true, example: 15 }) feePercentage!: number | null;
   @ApiProperty({ example: 90 }) guaranteePeriod!: number;
   @ApiProperty({ enum: ClientStatus }) status!: ClientStatus;
+  @ApiProperty({ enum: ClientQuality }) quality!: ClientQuality;
   @ApiProperty({ type: [ClientNoteDto], nullable: true }) notes!: ClientNoteDto[] | null;
+  @ApiProperty({
+    type: Date,
+    nullable: true,
+    description: 'Latest contactedAt across this client\'s stakeholders; null if never contacted',
+  })
+  lastContactedAt!: Date | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Contact method of the most recent contact, across all stakeholders (email, call, meeting, linkedin)' })
+  lastContactType!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Notes from the most recent contact, across all stakeholders' })
+  lastContactNotes!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Resolved name of the consultant who made the most recent contact, across all stakeholders' })
+  lastContactedBy!: string | null;
   @ApiProperty({ type: String, nullable: true }) consultantId!: string | null;
   @ApiProperty() createdAt!: Date;
   @ApiProperty() updatedAt!: Date;

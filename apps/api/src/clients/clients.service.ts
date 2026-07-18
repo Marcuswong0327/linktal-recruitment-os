@@ -15,25 +15,67 @@ import { RequestContext } from '../common/request-context';
 import { AuthUser } from '../auth/auth.types';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { ClientStatusFilter, QueryClientsDto } from './dto/query-clients.dto';
+import { ClientQualityFilter, ClientStatusFilter, QueryClientsDto } from './dto/query-clients.dto';
 import { AddClientNoteDto, ClientNoteDto, UpdateClientNoteDto } from './dto/client-note.dto';
 
 // Industry/specialization are FK relations now, not scalars — every read
 // needs this to get the resolved name back, and every write needs it to
 // return one (ClientEntity documents them as plain `string | null`, not the
 // nested `{id, name, ...}` object Prisma would otherwise hand back).
+//
+// lastContactType/Notes/By aren't sorted or filtered on (unlike
+// lastContactedAt, which is a denormalized column for that reason), so
+// they're resolved live instead: each non-deleted stakeholder's own top-1
+// contact row (bounded — a client typically has a handful of stakeholders),
+// flattened and reduced to the single most recent one in `toEntity`. A
+// two-hop "latest across all stakeholders" aggregate isn't expressible as a
+// single Prisma relation `orderBy`/`take`, so this fetches the small
+// candidate set and picks the max in application code instead of a raw query.
 const CLIENT_INCLUDE = {
   industry: { select: { name: true } },
   specialization: { select: { name: true } },
+  stakeholders: {
+    where: { deletedAt: null },
+    select: {
+      contactHistory: {
+        orderBy: { contactedAt: 'desc' },
+        take: 1,
+        select: { contactType: true, notes: true, contactedAt: true, contactedBy: { select: { fullName: true } } },
+      },
+    },
+  },
 } satisfies Prisma.ClientInclude;
 
-type ClientWithNames = { industry: { name: string } | null; specialization: { name: string } | null };
+type LatestContactRow = {
+  contactType: string;
+  notes: string | null;
+  contactedAt: Date;
+  contactedBy: { fullName: string } | null;
+};
 
-function toEntity<T extends ClientWithNames>(client: T) {
+type ClientWithRelations = {
+  industry: { name: string } | null;
+  specialization: { name: string } | null;
+  stakeholders: { contactHistory: LatestContactRow[] }[];
+};
+
+function latestContact(rows: LatestContactRow[]): LatestContactRow | undefined {
+  return rows.reduce<LatestContactRow | undefined>(
+    (max, row) => (!max || row.contactedAt > max.contactedAt ? row : max),
+    undefined,
+  );
+}
+
+function toEntity<T extends ClientWithRelations>(client: T) {
+  const { industry, specialization, stakeholders, ...rest } = client;
+  const latest = latestContact(stakeholders.flatMap((s) => s.contactHistory));
   return {
-    ...client,
-    industry: client.industry?.name ?? null,
-    specialization: client.specialization?.name ?? null,
+    ...rest,
+    industry: industry?.name ?? null,
+    specialization: specialization?.name ?? null,
+    lastContactType: latest?.contactType ?? null,
+    lastContactNotes: latest?.notes ?? null,
+    lastContactedBy: latest?.contactedBy?.fullName ?? null,
   };
 }
 
@@ -53,6 +95,10 @@ export class ClientsService {
 
     if (query.status !== ClientStatusFilter.ALL) {
       where.status = query.status as unknown as Prisma.ClientWhereInput['status'];
+    }
+
+    if (query.quality !== ClientQualityFilter.ALL) {
+      where.quality = query.quality as unknown as Prisma.ClientWhereInput['quality'];
     }
 
     // contains/insensitive text filters
@@ -84,15 +130,22 @@ export class ClientsService {
       ];
     }
 
-    const orderBy: Prisma.ClientOrderByWithRelationInput = sortBy
-      ? { [sortBy]: sortOrder }
-      : { createdAt: 'desc' };
+    // Default: most-recently-contacted first. lastContactedAt is null for
+    // clients with no contact history yet — "nulls: last" keeps those at the
+    // bottom regardless of sort direction, rather than Postgres's default
+    // (nulls first on desc), which would otherwise put never-contacted
+    // clients at the very top.
+    const orderBy: Prisma.ClientOrderByWithRelationInput =
+      sortBy === 'lastContactedAt' || !sortBy
+        ? { lastContactedAt: { sort: sortBy ? sortOrder : 'desc', nulls: 'last' } }
+        : { [sortBy]: sortOrder };
 
     // Parallel, not $transaction: these two reads don't need one consistent
     // DB snapshot, and running them concurrently instead of sequentially
     // (BEGIN/Q1/Q2/COMMIT) roughly halves the network round trips to Neon.
     const [data, total] = await Promise.all([
       this.prisma.client.findMany({
+        
         where,
         orderBy,
         skip: (page - 1) * pageSize,

@@ -13,6 +13,14 @@ import { Candidate, CandidateStatus, Prisma } from '@prisma/client';
  * the column, just as `null` when empty. An explicit `type` is required: a
  * `T | null` union reflects as `Object` at runtime, which would otherwise emit
  * `type: object` instead of the real scalar type.
+ *
+ * `lastContact*` fields aren't part of the raw `Candidate` model — they're
+ * resolved from the most recent `CandidateContactHistory` row (see
+ * CandidatesService), added here so exports get readable columns without the
+ * caller joining contact history + consultants themselves. `lastContactedAt`
+ * is the exception: it's a real denormalized column (needed for sorting), the
+ * other three are resolved live from that latest row since they're
+ * display-only.
  */
 export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
@@ -43,6 +51,19 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
   specializations!: Prisma.JsonValue;
   @ApiProperty({ enum: CandidateStatus }) status!: CandidateStatus;
   @ApiProperty({ type: String, nullable: true }) notes!: string | null;
+  @ApiProperty({ type: String, nullable: true }) consultantId!: string | null;
+  @ApiProperty({
+    type: Date,
+    nullable: true,
+    description: "Latest contactedAt across this candidate's contact history; null if never contacted",
+  })
+  lastContactedAt!: Date | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Contact method of the most recent contact (email, call, meeting, linkedin)' })
+  lastContactType!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Notes from the most recent contact' })
+  lastContactNotes!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Resolved name of the consultant who made the most recent contact' })
+  lastContactedBy!: string | null;
   @ApiProperty() createdAt!: Date;
   @ApiProperty() updatedAt!: Date;
 }

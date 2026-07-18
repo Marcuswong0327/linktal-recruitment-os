@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { ClientEntityQuality } from './clientEntityQuality';
 import type { ClientEntityStatus } from './clientEntityStatus';
 import type { ClientNoteDto } from './clientNoteDto';
 
@@ -37,8 +38,29 @@ export interface ClientEntity {
   feePercentage: number | null;
   guaranteePeriod: number;
   status: ClientEntityStatus;
+  quality: ClientEntityQuality;
   /** @nullable */
   notes: ClientNoteDto[] | null;
+  /**
+     * Latest contactedAt across this client's stakeholders; null if never contacted
+     * @nullable
+     */
+  lastContactedAt: string | null;
+  /**
+     * Contact method of the most recent contact, across all stakeholders (email, call, meeting, linkedin)
+     * @nullable
+     */
+  lastContactType: string | null;
+  /**
+     * Notes from the most recent contact, across all stakeholders
+     * @nullable
+     */
+  lastContactNotes: string | null;
+  /**
+     * Resolved name of the consultant who made the most recent contact, across all stakeholders
+     * @nullable
+     */
+  lastContactedBy: string | null;
   /** @nullable */
   consultantId: string | null;
   createdAt: string;

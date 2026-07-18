@@ -6,7 +6,7 @@ import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 
 describe('CandidatesService.create', () => {
   it('creates without setting displayId (DB sequence owns it) and returns the row', async () => {
-    const created = { id: 'c1', displayId: 'CDD-0105', fullName: 'Jane Doe' };
+    const created = { id: 'c1', displayId: 'CDD-0105', fullName: 'Jane Doe', contactHistory: [] };
     const create = jest.fn().mockResolvedValue(created);
     const prisma = { candidate: { create } } as unknown as ExtendedPrismaClient;
     const base = {} as unknown as PrismaService;
@@ -17,7 +17,14 @@ describe('CandidatesService.create', () => {
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0].data).not.toHaveProperty('displayId');
-    expect(result).toBe(created);
+    expect(result).toEqual({
+      id: 'c1',
+      displayId: 'CDD-0105',
+      fullName: 'Jane Doe',
+      lastContactType: null,
+      lastContactNotes: null,
+      lastContactedBy: null,
+    });
   });
 });
 
@@ -28,7 +35,7 @@ describe('CandidatesService.remove (cascade soft-delete)', () => {
   function setup(submissionIds: string[]) {
     const prisma = {
       candidate: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'c1', fullName: 'Jane' }),
+        findUnique: jest.fn().mockResolvedValue({ id: 'c1', fullName: 'Jane', contactHistory: [] }),
         delete: jest.fn().mockResolvedValue({ id: 'c1' }),
       },
       candidateSubmission: {
@@ -73,7 +80,9 @@ describe('CandidatesService.remove (cascade soft-delete)', () => {
 
 describe('CandidatesService.restore', () => {
   function setup(existing: unknown) {
-    const prisma = { candidate: { update: jest.fn().mockResolvedValue({ id: 'c1' }) } };
+    const prisma = {
+      candidate: { update: jest.fn().mockResolvedValue({ id: 'c1', contactHistory: [] }) },
+    };
     const base = { candidate: { findUnique: jest.fn().mockResolvedValue(existing) } };
     const service = new CandidatesService(
       prisma as unknown as ExtendedPrismaClient,
@@ -88,6 +97,7 @@ describe('CandidatesService.restore', () => {
     expect(prisma.candidate.update).toHaveBeenCalledWith({
       where: { id: 'c1' },
       data: { deletedAt: null, deletedById: null },
+      include: expect.any(Object),
     });
   });
 

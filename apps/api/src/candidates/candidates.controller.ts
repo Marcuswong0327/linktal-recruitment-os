@@ -14,8 +14,10 @@ import { CandidatesService } from './candidates.service';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { QueryCandidatesDto } from './dto/query-candidates.dto';
+import { CreateCandidateContactHistoryDto } from './dto/create-candidate-contact-history.dto';
 import { CandidateEntity } from './entities/candidate.entity';
 import { PaginatedCandidatesEntity } from './entities/paginated-candidates.entity';
+import { CandidateContactHistoryEntity } from './entities/candidate-contact-history.entity';
 import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
 import { AuthUser } from '../auth/auth.types';
 import { ForbiddenException } from '@nestjs/common';
@@ -103,5 +105,20 @@ export class CandidatesController {
       });
     }
     return this.candidates.purge(id);
+  }
+
+  @Post(':id/contact-history')
+  @RequirePermission('candidate', 'update')
+  @ApiOperation({
+    operationId: 'addCandidateContactHistory',
+    summary: 'Log a contact with a candidate — the calling consultant is recorded automatically',
+  })
+  @ApiResponse({ status: 201, description: 'Contact logged', type: CandidateContactHistoryEntity })
+  addContactHistory(
+    @Param('id') id: string,
+    @Body() dto: CreateCandidateContactHistoryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.candidates.addContactHistory(id, dto, user.consultantId);
   }
 }

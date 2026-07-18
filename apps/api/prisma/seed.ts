@@ -17,6 +17,7 @@ const RESOURCES = [
   "permission",
   "industry",
   "specialization",
+  "stakeholder_role_type",
   "report",
   "audit",
 ] as const;
@@ -29,10 +30,15 @@ const ACTIONS = ["create", "read", "update", "delete"] as const;
 // `audit` is read-only too: the activity log is append-only and admin-viewed.
 const READ_ONLY_RESOURCES = new Set<string>(["permission", "audit"]);
 
-// Industry/specialization have no update/delete endpoints — no admin page to
-// rename or retire one, the company form's combobox is the only way they get
-// added (create), alongside listing them for its dropdown (read).
-const CREATE_READ_ONLY_RESOURCES = new Set<string>(["industry", "specialization"]);
+// Industry/specialization/stakeholder_role_type have no update/delete
+// endpoints — no admin page to rename or retire one, the relevant form's
+// combobox is the only way they get added (create), alongside listing them
+// for its dropdown (read).
+const CREATE_READ_ONLY_RESOURCES = new Set<string>([
+  "industry",
+  "specialization",
+  "stakeholder_role_type",
+]);
 
 // The activity log is sensitive — keep it admin-only, so it's excluded from the
 // "read everything" grants that managers otherwise get.
@@ -57,16 +63,17 @@ const ROLE_PERMISSIONS: Record<string, { resources: string[]; actions: string[] 
     // resources (incl. consultant). RBAC management (role/permission/user) and
     // the audit log stay admin-only.
     { resources: readableBy(true), actions: ["read"] },
-    { resources: ["candidate", "client", "stakeholder", "job_order", "job_research", "submission", "placement", "consultant", "role", "industry", "specialization"], actions: ["create", "update", "delete"] },
+    { resources: ["candidate", "client", "stakeholder", "job_order", "job_research", "submission", "placement", "consultant", "role", "industry", "specialization", "stakeholder_role_type"], actions: ["create", "update", "delete"] },
     { resources: ["report"], actions: ["create"] },
   ],
   consultant: [
     // CRUD on core recruitment entities only. No consultant/role/permission
     // read: the consultant directory and the role editor are admin/manager only.
     { resources: ["candidate", "client", "stakeholder", "job_order", "job_research", "submission", "placement"], actions: [...ACTIONS] },
-    // Editing a company's Industry/Specialization combobox needs to list and
-    // add to the catalog, same as anyone who can update a client.
-    { resources: ["industry", "specialization"], actions: ["create", "read"] },
+    // Editing a company's Industry/Specialization combobox, or a stakeholder's
+    // role type combobox, needs to list and add to the catalog, same as
+    // anyone who can update a client/stakeholder.
+    { resources: ["industry", "specialization", "stakeholder_role_type"], actions: ["create", "read"] },
   ],
   finance: [
     // Read access to placements and reports, limited other access
@@ -75,7 +82,7 @@ const ROLE_PERMISSIONS: Record<string, { resources: string[]; actions: string[] 
   ],
   researcher: [
     // Research and upload only
-    { resources: ["client", "stakeholder", "job_research", "candidate", "industry", "specialization"], actions: ["create", "read", "update"] },
+    { resources: ["client", "stakeholder", "job_research", "candidate", "industry", "specialization", "stakeholder_role_type"], actions: ["create", "read", "update"] },
     { resources: ["job_order", "submission", "placement"], actions: ["read"] },
   ],
   viewer: [

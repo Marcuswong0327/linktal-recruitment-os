@@ -25,7 +25,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  CandidateContactHistoryEntity,
   CandidateEntity,
+  CreateCandidateContactHistoryDto,
   CreateCandidateDto,
   ErrorResponse,
   GetCandidatesParams,
@@ -934,4 +936,104 @@ export const usePurgeCandidate = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getPurgeCandidateMutationOptions(options), queryClient);
+    }
+    export type addCandidateContactHistoryResponse201 = {
+  data: CandidateContactHistoryEntity
+  status: 201
+}
+
+export type addCandidateContactHistoryResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type addCandidateContactHistoryResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type addCandidateContactHistoryResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type addCandidateContactHistoryResponseSuccess = (addCandidateContactHistoryResponse201) & {
+  headers: Headers;
+};
+export type addCandidateContactHistoryResponseError = (addCandidateContactHistoryResponse400 | addCandidateContactHistoryResponse404 | addCandidateContactHistoryResponse500) & {
+  headers: Headers;
+};
+
+export type addCandidateContactHistoryResponse = (addCandidateContactHistoryResponseSuccess | addCandidateContactHistoryResponseError)
+
+export const getAddCandidateContactHistoryUrl = (id: string,) => {
+
+
+
+
+  return `/candidates/${id}/contact-history`
+}
+
+/**
+ * @summary Log a contact with a candidate — the calling consultant is recorded automatically
+ */
+export const addCandidateContactHistory = async (id: string,
+    createCandidateContactHistoryDto: CreateCandidateContactHistoryDto, options?: RequestInit): Promise<addCandidateContactHistoryResponse> => {
+
+  return customFetch<addCandidateContactHistoryResponse>(getAddCandidateContactHistoryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createCandidateContactHistoryDto)
+  }
+);}
+
+
+
+
+
+export const getAddCandidateContactHistoryMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCandidateContactHistory>>, TError,{id: string;data: CreateCandidateContactHistoryDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addCandidateContactHistory>>, TError,{id: string;data: CreateCandidateContactHistoryDto}, TContext> => {
+
+const mutationKey = ['addCandidateContactHistory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addCandidateContactHistory>>, {id: string;data: CreateCandidateContactHistoryDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  addCandidateContactHistory(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddCandidateContactHistoryMutationResult = NonNullable<Awaited<ReturnType<typeof addCandidateContactHistory>>>
+    export type AddCandidateContactHistoryMutationBody = CreateCandidateContactHistoryDto
+    export type AddCandidateContactHistoryMutationError = ErrorResponse
+
+    /**
+ * @summary Log a contact with a candidate — the calling consultant is recorded automatically
+ */
+export const useAddCandidateContactHistory = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addCandidateContactHistory>>, TError,{id: string;data: CreateCandidateContactHistoryDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addCandidateContactHistory>>,
+        TError,
+        {id: string;data: CreateCandidateContactHistoryDto},
+        TContext
+      > => {
+      return useMutation(getAddCandidateContactHistoryMutationOptions(options), queryClient);
     }

@@ -6,7 +6,25 @@ import Link from 'next/link';
 import { EnumSelect } from '@/components/EnumSelect';
 import { ConsultantCombobox } from '@/components/ConsultantCombobox';
 import type { ConsultantEntity } from '@/lib/api/generated/types';
-import { type ClientStatus, type Company, clientStatusLabels, clientStatuses } from './schema';
+import {
+  type ClientQuality,
+  type ClientStatus,
+  type Company,
+  clientQualities,
+  clientQualityLabels,
+  clientStatusLabels,
+  clientStatuses,
+} from './schema';
+
+const dateFormatter = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+});
+
+function formatDate(iso: string) {
+  return dateFormatter.format(new Date(iso));
+}
 
 export const statusVariant: Record<ClientStatus, 'info' | 'warning' | 'success'> = {
   COLD: 'info',
@@ -30,6 +48,19 @@ export const tobTriggerClassName: Record<'true' | 'false', string> = {
   false: 'border-transparent bg-muted text-muted-foreground',
 };
 
+// Ascending scale: muted (low) -> info (medium) -> success (high).
+export const qualityVariant: Record<ClientQuality, 'muted' | 'info' | 'success'> = {
+  LOW: 'muted',
+  MEDIUM: 'info',
+  HIGH: 'success',
+};
+
+export const qualityTriggerClassName: Record<ClientQuality, string> = {
+  LOW: 'border-transparent bg-muted text-muted-foreground',
+  MEDIUM: 'border-info/30 bg-info/10 text-info',
+  HIGH: 'border-success/30 bg-success/10 text-success',
+};
+
 // Single option list per field — `variant` drives Badges/faceted filters,
 // `triggerClassName` drives the colored EnumSelect pills (table cell, drawer,
 // and detail page all share these instead of each rebuilding their own).
@@ -38,6 +69,13 @@ export const statusOptions = clientStatuses.map((value) => ({
   label: clientStatusLabels[value],
   variant: statusVariant[value],
   triggerClassName: statusTriggerClassName[value],
+}));
+
+export const qualityOptions = clientQualities.map((value) => ({
+  value,
+  label: clientQualityLabels[value],
+  variant: qualityVariant[value],
+  triggerClassName: qualityTriggerClassName[value],
 }));
 
 export const tobOptions = [
@@ -60,6 +98,7 @@ interface CompanyColumnsOptions {
   /** Fires on selection — applied immediately, no drawer/save step. */
   onConsultantChange: (company: Company, consultantId: string) => void;
   onStatusChange: (company: Company, status: ClientStatus) => void;
+  onQualityChange: (company: Company, quality: ClientQuality) => void;
   onTobSignedChange: (company: Company, tobSigned: boolean) => void;
   /** Row id currently saving an inline change — disables that row's pills. */
   pendingRowId: string | null;
@@ -69,6 +108,7 @@ export function getCompanyColumns({
   consultants,
   onConsultantChange,
   onStatusChange,
+  onQualityChange,
   onTobSignedChange,
   pendingRowId,
 }: CompanyColumnsOptions): ColumnDef<Company>[] {
@@ -84,6 +124,10 @@ export function getCompanyColumns({
     {
       accessorKey: 'companyName',
       header: 'Company',
+      // Free text — not a valid ClientSortField (see query-clients.dto.ts),
+      // so sorting by it would only ever yield an arbitrary alphabetical
+      // grouping and the backend rejects it as an unknown sortBy value.
+      enableSorting: false,
       cell: ({ row }) => (
         <Link
           href={`/companies/${row.original.id}`}
@@ -143,6 +187,29 @@ export function getCompanyColumns({
       },
     },
     {
+      accessorKey: 'quality',
+      header: 'Quality',
+      // Unlike status, quality is a meaningfully ordinal enum (Low < Medium <
+      // High, matching the DB enum's declaration order), so sorting it is
+      // left enabled — see ClientSortField in query-clients.dto.ts.
+      meta: { align: 'center', strictMinSize: true },
+      cell: ({ row }) => {
+        const company = row.original;
+        return (
+          <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
+            <EnumSelect
+              value={company.quality}
+              onValueChange={(v) => onQualityChange(company, v as ClientQuality)}
+              options={qualityOptions}
+              disabled={pendingRowId === company.id}
+              size="badge"
+              className="w-fit mx-auto"
+            />
+          </div>
+        );
+      },
+    },
+    {
       accessorKey: 'tobSigned',
       header: 'TOB',
       enableSorting: false,
@@ -162,6 +229,15 @@ export function getCompanyColumns({
           </div>
         );
       },
+    },
+    {
+      accessorKey: 'lastContactedAt',
+      header: 'Last contacted',
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {row.original.lastContactedAt ? formatDate(row.original.lastContactedAt) : '—'}
+        </span>
+      ),
     },
     {
       accessorKey: 'feePercentage',

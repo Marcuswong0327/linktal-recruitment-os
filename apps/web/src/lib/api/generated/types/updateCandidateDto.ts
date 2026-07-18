@@ -47,4 +47,6 @@ export interface UpdateCandidateDto {
   status?: UpdateCandidateDtoStatus;
   /** Notes */
   notes?: string;
+  /** Owning consultant ID */
+  consultantId?: string;
 }

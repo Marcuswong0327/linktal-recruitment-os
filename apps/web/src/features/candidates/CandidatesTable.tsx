@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Download, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
@@ -29,14 +29,19 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
+import { useConsultantLookup } from '@/components/ConsultantCombobox';
+import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
 import {
   deleteCandidate as deleteCandidateRequest,
   getGetCandidatesQueryKey,
   updateCandidate as updateCandidateRequest,
+  useAddCandidateContactHistory,
   useGetCandidates,
   useUpdateCandidate,
 } from '@/lib/api/generated/candidates/candidates';
+import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import type {
+  CreateCandidateContactHistoryDto,
   GetCandidatesParams,
   GetCandidatesSortBy,
   GetCandidatesStatus,
@@ -53,6 +58,7 @@ import {
 } from './schema';
 import { candidateColumns } from './columns';
 import { CandidateRowActions } from './CandidateRowActions';
+import { exportCandidatesToExcel } from './exportToExcel';
 
 const statusOptions = candidateStatuses.map((value) => ({
   value,
@@ -82,22 +88,30 @@ interface CandidateFormValues {
 
 export function CandidatesTable({ canCreate = true, canDelete = true }: { canCreate?: boolean; canDelete?: boolean }) {
   const queryClient = useQueryClient();
+  const [loggingContactFor, setLoggingContactFor] = React.useState<Candidate | null>(null);
 
-  // Append a per-row delete action only when the user may delete.
-  const columns = React.useMemo<ColumnDef<Candidate>[]>(() => {
-    if (!canDelete) return candidateColumns;
-    return [
+  // Log-a-contact is always available (backend enforces candidate:update);
+  // delete inside the row is gated by canDelete.
+  const columns = React.useMemo<ColumnDef<Candidate>[]>(
+    () => [
       ...candidateColumns,
       {
         id: 'actions',
         header: '',
-        size: 56,
+        size: canDelete ? 88 : 56,
         enableSorting: false,
         meta: { align: 'center' },
-        cell: ({ row }) => <CandidateRowActions candidate={row.original} />,
+        cell: ({ row }) => (
+          <CandidateRowActions
+            candidate={row.original}
+            canDelete={canDelete}
+            onLogContact={setLoggingContactFor}
+          />
+        ),
       },
-    ];
-  }, [canDelete]);
+    ],
+    [canDelete],
+  );
   const [page, setPage] = React.useState(1);
   const [query, setQuery] = React.useState<Pick<GetCandidatesParams, 'q' | 'status' | 'sortBy' | 'sortOrder'>>({});
   const [editing, setEditing] = React.useState<Candidate | null>(null);
@@ -110,6 +124,12 @@ export function CandidatesTable({ canCreate = true, canDelete = true }: { canCre
     // Keep the previous page's rows while the next one loads (no flash).
     { query: { placeholderData: keepPreviousData } },
   );
+
+  // Candidate.consultantId is a raw ID (not server-resolved, same convention
+  // as Client.consultantId) — resolved client-side for the export column.
+  const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
+  const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
+  const { labelFor: consultantLabelFor } = useConsultantLookup(consultants);
 
   const updateCandidate = useUpdateCandidate({
     mutation: {
@@ -159,6 +179,36 @@ export function CandidatesTable({ canCreate = true, canDelete = true }: { canCre
     setSelectedCandidates([]);
   }
 
+  function handleExport() {
+    exportCandidatesToExcel(selectedCandidates, consultantLabelFor);
+  }
+
+  const addContactHistory = useAddCandidateContactHistory({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
+        toast.success('Contact logged');
+        setLoggingContactFor(null);
+      },
+      onError: (err) => toast.error(err.message || 'Failed to log contact'),
+    },
+  });
+
+  function handleLogContact(values: LogContactValues) {
+    if (!loggingContactFor) return;
+    // Generated DTO has `notes` as optional (undefined), not nullable — the
+    // sheet emits `null` for "cleared", so build the payload without the key
+    // entirely rather than sending an invalid `null`.
+    addContactHistory.mutate({
+      id: loggingContactFor.id,
+      data: {
+        contactType: values.contactType,
+        contactedAt: values.contactedAt,
+        ...(values.notes ? { notes: values.notes } : {}),
+      } as unknown as CreateCandidateContactHistoryDto,
+    });
+  }
+
   async function handleBulkDelete() {
     setIsBulkDeleting(true);
     const results = await Promise.allSettled(selectedCandidates.map((c) => deleteCandidateRequest(c.id)));
@@ -199,6 +249,11 @@ export function CandidatesTable({ canCreate = true, canDelete = true }: { canCre
         toolbar={
           selectedCandidates.length > 0 ? (
             <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
+              <Button size="lg" variant="outline" onClick={handleExport}>
+                <Download />
+                Export to Excel
+              </Button>
+
               <AlertDialog>
                 <AlertDialogTrigger
                   render={
@@ -278,6 +333,14 @@ export function CandidatesTable({ canCreate = true, canDelete = true }: { canCre
           ) : null}
         </SheetContent>
       </Sheet>
+
+      <LogContactSheet
+        open={loggingContactFor !== null}
+        onOpenChange={(open) => !open && setLoggingContactFor(null)}
+        subjectLabel={loggingContactFor?.fullName ?? ''}
+        isSaving={addContactHistory.isPending}
+        onSave={handleLogContact}
+      />
     </>
   );
 }

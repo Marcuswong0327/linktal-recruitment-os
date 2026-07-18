@@ -887,6 +887,82 @@
         ]
       }
     },
+    "/candidates/{id}/contact-history": {
+      "post": {
+        "operationId": "addCandidateContactHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCandidateContactHistoryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Contact logged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateContactHistoryEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Log a contact with a candidate — the calling consultant is recorded automatically",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
     "/clients": {
       "get": {
         "operationId": "getClients",
@@ -918,14 +994,16 @@
             "name": "sortBy",
             "required": false,
             "in": "query",
-            "description": "Column to sort by. Defaults to most recently created.",
+            "description": "Column to sort by. Defaults to most recently contacted.",
             "schema": {
               "type": "string",
               "enum": [
                 "displayId",
                 "feePercentage",
                 "guaranteePeriod",
-                "createdAt"
+                "createdAt",
+                "lastContactedAt",
+                "quality"
               ]
             }
           },
@@ -1010,6 +1088,22 @@
             "description": "Filter by owning consultant ID (exact match)",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "quality",
+            "required": false,
+            "in": "query",
+            "description": "Filter by lead quality. Defaults to ALL (every quality); pass a specific value to narrow.",
+            "schema": {
+              "default": "ALL",
+              "type": "string",
+              "enum": [
+                "LOW",
+                "MEDIUM",
+                "HIGH",
+                "ALL"
+              ]
             }
           },
           {
@@ -1786,7 +1880,8 @@
               "enum": [
                 "displayId",
                 "fullName",
-                "createdAt"
+                "createdAt",
+                "lastContactedAt"
               ]
             }
           },
@@ -1822,12 +1917,36 @@
             }
           },
           {
+            "name": "clientIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by multiple client IDs at once (e.g. the stakeholder enrichment workspace, scoped to a set of selected companies)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "name": "jobTitle",
             "required": false,
             "in": "query",
             "description": "Filter by job title (contains, case-insensitive)",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "roleTypeIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by role type ID(s) (see /stakeholder-role-types)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -2196,6 +2315,82 @@
           }
         ],
         "summary": "Delete a stakeholder",
+        "tags": [
+          "Stakeholders"
+        ]
+      }
+    },
+    "/stakeholders/{id}/contact-history": {
+      "post": {
+        "operationId": "addStakeholderContactHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStakeholderContactHistoryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Contact logged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StakeholderContactHistoryEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Log a contact with a stakeholder — the calling consultant is recorded automatically",
         "tags": [
           "Stakeholders"
         ]
@@ -3907,6 +4102,111 @@
         ]
       }
     },
+    "/stakeholder-role-types": {
+      "get": {
+        "operationId": "getStakeholderRoleTypes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Active stakeholder role types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StakeholderRoleTypeEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List active stakeholder role types",
+        "tags": [
+          "Stakeholder Role Types"
+        ]
+      },
+      "post": {
+        "operationId": "createStakeholderRoleType",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStakeholderRoleTypeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Role type created (or already existed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StakeholderRoleTypeEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a stakeholder role type, or return the existing one with that name",
+        "tags": [
+          "Stakeholder Role Types"
+        ]
+      }
+    },
     "/audit-logs": {
       "get": {
         "operationId": "getAuditLogs",
@@ -4309,6 +4609,31 @@
             "type": "string",
             "nullable": true
           },
+          "consultantId": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastContactedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "Latest contactedAt across this candidate's contact history; null if never contacted"
+          },
+          "lastContactType": {
+            "type": "string",
+            "nullable": true,
+            "description": "Contact method of the most recent contact (email, call, meeting, linkedin)"
+          },
+          "lastContactNotes": {
+            "type": "string",
+            "nullable": true,
+            "description": "Notes from the most recent contact"
+          },
+          "lastContactedBy": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved name of the consultant who made the most recent contact"
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -4340,6 +4665,11 @@
           "specializations",
           "status",
           "notes",
+          "consultantId",
+          "lastContactedAt",
+          "lastContactType",
+          "lastContactNotes",
+          "lastContactedBy",
           "createdAt",
           "updatedAt"
         ]
@@ -4514,6 +4844,10 @@
           "notes": {
             "type": "string",
             "description": "Notes"
+          },
+          "consultantId": {
+            "type": "string",
+            "description": "Owning consultant ID"
           }
         },
         "required": [
@@ -4629,8 +4963,81 @@
           "notes": {
             "type": "string",
             "description": "Notes"
+          },
+          "consultantId": {
+            "type": "string",
+            "description": "Owning consultant ID"
           }
         }
+      },
+      "CreateCandidateContactHistoryDto": {
+        "type": "object",
+        "properties": {
+          "contactType": {
+            "type": "string",
+            "description": "How this contact happened",
+            "enum": [
+              "call",
+              "email",
+              "meeting",
+              "linkedin"
+            ],
+            "example": "call"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes from this contact"
+          },
+          "contactedAt": {
+            "type": "string",
+            "description": "When this contact happened (ISO 8601); defaults to now if omitted — set explicitly to log a past contact",
+            "example": "2026-07-16T18:58:34.123Z"
+          }
+        },
+        "required": [
+          "contactType"
+        ]
+      },
+      "CandidateContactHistoryEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "candidateId": {
+            "type": "string"
+          },
+          "contactType": {
+            "type": "string",
+            "example": "call"
+          },
+          "contactedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant who made this contact"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "candidateId",
+          "contactType",
+          "contactedById",
+          "notes",
+          "contactedAt",
+          "createdAt"
+        ]
       },
       "ClientNoteDto": {
         "type": "object",
@@ -4738,12 +5145,41 @@
               "TRADED"
             ]
           },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ]
+          },
           "notes": {
             "nullable": true,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ClientNoteDto"
             }
+          },
+          "lastContactedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "Latest contactedAt across this client's stakeholders; null if never contacted"
+          },
+          "lastContactType": {
+            "type": "string",
+            "nullable": true,
+            "description": "Contact method of the most recent contact, across all stakeholders (email, call, meeting, linkedin)"
+          },
+          "lastContactNotes": {
+            "type": "string",
+            "nullable": true,
+            "description": "Notes from the most recent contact, across all stakeholders"
+          },
+          "lastContactedBy": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved name of the consultant who made the most recent contact, across all stakeholders"
           },
           "consultantId": {
             "type": "string",
@@ -4773,7 +5209,12 @@
           "feePercentage",
           "guaranteePeriod",
           "status",
+          "quality",
           "notes",
+          "lastContactedAt",
+          "lastContactType",
+          "lastContactNotes",
+          "lastContactedBy",
           "consultantId",
           "createdAt",
           "updatedAt"
@@ -4874,6 +5315,16 @@
             ],
             "example": "COLD"
           },
+          "quality": {
+            "type": "string",
+            "description": "Lead quality; defaults to MEDIUM when omitted",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ],
+            "example": "MEDIUM"
+          },
           "consultantId": {
             "type": "string",
             "description": "Owning consultant ID"
@@ -4940,6 +5391,16 @@
             ],
             "example": "COLD"
           },
+          "quality": {
+            "type": "string",
+            "description": "Lead quality; defaults to MEDIUM when omitted",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ],
+            "example": "MEDIUM"
+          },
           "consultantId": {
             "type": "string",
             "description": "Owning consultant ID"
@@ -4989,6 +5450,11 @@
           "clientId": {
             "type": "string"
           },
+          "companyName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved client company name"
+          },
           "fullName": {
             "type": "string",
             "example": "Jane Doe"
@@ -4996,6 +5462,15 @@
           "jobTitle": {
             "type": "string",
             "nullable": true
+          },
+          "roleTypeId": {
+            "type": "string",
+            "nullable": true
+          },
+          "roleType": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved role type name"
           },
           "email": {
             "type": "string",
@@ -5013,6 +5488,27 @@
             "type": "string",
             "nullable": true
           },
+          "lastContactedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "Latest contactedAt across this stakeholder's own contact history; null if never contacted"
+          },
+          "lastContactType": {
+            "type": "string",
+            "nullable": true,
+            "description": "Contact method of the most recent contact (email, call, meeting, linkedin)"
+          },
+          "lastContactNotes": {
+            "type": "string",
+            "nullable": true,
+            "description": "Notes from the most recent contact"
+          },
+          "lastContactedBy": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved name of the consultant who made the most recent contact"
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -5026,12 +5522,19 @@
           "id",
           "displayId",
           "clientId",
+          "companyName",
           "fullName",
           "jobTitle",
+          "roleTypeId",
+          "roleType",
           "email",
           "mobile",
           "isDecisionMaker",
           "notes",
+          "lastContactedAt",
+          "lastContactType",
+          "lastContactNotes",
+          "lastContactedBy",
           "createdAt",
           "updatedAt"
         ]
@@ -5091,6 +5594,10 @@
             "description": "Job title",
             "example": "Head of Talent"
           },
+          "roleTypeId": {
+            "type": "string",
+            "description": "Role type ID (see /stakeholder-role-types)"
+          },
           "email": {
             "type": "string",
             "description": "Email address",
@@ -5133,6 +5640,10 @@
             "description": "Job title",
             "example": "Head of Talent"
           },
+          "roleTypeId": {
+            "type": "string",
+            "description": "Role type ID (see /stakeholder-role-types)"
+          },
           "email": {
             "type": "string",
             "description": "Email address",
@@ -5153,6 +5664,75 @@
             "description": "Notes"
           }
         }
+      },
+      "CreateStakeholderContactHistoryDto": {
+        "type": "object",
+        "properties": {
+          "contactType": {
+            "type": "string",
+            "description": "How this contact happened",
+            "enum": [
+              "call",
+              "email",
+              "meeting",
+              "linkedin"
+            ],
+            "example": "call"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes from this contact"
+          },
+          "contactedAt": {
+            "type": "string",
+            "description": "When this contact happened (ISO 8601); defaults to now if omitted — set explicitly to log a past contact",
+            "example": "2026-07-16T18:58:34.123Z"
+          }
+        },
+        "required": [
+          "contactType"
+        ]
+      },
+      "StakeholderContactHistoryEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "stakeholderId": {
+            "type": "string"
+          },
+          "contactType": {
+            "type": "string",
+            "example": "call"
+          },
+          "contactedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant who made this contact"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "stakeholderId",
+          "contactType",
+          "contactedById",
+          "notes",
+          "contactedAt",
+          "createdAt"
+        ]
       },
       "JobOrderEntity": {
         "type": "object",
@@ -5935,6 +6515,49 @@
             "type": "string",
             "description": "Specialization name",
             "example": "Blockchain Services"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "StakeholderRoleTypeEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "Hiring Manager"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateStakeholderRoleTypeDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Role type name",
+            "example": "Hiring Manager"
           }
         },
         "required": [

@@ -1,18 +1,22 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 /**
- * Columns the list may be sorted by. Deliberately narrow: ID, name, and
- * creation time — the things with a meaningful order (name sorting mirrors
- * Candidate). Categorical / free-text columns (jobTitle, email, isDecisionMaker)
- * are exposed as filters instead, since sorting by them only yields arbitrary
- * alphabetical groupings.
+ * Columns the list may be sorted by. Deliberately narrow: ID, name, creation
+ * time, and lastContactedAt (a denormalized column — see
+ * Stakeholder.lastContactedAt in schema.prisma; Prisma's relation-aggregate
+ * `orderBy` only supports `_count`, not `_max`, on to-many relations, so a
+ * live join can't sort by "latest contact" directly). Categorical /
+ * free-text columns (jobTitle, email, isDecisionMaker) are exposed as
+ * filters instead, since sorting by them only yields arbitrary alphabetical
+ * groupings.
  */
 export enum StakeholderSortField {
   displayId = 'displayId',
   fullName = 'fullName',
   createdAt = 'createdAt',
+  lastContactedAt = 'lastContactedAt',
 }
 
 export enum SortOrder {
@@ -61,10 +65,31 @@ export class QueryStakeholdersDto {
   @IsString()
   clientId?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Filter by multiple client IDs at once (e.g. the stakeholder enrichment workspace, scoped to a set of selected companies)',
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  @IsArray()
+  @IsString({ each: true })
+  clientIds?: string[];
+
   @ApiPropertyOptional({ description: 'Filter by job title (contains, case-insensitive)' })
   @IsOptional()
   @IsString()
   jobTitle?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by role type ID(s) (see /stakeholder-role-types)',
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  @IsArray()
+  @IsString({ each: true })
+  roleTypeIds?: string[];
 
   @ApiPropertyOptional({ description: 'Filter by decision-maker flag' })
   @IsOptional()

@@ -10,9 +10,21 @@ export interface StakeholderEntity {
   id: string;
   displayId: string;
   clientId: string;
+  /**
+     * Resolved client company name
+     * @nullable
+     */
+  companyName: string | null;
   fullName: string;
   /** @nullable */
   jobTitle: string | null;
+  /** @nullable */
+  roleTypeId: string | null;
+  /**
+     * Resolved role type name
+     * @nullable
+     */
+  roleType: string | null;
   /** @nullable */
   email: string | null;
   /** @nullable */
@@ -20,6 +32,26 @@ export interface StakeholderEntity {
   isDecisionMaker: boolean;
   /** @nullable */
   notes: string | null;
+  /**
+     * Latest contactedAt across this stakeholder's own contact history; null if never contacted
+     * @nullable
+     */
+  lastContactedAt: string | null;
+  /**
+     * Contact method of the most recent contact (email, call, meeting, linkedin)
+     * @nullable
+     */
+  lastContactType: string | null;
+  /**
+     * Notes from the most recent contact
+     * @nullable
+     */
+  lastContactNotes: string | null;
+  /**
+     * Resolved name of the consultant who made the most recent contact
+     * @nullable
+     */
+  lastContactedBy: string | null;
   createdAt: string;
   updatedAt: string;
 }

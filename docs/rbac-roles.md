@@ -38,8 +38,8 @@ only need authentication (or are `@Public()`).
 ## 2. Permission matrix
 
 Actions: **C**reate · **R**ead · **U**pdate · **D**elete. `–` = no access.
-(The `permission` and `audit` resources are read-only by design; `industry`
-and `specialization` are create+read only — see §4.)
+(The `permission` and `audit` resources are read-only by design; `industry`,
+`specialization`, and `stakeholder_role_type` are create+read only — see §4.)
 
 | Resource | admin | manager | consultant | finance | researcher | viewer |
 |----------|:-----:|:-------:|:----------:|:-------:|:----------:|:------:|
@@ -55,6 +55,7 @@ and `specialization` are create+read only — see §4.)
 | permission    | R    | R    | –    | –  | –   | – |
 | industry      | CR   | CR   | CR   | –  | CR  | – |
 | specialization| CR   | CR   | CR   | –  | CR  | – |
+| stakeholder_role_type | CR | CR | CR | – | CR | – |
 | report        | CRUD | CR   | –    | CR | –   | – |
 | **audit**     | R    | –    | –    | –  | –   | – |
 
@@ -149,6 +150,13 @@ runs on the base client with batch transactions).
   catalog editor: picking an existing value is `read`, typing a new one and
   hitting "Add" is `create` (upsert-by-name, so a duplicate just returns the
   existing row instead of erroring).
+- **`stakeholder_role_type`** is the same pattern as `industry`/
+  `specialization`, for the Stakeholder Enrichment Workspace's Role Type
+  field — seeded with a starting set (Director, Hiring Manager, HR, Talent
+  Acquisition, Operations, Finance, Department Head, Other) and growable the
+  same combobox way. New stakeholders are auto-classified into this catalog
+  from their `jobTitle` by keyword match; the field stays independently
+  editable to correct a bad guess.
 - There is **no `user` resource.** The app's identity table is **`Consultant`**;
   the admin "user management" screen was folded into **`/consultants`** and the
   old `user` permission was removed from the seed and pruned from the database.
@@ -173,6 +181,9 @@ runs on the base client with batch transactions).
 | `GET/POST/PATCH/DELETE /candidates` | `candidate:*` | per matrix |
 | `GET/POST/PATCH/DELETE /clients` | `client:*` | per matrix |
 | `GET/POST/PATCH/DELETE /stakeholders` | `stakeholder:*` | per matrix |
+| `POST /stakeholders/:id/contact-history` | `stakeholder:update` | admin, manager, consultant, researcher — `contactedById` is always the caller, never request-supplied |
+| `POST /candidates/:id/contact-history` | `candidate:update` | admin, manager, consultant, researcher — `contactedById` is always the caller, never request-supplied |
+| `GET/POST /stakeholder-role-types` | `stakeholder_role_type:read` / `:create` | admin, manager, consultant, researcher |
 | `GET/POST/PATCH/DELETE /job-orders` | `job_order:*` | per matrix |
 | `GET /consultants` | `consultant:read` | admin, manager |
 | `POST /consultants` | `consultant:create` | admin, manager (no privileged roles for managers) |

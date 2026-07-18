@@ -62,8 +62,14 @@ import {
   useGetSpecializations,
 } from '@/lib/api/generated/specializations/specializations';
 import type { ConsultantEntity, UpdateClientDto } from '@/lib/api/generated/types';
-import { statusOptions, statusVariant, tobOptions } from './columns';
-import { type ClientStatus, type Company, clientStatusLabels } from './schema';
+import { qualityOptions, qualityVariant, statusOptions, statusVariant, tobOptions } from './columns';
+import {
+  type ClientQuality,
+  type ClientStatus,
+  type Company,
+  clientQualityLabels,
+  clientStatusLabels,
+} from './schema';
 
 const textareaClass =
   'min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30';
@@ -183,6 +189,7 @@ function toPatch(values: {
   country: string;
   website: string;
   status: ClientStatus;
+  quality: ClientQuality;
   tobSigned: boolean;
   feePercentage: string;
   guaranteePeriod: string;
@@ -196,6 +203,7 @@ function toPatch(values: {
     country: values.country || null,
     website: values.website || null,
     status: values.status,
+    quality: values.quality,
     tobSigned: values.tobSigned,
     feePercentage: values.feePercentage === '' ? null : Number(values.feePercentage),
     // Not nullable in the DB — validated as required before this ever runs.
@@ -248,6 +256,7 @@ function CompanyEditForm({
   const [country, setCountry] = React.useState(company.country ?? '');
   const [website, setWebsite] = React.useState(company.website ?? '');
   const [status, setStatus] = React.useState<ClientStatus>(company.status);
+  const [quality, setQuality] = React.useState<ClientQuality>(company.quality);
   const [tobSigned, setTobSigned] = React.useState(company.tobSigned);
   const [feePercentage, setFeePercentage] = React.useState(
     company.feePercentage != null ? String(company.feePercentage) : '',
@@ -289,6 +298,7 @@ function CompanyEditForm({
     country !== (company.country ?? '') ||
     website !== (company.website ?? '') ||
     status !== company.status ||
+    quality !== company.quality ||
     tobSigned !== company.tobSigned ||
     feePercentage !== (company.feePercentage != null ? String(company.feePercentage) : '') ||
     guaranteePeriod !== String(company.guaranteePeriod) ||
@@ -408,6 +418,7 @@ function CompanyEditForm({
         country,
         website,
         status,
+        quality,
         tobSigned,
         feePercentage,
         guaranteePeriod,
@@ -442,6 +453,9 @@ function CompanyEditForm({
                 </h1>
                 <Badge variant={statusVariant[company.status]}>
                   {clientStatusLabels[company.status]}
+                </Badge>
+                <Badge variant={qualityVariant[company.quality]}>
+                  {clientQualityLabels[company.quality]} quality
                 </Badge>
               </div>
               <span className="font-mono text-xs text-muted-foreground">{company.displayId}</span>
@@ -574,6 +588,18 @@ function CompanyEditForm({
                     value={status}
                     onValueChange={(v) => setStatus(v as ClientStatus)}
                     options={statusOptions}
+                  />
+                </FormField>
+                <FormField
+                  label="Quality"
+                  htmlFor="quality"
+                  tooltip="A recruiter's subjective read on how good a prospect this client is."
+                >
+                  <EnumSelect
+                    id="quality"
+                    value={quality}
+                    onValueChange={(v) => setQuality(v as ClientQuality)}
+                    options={qualityOptions}
                   />
                 </FormField>
                 <FormField
