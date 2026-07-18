@@ -158,7 +158,7 @@ erDiagram
         jsonb workHistory "array of {company, role, startDate, endDate}"
         jsonb specializations "array of strings"
         enum status "COLD|WARM|HOT|PLACED, default COLD"
-        string notes
+        jsonb notes "array of {id, content, timestamp, by, editedAt, editedBy} - mirrors Client.notes"
         string consultantId FK "nullable - owning consultant, same shape as Client.consultantId"
         datetime lastContactedAt "nullable, denormalized - max(CandidateContactHistory.contactedAt)"
         datetime createdAt
@@ -238,6 +238,22 @@ erDiagram
         datetime updatedAt
     }
 
+    %% ==================== AUDIT / HISTORY DOMAIN ====================
+    %% Not a domain table a user creates directly — every write to a model in
+    %% AUDITED_MODELS (see below) produces one of these automatically via a
+    %% Prisma Client Extension. No FK to actorId/entityId on purpose: it must
+    %% keep a row even after the actor or the entity itself is gone.
+    AuditLog {
+        string id PK
+        string actorId "logical ref to Consultant.id, nullable = system/import"
+        string action "CREATE|UPDATE|SOFT_DELETE|RESTORE|HARD_DELETE|DEACTIVATE"
+        string entityType "e.g. Candidate, Client, CandidateSubmission"
+        string entityId "logical ref, no FK"
+        jsonb changes "nullable: {field: {from, to}} for updates; created row for creates"
+        jsonb metadata "nullable: {requestId?, ip?, cascade?, source: 'app'}"
+        datetime createdAt
+    }
+
     %% ==================== RELATIONSHIPS ====================
     Role ||--o{ RolePermission : "has"
     Permission ||--o{ RolePermission : "granted via"
@@ -293,6 +309,7 @@ erDiagram
 | **JobOrder** | Open positions | optional custom |
 | **CandidateSubmission** | Candidate → JobOrder submissions | unique(candidateId, jobOrderId) |
 | **Placement** | Successful placements (fee/guarantee) | `PLC-XXXX` |
+| **AuditLog** | Append-only history of every write to an audited model — see [Audit & History Tracking](#audit--history-tracking) | — |
 
 ### JSONB Fields
 
@@ -302,6 +319,9 @@ erDiagram
 | **Candidate** | `specializations` | `["string"]` |
 | **CandidateScreeningHistory** | `notes` | `[{ text, createdAt }]` |
 | **Client** | `notes` | `[{ id, content, timestamp, by, editedAt, editedBy }]` — internal note timeline, newest last |
+| **Candidate** | `notes` | `[{ id, content, timestamp, by, editedAt, editedBy }]` — identical shape to `Client.notes`; only the note's author or an admin may edit/delete it |
+| **AuditLog** | `changes` | `{ field: { from, to } }` per changed field (updates); the full created row (creates) |
+| **AuditLog** | `metadata` | `{ requestId?, ip?, cascade?, source: 'app' }` |
 
 ## Status Enums
 
@@ -387,6 +407,76 @@ These columns are kept in sync two ways:
   `Candidate.consultantId`, and both `contactedById` columns have no
   historical source data (nothing tracked "who" before this schema change)
   — they start empty and fill in only via the live endpoints above.
+
+## Audit & History Tracking
+
+The system keeps a full history of changes, not just the latest value, via a
+single generic mechanism rather than bespoke tracking per entity.
+
+### How it works
+
+`apps/api/src/prisma/prisma.extensions.ts` defines one Prisma Client
+Extension that intercepts every write (`$allOperations`) for the models
+listed in `AUDITED_MODELS` — `Client`, `Stakeholder`, `ClientJobResearch`,
+`Candidate`, `JobOrder`, `CandidateSubmission`, `Placement`, `Consultant`,
+`Role`, `Permission`. For each write it inserts one `AuditLog` row recording:
+who (`actorId`, from the request's `RequestContext`, `null` = system/import),
+when (`createdAt`), which record (`entityType` + `entityId`), what changed
+(`changes`: `{ field: { from, to } }` for updates, the full row for creates),
+and the source (`metadata.source`). `AuditLog` itself is neither soft-deleted
+nor audited — it's the bottom of the stack.
+
+The same extension also rewrites soft-deletable models
+(`SOFT_DELETE_MODELS` — the same list minus `Consultant`/`Role`/`Permission`,
+which are hard-deleted but still audited): `delete`/`deleteMany` become an
+update stamping `deletedAt`/`deletedById`, and reads filter out
+`deletedAt != null` automatically. Restoring a soft-deleted row (setting
+`deletedAt` back to `null`) logs a `RESTORE` action.
+
+Because interception happens at the Prisma layer, every service that writes
+to an audited model gets a history for free — no per-feature audit-writing
+code, and no route can accidentally skip it.
+
+### Reading the history
+
+- **`GET /audit-logs`** (`audit:read`, admin-only) — paginated, filterable
+  (`action`, `entityType`, `actorId`, `from`/`to`), sortable
+  (`createdAt`/`action`/`entityType`). Powers the web "Activity Log" page.
+  Each row is resolved to a human label (e.g. `Client-0042 · Acme Corp`) via
+  `ENTITY_LABEL` in `audit.service.ts`.
+- **`GET /candidates/:id/pipeline-timeline`** / **`GET /job-orders/:id/pipeline-timeline`**
+  (gated by `candidate:read`/`job_order:read`, not `audit:read` — it's scoped
+  to a record the caller can already see) — a derived view, not a separate
+  table. `AuditService.getPipelineTimeline` reads the `CandidateSubmission`
+  rows in scope plus their `AuditLog` entries (`entityType: 'CandidateSubmission'`)
+  and reshapes them into typed events: `CREATE` → `SUBMITTED`,
+  `UPDATE` with a `status` change → `STAGE_CHANGE`, `SOFT_DELETE` →
+  `REMOVED`, `RESTORE` → `RESTORED`. Each event carries candidate, job order,
+  previous/new stage, actor, and timestamp. Rendered as the "Pipeline
+  history" card on both the Candidate and Job Order detail pages.
+
+### Candidate / Client notes
+
+`Candidate.notes` and `Client.notes` are JSONB timelines, not plain strings
+(see JSONB Fields above) — each entry independently carries its own author,
+created-at, and (if edited) editor + edited-at, so editing a note never loses
+who wrote the original or when. Only the note's author or an admin may edit
+or delete it. Because the whole array is replaced on every note write, the
+audit extension's generic array/object diffing also captures note edits as an
+ordinary `changes.notes` entry on the parent `Candidate`/`Client` — the note
+timeline and the generic audit log agree with each other.
+
+### What isn't covered
+
+Two pieces of the original spec were explicitly deferred (not built):
+- A free-text **"reason"** field on ordinary audited writes — no current flow
+  captures a meaningful "why" for a plain field edit, so there's nothing to
+  attach it to yet. `AuditLog.metadata` is open JSON, so it's a small
+  follow-up if a specific flow needs it.
+- Explicitly flagging historical **Excel-imported** contact history as
+  "imported" rather than merely unattributed — imported
+  `StakeholderContactHistory`/`CandidateContactHistory` rows have
+  `contactedById: null`, which today reads the same as "nobody knows who."
 
 ## Excel Import
 

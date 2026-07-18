@@ -134,6 +134,23 @@
 | Stakeholder categorization | fixed job-title categories for filtering | ✅ done — `StakeholderRoleType` reference table + `Stakeholder.roleTypeId`, auto-derived from `jobTitle` by keyword match, independently editable |
 | Client lead quality | subjective recruiter rating, sortable | ✅ done — `Client.quality` (`LOW`/`MEDIUM`/`HIGH`) |
 
+## Summary: Audit & History Tracking
+
+> ✅ **Built** — full write history for the core entities, via one generic
+> mechanism rather than per-feature tracking. Details, schema, and endpoints:
+> see `database-erd.md` → "Audit & History Tracking". Short version:
+
+| Requirement | Status |
+|---|---|
+| Who/when/which record/field/before/after/source, for every audited write | ✅ done — generic `AuditLog`, no per-feature code needed |
+| Candidate notes: content/author/created/editor/edited-at/edit history | ✅ done — same JSONB timeline shape as `Client.notes` |
+| Audit coverage: Candidates, notes, Stakeholders, Companies, Job Orders, Submissions, interview stages, Placements, contact activities, Last Contacted, status changes | ✅ done — all in `AUDITED_MODELS`; contact activities are their own append-only tables; Last Contacted is the live bump-if-newer mechanism above |
+| Pipeline stage-change events (candidate ↔ job order, incl. moved back / removed) | ✅ done — `GET /candidates/:id/pipeline-timeline`, `GET /job-orders/:id/pipeline-timeline`, rendered as the "Pipeline history" card |
+| Org-wide Last Contacted (not scoped to current viewer) | ✅ done — see Rule 1 below |
+| Automatic user attribution (never manually self-selected) | ✅ done — `contactedById`/note `by`/`editedBy` always come from the session, never the request body |
+| Free-text "reason" on ordinary edits | ❌ deferred — no current flow has a meaningful "why" to attach |
+| Explicit "imported/system-generated" flag on historical contact rows | ❌ deferred — imported rows have `contactedById: null`, same as "unattributed" |
+
 ## Summary: Auto-Update Triggers
 
 | Trigger | Updates | Status |

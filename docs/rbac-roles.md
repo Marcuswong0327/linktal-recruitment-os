@@ -185,6 +185,9 @@ runs on the base client with batch transactions).
 | `POST /candidates/:id/contact-history` | `candidate:update` | admin, manager, consultant, researcher — `contactedById` is always the caller, never request-supplied |
 | `GET/POST /stakeholder-role-types` | `stakeholder_role_type:read` / `:create` | admin, manager, consultant, researcher |
 | `GET/POST/PATCH/DELETE /job-orders` | `job_order:*` | per matrix |
+| `GET /candidates/:id/pipeline-timeline` | `candidate:read` | scoped to a candidate the caller can already read, not `audit:read` |
+| `GET /job-orders/:id/pipeline-timeline` | `job_order:read` | scoped to a job order the caller can already read, not `audit:read` |
+| `GET/POST/PATCH/DELETE /candidate-submissions` | `submission:*` | per matrix |
 | `GET /consultants` | `consultant:read` | admin, manager |
 | `POST /consultants` | `consultant:create` | admin, manager (no privileged roles for managers) |
 | `PATCH/DELETE /consultants/:id` | `consultant:update` / `:delete` | **admin only** (service guard) |
