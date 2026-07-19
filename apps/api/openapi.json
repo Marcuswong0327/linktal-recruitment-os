@@ -887,6 +887,82 @@
         ]
       }
     },
+    "/candidates/{id}/contact-history": {
+      "post": {
+        "operationId": "addCandidateContactHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCandidateContactHistoryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Contact logged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateContactHistoryEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Log a contact with a candidate — the calling consultant is recorded automatically",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
     "/clients": {
       "get": {
         "operationId": "getClients",
@@ -918,14 +994,16 @@
             "name": "sortBy",
             "required": false,
             "in": "query",
-            "description": "Column to sort by. Defaults to most recently created.",
+            "description": "Column to sort by. Defaults to most recently contacted.",
             "schema": {
               "type": "string",
               "enum": [
                 "displayId",
                 "feePercentage",
                 "guaranteePeriod",
-                "createdAt"
+                "createdAt",
+                "lastContactedAt",
+                "quality"
               ]
             }
           },
@@ -977,6 +1055,15 @@
             }
           },
           {
+            "name": "specialization",
+            "required": false,
+            "in": "query",
+            "description": "Filter by specialization (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "country",
             "required": false,
             "in": "query",
@@ -1001,6 +1088,22 @@
             "description": "Filter by owning consultant ID (exact match)",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "quality",
+            "required": false,
+            "in": "query",
+            "description": "Filter by lead quality. Defaults to ALL (every quality); pass a specific value to narrow.",
+            "schema": {
+              "default": "ALL",
+              "type": "string",
+              "enum": [
+                "LOW",
+                "MEDIUM",
+                "HIGH",
+                "ALL"
+              ]
             }
           },
           {
@@ -1374,6 +1477,247 @@
         ]
       }
     },
+    "/clients/{id}/notes": {
+      "post": {
+        "operationId": "addClientNote",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddClientNoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Client updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Append a note to a client's timeline",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/{id}/notes/{noteId}": {
+      "patch": {
+        "operationId": "updateClientNote",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateClientNoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Client updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edit one note in a client's timeline (author or admin only)",
+        "tags": [
+          "Clients"
+        ]
+      },
+      "delete": {
+        "operationId": "deleteClientNote",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expectedVersion",
+            "required": false,
+            "in": "query",
+            "description": "Optimistic concurrency check: the note's own `editedAt ?? timestamp` as last seen by the caller. If it no longer matches, the note was changed by someone else in the meantime and the request is rejected with 409.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Client updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove one note from a client's timeline (author or admin only)",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
     "/clients/{id}/restore": {
       "post": {
         "operationId": "restoreClient",
@@ -1536,7 +1880,8 @@
               "enum": [
                 "displayId",
                 "fullName",
-                "createdAt"
+                "createdAt",
+                "lastContactedAt"
               ]
             }
           },
@@ -1572,12 +1917,36 @@
             }
           },
           {
+            "name": "clientIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by multiple client IDs at once (e.g. the stakeholder enrichment workspace, scoped to a set of selected companies)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "name": "jobTitle",
             "required": false,
             "in": "query",
             "description": "Filter by job title (contains, case-insensitive)",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "roleTypeIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by role type ID(s) (see /stakeholder-role-types)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -1946,6 +2315,82 @@
           }
         ],
         "summary": "Delete a stakeholder",
+        "tags": [
+          "Stakeholders"
+        ]
+      }
+    },
+    "/stakeholders/{id}/contact-history": {
+      "post": {
+        "operationId": "addStakeholderContactHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStakeholderContactHistoryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Contact logged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StakeholderContactHistoryEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Log a contact with a stakeholder — the calling consultant is recorded automatically",
         "tags": [
           "Stakeholders"
         ]
@@ -3447,6 +3892,321 @@
         ]
       }
     },
+    "/industries": {
+      "get": {
+        "operationId": "getIndustries",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Active industries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/IndustryEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List active industries",
+        "tags": [
+          "Industries"
+        ]
+      },
+      "post": {
+        "operationId": "createIndustry",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIndustryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Industry created (or already existed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndustryEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create an industry, or return the existing one with that name",
+        "tags": [
+          "Industries"
+        ]
+      }
+    },
+    "/specializations": {
+      "get": {
+        "operationId": "getSpecializations",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Active specializations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SpecializationEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List active specializations",
+        "tags": [
+          "Specializations"
+        ]
+      },
+      "post": {
+        "operationId": "createSpecialization",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSpecializationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Specialization created (or already existed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecializationEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a specialization, or return the existing one with that name",
+        "tags": [
+          "Specializations"
+        ]
+      }
+    },
+    "/stakeholder-role-types": {
+      "get": {
+        "operationId": "getStakeholderRoleTypes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Active stakeholder role types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StakeholderRoleTypeEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List active stakeholder role types",
+        "tags": [
+          "Stakeholder Role Types"
+        ]
+      },
+      "post": {
+        "operationId": "createStakeholderRoleType",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStakeholderRoleTypeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Role type created (or already existed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StakeholderRoleTypeEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a stakeholder role type, or return the existing one with that name",
+        "tags": [
+          "Stakeholder Role Types"
+        ]
+      }
+    },
     "/audit-logs": {
       "get": {
         "operationId": "getAuditLogs",
@@ -3849,6 +4609,31 @@
             "type": "string",
             "nullable": true
           },
+          "consultantId": {
+            "type": "string",
+            "nullable": true
+          },
+          "lastContactedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "Latest contactedAt across this candidate's contact history; null if never contacted"
+          },
+          "lastContactType": {
+            "type": "string",
+            "nullable": true,
+            "description": "Contact method of the most recent contact (email, call, meeting, linkedin)"
+          },
+          "lastContactNotes": {
+            "type": "string",
+            "nullable": true,
+            "description": "Notes from the most recent contact"
+          },
+          "lastContactedBy": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved name of the consultant who made the most recent contact"
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -3880,6 +4665,11 @@
           "specializations",
           "status",
           "notes",
+          "consultantId",
+          "lastContactedAt",
+          "lastContactType",
+          "lastContactNotes",
+          "lastContactedBy",
           "createdAt",
           "updatedAt"
         ]
@@ -4054,6 +4844,10 @@
           "notes": {
             "type": "string",
             "description": "Notes"
+          },
+          "consultantId": {
+            "type": "string",
+            "description": "Owning consultant ID"
           }
         },
         "required": [
@@ -4169,8 +4963,122 @@
           "notes": {
             "type": "string",
             "description": "Notes"
+          },
+          "consultantId": {
+            "type": "string",
+            "description": "Owning consultant ID"
           }
         }
+      },
+      "CreateCandidateContactHistoryDto": {
+        "type": "object",
+        "properties": {
+          "contactType": {
+            "type": "string",
+            "description": "How this contact happened",
+            "enum": [
+              "call",
+              "email",
+              "meeting",
+              "linkedin"
+            ],
+            "example": "call"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes from this contact"
+          },
+          "contactedAt": {
+            "type": "string",
+            "description": "When this contact happened (ISO 8601); defaults to now if omitted — set explicitly to log a past contact",
+            "example": "2026-07-16T18:58:34.123Z"
+          }
+        },
+        "required": [
+          "contactType"
+        ]
+      },
+      "CandidateContactHistoryEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "candidateId": {
+            "type": "string"
+          },
+          "contactType": {
+            "type": "string",
+            "example": "call"
+          },
+          "contactedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant who made this contact"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "candidateId",
+          "contactType",
+          "contactedById",
+          "notes",
+          "contactedAt",
+          "createdAt"
+        ]
+      },
+      "ClientNoteDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable id, unique within this client’s notes (for edit/delete)"
+          },
+          "content": {
+            "type": "string",
+            "example": "Called to confirm the Terms of Business."
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "ISO 8601 timestamp",
+            "example": "2026-07-16T18:58:34.123Z"
+          },
+          "by": {
+            "type": "string",
+            "nullable": true,
+            "description": "Authoring consultant ID"
+          },
+          "editedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "ISO 8601 timestamp of the last edit, null if never edited"
+          },
+          "editedBy": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant ID who made the last edit, null if never edited (may differ from `by`, e.g. an admin editing someone else’s note)"
+          }
+        },
+        "required": [
+          "id",
+          "content",
+          "timestamp",
+          "by",
+          "editedAt",
+          "editedBy"
+        ]
       },
       "ClientEntity": {
         "type": "object",
@@ -4186,9 +5094,23 @@
             "type": "string",
             "example": "Acme Corp"
           },
-          "industry": {
+          "industryId": {
             "type": "string",
             "nullable": true
+          },
+          "industry": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved industry name"
+          },
+          "specializationId": {
+            "type": "string",
+            "nullable": true
+          },
+          "specialization": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved specialization name"
           },
           "country": {
             "type": "string",
@@ -4223,9 +5145,41 @@
               "TRADED"
             ]
           },
-          "notes": {
+          "quality": {
             "type": "string",
-            "nullable": true
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ]
+          },
+          "notes": {
+            "nullable": true,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientNoteDto"
+            }
+          },
+          "lastContactedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "Latest contactedAt across this client's stakeholders; null if never contacted"
+          },
+          "lastContactType": {
+            "type": "string",
+            "nullable": true,
+            "description": "Contact method of the most recent contact, across all stakeholders (email, call, meeting, linkedin)"
+          },
+          "lastContactNotes": {
+            "type": "string",
+            "nullable": true,
+            "description": "Notes from the most recent contact, across all stakeholders"
+          },
+          "lastContactedBy": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved name of the consultant who made the most recent contact, across all stakeholders"
           },
           "consultantId": {
             "type": "string",
@@ -4244,7 +5198,10 @@
           "id",
           "displayId",
           "companyName",
+          "industryId",
           "industry",
+          "specializationId",
+          "specialization",
           "country",
           "city",
           "website",
@@ -4252,7 +5209,12 @@
           "feePercentage",
           "guaranteePeriod",
           "status",
+          "quality",
           "notes",
+          "lastContactedAt",
+          "lastContactType",
+          "lastContactNotes",
+          "lastContactedBy",
           "consultantId",
           "createdAt",
           "updatedAt"
@@ -4304,10 +5266,13 @@
             "description": "Company name",
             "example": "Acme Corp"
           },
-          "industry": {
+          "industryId": {
             "type": "string",
-            "description": "Industry",
-            "example": "Manufacturing"
+            "description": "Industry ID"
+          },
+          "specializationId": {
+            "type": "string",
+            "description": "Specialization ID"
           },
           "country": {
             "type": "string",
@@ -4350,9 +5315,15 @@
             ],
             "example": "COLD"
           },
-          "notes": {
+          "quality": {
             "type": "string",
-            "description": "Notes"
+            "description": "Lead quality; defaults to MEDIUM when omitted",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ],
+            "example": "MEDIUM"
           },
           "consultantId": {
             "type": "string",
@@ -4371,10 +5342,13 @@
             "description": "Company name",
             "example": "Acme Corp"
           },
-          "industry": {
+          "industryId": {
             "type": "string",
-            "description": "Industry",
-            "example": "Manufacturing"
+            "description": "Industry ID"
+          },
+          "specializationId": {
+            "type": "string",
+            "description": "Specialization ID"
           },
           "country": {
             "type": "string",
@@ -4417,15 +5391,51 @@
             ],
             "example": "COLD"
           },
-          "notes": {
+          "quality": {
             "type": "string",
-            "description": "Notes"
+            "description": "Lead quality; defaults to MEDIUM when omitted",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ],
+            "example": "MEDIUM"
           },
           "consultantId": {
             "type": "string",
             "description": "Owning consultant ID"
           }
         }
+      },
+      "AddClientNoteDto": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "Note content",
+            "example": "Called to confirm the Terms of Business."
+          }
+        },
+        "required": [
+          "content"
+        ]
+      },
+      "UpdateClientNoteDto": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "New note content",
+            "example": "Called to confirm the Terms of Business."
+          },
+          "expectedVersion": {
+            "type": "string",
+            "description": "Optimistic concurrency check: the note's own `editedAt ?? timestamp` as last seen by the caller. If it no longer matches, the note was changed by someone else in the meantime and the request is rejected with 409."
+          }
+        },
+        "required": [
+          "content"
+        ]
       },
       "StakeholderEntity": {
         "type": "object",
@@ -4440,6 +5450,11 @@
           "clientId": {
             "type": "string"
           },
+          "companyName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved client company name"
+          },
           "fullName": {
             "type": "string",
             "example": "Jane Doe"
@@ -4447,6 +5462,15 @@
           "jobTitle": {
             "type": "string",
             "nullable": true
+          },
+          "roleTypeId": {
+            "type": "string",
+            "nullable": true
+          },
+          "roleType": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved role type name"
           },
           "email": {
             "type": "string",
@@ -4464,6 +5488,27 @@
             "type": "string",
             "nullable": true
           },
+          "lastContactedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "Latest contactedAt across this stakeholder's own contact history; null if never contacted"
+          },
+          "lastContactType": {
+            "type": "string",
+            "nullable": true,
+            "description": "Contact method of the most recent contact (email, call, meeting, linkedin)"
+          },
+          "lastContactNotes": {
+            "type": "string",
+            "nullable": true,
+            "description": "Notes from the most recent contact"
+          },
+          "lastContactedBy": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved name of the consultant who made the most recent contact"
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -4477,12 +5522,19 @@
           "id",
           "displayId",
           "clientId",
+          "companyName",
           "fullName",
           "jobTitle",
+          "roleTypeId",
+          "roleType",
           "email",
           "mobile",
           "isDecisionMaker",
           "notes",
+          "lastContactedAt",
+          "lastContactType",
+          "lastContactNotes",
+          "lastContactedBy",
           "createdAt",
           "updatedAt"
         ]
@@ -4542,6 +5594,10 @@
             "description": "Job title",
             "example": "Head of Talent"
           },
+          "roleTypeId": {
+            "type": "string",
+            "description": "Role type ID (see /stakeholder-role-types)"
+          },
           "email": {
             "type": "string",
             "description": "Email address",
@@ -4584,6 +5640,10 @@
             "description": "Job title",
             "example": "Head of Talent"
           },
+          "roleTypeId": {
+            "type": "string",
+            "description": "Role type ID (see /stakeholder-role-types)"
+          },
           "email": {
             "type": "string",
             "description": "Email address",
@@ -4604,6 +5664,75 @@
             "description": "Notes"
           }
         }
+      },
+      "CreateStakeholderContactHistoryDto": {
+        "type": "object",
+        "properties": {
+          "contactType": {
+            "type": "string",
+            "description": "How this contact happened",
+            "enum": [
+              "call",
+              "email",
+              "meeting",
+              "linkedin"
+            ],
+            "example": "call"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes from this contact"
+          },
+          "contactedAt": {
+            "type": "string",
+            "description": "When this contact happened (ISO 8601); defaults to now if omitted — set explicitly to log a past contact",
+            "example": "2026-07-16T18:58:34.123Z"
+          }
+        },
+        "required": [
+          "contactType"
+        ]
+      },
+      "StakeholderContactHistoryEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "stakeholderId": {
+            "type": "string"
+          },
+          "contactType": {
+            "type": "string",
+            "example": "call"
+          },
+          "contactedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant who made this contact"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "stakeholderId",
+          "contactType",
+          "contactedById",
+          "notes",
+          "contactedAt",
+          "createdAt"
+        ]
       },
       "JobOrderEntity": {
         "type": "object",
@@ -5304,6 +6433,135 @@
           "action",
           "description",
           "createdAt"
+        ]
+      },
+      "IndustryEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "Manufacturing"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateIndustryDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Industry name",
+            "example": "Manufacturing"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "SpecializationEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "Blockchain Services"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateSpecializationDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Specialization name",
+            "example": "Blockchain Services"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "StakeholderRoleTypeEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "Hiring Manager"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateStakeholderRoleTypeDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Role type name",
+            "example": "Hiring Manager"
+          }
+        },
+        "required": [
+          "name"
         ]
       },
       "AuditLogEntity": {

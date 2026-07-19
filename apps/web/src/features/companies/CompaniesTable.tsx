@@ -1,8 +1,10 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { Combobox } from '@base-ui/react/combobox';
-import { ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Download, Plus, Trash2 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
@@ -29,9 +31,21 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { ConsultantCombobox, ConsultantComboboxPopup, useConsultantLookup } from '@/components/ConsultantCombobox';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import {
+  ConsultantCombobox,
+  ConsultantComboboxPopup,
+  useConsultantLookup,
+} from '@/components/ConsultantCombobox';
 import { ConsultantFilter } from '@/components/ConsultantFilter';
+import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
@@ -41,35 +55,76 @@ import {
   updateClient as updateClientRequest,
   useCreateClient,
   useGetClients,
-  useUpdateClient,
 } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
-import type { ConsultantEntity, GetClientsStatus, UpdateClientDto } from '@/lib/api/generated/types';
-import { getCompanyColumns, statusOptions, statusVariant, tobOptions } from './columns';
-import { type ClientStatus, type Company, clientStatusLabels, clientStatuses } from './schema';
+import {
+  getGetIndustriesQueryKey,
+  useCreateIndustry,
+  useGetIndustries,
+} from '@/lib/api/generated/industries/industries';
+import {
+  getGetSpecializationsQueryKey,
+  useCreateSpecialization,
+  useGetSpecializations,
+} from '@/lib/api/generated/specializations/specializations';
+import {
+  GetClientsSortBy,
+  GetClientsSortOrder,
+  type ConsultantEntity,
+  type GetClientsQuality,
+  type GetClientsStatus,
+  type UpdateClientDto,
+} from '@/lib/api/generated/types';
+import { getCompanyColumns, qualityOptions, statusOptions, statusVariant, tobOptions } from './columns';
+import { exportCompaniesToExcel } from './exportToExcel';
+import {
+  type ClientQuality,
+  type ClientStatus,
+  type Company,
+  clientQualityLabels,
+  clientStatusLabels,
+  clientStatuses,
+} from './schema';
 
 const PAGE_SIZE = 20;
 
 /** Editable fields shared by the create and edit forms — no `id`, since create doesn't have one yet. */
 interface CompanyFormValues {
   companyName: string;
-  industry: string | null;
+  industryId: string | null;
+  specializationId: string | null;
   city: string | null;
   country: string | null;
   status: ClientStatus;
+  quality: ClientQuality;
   tobSigned: boolean;
   feePercentage: number | null;
   consultantId: string | null;
 }
 
-export function CompaniesTable({ canCreate = true, canDelete = true }: { canCreate?: boolean; canDelete?: boolean }) {
+export function CompaniesTable({
+  canCreate = true,
+  canDelete = true,
+}: {
+  canCreate?: boolean;
+  canDelete?: boolean;
+}) {
+  const router = useRouter();
   const queryClient = useQueryClient();
+  // Consultants only ever see their own book of companies (enforced
+  // server-side in ClientsService.findAll) — the "filter by consultant"
+  // control would be a no-op for them, so it's hidden rather than shown
+  // disabled.
+  const { data: session } = useSession();
+  const isConsultant = session?.user?.roleName === 'consultant';
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
   const [status, setStatus] = React.useState<GetClientsStatus | undefined>();
+  const [quality, setQuality] = React.useState<GetClientsQuality | undefined>();
   const [tobSigned, setTobSigned] = React.useState<boolean | undefined>();
   const [consultantId, setConsultantId] = React.useState<string | undefined>();
-  const [editing, setEditing] = React.useState<Company | null>(null);
+  const [sortBy, setSortBy] = React.useState<GetClientsSortBy | undefined>();
+  const [sortOrder, setSortOrder] = React.useState<GetClientsSortOrder>(GetClientsSortOrder.desc);
   const [creating, setCreating] = React.useState(false);
   const [selectedCompanies, setSelectedCompanies] = React.useState<Company[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
@@ -78,7 +133,7 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
 
   const { data, isLoading, isFetching, isError, error } = useGetClients(
-    { page, pageSize: PAGE_SIZE, q: search, status, tobSigned, consultantId },
+    { page, pageSize: PAGE_SIZE, q: search, status, quality, tobSigned, consultantId, sortBy, sortOrder },
     { query: { placeholderData: keepPreviousData } },
   );
 
@@ -86,39 +141,37 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
   // consultant list once to resolve names for the table and edit form.
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
+  const { labelFor: consultantLabelFor } = useConsultantLookup(consultants);
   // Disables a row's inline pills (relationship/TOB/consultant) while any one of them is saving.
   const [pendingRowId, setPendingRowId] = React.useState<string | null>(null);
 
   const companyFilters: DataGridFilter[] = React.useMemo(
     () => [
       { columnId: 'status', title: 'Relationship', single: true, options: statusOptions },
+      { columnId: 'quality', title: 'Quality', single: true, options: qualityOptions },
       { columnId: 'tobSigned', title: 'TOB', single: true, options: tobOptions },
-      {
-        columnId: 'consultantId',
-        title: 'Consultant',
-        single: true,
-        render: ({ selected, onChange }) => (
-          <ConsultantFilter
-            value={selected[0]}
-            onValueChange={(v) => onChange(v !== undefined ? [v] : [])}
-            consultants={consultants}
-          />
-        ),
-      },
+      ...(isConsultant
+        ? []
+        : [
+            {
+              columnId: 'consultantId',
+              title: 'Consultant',
+              single: true,
+              render: ({ selected, onChange }: {
+                selected: string[];
+                onChange: (value: string[]) => void;
+              }) => (
+                <ConsultantFilter
+                  value={selected[0]}
+                  onValueChange={(v) => onChange(v !== undefined ? [v] : [])}
+                  consultants={consultants}
+                />
+              ),
+            },
+          ]),
     ],
-    [consultants],
+    [consultants, isConsultant],
   );
-
-  const updateClient = useUpdateClient({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey() });
-        toast.success('Saved changes');
-        setEditing(null);
-      },
-      onError: (err) => toast.error(err.message || 'Failed to update company'),
-    },
-  });
 
   const createClient = useCreateClient({
     mutation: {
@@ -134,37 +187,40 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
   const result = data?.status === 200 ? data.data : undefined;
   const companies = result?.data ?? [];
 
-  function handleQueryChange({ search, columnFilters }: DataGridQuery) {
-    const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as string[] | undefined;
-    const tobFilter = columnFilters.find((f) => f.id === 'tobSigned')?.value as string[] | undefined;
-    const consultantFilter = columnFilters.find((f) => f.id === 'consultantId')?.value as string[] | undefined;
+  function handleQueryChange({ search, sorting, columnFilters }: DataGridQuery) {
+    const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as
+      string[] | undefined;
+    const qualityFilter = columnFilters.find((f) => f.id === 'quality')?.value as
+      string[] | undefined;
+    const tobFilter = columnFilters.find((f) => f.id === 'tobSigned')?.value as
+      string[] | undefined;
+    const consultantFilter = columnFilters.find((f) => f.id === 'consultantId')?.value as
+      string[] | undefined;
+    const sort = sorting[0];
+    // Only forward column ids the backend actually knows how to sort by
+    // (see ClientSortField) — every sortable column here is named after its
+    // ClientSortField counterpart, so this is a plain membership check.
+    const sortField = sort && sort.id in GetClientsSortBy ? (sort.id as GetClientsSortBy) : undefined;
     setSearch(search.trim() || undefined);
     setStatus(statusFilter?.[0] as GetClientsStatus | undefined);
+    setQuality(qualityFilter?.[0] as GetClientsQuality | undefined);
     setTobSigned(tobFilter?.[0] === undefined ? undefined : tobFilter[0] === 'true');
     setConsultantId(consultantFilter?.[0]);
+    setSortBy(sortField);
+    setSortOrder(sort?.desc ? GetClientsSortOrder.desc : GetClientsSortOrder.asc);
     setPage(1);
-  }
-
-  function handleSave(values: CompanyFormValues) {
-    if (!editing) return;
-    updateClient.mutate({
-      id: editing.id,
-      // Generated type omits null (the API accepts it to clear these
-      // fields) — `?? undefined` here would drop the key entirely from the
-      // request body, silently no-op'ing an intended clear while still
-      // reporting success.
-      data: values as unknown as UpdateClientDto,
-    });
   }
 
   function handleCreate(values: CompanyFormValues) {
     createClient.mutate({
       data: {
         companyName: values.companyName,
-        industry: values.industry ?? undefined,
+        industryId: values.industryId ?? undefined,
+        specializationId: values.specializationId ?? undefined,
         city: values.city ?? undefined,
         country: values.country ?? undefined,
         status: values.status,
+        quality: values.quality,
         tobSigned: values.tobSigned,
         feePercentage: values.feePercentage ?? undefined,
         consultantId: values.consultantId ?? undefined,
@@ -172,24 +228,38 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
     });
   }
 
-  // Bypasses the useUpdateClient hook (which only tracks one in-flight call at
-  // a time) — bulk fires several concurrent requests, and we want a single
-  // summary toast, not one per row.
+  // Fires several concurrent requests directly (not via a mutation hook, which
+  // only tracks one in-flight call at a time) so bulk gets a single summary
+  // toast instead of one per row.
   async function handleBulkUpdate(data: UpdateClientDto, actionLabel: string) {
     setIsBulkUpdating(true);
-    const results = await Promise.allSettled(selectedCompanies.map((c) => updateClientRequest(c.id, data)));
+    const results = await Promise.allSettled(
+      selectedCompanies.map((c) => updateClientRequest(c.id, data)),
+    );
     const failed = results.filter((r) => r.status === 'rejected').length;
     const succeeded = results.length - failed;
     queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey() });
-    if (succeeded > 0) toast.success(`${actionLabel} for ${succeeded} compan${succeeded === 1 ? 'y' : 'ies'}`);
+    if (succeeded > 0)
+      toast.success(`${actionLabel} for ${succeeded} compan${succeeded === 1 ? 'y' : 'ies'}`);
     if (failed > 0) toast.error(`Failed for ${failed} compan${failed === 1 ? 'y' : 'ies'}`);
     setIsBulkUpdating(false);
     setSelectedCompanies([]);
   }
 
+  function handleExport() {
+    exportCompaniesToExcel(selectedCompanies, consultantLabelFor);
+  }
+
+  function handleEnrichStakeholders() {
+    const clientIds = selectedCompanies.map((c) => c.id).join(',');
+    router.push(`/companies/stakeholder-workspace?clientIds=${encodeURIComponent(clientIds)}`);
+  }
+
   async function handleBulkDelete() {
     setIsBulkDeleting(true);
-    const results = await Promise.allSettled(selectedCompanies.map((c) => deleteClientRequest(c.id)));
+    const results = await Promise.allSettled(
+      selectedCompanies.map((c) => deleteClientRequest(c.id)),
+    );
     const failed = results.filter((r) => r.status === 'rejected').length;
     const succeeded = results.length - failed;
     queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey() });
@@ -199,8 +269,6 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
     setSelectedCompanies([]);
   }
 
-  // Separate from useUpdateClient (used by the edit drawer) so an inline pill
-  // change doesn't fight the drawer's isSaving/onSuccess (which closes it).
   const handleInlineUpdate = React.useCallback(
     async (company: Company, data: UpdateClientDto, successLabel: string) => {
       setPendingRowId(company.id);
@@ -232,13 +300,31 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
 
   const handleStatusChange = React.useCallback(
     (company: Company, newStatus: ClientStatus) =>
-      handleInlineUpdate(company, { status: newStatus }, `Relationship set to ${clientStatusLabels[newStatus]}`),
+      handleInlineUpdate(
+        company,
+        { status: newStatus },
+        `Relationship set to ${clientStatusLabels[newStatus]}`,
+      ),
+    [handleInlineUpdate],
+  );
+
+  const handleQualityChange = React.useCallback(
+    (company: Company, newQuality: ClientQuality) =>
+      handleInlineUpdate(
+        company,
+        { quality: newQuality },
+        `Quality set to ${clientQualityLabels[newQuality]}`,
+      ),
     [handleInlineUpdate],
   );
 
   const handleTobSignedChange = React.useCallback(
     (company: Company, newTobSigned: boolean) =>
-      handleInlineUpdate(company, { tobSigned: newTobSigned }, newTobSigned ? 'TOB signed' : 'TOB marked not signed'),
+      handleInlineUpdate(
+        company,
+        { tobSigned: newTobSigned },
+        newTobSigned ? 'TOB signed' : 'TOB marked not signed',
+      ),
     [handleInlineUpdate],
   );
 
@@ -248,14 +334,28 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
         consultants,
         onConsultantChange: handleConsultantChange,
         onStatusChange: handleStatusChange,
+        onQualityChange: handleQualityChange,
         onTobSignedChange: handleTobSignedChange,
         pendingRowId,
+        hideConsultantColumn: isConsultant,
       }),
-    [consultants, handleConsultantChange, handleStatusChange, handleTobSignedChange, pendingRowId],
+    [
+      consultants,
+      handleConsultantChange,
+      handleStatusChange,
+      handleQualityChange,
+      handleTobSignedChange,
+      pendingRowId,
+      isConsultant,
+    ],
   );
 
   if (isError) {
-    return <p className="text-sm text-destructive">Failed to load companies: {error?.message ?? 'Unknown error'}</p>;
+    return (
+      <p className="text-sm text-destructive">
+        Failed to load companies: {error?.message ?? 'Unknown error'}
+      </p>
+    );
   }
 
   return (
@@ -267,13 +367,20 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
         isFetching={isFetching}
         searchPlaceholder="Search Companies"
         filters={companyFilters}
-        onRowClick={setEditing}
+        onRowClick={(company) => router.push(`/companies/${company.id}`)}
+        enableRowRangeSelect
+        hideSelectColumn
         emptyState="No companies yet. Add your first client to get started."
         getRowId={(c) => c.id}
         onSelectionChange={setSelectedCompanies}
         toolbar={
           selectedCompanies.length > 0 ? (
             <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
+              <Button size="lg" variant="outline" onClick={handleExport}>
+                <Download />
+                Export to Excel
+              </Button>
+
               <AlertDialog>
                 <AlertDialogTrigger
                   render={
@@ -281,7 +388,9 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
                       variant="destructive"
                       size="lg"
                       disabled={!canDelete || isBulkDeleting}
-                      title={canDelete ? undefined : "You don't have permission to delete companies"}
+                      title={
+                        canDelete ? undefined : "You don't have permission to delete companies"
+                      }
                     >
                       <Trash2 />
                       Delete
@@ -291,7 +400,8 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
                 <AlertDialogContent>
                   <AlertDialogHeader>
                     <AlertDialogTitle>
-                      Delete {selectedCompanies.length} compan{selectedCompanies.length === 1 ? 'y' : 'ies'}?
+                      Delete {selectedCompanies.length} compan
+                      {selectedCompanies.length === 1 ? 'y' : 'ies'}?
                     </AlertDialogTitle>
                     <AlertDialogDescription>
                       This permanently removes the selected companies and can't be undone.
@@ -321,7 +431,10 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
                         <DropdownMenuItem
                           key={s}
                           onClick={() =>
-                            handleBulkUpdate({ status: s }, `Relationship set to ${clientStatusLabels[s]}`)
+                            handleBulkUpdate(
+                              { status: s },
+                              `Relationship set to ${clientStatusLabels[s]}`,
+                            )
                           }
                         >
                           <Badge variant={statusVariant[s]}>{clientStatusLabels[s]}</Badge>
@@ -329,7 +442,12 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
                       ))}
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
-                  <DropdownMenuItem onClick={() => setConsultantPickerOpen(true)}>Set consultant</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setConsultantPickerOpen(true)}>
+                    Set consultant
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleEnrichStakeholders}>
+                    Enrich Data with Stakeholders
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -374,21 +492,6 @@ export function CompaniesTable({ canCreate = true, canDelete = true }: { canCrea
           onQueryChange: handleQueryChange,
         }}
       />
-
-      <Sheet open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
-        <SheetContent className="w-full sm:max-w-md">
-          {editing ? (
-            <CompanyForm
-              key={editing.id}
-              company={editing}
-              consultants={consultants}
-              isSaving={updateClient.isPending}
-              onSave={handleSave}
-              onCancel={() => setEditing(null)}
-            />
-          ) : null}
-        </SheetContent>
-      </Sheet>
 
       <Sheet open={creating} onOpenChange={setCreating}>
         <SheetContent className="w-full sm:max-w-md">
@@ -447,41 +550,69 @@ function BulkConsultantPicker({
   );
 }
 
-/** Shared by "Add company" and the row edit drawer — every field but the name is optional either way. */
+/** The "Add company" drawer form — every field but the name is optional. */
 function CompanyForm({
-  company,
   consultants,
   isSaving,
   onSave,
   onCancel,
 }: {
-  /** Omit for create; the form starts blank and reports back a fresh set of values. */
-  company?: Company;
   consultants: ConsultantEntity[];
   isSaving: boolean;
   onSave: (values: CompanyFormValues) => void;
   onCancel: () => void;
 }) {
-  const isEditing = company !== undefined;
-  const [companyName, setCompanyName] = React.useState(company?.companyName ?? '');
-  const [industry, setIndustry] = React.useState(company?.industry ?? '');
-  const [city, setCity] = React.useState(company?.city ?? '');
-  const [country, setCountry] = React.useState(company?.country ?? '');
-  const [status, setStatus] = React.useState<ClientStatus>(company?.status ?? 'COLD');
-  const [tobSigned, setTobSigned] = React.useState(company?.tobSigned ?? false);
-  const [feePercentage, setFeePercentage] = React.useState(
-    company?.feePercentage != null ? String(company.feePercentage) : '',
-  );
-  const [consultantId, setConsultantId] = React.useState(company?.consultantId ?? '');
+  const queryClient = useQueryClient();
+
+  const { data: industryData } = useGetIndustries();
+  const industries = industryData?.status === 200 ? industryData.data : [];
+  const { data: specializationData } = useGetSpecializations();
+  const specializations = specializationData?.status === 200 ? specializationData.data : [];
+
+  const createIndustry = useCreateIndustry({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetIndustriesQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to add industry'),
+    },
+  });
+  const createSpecialization = useCreateSpecialization({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetSpecializationsQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to add specialization'),
+    },
+  });
+  async function handleCreateIndustry(name: string) {
+    const res = await createIndustry.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add industry');
+    return res.data;
+  }
+  async function handleCreateSpecialization(name: string) {
+    const res = await createSpecialization.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add specialization');
+    return res.data;
+  }
+
+  const [companyName, setCompanyName] = React.useState('');
+  const [industryId, setIndustryId] = React.useState('');
+  const [specializationId, setSpecializationId] = React.useState('');
+  const [city, setCity] = React.useState('');
+  const [country, setCountry] = React.useState('');
+  const [status, setStatus] = React.useState<ClientStatus>('COLD');
+  const [quality, setQuality] = React.useState<ClientQuality>('MEDIUM');
+  const [tobSigned, setTobSigned] = React.useState(false);
+  const [feePercentage, setFeePercentage] = React.useState('');
+  const [consultantId, setConsultantId] = React.useState('');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     onSave({
       companyName,
-      industry: industry || null,
+      industryId: industryId || null,
+      specializationId: specializationId || null,
       city: city || null,
       country: country || null,
       status,
+      quality,
       tobSigned,
       feePercentage: feePercentage === '' ? null : Number(feePercentage),
       consultantId: consultantId || null,
@@ -491,24 +622,45 @@ function CompanyForm({
   return (
     <form onSubmit={handleSubmit} className="flex h-full flex-col">
       <SheetHeader>
-        <SheetTitle>{isEditing ? 'Edit company' : 'Add company'}</SheetTitle>
-        <SheetDescription>
-          {isEditing ? `Update ${company.companyName}’s account details.` : 'Add a new client company.'}
-        </SheetDescription>
+        <SheetTitle>Add company</SheetTitle>
+        <SheetDescription>Add a new client company.</SheetDescription>
       </SheetHeader>
 
       <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
         <FormField label="Company name" htmlFor="company-name">
-          <Input id="company-name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
+          <Input
+            id="company-name"
+            value={companyName}
+            onChange={(e) => setCompanyName(e.target.value)}
+          />
         </FormField>
         <FormField label="Industry" htmlFor="company-industry">
-          <Input id="company-industry" value={industry} onChange={(e) => setIndustry(e.target.value)} />
+          <CreatableCombobox
+            id="company-industry"
+            value={industryId}
+            onValueChange={setIndustryId}
+            options={industries}
+            onCreate={handleCreateIndustry}
+          />
+        </FormField>
+        <FormField label="Specialization" htmlFor="company-specialization">
+          <CreatableCombobox
+            id="company-specialization"
+            value={specializationId}
+            onValueChange={setSpecializationId}
+            options={specializations}
+            onCreate={handleCreateSpecialization}
+          />
         </FormField>
         <FormField label="City" htmlFor="company-city">
           <Input id="company-city" value={city} onChange={(e) => setCity(e.target.value)} />
         </FormField>
         <FormField label="Country" htmlFor="company-country">
-          <Input id="company-country" value={country} onChange={(e) => setCountry(e.target.value)} />
+          <Input
+            id="company-country"
+            value={country}
+            onChange={(e) => setCountry(e.target.value)}
+          />
         </FormField>
         <FormField label="Relationship" htmlFor="company-status">
           <EnumSelect
@@ -516,6 +668,14 @@ function CompanyForm({
             value={status}
             onValueChange={(v) => setStatus(v as ClientStatus)}
             options={statusOptions}
+          />
+        </FormField>
+        <FormField label="Quality" htmlFor="company-quality">
+          <EnumSelect
+            id="company-quality"
+            value={quality}
+            onValueChange={(v) => setQuality(v as ClientQuality)}
+            options={qualityOptions}
           />
         </FormField>
         <FormField label="Terms of Business" htmlFor="company-tob">
@@ -549,7 +709,7 @@ function CompanyForm({
           Cancel
         </Button>
         <Button type="submit" size="lg" disabled={isSaving || !companyName.trim()}>
-          {isSaving ? 'Saving…' : isEditing ? 'Save changes' : 'Add company'}
+          {isSaving ? 'Saving…' : 'Add company'}
         </Button>
       </SheetFooter>
     </form>

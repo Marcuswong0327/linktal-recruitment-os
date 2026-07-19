@@ -47,4 +47,6 @@ export interface CreateCandidateDto {
   status?: CreateCandidateDtoStatus;
   /** Notes */
   notes?: string;
+  /** Owning consultant ID */
+  consultantId?: string;
 }

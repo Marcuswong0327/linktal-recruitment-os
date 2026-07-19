@@ -14,9 +14,12 @@ import { StakeholdersService } from './stakeholders.service';
 import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
 import { UpdateStakeholderDto } from './dto/update-stakeholder.dto';
 import { QueryStakeholdersDto } from './dto/query-stakeholders.dto';
+import { CreateStakeholderContactHistoryDto } from './dto/create-stakeholder-contact-history.dto';
 import { StakeholderEntity } from './entities/stakeholder.entity';
 import { PaginatedStakeholdersEntity } from './entities/paginated-stakeholders.entity';
-import { RequirePermission } from '../auth/auth.decorators';
+import { StakeholderContactHistoryEntity } from './entities/stakeholder-contact-history.entity';
+import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
+import { AuthUser } from '../auth/auth.types';
 
 @ApiTags('Stakeholders')
 @ApiBearerAuth()
@@ -74,5 +77,20 @@ export class StakeholdersController {
   @ApiResponse({ status: 204, description: 'Stakeholder deleted' })
   remove(@Param('id') id: string) {
     return this.stakeholders.remove(id);
+  }
+
+  @Post(':id/contact-history')
+  @RequirePermission('stakeholder', 'update')
+  @ApiOperation({
+    operationId: 'addStakeholderContactHistory',
+    summary: 'Log a contact with a stakeholder — the calling consultant is recorded automatically',
+  })
+  @ApiResponse({ status: 201, description: 'Contact logged', type: StakeholderContactHistoryEntity })
+  addContactHistory(
+    @Param('id') id: string,
+    @Body() dto: CreateStakeholderContactHistoryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.stakeholders.addContactHistory(id, dto, user.consultantId);
   }
 }

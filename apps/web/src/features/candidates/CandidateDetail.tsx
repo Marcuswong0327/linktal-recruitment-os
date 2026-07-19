@@ -8,6 +8,7 @@ import {
   FileText,
   History,
   Info,
+  Phone,
   Tag,
   User,
 } from 'lucide-react';
@@ -27,14 +28,17 @@ import {
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FormField } from '@/components/FormField';
+import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
 import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
 import {
   useGetCandidate,
   useUpdateCandidate,
+  useAddCandidateContactHistory,
   getGetCandidatesQueryKey,
   getGetCandidateQueryKey,
 } from '@/lib/api/generated/candidates/candidates';
-import type { UpdateCandidateDto } from '@/lib/api/generated/types';
+import type { CreateCandidateContactHistoryDto, UpdateCandidateDto } from '@/lib/api/generated/types';
+import { contactTypeLabels, type ContactType } from '@/lib/contact-types';
 import {
   type Candidate,
   candidateStatusLabels,
@@ -141,6 +145,33 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
     updateCandidate.mutate({ id: candidate.id, data: cleanPatch(values) });
   });
 
+  const [loggingContact, setLoggingContact] = React.useState(false);
+  const addContactHistory = useAddCandidateContactHistory({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetCandidateQueryKey(candidate.id) });
+        toast.success('Contact logged');
+        setLoggingContact(false);
+      },
+      onError: (err) => toast.error(err.message || 'Failed to log contact'),
+    },
+  });
+
+  function handleLogContact(values: LogContactValues) {
+    // Generated DTO has `notes` as optional (undefined), not nullable —
+    // the sheet emits `null` for "cleared", so build the payload without
+    // the key entirely rather than sending an invalid `null`.
+    addContactHistory.mutate({
+      id: candidate.id,
+      data: {
+        contactType: values.contactType,
+        contactedAt: values.contactedAt,
+        ...(values.notes ? { notes: values.notes } : {}),
+      } as unknown as CreateCandidateContactHistoryDto,
+    });
+  }
+
   return (
     <PageLayout className="overflow-auto">
       <div className="flex flex-col gap-4 border-b border-border pb-5">
@@ -178,6 +209,10 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
             {formState.isDirty && !updateCandidate.isPending ? (
               <span className="text-xs text-muted-foreground">Unsaved changes</span>
             ) : null}
+            <Button type="button" variant="outline" size="lg" onClick={() => setLoggingContact(true)}>
+              <Phone />
+              Log a contact
+            </Button>
             <Button
               type="submit"
               form="candidate-form"
@@ -361,11 +396,33 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                 <span>{new Date(candidate.createdAt).toLocaleDateString()}</span>
                 <span className="text-muted-foreground">Updated</span>
                 <span>{new Date(candidate.updatedAt).toLocaleDateString()}</span>
+                <span className="text-muted-foreground">Last contacted</span>
+                <span>
+                  {candidate.lastContactedAt
+                    ? new Date(candidate.lastContactedAt).toLocaleString()
+                    : '—'}
+                </span>
+                <span className="text-muted-foreground">Method</span>
+                <span>
+                  {candidate.lastContactType
+                    ? (contactTypeLabels[candidate.lastContactType as ContactType] ?? candidate.lastContactType)
+                    : '—'}
+                </span>
+                <span className="text-muted-foreground">Contacted by</span>
+                <span>{candidate.lastContactedBy ?? '—'}</span>
               </CardContent>
             </Card>
           </div>
         </div>
       </form>
+
+      <LogContactSheet
+        open={loggingContact}
+        onOpenChange={setLoggingContact}
+        subjectLabel={candidate.fullName}
+        isSaving={addContactHistory.isPending}
+        onSave={handleLogContact}
+      />
     </PageLayout>
   );
 }

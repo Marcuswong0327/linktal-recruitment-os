@@ -25,12 +25,15 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AddClientNoteDto,
   ClientEntity,
   CreateClientDto,
+  DeleteClientNoteParams,
   ErrorResponse,
   GetClientsParams,
   PaginatedClientsEntity,
-  UpdateClientDto
+  UpdateClientDto,
+  UpdateClientNoteDto
 } from '../types';
 
 import { customFetch } from '../../fetcher';
@@ -736,6 +739,318 @@ export const useDeleteClient = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getDeleteClientMutationOptions(options), queryClient);
+    }
+    export type addClientNoteResponse201 = {
+  data: ClientEntity
+  status: 201
+}
+
+export type addClientNoteResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type addClientNoteResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type addClientNoteResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type addClientNoteResponseSuccess = (addClientNoteResponse201) & {
+  headers: Headers;
+};
+export type addClientNoteResponseError = (addClientNoteResponse400 | addClientNoteResponse404 | addClientNoteResponse500) & {
+  headers: Headers;
+};
+
+export type addClientNoteResponse = (addClientNoteResponseSuccess | addClientNoteResponseError)
+
+export const getAddClientNoteUrl = (id: string,) => {
+
+
+
+
+  return `/clients/${id}/notes`
+}
+
+/**
+ * @summary Append a note to a client's timeline
+ */
+export const addClientNote = async (id: string,
+    addClientNoteDto: AddClientNoteDto, options?: RequestInit): Promise<addClientNoteResponse> => {
+
+  return customFetch<addClientNoteResponse>(getAddClientNoteUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(addClientNoteDto)
+  }
+);}
+
+
+
+
+
+export const getAddClientNoteMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addClientNote>>, TError,{id: string;data: AddClientNoteDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addClientNote>>, TError,{id: string;data: AddClientNoteDto}, TContext> => {
+
+const mutationKey = ['addClientNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addClientNote>>, {id: string;data: AddClientNoteDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  addClientNote(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddClientNoteMutationResult = NonNullable<Awaited<ReturnType<typeof addClientNote>>>
+    export type AddClientNoteMutationBody = AddClientNoteDto
+    export type AddClientNoteMutationError = ErrorResponse
+
+    /**
+ * @summary Append a note to a client's timeline
+ */
+export const useAddClientNote = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addClientNote>>, TError,{id: string;data: AddClientNoteDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addClientNote>>,
+        TError,
+        {id: string;data: AddClientNoteDto},
+        TContext
+      > => {
+      return useMutation(getAddClientNoteMutationOptions(options), queryClient);
+    }
+    export type updateClientNoteResponse200 = {
+  data: ClientEntity
+  status: 200
+}
+
+export type updateClientNoteResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type updateClientNoteResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type updateClientNoteResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type updateClientNoteResponseSuccess = (updateClientNoteResponse200) & {
+  headers: Headers;
+};
+export type updateClientNoteResponseError = (updateClientNoteResponse400 | updateClientNoteResponse404 | updateClientNoteResponse500) & {
+  headers: Headers;
+};
+
+export type updateClientNoteResponse = (updateClientNoteResponseSuccess | updateClientNoteResponseError)
+
+export const getUpdateClientNoteUrl = (id: string,
+    noteId: string,) => {
+
+
+
+
+  return `/clients/${id}/notes/${noteId}`
+}
+
+/**
+ * @summary Edit one note in a client's timeline (author or admin only)
+ */
+export const updateClientNote = async (id: string,
+    noteId: string,
+    updateClientNoteDto: UpdateClientNoteDto, options?: RequestInit): Promise<updateClientNoteResponse> => {
+
+  return customFetch<updateClientNoteResponse>(getUpdateClientNoteUrl(id,noteId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateClientNoteDto)
+  }
+);}
+
+
+
+
+
+export const getUpdateClientNoteMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateClientNote>>, TError,{id: string;noteId: string;data: UpdateClientNoteDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateClientNote>>, TError,{id: string;noteId: string;data: UpdateClientNoteDto}, TContext> => {
+
+const mutationKey = ['updateClientNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateClientNote>>, {id: string;noteId: string;data: UpdateClientNoteDto}> = (props) => {
+          const {id,noteId,data} = props ?? {};
+
+          return  updateClientNote(id,noteId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateClientNoteMutationResult = NonNullable<Awaited<ReturnType<typeof updateClientNote>>>
+    export type UpdateClientNoteMutationBody = UpdateClientNoteDto
+    export type UpdateClientNoteMutationError = ErrorResponse
+
+    /**
+ * @summary Edit one note in a client's timeline (author or admin only)
+ */
+export const useUpdateClientNote = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateClientNote>>, TError,{id: string;noteId: string;data: UpdateClientNoteDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateClientNote>>,
+        TError,
+        {id: string;noteId: string;data: UpdateClientNoteDto},
+        TContext
+      > => {
+      return useMutation(getUpdateClientNoteMutationOptions(options), queryClient);
+    }
+    export type deleteClientNoteResponse200 = {
+  data: ClientEntity
+  status: 200
+}
+
+export type deleteClientNoteResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type deleteClientNoteResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type deleteClientNoteResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type deleteClientNoteResponseSuccess = (deleteClientNoteResponse200) & {
+  headers: Headers;
+};
+export type deleteClientNoteResponseError = (deleteClientNoteResponse400 | deleteClientNoteResponse404 | deleteClientNoteResponse500) & {
+  headers: Headers;
+};
+
+export type deleteClientNoteResponse = (deleteClientNoteResponseSuccess | deleteClientNoteResponseError)
+
+export const getDeleteClientNoteUrl = (id: string,
+    noteId: string,
+    params?: DeleteClientNoteParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/clients/${id}/notes/${noteId}?${stringifiedParams}` : `/clients/${id}/notes/${noteId}`
+}
+
+/**
+ * @summary Remove one note from a client's timeline (author or admin only)
+ */
+export const deleteClientNote = async (id: string,
+    noteId: string,
+    params?: DeleteClientNoteParams, options?: RequestInit): Promise<deleteClientNoteResponse> => {
+
+  return customFetch<deleteClientNoteResponse>(getDeleteClientNoteUrl(id,noteId,params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteClientNoteMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteClientNote>>, TError,{id: string;noteId: string;params?: DeleteClientNoteParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteClientNote>>, TError,{id: string;noteId: string;params?: DeleteClientNoteParams}, TContext> => {
+
+const mutationKey = ['deleteClientNote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteClientNote>>, {id: string;noteId: string;params?: DeleteClientNoteParams}> = (props) => {
+          const {id,noteId,params} = props ?? {};
+
+          return  deleteClientNote(id,noteId,params,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteClientNoteMutationResult = NonNullable<Awaited<ReturnType<typeof deleteClientNote>>>
+
+    export type DeleteClientNoteMutationError = ErrorResponse
+
+    /**
+ * @summary Remove one note from a client's timeline (author or admin only)
+ */
+export const useDeleteClientNote = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteClientNote>>, TError,{id: string;noteId: string;params?: DeleteClientNoteParams}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteClientNote>>,
+        TError,
+        {id: string;noteId: string;params?: DeleteClientNoteParams},
+        TContext
+      > => {
+      return useMutation(getDeleteClientNoteMutationOptions(options), queryClient);
     }
     export type restoreClientResponse201 = {
   data: ClientEntity

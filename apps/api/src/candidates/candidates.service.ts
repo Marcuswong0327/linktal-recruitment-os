@@ -7,6 +7,35 @@ import { RequestContext } from '../common/request-context';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { CandidateStatusFilter, QueryCandidatesDto } from './dto/query-candidates.dto';
+import { CreateCandidateContactHistoryDto } from './dto/create-candidate-contact-history.dto';
+
+// lastContactedAt is a plain scalar column (see schema.prisma) — denormalized
+// for sorting, same reasoning as Client/Stakeholder.lastContactedAt. The rest
+// of the "latest contact" detail (type/notes/who) isn't sorted or filtered
+// on, so it's resolved live via the top-1 contact history row instead of
+// also being denormalized — display-only, cheap per row.
+const CANDIDATE_INCLUDE = {
+  contactHistory: {
+    orderBy: { contactedAt: 'desc' },
+    take: 1,
+    select: { contactType: true, notes: true, contactedBy: { select: { fullName: true } } },
+  },
+} satisfies Prisma.CandidateInclude;
+
+type CandidateWithRelations = {
+  contactHistory: { contactType: string; notes: string | null; contactedBy: { fullName: string } | null }[];
+};
+
+function toEntity<T extends CandidateWithRelations>(candidate: T) {
+  const { contactHistory, ...rest } = candidate;
+  const latest = contactHistory[0];
+  return {
+    ...rest,
+    lastContactType: latest?.contactType ?? null,
+    lastContactNotes: latest?.notes ?? null,
+    lastContactedBy: latest?.contactedBy?.fullName ?? null,
+  };
+}
 
 @Injectable()
 export class CandidatesService {
@@ -65,37 +94,53 @@ export class CandidatesService {
         orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
+        include: CANDIDATE_INCLUDE,
       }),
       this.prisma.candidate.count({ where }),
     ]);
 
-    return { data, total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
+    return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }
 
   async findOne(id: string) {
-    const candidate = await this.prisma.candidate.findUnique({ where: { id } });
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id },
+      include: CANDIDATE_INCLUDE,
+    });
     if (!candidate) {
       throw new NotFoundException(`Candidate ${id} not found`);
     }
-    return candidate;
+    return toEntity(candidate);
   }
 
   async findByDisplayId(displayId: string) {
-    const candidate = await this.prisma.candidate.findUnique({ where: { displayId } });
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { displayId },
+      include: CANDIDATE_INCLUDE,
+    });
     if (!candidate) {
       throw new NotFoundException(`Candidate ${displayId} not found`);
     }
-    return candidate;
+    return toEntity(candidate);
   }
 
-  create(dto: CreateCandidateDto) {
+  async create(dto: CreateCandidateDto) {
     // displayId is assigned by the DB (Candidate_displayId_seq default).
-    return this.prisma.candidate.create({ data: this.toPrismaData(dto) });
+    const candidate = await this.prisma.candidate.create({
+      data: this.toPrismaData(dto),
+      include: CANDIDATE_INCLUDE,
+    });
+    return toEntity(candidate);
   }
 
   async update(id: string, dto: UpdateCandidateDto) {
     await this.findOne(id);
-    return this.prisma.candidate.update({ where: { id }, data: this.toPrismaData(dto) });
+    const candidate = await this.prisma.candidate.update({
+      where: { id },
+      data: this.toPrismaData(dto),
+      include: CANDIDATE_INCLUDE,
+    });
+    return toEntity(candidate);
   }
 
   /**
@@ -129,10 +174,12 @@ export class CandidatesService {
     if (!existing.deletedAt) {
       throw new BadRequestException(`Candidate ${id} is not deleted`);
     }
-    return this.prisma.candidate.update({
+    const candidate = await this.prisma.candidate.update({
       where: { id },
       data: { deletedAt: null, deletedById: null },
+      include: CANDIDATE_INCLUDE,
     });
+    return toEntity(candidate);
   }
 
   /**
@@ -156,6 +203,40 @@ export class CandidatesService {
       },
     });
     return this.base.candidate.delete({ where: { id } });
+  }
+
+  /**
+   * Logs a contact and bumps the denormalized lastContactedAt — but only if
+   * this contact is newer than what's already stored (a backdated log entry
+   * shouldn't clobber a more recent one). contactedById always comes from
+   * the caller's own session (never the request body) — a contact can only
+   * ever be attributed to whoever is actually submitting it.
+   */
+  async addContactHistory(id: string, dto: CreateCandidateContactHistoryDto, consultantId: string) {
+    const candidate = await this.base.candidate.findUnique({
+      where: { id },
+      select: { lastContactedAt: true },
+    });
+    if (!candidate) {
+      throw new NotFoundException(`Candidate ${id} not found`);
+    }
+    const contactedAt = dto.contactedAt ? new Date(dto.contactedAt) : new Date();
+
+    const created = await this.prisma.candidateContactHistory.create({
+      data: {
+        candidateId: id,
+        contactType: dto.contactType,
+        notes: dto.notes,
+        contactedAt,
+        contactedById: consultantId,
+      },
+    });
+
+    if (!candidate.lastContactedAt || contactedAt > candidate.lastContactedAt) {
+      await this.prisma.candidate.update({ where: { id }, data: { lastContactedAt: contactedAt } });
+    }
+
+    return created;
   }
 
   /**

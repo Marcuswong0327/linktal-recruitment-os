@@ -24,6 +24,11 @@ export class CreateStakeholderDto {
   @IsString()
   jobTitle?: string;
 
+  @ApiPropertyOptional({ description: 'Role type ID (see /stakeholder-role-types)' })
+  @IsOptional()
+  @IsString()
+  roleTypeId?: string;
+
   @ApiPropertyOptional({ description: 'Email address', example: 'jane@acme.com' })
   @IsOptional()
   @IsEmail()

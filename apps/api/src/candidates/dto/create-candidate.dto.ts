@@ -141,4 +141,9 @@ export class CreateCandidateDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ description: 'Owning consultant ID' })
+  @IsOptional()
+  @IsString()
+  consultantId?: string;
 }

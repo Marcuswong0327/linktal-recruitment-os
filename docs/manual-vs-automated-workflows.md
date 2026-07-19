@@ -1,9 +1,11 @@
 # Manual vs Automated Workflows
 
-> **Status: ROADMAP — not yet implemented.** As of this writing, **none** of the
-> automations or auto-update rules below are built. The only services that exist
-> are `candidates`, `auth`, and `health`; no status auto-updates run anywhere.
-> Treat this file as the target design, not a description of current behaviour.
+> **Status: ROADMAP — mostly not yet implemented.** The only auto-update rule
+> actually built so far is the **contact-tracking half of Rule 1** (see below);
+> every other rule on this page — status auto-transitions, fee calculation,
+> guarantee alerts, replacement linking, reporting — is still just this design
+> doc, not running code. Treat the rest of this file as the target design, not
+> a description of current behaviour.
 >
 > **Schema reality check** — some rules below assume fields that don't exist yet.
 > Aligning the rule names to `schema.prisma`:
@@ -19,7 +21,10 @@
 > | `Client.feePercentage`, `guaranteePeriod` | ✅ exist (numeric) | already in schema |
 > | `JobOrder.salaryMin/Max` | ✅ exist | already in schema |
 > | `Placement.isWithinGuarantee` / `guaranteeStatus` | ❌ missing | would need adding (use `Placement.status` FAILED/COMPLETED for now) |
-> | `Client.latestContactBy/Date`, `Stakeholder.lastContactDate`, `Candidate.contactedBy` | ❌ missing | contact time lives on `StakeholderContactHistory.contactedAt`; there is no per-record "contacted by" owner field |
+> | `Client.latestContactBy` | ⚠️ partial | no field on `Client` itself — resolved live from whichever stakeholder's `StakeholderContactHistory` row is most recent (a company is never contacted directly) |
+> | `Client.latestContactDate` | ✅ exists (as `Client.lastContactedAt`, denormalized) | bumped live by `POST /stakeholders/:id/contact-history`, only if newer than what's stored |
+> | `Stakeholder.lastContactDate` | ✅ exists (as `Stakeholder.lastContactedAt`) | same live-bump mechanism |
+> | `Candidate.contactedBy` | ✅ exists, but per-event not per-record — `CandidateContactHistory.contactedById` (mirrors the Stakeholder side) via `POST /candidates/:id/contact-history` | `Candidate.lastContactedAt` also now exists, same bump-if-newer rule |
 > | `JobOrder.latestSubmissionDate`, `isReplacement`, `replacementForPlacementId` | ❌ missing | replacement-linking was explicitly deferred |
 > | JobOrder → ClientJobResearch link | ❌ missing | no `jobResearchId` on JobOrder yet |
 
@@ -32,12 +37,22 @@
 | Status stays "Prospect" forever | Auto-update to "Converted" |
 
 ## 2. Stakeholder Contact Tracking
+> ✅ **Partially built**: `POST /stakeholders/:id/contact-history` — a consultant
+> manually logs a contact (method, notes, optional backdated time) via the
+> Stakeholder Enrichment Workspace; the API stamps `contactedById` from the
+> session and bumps `Stakeholder.lastContactedAt` / `Client.lastContactedAt`
+> (only if newer). Same feature exists for candidates
+> (`POST /candidates/:id/contact-history`), from the candidate detail page and
+> the candidates list. What's still manual/automated below is unchanged by this
+> — it's still the consultant typing the log entry, not an AI transcript or an
+> auto-detected email/call.
+
 | Manual | Automated |
 |--------|-----------|
 | Manually type notes after call | Call recording → AI transcription |
 | Manually send email via Gmail | Send via system (SendGrid) |
-| Manually log email sent | Auto-log all emails sent/received |
-| Status unchanged after contact | Auto: `Stakeholder.status → Warm` |
+| Manually log a contact (method + notes) — see above | Auto-log all emails sent/received |
+| Status unchanged after contact | Auto: `Stakeholder.status → Warm` — **still not built** |
 
 ## 3. Candidate Sourcing
 | Manual | Automated |
@@ -114,31 +129,44 @@
 | ClientJobResearch → JobOrder | link (`jobResearchId` on JobOrder) | ❌ todo |
 | JobOrder | `latestSubmissionDate`, `isReplacement`, `replacementForPlacementId` | ❌ todo |
 | Placement | `isWithinGuarantee` (or derive from `status` + `guaranteeEndDate`) | ❌ todo |
-| Contact ownership | `contactedBy`/`latestContactBy` fields (only if row-level ownership is wanted) | ❌ not planned |
+| Contact ownership | `contactedBy` fields | ✅ done — `StakeholderContactHistory.contactedById` and `CandidateContactHistory.contactedById` (both nullable FK → `Consultant`, set from the caller's session, never the request body) |
+| Candidate ownership | owning consultant (mirrors `Client.consultantId`) | ✅ done — `Candidate.consultantId` |
+| Stakeholder categorization | fixed job-title categories for filtering | ✅ done — `StakeholderRoleType` reference table + `Stakeholder.roleTypeId`, auto-derived from `jobTitle` by keyword match, independently editable |
+| Client lead quality | subjective recruiter rating, sortable | ✅ done — `Client.quality` (`LOW`/`MEDIUM`/`HIGH`) |
 
 ## Summary: Auto-Update Triggers
 
-| Trigger | Updates |
-|---------|---------|
-| ContactHistory created | `Stakeholder.status`, `Client.latestContactDate` |
-| ScreeningHistory created | `Candidate.status → Warm` |
-| Submission created | `JobOrder.latestSubmissionDate` |
-| Interview scheduled | `Submission.status → Interviewing` |
-| Placement created | `Candidate.status → Placed`, `JobOrder.status`, `feeValue` |
-| Placement failed | Prompt replacement, link to failed placement |
+| Trigger | Updates | Status |
+|---------|---------|--------|
+| ContactHistory created (Stakeholder or Candidate) | `[Stakeholder\|Candidate].lastContactedAt`, and `Client.lastContactedAt` for the stakeholder side (bump-if-newer only) | ✅ done |
+| ContactHistory created | `Stakeholder.status → Warm` | ❌ not built |
+| ScreeningHistory created | `Candidate.status → Warm` | ❌ not built |
+| Submission created | `JobOrder.latestSubmissionDate` | ❌ not built |
+| Interview scheduled | `Submission.status → Interviewing` | ❌ not built |
+| Placement created | `Candidate.status → Placed`, `JobOrder.status`, `feeValue` | ❌ not built |
+| Placement failed | Prompt replacement, link to failed placement | ❌ not built |
 
 ---
 
 ## Auto-Update Rules (Detailed)
 
 ### Rule 1: Contact History Created
+
+> ✅ **The timestamp/attribution half is built** (`StakeholdersService.addContactHistory`,
+> `CandidatesService.addContactHistory`). ❌ **The status transition is not.**
+
 ```
-WHEN: StakeholderContactHistory created
+WHEN: StakeholderContactHistory created                    ✅ done — POST /stakeholders/:id/contact-history
 THEN:
-  → Stakeholder.status = 'Warm'
-  → Stakeholder.lastContactDate = now()
-  → Client.latestContactDate = now()
-  → Client.latestContactBy = currentUser
+  → Stakeholder.status = 'Warm'                             ❌ not built
+  → Stakeholder.lastContactedAt = contactedAt                ✅ done — only if newer than what's stored
+  → Client.lastContactedAt = contactedAt                     ✅ done — same bump-if-newer rule, cascaded from the stakeholder
+  → StakeholderContactHistory.contactedById = currentUser    ✅ done — always the caller's session, never request-supplied
+
+WHEN: CandidateContactHistory created                       ✅ done — POST /candidates/:id/contact-history (mirrors the above)
+THEN:
+  → Candidate.lastContactedAt = contactedAt                  ✅ done — only if newer than what's stored
+  → CandidateContactHistory.contactedById = currentUser      ✅ done
 ```
 
 ### Rule 2: Screening History Created

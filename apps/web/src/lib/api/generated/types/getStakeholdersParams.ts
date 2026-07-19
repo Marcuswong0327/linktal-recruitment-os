@@ -34,9 +34,17 @@ q?: string;
  */
 clientId?: string;
 /**
+ * Filter by multiple client IDs at once (e.g. the stakeholder enrichment workspace, scoped to a set of selected companies)
+ */
+clientIds?: string[];
+/**
  * Filter by job title (contains, case-insensitive)
  */
 jobTitle?: string;
+/**
+ * Filter by role type ID(s) (see /stakeholder-role-types)
+ */
+roleTypeIds?: string[];
 /**
  * Filter by decision-maker flag
  */

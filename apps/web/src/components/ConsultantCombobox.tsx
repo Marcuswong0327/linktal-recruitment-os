@@ -47,15 +47,55 @@ export function ConsultantAvatar({
   );
 }
 
-/** Shared lookup + display helpers for any Combobox picking a consultant. */
-export function useConsultantLookup(consultants: ConsultantEntity[]) {
-  const byId = useMemo(() => new Map(consultants.map((c) => [c.id, c])), [consultants]);
-  const items = useMemo(() => [UNASSIGNED, ...consultants.map((c) => c.id)], [consultants]);
+/** Minimal identity of the logged-in user, for the "(You)" label below. */
+export interface CurrentConsultant {
+  id: string;
+  fullName: string;
+}
+
+/**
+ * Shared lookup + display helpers for any Combobox picking a consultant.
+ *
+ * `currentUser` (optional) is merged in as a synthetic entry when it isn't
+ * already in `consultants` — GET /consultants is admin/manager only (see
+ * rbac-roles.md §2), so every other role's roster fetch comes back empty,
+ * and without this a company/candidate assigned to the logged-in user shows
+ * "Unknown" instead of their own name. The merged entry also gets the
+ * "(You)" suffix so it's clear at a glance which row is theirs.
+ */
+export function useConsultantLookup(
+  consultants: ConsultantEntity[],
+  currentUser?: CurrentConsultant | null,
+) {
+  const merged = useMemo(() => {
+    if (!currentUser || consultants.some((c) => c.id === currentUser.id)) return consultants;
+    return [
+      ...consultants,
+      {
+        id: currentUser.id,
+        displayId: '',
+        azureId: null,
+        email: '',
+        fullName: currentUser.fullName,
+        roleId: null,
+        isActive: true,
+        createdAt: '',
+        updatedAt: '',
+      } satisfies ConsultantEntity,
+    ];
+  }, [consultants, currentUser]);
+
+  const byId = useMemo(() => new Map(merged.map((c) => [c.id, c])), [merged]);
+  const items = useMemo(() => [UNASSIGNED, ...merged.map((c) => c.id)], [merged]);
 
   const labelFor = useCallback(
-    (consultantId: string) =>
-      consultantId === UNASSIGNED ? 'Unassigned' : (byId.get(consultantId)?.fullName ?? 'Unknown'),
-    [byId],
+    (consultantId: string) => {
+      if (consultantId === UNASSIGNED) return 'Unassigned';
+      const consultant = byId.get(consultantId);
+      if (!consultant) return 'Unknown';
+      return consultantId === currentUser?.id ? `${consultant.fullName} (You)` : consultant.fullName;
+    },
+    [byId, currentUser],
   );
   // Drives filtering — combine name + email so typing either finds the match.
   const searchTextFor = useCallback(
@@ -136,6 +176,14 @@ interface ConsultantComboboxProps {
   disabled?: boolean;
   /** Overrides the trigger's default `w-full` sizing — e.g. `w-fit mx-auto` for a compact, centered table cell. */
   className?: string;
+  /** The logged-in user — shows "(You)" on their own entry, see useConsultantLookup. */
+  currentUser?: CurrentConsultant | null;
+  /**
+   * Hides the "Unassigned" choice from the dropdown — for consultants, who
+   * shouldn't be able to orphan a company off their own book (enforced
+   * server-side too, in ClientsService.update). Defaults to `true`.
+   */
+  allowUnassign?: boolean;
 }
 
 /**
@@ -151,12 +199,15 @@ export function ConsultantCombobox({
   consultants,
   disabled,
   className,
+  currentUser,
+  allowUnassign = true,
 }: ConsultantComboboxProps) {
-  const { byId, items, labelFor, searchTextFor } = useConsultantLookup(consultants);
+  const { byId, items, labelFor, searchTextFor } = useConsultantLookup(consultants, currentUser);
+  const selectableItems = allowUnassign ? items : items.filter((item) => item !== UNASSIGNED);
 
   return (
     <Combobox.Root
-      items={items}
+      items={selectableItems}
       value={value}
       onValueChange={(next) => onValueChange(next ?? UNASSIGNED)}
       itemToStringLabel={searchTextFor}

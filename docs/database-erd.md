@@ -17,7 +17,7 @@ erDiagram
 
     Permission {
         string id PK
-        string resource "candidate|client|stakeholder|job_order|job_research|submission|placement|consultant|role|permission|user|report"
+        string resource "candidate|client|stakeholder|job_order|job_research|submission|placement|consultant|role|permission|industry|specialization|stakeholder_role_type|report|audit"
         string action "create|read|update|delete"
         string description
     }
@@ -46,11 +46,42 @@ erDiagram
     }
 
     %% ==================== CLIENT DOMAIN ====================
+    %% Industry/Specialization/StakeholderRoleType are reference tables (a
+    %% fixed row instead of free text), so values stay consistent and
+    %% reusable. No admin management page: the relevant form's combobox
+    %% doubles as the catalog editor (pick existing, or type new to create
+    %% one). See rbac-roles.md §4 for the create+read-only permission shape
+    %% they share.
+    Industry {
+        string id PK
+        string name "unique"
+        boolean isActive "default true"
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    Specialization {
+        string id PK
+        string name "unique"
+        boolean isActive "default true"
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    StakeholderRoleType {
+        string id PK
+        string name "unique - Director|Hiring Manager|HR|Talent Acquisition|Operations|Finance|Department Head|Other, growable"
+        boolean isActive "default true"
+        datetime createdAt
+        datetime updatedAt
+    }
+
     Client {
         string id PK
         string displayId "unique: Client-XXXX"
         string companyName
-        string industry
+        string industryId FK "nullable"
+        string specializationId FK "nullable"
         string country
         string city
         string website
@@ -58,7 +89,9 @@ erDiagram
         float feePercentage "default 15"
         int guaranteePeriod "days, default 90"
         enum status "COLD|WARM|TRADED, default COLD"
-        string notes
+        enum quality "LOW|MEDIUM|HIGH, default MEDIUM - recruiter's read on prospect quality"
+        jsonb notes "array of {id, content, timestamp, by, editedAt, editedBy}"
+        datetime lastContactedAt "nullable, denormalized - max(contactedAt) across this client's stakeholders"
         string consultantId FK "nullable - owning consultant"
         datetime createdAt
         datetime updatedAt
@@ -70,10 +103,12 @@ erDiagram
         string clientId FK
         string fullName
         string jobTitle
+        string roleTypeId FK "nullable - derived from jobTitle by keyword match, independently editable"
         string email
         string mobile
         boolean isDecisionMaker "default false"
         string notes
+        datetime lastContactedAt "nullable, denormalized - max(contactedAt) across this stakeholder's own history"
         datetime createdAt
         datetime updatedAt
     }
@@ -81,9 +116,10 @@ erDiagram
     StakeholderContactHistory {
         string id PK
         string stakeholderId FK
-        string contactType "email|call|meeting|linkedin"
+        string contactType "call|email|meeting|linkedin"
+        string contactedById FK "nullable - consultant who made this specific contact"
         string notes
-        datetime contactedAt
+        datetime contactedAt "default now"
         datetime createdAt
     }
 
@@ -123,6 +159,8 @@ erDiagram
         jsonb specializations "array of strings"
         enum status "COLD|WARM|HOT|PLACED, default COLD"
         string notes
+        string consultantId FK "nullable - owning consultant, same shape as Client.consultantId"
+        datetime lastContactedAt "nullable, denormalized - max(CandidateContactHistory.contactedAt)"
         datetime createdAt
         datetime updatedAt
     }
@@ -132,6 +170,19 @@ erDiagram
         string candidateId FK
         jsonb notes "array of {text, createdAt}"
         datetime screenedAt
+        datetime createdAt
+    }
+
+    %% Mirrors StakeholderContactHistory exactly. Kept separate from
+    %% CandidateScreeningHistory on purpose: a quick call/email/LinkedIn
+    %% touch isn't the same event as a formal screening pass.
+    CandidateContactHistory {
+        string id PK
+        string candidateId FK
+        string contactType "call|email|meeting|linkedin"
+        string contactedById FK "nullable - consultant who made this specific contact"
+        string notes
+        datetime contactedAt "default now"
         datetime createdAt
     }
 
@@ -194,6 +245,13 @@ erDiagram
 
     Consultant ||--o{ Client : "owns"
     Consultant ||--o{ JobOrder : "manages"
+    Consultant ||--o{ Candidate : "owns"
+    Consultant ||--o{ StakeholderContactHistory : "made"
+    Consultant ||--o{ CandidateContactHistory : "made"
+
+    Industry ||--o{ Client : "categorizes"
+    Specialization ||--o{ Client : "categorizes"
+    StakeholderRoleType ||--o{ Stakeholder : "categorizes"
 
     Client ||--o{ Stakeholder : "has"
     Stakeholder ||--o{ StakeholderContactHistory : "has"
@@ -201,6 +259,7 @@ erDiagram
     Client ||--o{ JobOrder : "opens"
 
     Candidate ||--o{ CandidateScreeningHistory : "has"
+    Candidate ||--o{ CandidateContactHistory : "has"
     Candidate ||--o{ CandidateSubmission : "submitted via"
     JobOrder ||--o{ CandidateSubmission : "receives"
     CandidateSubmission ||--o| Placement : "results in"
@@ -222,11 +281,15 @@ erDiagram
 | Table | Description | Display ID |
 |-------|-------------|------------|
 | **Client** | Client companies (employers) | `Client-XXXX` |
+| **Industry** | Reference table for `Client.industryId` — growable via combobox | — |
+| **Specialization** | Reference table for `Client.specializationId` — growable via combobox | — |
 | **Stakeholder** | Contacts at client companies | `Stake-XXXX` |
-| **StakeholderContactHistory** | Communications with stakeholders | — |
+| **StakeholderRoleType** | Reference table for `Stakeholder.roleTypeId` — seeded (Director, Hiring Manager, HR, Talent Acquisition, Operations, Finance, Department Head, Other), auto-derived from `jobTitle` by keyword match, growable via combobox | — |
+| **StakeholderContactHistory** | Communications with stakeholders (`contactedById` attributes to a consultant) | — |
 | **ClientJobResearch** | Job-opening research / prospecting | — |
 | **Candidate** | Job seekers (`workHistory`/`specializations` as JSONB) | `CDD-XXXX` |
 | **CandidateScreeningHistory** | Screening notes (`notes` as JSONB) | — |
+| **CandidateContactHistory** | Communications with candidates (mirrors `StakeholderContactHistory`) | — |
 | **JobOrder** | Open positions | optional custom |
 | **CandidateSubmission** | Candidate → JobOrder submissions | unique(candidateId, jobOrderId) |
 | **Placement** | Successful placements (fee/guarantee) | `PLC-XXXX` |
@@ -238,12 +301,14 @@ erDiagram
 | **Candidate** | `workHistory` | `[{ company, role, startDate, endDate }]` |
 | **Candidate** | `specializations` | `["string"]` |
 | **CandidateScreeningHistory** | `notes` | `[{ text, createdAt }]` |
+| **Client** | `notes` | `[{ id, content, timestamp, by, editedAt, editedBy }]` — internal note timeline, newest last |
 
 ## Status Enums
 
 | Enum | Values |
 |------|--------|
 | **ClientStatus** | `COLD` · `WARM` · `TRADED` |
+| **ClientQuality** | `LOW` · `MEDIUM` (default) · `HIGH` — declared in this order so the native Postgres enum sorts ordinally, not alphabetically |
 | **CandidateStatus** | `COLD` · `WARM` · `HOT` · `PLACED` |
 | **JobOrderStatus** | `ACTIVE` · `PLACED` · `CLOSED` · `ON_HOLD` |
 | **SubmissionStatus** | `SUBMITTED` · `INTERVIEWING` · `REJECTED` · `PLACED` |
@@ -261,18 +326,20 @@ permission like `candidate:read` grants read on all candidates. Enforcement:
 
 - **Resources:** `candidate`, `client`, `stakeholder`, `job_order`,
   `job_research`, `submission`, `placement`, `consultant`, `role`, `permission`,
-  `user`, `report`
-- **Actions:** `create`, `read`, `update`, `delete`
+  `industry`, `specialization`, `stakeholder_role_type`, `report`, `audit`
+- **Actions:** `create`, `read`, `update`, `delete` (`industry`,
+  `specialization`, and `stakeholder_role_type` are create+read only — see
+  `rbac-roles.md` §4)
 
 ### Role → permission matrix (from seed)
 
 | Role | Grants |
 |------|--------|
 | **admin** | All actions on all resources |
-| **manager** | `read` on all; `create`/`update` on candidate, client, stakeholder, job_order, job_research, submission, placement, consultant; `create` on report |
-| **consultant** | Full CRUD on candidate, client, stakeholder, job_order, job_research, submission, placement; `read` on consultant, user, role, permission |
+| **manager** | `read` on all; `create`/`update` on candidate, client, stakeholder, job_order, job_research, submission, placement, consultant; `create` on industry, specialization, stakeholder_role_type; `create` on report |
+| **consultant** | Full CRUD on candidate, client, stakeholder, job_order, job_research, submission, placement; `create`/`read` on industry, specialization, stakeholder_role_type (needed by those fields' comboboxes) |
 | **finance** | `read` on placement, client, job_order; `create`/`read` on report |
-| **researcher** | `create`/`read`/`update` on client, stakeholder, job_research, candidate; `read` on job_order, submission, placement |
+| **researcher** | `create`/`read`/`update` on client, stakeholder, job_research, candidate; `create`/`read` on industry, specialization, stakeholder_role_type; `read` on job_order, submission, placement |
 | **viewer** | `read` on candidate, client, stakeholder, job_order, job_research, submission, placement |
 
 > New users are provisioned just-in-time on first login with the **viewer** role
@@ -283,13 +350,43 @@ permission like `candidate:read` grants read on all candidates. Enforcement:
 
 1. **Role → Consultant** — one role per consultant (nullable).
 2. **Role ↔ Permission** (via RolePermission) — many-to-many.
-3. **Consultant → Client / JobOrder** — a consultant owns clients and manages job orders (`consultantId`, nullable).
-4. **Client → Stakeholder → ContactHistory** — contacts and their communications.
+3. **Consultant → Client / JobOrder / Candidate** — a consultant owns clients, candidates, and manages job orders (`consultantId`, nullable). This is *ownership*, distinct from #4/#10 below (*who actually made a specific contact*) — the two aren't required to be the same person.
+4. **Client → Stakeholder → ContactHistory ← Consultant** — contacts and their communications; each `StakeholderContactHistory` row attributes to the consultant who made it (`contactedById`, nullable).
 5. **Client → ClientJobResearch** — prospecting research.
 6. **Client → JobOrder** — open positions.
 7. **Candidate → ScreeningHistory** — screening notes.
 8. **Candidate → CandidateSubmission ← JobOrder** — submissions (unique per candidate+job).
 9. **CandidateSubmission → Placement** — one placement per successful submission.
+10. **Candidate → ContactHistory ← Consultant** — mirrors #4 for candidates (`CandidateContactHistory`, `contactedById`).
+11. **Industry / Specialization → Client**, **StakeholderRoleType → Stakeholder** — reference-table categorization (see `Industry` note above the ERD).
+
+### Denormalized `lastContactedAt`
+
+`Client`, `Stakeholder`, and `Candidate` each carry a `lastContactedAt` column
+that mirrors the max `contactedAt` of their contact history, so the
+companies/stakeholders/candidates lists can sort/filter by "last contacted"
+without a live cross-table aggregate on every page load (Prisma's
+relation-aggregate `orderBy` only supports `_count`, not `_max`, on to-many
+relations — a real column is the only way to make this a cheap, indexed sort).
+`Client.lastContactedAt` specifically is the max across *all* of that
+client's stakeholders (a company is never contacted directly).
+
+These columns are kept in sync two ways:
+- **Live**: `POST /stakeholders/:id/contact-history` and
+  `POST /candidates/:id/contact-history` bump the relevant `lastContactedAt`
+  column(s) — but only if the new contact is newer than what's already
+  stored, so a backdated log entry can't clobber a more recent one.
+  `contactedById` on both endpoints always comes from the caller's own
+  session, never the request body.
+- **Historical backfill**: `prisma/migrations/20260718143814_backfill_contact_data`
+  (a data-only migration, no schema change) seeded the `StakeholderRoleType`
+  catalog, classified every existing stakeholder's `jobTitle` into a role
+  type by keyword match, and computed `lastContactedAt` for `Client` and
+  `Stakeholder` from the historical `StakeholderContactHistory` rows the
+  Excel import created. `Candidate.lastContactedAt`,
+  `Candidate.consultantId`, and both `contactedById` columns have no
+  historical source data (nothing tracked "who" before this schema change)
+  — they start empty and fill in only via the live endpoints above.
 
 ## Excel Import
 
