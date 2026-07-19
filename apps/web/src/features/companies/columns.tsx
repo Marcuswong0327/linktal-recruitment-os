@@ -102,6 +102,12 @@ interface CompanyColumnsOptions {
   onTobSignedChange: (company: Company, tobSigned: boolean) => void;
   /** Row id currently saving an inline change — disables that row's pills. */
   pendingRowId: string | null;
+  /**
+   * Omits the Consultant column — every row is scoped to this consultant's
+   * own companies (see ClientsService.findAll), so the column would just
+   * repeat their own name on every row.
+   */
+  hideConsultantColumn?: boolean;
 }
 
 export function getCompanyColumns({
@@ -111,6 +117,7 @@ export function getCompanyColumns({
   onQualityChange,
   onTobSignedChange,
   pendingRowId,
+  hideConsultantColumn,
 }: CompanyColumnsOptions): ColumnDef<Company>[] {
   return [
     {
@@ -249,25 +256,29 @@ export function getCompanyColumns({
         </span>
       ),
     },
-    {
-      accessorKey: 'consultantId',
-      header: 'Consultant',
-      enableSorting: false,
-      meta: { align: 'center', strictMinSize: true },
-      cell: ({ row }) => {
-        const company = row.original;
-        return (
-          <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
-            <ConsultantCombobox
-              value={company.consultantId ?? ''}
-              onValueChange={(v) => onConsultantChange(company, v)}
-              consultants={consultants}
-              disabled={pendingRowId === company.id}
-              className="w-fit mx-auto"
-            />
-          </div>
-        );
-      },
-    },
+    ...(hideConsultantColumn
+      ? []
+      : [
+          {
+            accessorKey: 'consultantId',
+            header: 'Consultant',
+            enableSorting: false,
+            meta: { align: 'center', strictMinSize: true },
+            cell: ({ row }) => {
+              const company = row.original;
+              return (
+                <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
+                  <ConsultantCombobox
+                    value={company.consultantId ?? ''}
+                    onValueChange={(v) => onConsultantChange(company, v)}
+                    consultants={consultants}
+                    disabled={pendingRowId === company.id}
+                    className="w-fit mx-auto"
+                  />
+                </div>
+              );
+            },
+          } satisfies ColumnDef<Company>,
+        ]),
   ];
 }

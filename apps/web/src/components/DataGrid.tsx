@@ -781,30 +781,38 @@ export function DataGrid<TData>({
                 : `${(server.page - 1) * server.pageSize + 1}–${Math.min(server.page * server.pageSize, server.total)} of ${server.total} ${server.total === 1 ? 'row' : 'rows'}`}
           </p>
           <div className="flex items-center gap-2">
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {isFetching && !isLoading ? (
-                <Loader2 className="size-3 animate-spin" aria-hidden />
-              ) : null}
-              Page {server.page} of {Math.max(server.pageCount, 1)}
-            </p>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              disabled={isLoading || isFetching || server.page <= 1}
-              onClick={() => server.onPageChange(server.page - 1)}
-            >
-              <ChevronLeft />
-              <span className="sr-only">Previous page</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              disabled={isLoading || isFetching || server.page >= server.pageCount}
-              onClick={() => server.onPageChange(server.page + 1)}
-            >
-              <ChevronRight />
-              <span className="sr-only">Next page</span>
-            </Button>
+            {/* A single page never needs a page indicator or Prev/Next —
+                showing "Page 1 of 1" with both buttons disabled is just
+                noise. Still shows the fetching spinner via the row-count
+                text on the left. */}
+            {server.pageCount > 1 ? (
+              <>
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  {isFetching && !isLoading ? (
+                    <Loader2 className="size-3 animate-spin" aria-hidden />
+                  ) : null}
+                  Page {server.page} of {server.pageCount}
+                </p>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  disabled={isLoading || isFetching || server.page <= 1}
+                  onClick={() => server.onPageChange(server.page - 1)}
+                >
+                  <ChevronLeft />
+                  <span className="sr-only">Previous page</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  disabled={isLoading || isFetching || server.page >= server.pageCount}
+                  onClick={() => server.onPageChange(server.page + 1)}
+                >
+                  <ChevronRight />
+                  <span className="sr-only">Next page</span>
+                </Button>
+              </>
+            ) : null}
           </div>
         </div>
       ) : (

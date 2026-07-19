@@ -88,7 +88,7 @@ export class ClientsService {
     private readonly base: PrismaService,
   ) {}
 
-  async findAll(query: QueryClientsDto) {
+  async findAll(query: QueryClientsDto, user: AuthUser) {
     const { page, pageSize, sortBy, sortOrder, q } = query;
 
     const where: Prisma.ClientWhereInput = {};
@@ -113,7 +113,14 @@ export class ClientsService {
     where.country = contains(query.country);
     where.city = contains(query.city);
 
-    if (query.consultantId !== undefined) {
+    if (user.roleName === 'consultant') {
+      // Consultants only ever see their own book of companies — enforced
+      // here, not just hidden in the UI, so a crafted `consultantId` query
+      // param can't be used to browse someone else's clients. Overrides
+      // whatever the caller passed; there's no "view others" mode for this
+      // role.
+      where.consultantId = user.consultantId;
+    } else if (query.consultantId !== undefined) {
       // '' is the frontend's "Unassigned" sentinel — maps to a null FK, not a no-op.
       where.consultantId = query.consultantId === '' ? null : query.consultantId;
     }
@@ -183,7 +190,23 @@ export class ClientsService {
     return toEntity(client);
   }
 
-  async update(id: string, dto: UpdateClientDto) {
+  async update(id: string, dto: UpdateClientDto, user: AuthUser) {
+    // A consultant can reassign a company to another consultant, but can't
+    // orphan it — 'consultantId' present and falsy means "clear the FK"
+    // (see the null-vs-undefined regression test above), which combined with
+    // the consultant-only scoping in `findAll` would otherwise let them drop
+    // a company out of their own book entirely, with no one left owning it.
+    if (
+      user.roleName === 'consultant' &&
+      'consultantId' in dto &&
+      !dto.consultantId
+    ) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Consultants cannot unassign a company from a consultant.',
+      });
+    }
+
     await this.findOne(id);
     const client = await this.prisma.client.update({ where: { id }, data: dto, include: CLIENT_INCLUDE });
     return toEntity(client);

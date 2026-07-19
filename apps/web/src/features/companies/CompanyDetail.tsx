@@ -264,8 +264,15 @@ function CompanyEditForm({
   const [guaranteePeriod, setGuaranteePeriod] = React.useState(String(company.guaranteePeriod));
   const [consultantId, setConsultantId] = React.useState(company.consultantId ?? '');
 
-  const { labelFor: consultantLabelFor } = useConsultantLookup(consultants);
   const { data: session } = useSession();
+  // GET /consultants is admin/manager only (rbac-roles.md §2) — every other
+  // role's `consultants` fetch comes back empty, so without this, a company
+  // assigned to the logged-in user would show "Unknown" instead of their own
+  // name. See useConsultantLookup's doc for the merge/label logic.
+  const currentUser = session?.user?.consultantId
+    ? { id: session.user.consultantId, fullName: session.user.name ?? 'You' }
+    : null;
+  const { labelFor: consultantLabelFor } = useConsultantLookup(consultants, currentUser);
   const canModifyNote = (note: { by: string | null }) =>
     note.by === session?.user?.consultantId || session?.user?.roleName === 'admin';
   const [noteDraft, setNoteDraft] = React.useState('');
@@ -656,6 +663,8 @@ function CompanyEditForm({
                     value={consultantId}
                     onValueChange={setConsultantId}
                     consultants={consultants}
+                    currentUser={currentUser}
+                    allowUnassign={session?.user?.roleName !== 'consultant'}
                   />
                 </FormField>
               </CardContent>

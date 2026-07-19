@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { Combobox } from '@base-ui/react/combobox';
 import { ChevronDown, Download, Plus, Trash2 } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
@@ -110,6 +111,12 @@ export function CompaniesTable({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  // Consultants only ever see their own book of companies (enforced
+  // server-side in ClientsService.findAll) — the "filter by consultant"
+  // control would be a no-op for them, so it's hidden rather than shown
+  // disabled.
+  const { data: session } = useSession();
+  const isConsultant = session?.user?.roleName === 'consultant';
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
   const [status, setStatus] = React.useState<GetClientsStatus | undefined>();
@@ -143,20 +150,27 @@ export function CompaniesTable({
       { columnId: 'status', title: 'Relationship', single: true, options: statusOptions },
       { columnId: 'quality', title: 'Quality', single: true, options: qualityOptions },
       { columnId: 'tobSigned', title: 'TOB', single: true, options: tobOptions },
-      {
-        columnId: 'consultantId',
-        title: 'Consultant',
-        single: true,
-        render: ({ selected, onChange }) => (
-          <ConsultantFilter
-            value={selected[0]}
-            onValueChange={(v) => onChange(v !== undefined ? [v] : [])}
-            consultants={consultants}
-          />
-        ),
-      },
+      ...(isConsultant
+        ? []
+        : [
+            {
+              columnId: 'consultantId',
+              title: 'Consultant',
+              single: true,
+              render: ({ selected, onChange }: {
+                selected: string[];
+                onChange: (value: string[]) => void;
+              }) => (
+                <ConsultantFilter
+                  value={selected[0]}
+                  onValueChange={(v) => onChange(v !== undefined ? [v] : [])}
+                  consultants={consultants}
+                />
+              ),
+            },
+          ]),
     ],
-    [consultants],
+    [consultants, isConsultant],
   );
 
   const createClient = useCreateClient({
@@ -323,6 +337,7 @@ export function CompaniesTable({
         onQualityChange: handleQualityChange,
         onTobSignedChange: handleTobSignedChange,
         pendingRowId,
+        hideConsultantColumn: isConsultant,
       }),
     [
       consultants,
@@ -331,6 +346,7 @@ export function CompaniesTable({
       handleQualityChange,
       handleTobSignedChange,
       pendingRowId,
+      isConsultant,
     ],
   );
 
