@@ -295,6 +295,8 @@ export function CandidatesTable({
         isFetching={isFetching}
         hideSearch
         onRowClick={setEditing}
+        enableRowRangeSelect
+        hideSelectColumn
         getRowId={(c) => c.id}
         onSelectionChange={setSelectedCandidates}
         server={{
