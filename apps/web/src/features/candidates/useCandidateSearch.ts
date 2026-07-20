@@ -9,7 +9,7 @@ import type {
   GetCandidatesStatusesItem,
   GetCandidatesSubmissionStatusesItem,
 } from '@/lib/api/generated/types';
-import { candidateStatusLabels } from './schema';
+import { candidateStatusLabels, candidateStatusVariants } from './schema';
 
 export const submissionStatusLabels: Record<GetCandidatesSubmissionStatusesItem, string> = {
   SUBMITTED: 'Submitted',
@@ -59,6 +59,8 @@ export interface FilterChip {
   key: string;
   label: string;
   remove: () => void;
+  /** Semantic color for chips with an established one elsewhere (e.g. Status's temperature scale) — plain `secondary` otherwise. */
+  variant?: 'info' | 'warning' | 'destructive' | 'success';
 }
 
 /** Resolves an id back to a display name for chip labels — supplied by the caller, which already has these lists loaded for the dropdowns. */
@@ -113,7 +115,12 @@ export function useCandidateSearch(resolvers: ChipLabelResolvers) {
       }),
     );
     filters.statuses.forEach((status) =>
-      list.push({ key: `status:${status}`, label: `Status: ${candidateStatusLabels[status]}`, remove: () => removeFromArray('statuses', status) }),
+      list.push({
+        key: `status:${status}`,
+        label: `Status: ${candidateStatusLabels[status]}`,
+        variant: candidateStatusVariants[status],
+        remove: () => removeFromArray('statuses', status),
+      }),
     );
     filters.consultantIds.forEach((id) =>
       list.push({ key: `consultant:${id}`, label: `Consultant: ${resolvers.consultantName(id)}`, remove: () => removeFromArray('consultantIds', id) }),

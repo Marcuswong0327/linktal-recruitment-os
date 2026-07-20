@@ -1,17 +1,19 @@
 'use client';
 
 import * as React from 'react';
-import { Search, UserSearch, X } from 'lucide-react';
+import { Info, Search, UserSearch, X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/app-shell/PageLayout';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { useGetIndustries } from '@/lib/api/generated/industries/industries';
 import { useGetSpecializations } from '@/lib/api/generated/specializations/specializations';
 import { useGetCandidateRoleTypes } from '@/lib/api/generated/candidate-role-types/candidate-role-types';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
+import { AdvancedSearchInput } from './AdvancedSearchInput';
 import { CandidatesTable } from './CandidatesTable';
 import { SavedSearchesMenu } from './SavedSearchesMenu';
 import { parseQueryLanguage, QUERY_LANGUAGE_HELP } from './parseQueryLanguage';
@@ -146,39 +148,63 @@ export function CandidateSearchGate({ canCreate, canDelete }: { canCreate: boole
               {m === 'quick' ? 'Free Text Search' : 'Advanced (Key-Value Search)'}
             </button>
           ))}
+          {mode === 'advanced' ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    className="mb-2 ml-auto flex items-center text-muted-foreground hover:text-foreground"
+                    aria-label="Advanced search syntax help"
+                  >
+                    <Info className="size-3.5" />
+                  </button>
+                }
+              />
+              <TooltipContent side="left" className="max-w-xs text-left">
+                {QUERY_LANGUAGE_HELP}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
+          {mode === 'quick' ? (
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSearchSubmit();
+                }}
+                placeholder="Search by name, title, skills, company, location, email, phone…"
+                className="pl-8"
+              />
+            </div>
+          ) : (
+            <AdvancedSearchInput
               value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSearchSubmit();
-              }}
-              placeholder={
-                mode === 'quick'
-                  ? 'Search by name, title, skills, company, location, email, phone…'
-                  : 'Status: Warm, Location: Sydney'
-              }
-              className="pl-8"
+              onChange={setSearchText}
+              onSubmit={handleSearchSubmit}
+              lookups={{ industries, roleTypes, specializations, consultants: consultantOptions }}
+              placeholder="Status: Warm, Location: Sydney"
             />
-          </div>
+          )}
           <Button onClick={handleSearchSubmit} disabled={!searchText.trim()}>
             Search
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {mode === 'quick' ? 'Example: John Lee, Senior Developer, AWS' : QUERY_LANGUAGE_HELP}
-        </p>
+        {mode === 'quick' ? (
+          <p className="text-xs text-muted-foreground">Example: John Lee, Senior Developer, AWS</p>
+        ) : null}
       </div>
 
       {search.chips.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-4">
           <span className="text-sm font-medium">Active Filters</span>
           {search.chips.map((chip) => (
-            <Badge key={chip.key} variant="secondary" className="gap-1 py-1">
+            <Badge key={chip.key} variant={chip.variant ?? 'secondary'} className="gap-1 py-1">
               {chip.label}
               <button type="button" onClick={chip.remove} aria-label={`Remove ${chip.label}`}>
                 <X className="size-3" />
