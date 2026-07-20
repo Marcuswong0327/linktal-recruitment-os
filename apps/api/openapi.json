@@ -283,7 +283,9 @@
                 "fullName",
                 "familyName",
                 "givenName",
-                "yearsExperience"
+                "yearsExperience",
+                "lastContactedAt",
+                "status"
               ]
             }
           },
@@ -304,60 +306,129 @@
             "name": "q",
             "required": false,
             "in": "query",
-            "description": "Free-text search across fullName, email, currentCompany and displayId",
+            "description": "Free-text search across fullName, email, displayId, mobile, city, country, currentPosition, currentCompany, and industry/role type name",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "status",
+            "name": "statuses",
             "required": false,
             "in": "query",
-            "description": "Filter by status. Defaults to ALL (every status); pass a specific status to narrow.",
+            "description": "Filter by status (one or more). Omit for all statuses.",
             "schema": {
-              "default": "ALL",
-              "type": "string",
-              "enum": [
-                "COLD",
-                "WARM",
-                "HOT",
-                "PLACED",
-                "ALL"
-              ]
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "HOT",
+                  "PLACED"
+                ]
+              }
             }
           },
           {
-            "name": "industry",
+            "name": "industryIds",
             "required": false,
             "in": "query",
-            "description": "Filter by industry (contains, case-insensitive)",
+            "description": "Filter by industry ID(s) (see /industries)",
             "schema": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
-            "name": "roleType",
+            "name": "roleTypeIds",
             "required": false,
             "in": "query",
-            "description": "Filter by role type (contains, case-insensitive)",
+            "description": "Filter by role type ID(s) (see /candidate-role-types)",
             "schema": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
-            "name": "country",
+            "name": "specializationIds",
             "required": false,
             "in": "query",
-            "description": "Filter by country (contains, case-insensitive)",
+            "description": "Filter by specialization ID(s) (see /specializations)",
             "schema": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
-            "name": "city",
+            "name": "skills",
             "required": false,
             "in": "query",
-            "description": "Filter by city (contains, case-insensitive)",
+            "description": "Filter by skill tag(s) (exact match against the free-entry skills list)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "consultantIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by owning consultant ID(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "submissionStatuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by submission status (has at least one submission with this status)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "SUBMITTED",
+                  "INTERVIEWING",
+                  "REJECTED",
+                  "PLACED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "placementStatuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by placement status (has at least one placement with this status)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "COMPLETED",
+                  "FAILED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "location",
+            "required": false,
+            "in": "query",
+            "description": "Filter by location — matches city OR country (contains, case-insensitive)",
             "schema": {
               "type": "string"
             }
@@ -398,6 +469,24 @@
             "schema": {
               "minimum": 0,
               "type": "number"
+            }
+          },
+          {
+            "name": "lastContactedFrom",
+            "required": false,
+            "in": "query",
+            "description": "Only candidates last contacted on/after this date (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedTo",
+            "required": false,
+            "in": "query",
+            "description": "Only candidates last contacted on/before this date (ISO 8601)",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -494,6 +583,170 @@
           }
         ],
         "summary": "Create a new candidate",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
+    "/candidates/saved-searches": {
+      "get": {
+        "operationId": "getCandidateSavedSearches",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Saved searches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CandidateSavedSearchEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the caller's saved candidate searches",
+        "tags": [
+          "Candidates"
+        ]
+      },
+      "post": {
+        "operationId": "createCandidateSavedSearch",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCandidateSavedSearchDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Saved search created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateSavedSearchEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Save the current candidate search/filter state",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
+    "/candidates/saved-searches/{id}": {
+      "delete": {
+        "operationId": "deleteCandidateSavedSearch",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Saved search deleted"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete one of the caller's saved searches",
         "tags": [
           "Candidates"
         ]
@@ -5057,6 +5310,111 @@
           "Submissions"
         ]
       }
+    },
+    "/candidate-role-types": {
+      "get": {
+        "operationId": "getCandidateRoleTypes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Active candidate role types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CandidateRoleTypeEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List active candidate role types",
+        "tags": [
+          "Candidate Role Types"
+        ]
+      },
+      "post": {
+        "operationId": "createCandidateRoleType",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCandidateRoleTypeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Role type created (or already existed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateRoleTypeEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a candidate role type, or return the existing one with that name",
+        "tags": [
+          "Candidate Role Types"
+        ]
+      }
     }
   },
   "info": {
@@ -5290,13 +5648,23 @@
             "type": "string",
             "nullable": true
           },
+          "industryId": {
+            "type": "string",
+            "nullable": true
+          },
           "industry": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved industry name"
+          },
+          "roleTypeId": {
             "type": "string",
             "nullable": true
           },
           "roleType": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "description": "Resolved role type name"
           },
           "currentPosition": {
             "type": "string",
@@ -5330,12 +5698,27 @@
             "nullable": true,
             "description": "[{ company, role, startDate, endDate }]"
           },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "description": "Free-entry skill tags"
+          },
           "specializations": {
             "type": "array",
             "items": {
               "type": "string"
             },
-            "nullable": true
+            "description": "Resolved specialization names"
+          },
+          "specializationIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Specialization IDs backing `specializations` — what an editable multi-select actually binds to"
           },
           "status": {
             "type": "string",
@@ -5397,7 +5780,9 @@
           "mobile",
           "country",
           "city",
+          "industryId",
           "industry",
+          "roleTypeId",
           "roleType",
           "currentPosition",
           "currentCompany",
@@ -5406,7 +5791,9 @@
           "linkedinUrl",
           "resumeUrl",
           "workHistory",
+          "skills",
           "specializations",
+          "specializationIds",
           "status",
           "notes",
           "consultantId",
@@ -5454,6 +5841,66 @@
           "page",
           "pageSize",
           "pageCount"
+        ]
+      },
+      "CandidateSavedSearchEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "consultantId": {
+            "type": "string"
+          },
+          "filters": {
+            "type": "object"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "consultantId",
+          "filters",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateCandidateSavedSearchDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Display name for this saved search",
+            "example": "IT contractors in Sydney"
+          },
+          "filters": {
+            "type": "object",
+            "description": "Serialized filter state (same shape as the GET /candidates query params)",
+            "example": {
+              "industryIds": [
+                "abc123"
+              ],
+              "statuses": [
+                "WARM"
+              ],
+              "q": "Sydney"
+            }
+          }
+        },
+        "required": [
+          "name",
+          "filters"
         ]
       },
       "PipelineTimelineEventEntity": {
@@ -5586,15 +6033,13 @@
             "description": "City",
             "example": "Brisbane"
           },
-          "industry": {
+          "industryId": {
             "type": "string",
-            "description": "Industry",
-            "example": "Manufacturing"
+            "description": "Industry ID (see /industries)"
           },
-          "roleType": {
+          "roleTypeId": {
             "type": "string",
-            "description": "Role type",
-            "example": "Production Lead"
+            "description": "Role type ID (see /candidate-role-types)"
           },
           "currentPosition": {
             "type": "string",
@@ -5632,8 +6077,15 @@
               "$ref": "#/components/schemas/WorkHistoryItemDto"
             }
           },
-          "specializations": {
-            "description": "Specialization tags",
+          "specializationIds": {
+            "description": "Specialization IDs (see /specializations)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skills": {
+            "description": "Free-entry skill tags",
             "example": [
               "CNC",
               "Welding"
@@ -5701,15 +6153,13 @@
             "description": "City",
             "example": "Brisbane"
           },
-          "industry": {
+          "industryId": {
             "type": "string",
-            "description": "Industry",
-            "example": "Manufacturing"
+            "description": "Industry ID (see /industries)"
           },
-          "roleType": {
+          "roleTypeId": {
             "type": "string",
-            "description": "Role type",
-            "example": "Production Lead"
+            "description": "Role type ID (see /candidate-role-types)"
           },
           "currentPosition": {
             "type": "string",
@@ -5747,8 +6197,15 @@
               "$ref": "#/components/schemas/WorkHistoryItemDto"
             }
           },
-          "specializations": {
-            "description": "Specialization tags",
+          "specializationIds": {
+            "description": "Specialization IDs (see /specializations)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skills": {
+            "description": "Free-entry skill tags",
             "example": [
               "CNC",
               "Welding"
@@ -7618,6 +8075,49 @@
             "description": "Notes"
           }
         }
+      },
+      "CandidateRoleTypeEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "Permanent"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateCandidateRoleTypeDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Role type name",
+            "example": "Permanent"
+          }
+        },
+        "required": [
+          "name"
+        ]
       },
       "ErrorResponse": {
         "type": "object",

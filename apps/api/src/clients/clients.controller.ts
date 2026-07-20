@@ -24,8 +24,8 @@ export class ClientsController {
     summary: 'List clients (paginated, filterable, sortable)',
   })
   @ApiResponse({ status: 200, description: 'Paginated clients', type: PaginatedClientsEntity })
-  findAll(@Query() query: QueryClientsDto) {
-    return this.clients.findAll(query);
+  findAll(@Query() query: QueryClientsDto, @CurrentUser() user: AuthUser) {
+    return this.clients.findAll(query, user);
   }
 
   @Get('by-display-id/:displayId')
@@ -59,8 +59,8 @@ export class ClientsController {
   @RequirePermission('client', 'update')
   @ApiOperation({ operationId: 'updateClient', summary: 'Update a client' })
   @ApiResponse({ status: 200, description: 'Client updated', type: ClientEntity })
-  update(@Param('id') id: string, @Body() dto: UpdateClientDto) {
-    return this.clients.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateClientDto, @CurrentUser() user: AuthUser) {
+    return this.clients.update(id, dto, user);
   }
 
   @Post(':id/notes')

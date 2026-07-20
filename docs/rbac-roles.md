@@ -39,7 +39,8 @@ only need authentication (or are `@Public()`).
 
 Actions: **C**reate · **R**ead · **U**pdate · **D**elete. `–` = no access.
 (The `permission` and `audit` resources are read-only by design; `industry`,
-`specialization`, and `stakeholder_role_type` are create+read only — see §4.)
+`specialization`, `stakeholder_role_type`, and `candidate_role_type` are
+create+read only; `saved_search` is create+read+delete only — see §4.)
 
 | Resource | admin | manager | consultant | finance | researcher | viewer |
 |----------|:-----:|:-------:|:----------:|:-------:|:----------:|:------:|
@@ -56,6 +57,8 @@ Actions: **C**reate · **R**ead · **U**pdate · **D**elete. `–` = no access.
 | industry      | CR   | CR   | CR   | –  | CR  | – |
 | specialization| CR   | CR   | CR   | –  | CR  | – |
 | stakeholder_role_type | CR | CR | CR | – | CR | – |
+| candidate_role_type | CR | CR | CR | – | CR | – |
+| saved_search  | CRD  | CRD  | CRD  | –  | CRD | – |
 | report        | CRUD | CR   | –    | CR | –   | – |
 | **audit**     | R    | –    | –    | –  | –   | – |
 
@@ -157,6 +160,20 @@ runs on the base client with batch transactions).
   same combobox way. New stakeholders are auto-classified into this catalog
   from their `jobTitle` by keyword match; the field stays independently
   editable to correct a bad guess.
+- **`candidate_role_type`** is the same create+read-only combobox-catalog
+  pattern again, for the Candidate form's Role Type field — its own catalog
+  (employment type: Permanent/Contract/...), not shared with
+  `stakeholder_role_type` (a functional/department classification). No
+  seeded starting set or auto-classification — added purely as consultants
+  type new values into the combobox.
+- **`saved_search`** is a different shape entirely: **personal, owner-scoped
+  data**, not a shared catalog. A consultant's own saved candidate searches
+  (`CandidateSavedSearch`, filter state as JSON) — `create`/`read`/`delete`
+  only (no `update`; renaming isn't supported, delete + re-save covers it).
+  `GET /candidates/saved-searches` always scopes to the caller's own
+  `consultantId`; `DELETE .../:id` 404s (not 403) on an id that exists but
+  belongs to someone else, so a saved search's existence isn't probeable by
+  id across consultants.
 - There is **no `user` resource.** The app's identity table is **`Consultant`**;
   the admin "user management" screen was folded into **`/consultants`** and the
   old `user` permission was removed from the seed and pruned from the database.
@@ -184,6 +201,9 @@ runs on the base client with batch transactions).
 | `POST /stakeholders/:id/contact-history` | `stakeholder:update` | admin, manager, consultant, researcher — `contactedById` is always the caller, never request-supplied |
 | `POST /candidates/:id/contact-history` | `candidate:update` | admin, manager, consultant, researcher — `contactedById` is always the caller, never request-supplied |
 | `GET/POST /stakeholder-role-types` | `stakeholder_role_type:read` / `:create` | admin, manager, consultant, researcher |
+| `GET/POST /candidate-role-types` | `candidate_role_type:read` / `:create` | admin, manager, consultant, researcher |
+| `GET/POST /candidates/saved-searches` | `saved_search:read` / `:create` | admin, manager, consultant, researcher — always scoped to the caller's own consultantId |
+| `DELETE /candidates/saved-searches/:id` | `saved_search:delete` | admin, manager, consultant, researcher — 404s if the id belongs to another consultant |
 | `GET/POST/PATCH/DELETE /job-orders` | `job_order:*` | per matrix |
 | `GET /candidates/:id/pipeline-timeline` | `candidate:read` | scoped to a candidate the caller can already read, not `audit:read` |
 | `GET /job-orders/:id/pipeline-timeline` | `job_order:read` | scoped to a job order the caller can already read, not `audit:read` |

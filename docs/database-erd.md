@@ -17,7 +17,7 @@ erDiagram
 
     Permission {
         string id PK
-        string resource "candidate|client|stakeholder|job_order|job_research|submission|placement|consultant|role|permission|industry|specialization|stakeholder_role_type|report|audit"
+        string resource "candidate|client|stakeholder|job_order|job_research|submission|placement|consultant|role|permission|industry|specialization|stakeholder_role_type|candidate_role_type|saved_search|report|audit"
         string action "create|read|update|delete"
         string description
     }
@@ -137,6 +137,22 @@ erDiagram
     }
 
     %% ==================== CANDIDATE DOMAIN ====================
+    %% CandidateRoleType is the same reference-table pattern as
+    %% StakeholderRoleType above, but its own catalog — a candidate's role
+    %% type is an employment category (Permanent/Contract/...), not
+    %% StakeholderRoleType's functional/department classification.
+    %% Industry/Specialization are shared with the Client domain (same
+    %% catalog, e.g. one org-wide Industry list). Specialization is
+    %% many-to-many for Candidate (unlike Client's single FK) via the
+    %% CandidateSpecialization join, since a candidate can carry several.
+    CandidateRoleType {
+        string id PK
+        string name "unique - employment type, e.g. Permanent|Contract|Temp, growable"
+        boolean isActive "default true"
+        datetime createdAt
+        datetime updatedAt
+    }
+
     Candidate {
         string id PK
         string displayId "unique: CDD-XXXX"
@@ -147,8 +163,8 @@ erDiagram
         string mobile
         string country
         string city
-        string industry
-        string roleType
+        string industryId FK "nullable"
+        string roleTypeId FK "nullable"
         string currentPosition
         string currentCompany
         int yearsExperience
@@ -156,7 +172,7 @@ erDiagram
         string linkedinUrl
         string resumeUrl
         jsonb workHistory "array of {company, role, startDate, endDate}"
-        jsonb specializations "array of strings"
+        jsonb skills "array of strings - free-entry tags, distinct from specializations (a shared reference-table taxonomy)"
         enum status "COLD|WARM|HOT|PLACED, default COLD"
         jsonb notes "array of {id, content, timestamp, by, editedAt, editedBy} - mirrors Client.notes"
         string consultantId FK "nullable - owning consultant, same shape as Client.consultantId"
@@ -165,12 +181,31 @@ erDiagram
         datetime updatedAt
     }
 
+    %% Join table: a candidate can carry several specializations (unlike
+    %% Client's single specializationId). No id/timestamps — pure join.
+    CandidateSpecialization {
+        string candidateId PK "also FK -> Candidate"
+        string specializationId PK "also FK -> Specialization"
+    }
+
     CandidateScreeningHistory {
         string id PK
         string candidateId FK
         jsonb notes "array of {text, createdAt}"
         datetime screenedAt
         datetime createdAt
+    }
+
+    %% A consultant's saved candidate search — personal, not shared. `filters`
+    %% is opaque JSON (same shape as GET /candidates' query params) rather
+    %% than individual columns, since it's only ever fetched whole by owner.
+    CandidateSavedSearch {
+        string id PK
+        string name
+        string consultantId FK
+        jsonb filters "serialized filter state, same shape as GET /candidates query params"
+        datetime createdAt
+        datetime updatedAt
     }
 
     %% Mirrors StakeholderContactHistory exactly. Kept separate from
@@ -264,10 +299,15 @@ erDiagram
     Consultant ||--o{ Candidate : "owns"
     Consultant ||--o{ StakeholderContactHistory : "made"
     Consultant ||--o{ CandidateContactHistory : "made"
+    Consultant ||--o{ CandidateSavedSearch : "owns"
 
     Industry ||--o{ Client : "categorizes"
     Specialization ||--o{ Client : "categorizes"
     StakeholderRoleType ||--o{ Stakeholder : "categorizes"
+    Industry ||--o{ Candidate : "categorizes"
+    CandidateRoleType ||--o{ Candidate : "categorizes"
+    Candidate ||--o{ CandidateSpecialization : "has"
+    Specialization ||--o{ CandidateSpecialization : "categorizes"
 
     Client ||--o{ Stakeholder : "has"
     Stakeholder ||--o{ StakeholderContactHistory : "has"
@@ -303,9 +343,12 @@ erDiagram
 | **StakeholderRoleType** | Reference table for `Stakeholder.roleTypeId` — seeded (Director, Hiring Manager, HR, Talent Acquisition, Operations, Finance, Department Head, Other), auto-derived from `jobTitle` by keyword match, growable via combobox | — |
 | **StakeholderContactHistory** | Communications with stakeholders (`contactedById` attributes to a consultant) | — |
 | **ClientJobResearch** | Job-opening research / prospecting | — |
-| **Candidate** | Job seekers (`workHistory`/`specializations` as JSONB) | `CDD-XXXX` |
+| **CandidateRoleType** | Reference table for `Candidate.roleTypeId` — own catalog (employment type: Permanent/Contract/...), distinct from `StakeholderRoleType`, growable via combobox | — |
+| **Candidate** | Job seekers (`workHistory`/`skills` as JSONB; `industryId`/`roleTypeId` FKs; specializations many-to-many via `CandidateSpecialization`) | `CDD-XXXX` |
+| **CandidateSpecialization** | Join: candidates ↔ specializations (many-to-many — a candidate can carry several, unlike Client's single FK) | composite PK(candidateId, specializationId) |
 | **CandidateScreeningHistory** | Screening notes (`notes` as JSONB) | — |
 | **CandidateContactHistory** | Communications with candidates (mirrors `StakeholderContactHistory`) | — |
+| **CandidateSavedSearch** | A consultant's saved candidate search (personal, `filters` as opaque JSON) | — |
 | **JobOrder** | Open positions | optional custom |
 | **CandidateSubmission** | Candidate → JobOrder submissions | unique(candidateId, jobOrderId) |
 | **Placement** | Successful placements (fee/guarantee) | `PLC-XXXX` |
@@ -316,8 +359,10 @@ erDiagram
 | Table | Field | Structure |
 |-------|-------|-----------|
 | **Candidate** | `workHistory` | `[{ company, role, startDate, endDate }]` |
-| **Candidate** | `specializations` | `["string"]` |
+| **Candidate** | `skills` | `["string"]` — free-entry tags, distinct from specializations (a shared, reference-table taxonomy) |
+| **Candidate** | `notes` | `[{ content, timestamp, by }]` — internal note timeline, mirrors `Client.notes` |
 | **CandidateScreeningHistory** | `notes` | `[{ text, createdAt }]` |
+| **CandidateSavedSearch** | `filters` | serialized filter state, same shape as `GET /candidates`' query params |
 | **Client** | `notes` | `[{ id, content, timestamp, by, editedAt, editedBy }]` — internal note timeline, newest last |
 | **Candidate** | `notes` | `[{ id, content, timestamp, by, editedAt, editedBy }]` — identical shape to `Client.notes`; only the note's author or an admin may edit/delete it |
 | **AuditLog** | `changes` | `{ field: { from, to } }` per changed field (updates); the full created row (creates) |
@@ -346,20 +391,22 @@ permission like `candidate:read` grants read on all candidates. Enforcement:
 
 - **Resources:** `candidate`, `client`, `stakeholder`, `job_order`,
   `job_research`, `submission`, `placement`, `consultant`, `role`, `permission`,
-  `industry`, `specialization`, `stakeholder_role_type`, `report`, `audit`
+  `industry`, `specialization`, `stakeholder_role_type`, `candidate_role_type`,
+  `saved_search`, `report`, `audit`
 - **Actions:** `create`, `read`, `update`, `delete` (`industry`,
-  `specialization`, and `stakeholder_role_type` are create+read only — see
-  `rbac-roles.md` §4)
+  `specialization`, `stakeholder_role_type`, and `candidate_role_type` are
+  create+read only; `saved_search` is create+read+delete only — no `update`,
+  rename isn't supported, delete+re-save covers it — see `rbac-roles.md` §4)
 
 ### Role → permission matrix (from seed)
 
 | Role | Grants |
 |------|--------|
 | **admin** | All actions on all resources |
-| **manager** | `read` on all; `create`/`update` on candidate, client, stakeholder, job_order, job_research, submission, placement, consultant; `create` on industry, specialization, stakeholder_role_type; `create` on report |
-| **consultant** | Full CRUD on candidate, client, stakeholder, job_order, job_research, submission, placement; `create`/`read` on industry, specialization, stakeholder_role_type (needed by those fields' comboboxes) |
+| **manager** | `read` on all; `create`/`update` on candidate, client, stakeholder, job_order, job_research, submission, placement, consultant; `create` on industry, specialization, stakeholder_role_type, candidate_role_type, saved_search; `create` on report |
+| **consultant** | Full CRUD on candidate, client, stakeholder, job_order, job_research, submission, placement; `create`/`read` on industry, specialization, stakeholder_role_type, candidate_role_type (needed by those fields' comboboxes); `create`/`read`/`delete` on saved_search (own candidate searches) |
 | **finance** | `read` on placement, client, job_order; `create`/`read` on report |
-| **researcher** | `create`/`read`/`update` on client, stakeholder, job_research, candidate; `create`/`read` on industry, specialization, stakeholder_role_type; `read` on job_order, submission, placement |
+| **researcher** | `create`/`read`/`update` on client, stakeholder, job_research, candidate; `create`/`read` on industry, specialization, stakeholder_role_type, candidate_role_type; `create`/`read`/`delete` on saved_search; `read` on job_order, submission, placement |
 | **viewer** | `read` on candidate, client, stakeholder, job_order, job_research, submission, placement |
 
 > New users are provisioned just-in-time on first login with the **viewer** role
@@ -379,6 +426,9 @@ permission like `candidate:read` grants read on all candidates. Enforcement:
 9. **CandidateSubmission → Placement** — one placement per successful submission.
 10. **Candidate → ContactHistory ← Consultant** — mirrors #4 for candidates (`CandidateContactHistory`, `contactedById`).
 11. **Industry / Specialization → Client**, **StakeholderRoleType → Stakeholder** — reference-table categorization (see `Industry` note above the ERD).
+12. **Industry / CandidateRoleType → Candidate** — same reference-table pattern; Industry is the same shared catalog Client uses, CandidateRoleType is its own (employment type, not Stakeholder's functional classification).
+13. **Candidate ↔ Specialization** (via `CandidateSpecialization`) — many-to-many; unlike Client's single `specializationId`, a candidate can carry several.
+14. **Consultant → CandidateSavedSearch** — a consultant's own saved candidate searches; owner-scoped, never shared across consultants.
 
 ### Denormalized `lastContactedAt`
 

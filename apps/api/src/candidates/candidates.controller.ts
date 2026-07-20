@@ -25,6 +25,9 @@ import {
 import { CandidateEntity } from './entities/candidate.entity';
 import { PaginatedCandidatesEntity } from './entities/paginated-candidates.entity';
 import { CandidateContactHistoryEntity } from './entities/candidate-contact-history.entity';
+import { CandidateSavedSearchesService } from './saved-searches/candidate-saved-searches.service';
+import { CreateCandidateSavedSearchDto } from './saved-searches/dto/create-candidate-saved-search.dto';
+import { CandidateSavedSearchEntity } from './saved-searches/entities/candidate-saved-search.entity';
 import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
 import { AuthUser } from '../auth/auth.types';
 import { ForbiddenException } from '@nestjs/common';
@@ -36,6 +39,7 @@ export class CandidatesController {
   constructor(
     private readonly candidates: CandidatesService,
     private readonly audit: AuditService,
+    private readonly savedSearches: CandidateSavedSearchesService,
   ) {}
 
   @Get()
@@ -47,6 +51,34 @@ export class CandidatesController {
   @ApiResponse({ status: 200, description: 'Paginated candidates', type: PaginatedCandidatesEntity })
   findAll(@Query() query: QueryCandidatesDto) {
     return this.candidates.findAll(query);
+  }
+
+  // Static routes ('saved-searches', 'by-display-id/:displayId') must come
+  // before the dynamic @Get(':id') below — Nest/Express match in
+  // registration order, so a later ':id' route would otherwise swallow them.
+  @Get('saved-searches')
+  @RequirePermission('saved_search', 'read')
+  @ApiOperation({ operationId: 'getCandidateSavedSearches', summary: "List the caller's saved candidate searches" })
+  @ApiResponse({ status: 200, description: 'Saved searches', type: CandidateSavedSearchEntity, isArray: true })
+  findAllSavedSearches(@CurrentUser() user: AuthUser) {
+    return this.savedSearches.findAllForConsultant(user.consultantId);
+  }
+
+  @Post('saved-searches')
+  @RequirePermission('saved_search', 'create')
+  @ApiOperation({ operationId: 'createCandidateSavedSearch', summary: 'Save the current candidate search/filter state' })
+  @ApiResponse({ status: 201, description: 'Saved search created', type: CandidateSavedSearchEntity })
+  createSavedSearch(@Body() dto: CreateCandidateSavedSearchDto, @CurrentUser() user: AuthUser) {
+    return this.savedSearches.create(user.consultantId, dto);
+  }
+
+  @Delete('saved-searches/:id')
+  @HttpCode(204)
+  @RequirePermission('saved_search', 'delete')
+  @ApiOperation({ operationId: 'deleteCandidateSavedSearch', summary: "Delete one of the caller's saved searches" })
+  @ApiResponse({ status: 204, description: 'Saved search deleted' })
+  removeSavedSearch(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.savedSearches.remove(id, user.consultantId);
   }
 
   @Get('by-display-id/:displayId')

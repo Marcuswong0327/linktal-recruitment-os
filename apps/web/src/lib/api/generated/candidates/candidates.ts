@@ -28,8 +28,10 @@ import type {
   AddCandidateNoteDto,
   CandidateContactHistoryEntity,
   CandidateEntity,
+  CandidateSavedSearchEntity,
   CreateCandidateContactHistoryDto,
   CreateCandidateDto,
+  CreateCandidateSavedSearchDto,
   DeleteCandidateNoteParams,
   ErrorResponse,
   GetCandidatesParams,
@@ -89,6 +91,14 @@ export const getGetCandidatesUrl = (params?: GetCandidatesParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["statuses","industryIds","roleTypeIds","specializationIds","skills","consultantIds","submissionStatuses","placementStatuses"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
 
     if (value !== undefined) {
       normalizedParams.append(key, value === null ? 'null' : String(value))
@@ -285,6 +295,323 @@ export const useCreateCandidate = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getCreateCandidateMutationOptions(options), queryClient);
+    }
+    export type getCandidateSavedSearchesResponse200 = {
+  data: CandidateSavedSearchEntity[]
+  status: 200
+}
+
+export type getCandidateSavedSearchesResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getCandidateSavedSearchesResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getCandidateSavedSearchesResponseSuccess = (getCandidateSavedSearchesResponse200) & {
+  headers: Headers;
+};
+export type getCandidateSavedSearchesResponseError = (getCandidateSavedSearchesResponse400 | getCandidateSavedSearchesResponse500) & {
+  headers: Headers;
+};
+
+export type getCandidateSavedSearchesResponse = (getCandidateSavedSearchesResponseSuccess | getCandidateSavedSearchesResponseError)
+
+export const getGetCandidateSavedSearchesUrl = () => {
+
+
+
+
+  return `/candidates/saved-searches`
+}
+
+/**
+ * @summary List the caller's saved candidate searches
+ */
+export const getCandidateSavedSearches = async ( options?: RequestInit): Promise<getCandidateSavedSearchesResponse> => {
+
+  return customFetch<getCandidateSavedSearchesResponse>(getGetCandidateSavedSearchesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCandidateSavedSearchesQueryKey = () => {
+    return [
+    `/candidates/saved-searches`
+    ] as const;
+    }
+
+
+export const getGetCandidateSavedSearchesQueryOptions = <TData = Awaited<ReturnType<typeof getCandidateSavedSearches>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidateSavedSearches>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCandidateSavedSearchesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCandidateSavedSearches>>> = ({ signal }) => getCandidateSavedSearches({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCandidateSavedSearches>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCandidateSavedSearchesQueryResult = NonNullable<Awaited<ReturnType<typeof getCandidateSavedSearches>>>
+export type GetCandidateSavedSearchesQueryError = ErrorResponse
+
+
+export function useGetCandidateSavedSearches<TData = Awaited<ReturnType<typeof getCandidateSavedSearches>>, TError = ErrorResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidateSavedSearches>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCandidateSavedSearches>>,
+          TError,
+          Awaited<ReturnType<typeof getCandidateSavedSearches>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCandidateSavedSearches<TData = Awaited<ReturnType<typeof getCandidateSavedSearches>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidateSavedSearches>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCandidateSavedSearches>>,
+          TError,
+          Awaited<ReturnType<typeof getCandidateSavedSearches>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCandidateSavedSearches<TData = Awaited<ReturnType<typeof getCandidateSavedSearches>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidateSavedSearches>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List the caller's saved candidate searches
+ */
+
+export function useGetCandidateSavedSearches<TData = Awaited<ReturnType<typeof getCandidateSavedSearches>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidateSavedSearches>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetCandidateSavedSearchesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type createCandidateSavedSearchResponse201 = {
+  data: CandidateSavedSearchEntity
+  status: 201
+}
+
+export type createCandidateSavedSearchResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type createCandidateSavedSearchResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type createCandidateSavedSearchResponseSuccess = (createCandidateSavedSearchResponse201) & {
+  headers: Headers;
+};
+export type createCandidateSavedSearchResponseError = (createCandidateSavedSearchResponse400 | createCandidateSavedSearchResponse500) & {
+  headers: Headers;
+};
+
+export type createCandidateSavedSearchResponse = (createCandidateSavedSearchResponseSuccess | createCandidateSavedSearchResponseError)
+
+export const getCreateCandidateSavedSearchUrl = () => {
+
+
+
+
+  return `/candidates/saved-searches`
+}
+
+/**
+ * @summary Save the current candidate search/filter state
+ */
+export const createCandidateSavedSearch = async (createCandidateSavedSearchDto: CreateCandidateSavedSearchDto, options?: RequestInit): Promise<createCandidateSavedSearchResponse> => {
+
+  return customFetch<createCandidateSavedSearchResponse>(getCreateCandidateSavedSearchUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createCandidateSavedSearchDto)
+  }
+);}
+
+
+
+
+
+export const getCreateCandidateSavedSearchMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCandidateSavedSearch>>, TError,{data: CreateCandidateSavedSearchDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCandidateSavedSearch>>, TError,{data: CreateCandidateSavedSearchDto}, TContext> => {
+
+const mutationKey = ['createCandidateSavedSearch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCandidateSavedSearch>>, {data: CreateCandidateSavedSearchDto}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createCandidateSavedSearch(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCandidateSavedSearchMutationResult = NonNullable<Awaited<ReturnType<typeof createCandidateSavedSearch>>>
+    export type CreateCandidateSavedSearchMutationBody = CreateCandidateSavedSearchDto
+    export type CreateCandidateSavedSearchMutationError = ErrorResponse
+
+    /**
+ * @summary Save the current candidate search/filter state
+ */
+export const useCreateCandidateSavedSearch = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCandidateSavedSearch>>, TError,{data: CreateCandidateSavedSearchDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createCandidateSavedSearch>>,
+        TError,
+        {data: CreateCandidateSavedSearchDto},
+        TContext
+      > => {
+      return useMutation(getCreateCandidateSavedSearchMutationOptions(options), queryClient);
+    }
+    export type deleteCandidateSavedSearchResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteCandidateSavedSearchResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type deleteCandidateSavedSearchResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type deleteCandidateSavedSearchResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type deleteCandidateSavedSearchResponseSuccess = (deleteCandidateSavedSearchResponse204) & {
+  headers: Headers;
+};
+export type deleteCandidateSavedSearchResponseError = (deleteCandidateSavedSearchResponse400 | deleteCandidateSavedSearchResponse404 | deleteCandidateSavedSearchResponse500) & {
+  headers: Headers;
+};
+
+export type deleteCandidateSavedSearchResponse = (deleteCandidateSavedSearchResponseSuccess | deleteCandidateSavedSearchResponseError)
+
+export const getDeleteCandidateSavedSearchUrl = (id: string,) => {
+
+
+
+
+  return `/candidates/saved-searches/${id}`
+}
+
+/**
+ * @summary Delete one of the caller's saved searches
+ */
+export const deleteCandidateSavedSearch = async (id: string, options?: RequestInit): Promise<deleteCandidateSavedSearchResponse> => {
+
+  return customFetch<deleteCandidateSavedSearchResponse>(getDeleteCandidateSavedSearchUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteCandidateSavedSearchMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCandidateSavedSearch>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCandidateSavedSearch>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteCandidateSavedSearch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCandidateSavedSearch>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteCandidateSavedSearch(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCandidateSavedSearchMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCandidateSavedSearch>>>
+
+    export type DeleteCandidateSavedSearchMutationError = ErrorResponse
+
+    /**
+ * @summary Delete one of the caller's saved searches
+ */
+export const useDeleteCandidateSavedSearch = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCandidateSavedSearch>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCandidateSavedSearch>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteCandidateSavedSearchMutationOptions(options), queryClient);
     }
     export type getCandidateByDisplayIdResponse200 = {
   data: CandidateEntity

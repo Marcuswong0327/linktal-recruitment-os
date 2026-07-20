@@ -408,11 +408,38 @@ async function importCandidates() {
       });
     }
 
-    // Build specializations array
-    const specializations: string[] = [];
-    if (row.Specialization_1) specializations.push(row.Specialization_1);
-    if (row.Specialization_2) specializations.push(row.Specialization_2);
-    if (row.Specialization_3) specializations.push(row.Specialization_3);
+    // Build specializations array — same shared Specialization catalog
+    // Clients use, upserted by name and linked via the CandidateSpecialization
+    // join (a candidate can carry several, unlike Client's single FK).
+    const specializationNames: string[] = [];
+    if (row.Specialization_1) specializationNames.push(row.Specialization_1);
+    if (row.Specialization_2) specializationNames.push(row.Specialization_2);
+    if (row.Specialization_3) specializationNames.push(row.Specialization_3);
+    const specializationIds = await Promise.all(
+      specializationNames.map(async (name) =>
+        (
+          await prisma.specialization.upsert({ where: { name }, create: { name }, update: {} })
+        ).id,
+      ),
+    );
+
+    // Industry (shared with Client) and role type (candidate-scoped) are
+    // reference tables, not free text — upsert-by-name to reuse an existing
+    // row (or create one) and link by id, same pattern as importClients().
+    const industryName = cleanString(row['Industry ']);
+    const industryId = industryName
+      ? (await prisma.industry.upsert({ where: { name: industryName }, create: { name: industryName }, update: {} })).id
+      : undefined;
+    const roleTypeName = cleanString(row['Role Type']);
+    const roleTypeId = roleTypeName
+      ? (
+          await prisma.candidateRoleType.upsert({
+            where: { name: roleTypeName },
+            create: { name: roleTypeName },
+            update: {},
+          })
+        ).id
+      : undefined;
 
     try {
       await prisma.candidate.upsert({
@@ -426,13 +453,16 @@ async function importCandidates() {
           mobile: cleanString(row.Mobile),
           country: cleanString(row.Country),
           city: cleanString(row['City ']),
-          industry: cleanString(row['Industry ']),
-          roleType: cleanString(row['Role Type']),
+          industryId,
+          roleTypeId,
           linkedinUrl: cleanString(row['Linkedln URL']),
           currentCompany: cleanString(row['Company_1 (Latest)']),
           currentPosition: cleanString(row['Role_1 (Latest)']),
           workHistory: workHistory.length > 0 ? workHistory : undefined,
-          specializations: specializations.length > 0 ? specializations : undefined,
+          specializations:
+            specializationIds.length > 0
+              ? { create: specializationIds.map((specializationId) => ({ specializationId })) }
+              : undefined,
           status: mapCandidateStatus(cleanString(row['Status '])),
         },
         update: {

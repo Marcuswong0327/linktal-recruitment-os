@@ -15,4 +15,6 @@ export const GetCandidatesSortBy = {
   familyName: 'familyName',
   givenName: 'givenName',
   yearsExperience: 'yearsExperience',
+  lastContactedAt: 'lastContactedAt',
+  status: 'status',
 } as const;

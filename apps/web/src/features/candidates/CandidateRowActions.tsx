@@ -74,7 +74,7 @@ export function CandidateRowActions({
   }
 
   return (
-    <div className="flex items-center justify-center gap-1">
+    <div className="flex items-center justify-center gap-1" data-no-row-drag>
       <Button
         variant="ghost"
         size="icon"

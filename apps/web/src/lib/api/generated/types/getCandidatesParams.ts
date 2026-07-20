@@ -5,9 +5,11 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { GetCandidatesPlacementStatusesItem } from './getCandidatesPlacementStatusesItem';
 import type { GetCandidatesSortBy } from './getCandidatesSortBy';
 import type { GetCandidatesSortOrder } from './getCandidatesSortOrder';
-import type { GetCandidatesStatus } from './getCandidatesStatus';
+import type { GetCandidatesStatusesItem } from './getCandidatesStatusesItem';
+import type { GetCandidatesSubmissionStatusesItem } from './getCandidatesSubmissionStatusesItem';
 
 export type GetCandidatesParams = {
 /**
@@ -27,29 +29,45 @@ pageSize?: number;
 sortBy?: GetCandidatesSortBy;
 sortOrder?: GetCandidatesSortOrder;
 /**
- * Free-text search across fullName, email, currentCompany and displayId
+ * Free-text search across fullName, email, displayId, mobile, city, country, currentPosition, currentCompany, and industry/role type name
  */
 q?: string;
 /**
- * Filter by status. Defaults to ALL (every status); pass a specific status to narrow.
+ * Filter by status (one or more). Omit for all statuses.
  */
-status?: GetCandidatesStatus;
+statuses?: GetCandidatesStatusesItem[];
 /**
- * Filter by industry (contains, case-insensitive)
+ * Filter by industry ID(s) (see /industries)
  */
-industry?: string;
+industryIds?: string[];
 /**
- * Filter by role type (contains, case-insensitive)
+ * Filter by role type ID(s) (see /candidate-role-types)
  */
-roleType?: string;
+roleTypeIds?: string[];
 /**
- * Filter by country (contains, case-insensitive)
+ * Filter by specialization ID(s) (see /specializations)
  */
-country?: string;
+specializationIds?: string[];
 /**
- * Filter by city (contains, case-insensitive)
+ * Filter by skill tag(s) (exact match against the free-entry skills list)
  */
-city?: string;
+skills?: string[];
+/**
+ * Filter by owning consultant ID(s)
+ */
+consultantIds?: string[];
+/**
+ * Filter by submission status (has at least one submission with this status)
+ */
+submissionStatuses?: GetCandidatesSubmissionStatusesItem[];
+/**
+ * Filter by placement status (has at least one placement with this status)
+ */
+placementStatuses?: GetCandidatesPlacementStatusesItem[];
+/**
+ * Filter by location — matches city OR country (contains, case-insensitive)
+ */
+location?: string;
 /**
  * Filter by current company (contains, case-insensitive)
  */
@@ -68,4 +86,12 @@ yearsExperienceMin?: number;
  * @minimum 0
  */
 yearsExperienceMax?: number;
+/**
+ * Only candidates last contacted on/after this date (ISO 8601)
+ */
+lastContactedFrom?: string;
+/**
+ * Only candidates last contacted on/before this date (ISO 8601)
+ */
+lastContactedTo?: string;
 };

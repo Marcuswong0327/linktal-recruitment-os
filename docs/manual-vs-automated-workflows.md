@@ -132,6 +132,7 @@
 | Contact ownership | `contactedBy` fields | ✅ done — `StakeholderContactHistory.contactedById` and `CandidateContactHistory.contactedById` (both nullable FK → `Consultant`, set from the caller's session, never the request body) |
 | Candidate ownership | owning consultant (mirrors `Client.consultantId`) | ✅ done — `Candidate.consultantId` |
 | Stakeholder categorization | fixed job-title categories for filtering | ✅ done — `StakeholderRoleType` reference table + `Stakeholder.roleTypeId`, auto-derived from `jobTitle` by keyword match, independently editable |
+| Candidate categorization | fixed industry/role-type/specialization categories for filtering | ✅ done — `Candidate.industryId` (shared `Industry` catalog with Client), `Candidate.roleTypeId` (own `CandidateRoleType` catalog — employment type, not auto-derived), specializations many-to-many via `CandidateSpecialization` (shared `Specialization` catalog with Client) |
 | Client lead quality | subjective recruiter rating, sortable | ✅ done — `Client.quality` (`LOW`/`MEDIUM`/`HIGH`) |
 
 ## Summary: Audit & History Tracking

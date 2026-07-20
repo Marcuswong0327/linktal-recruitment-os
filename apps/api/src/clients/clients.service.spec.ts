@@ -4,6 +4,20 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { ClientQualityFilter, ClientStatusFilter, QueryClientsDto, SortOrder } from './dto/query-clients.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
+import { AuthUser } from '../auth/auth.types';
+
+function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
+  return {
+    consultantId: 'me',
+    azureId: 'azure-1',
+    email: 'me@example.com',
+    fullName: 'Me',
+    roleName: 'admin',
+    isActive: true,
+    permissions: new Set(),
+    ...overrides,
+  };
+}
 
 describe('ClientsService.create', () => {
   it('creates without setting displayId (DB sequence owns it) and returns the row', async () => {
@@ -109,7 +123,7 @@ describe('ClientsService.update', () => {
       feePercentage: null,
     } as unknown as UpdateClientDto;
 
-    await service.update('cl1', dto);
+    await service.update('cl1', dto, makeUser());
 
     expect(update).toHaveBeenCalledWith({
       where: { id: 'cl1' },
@@ -126,7 +140,70 @@ describe('ClientsService.update', () => {
 
   it('throws when the client does not exist', async () => {
     const { service } = makeService(null);
-    await expect(service.update('missing', { companyName: 'X' })).rejects.toThrow('Client missing not found');
+    await expect(
+      service.update('missing', { companyName: 'X' }, makeUser()),
+    ).rejects.toThrow('Client missing not found');
+  });
+});
+
+// A consultant can reassign a company to a different consultant, but can't
+// clear the assignment entirely — orphaning it would (combined with the
+// consultant-only scoping in `findAll`) drop it out of anyone's book.
+describe('ClientsService.update — consultant cannot unassign', () => {
+  function makeService(existing: unknown = { id: 'cl1', stakeholders: [] }) {
+    const findUnique = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue({ id: 'cl1', stakeholders: [] });
+    const prisma = { client: { findUnique, update } } as unknown as ExtendedPrismaClient;
+    const base = {} as unknown as PrismaService;
+    return { service: new ClientsService(prisma, base), update };
+  }
+
+  it('rejects a consultant clearing consultantId with null', async () => {
+    const { service } = makeService();
+    await expect(
+      service.update(
+        'cl1',
+        { consultantId: null } as unknown as UpdateClientDto,
+        makeUser({ roleName: 'consultant' }),
+      ),
+    ).rejects.toThrow('Consultants cannot unassign a company from a consultant.');
+  });
+
+  it('rejects a consultant clearing consultantId with the "" sentinel', async () => {
+    const { service } = makeService();
+    await expect(
+      service.update(
+        'cl1',
+        { consultantId: '' } as unknown as UpdateClientDto,
+        makeUser({ roleName: 'consultant' }),
+      ),
+    ).rejects.toThrow('Consultants cannot unassign a company from a consultant.');
+  });
+
+  it('allows a consultant reassigning to a different consultant', async () => {
+    const { service, update } = makeService();
+    await service.update(
+      'cl1',
+      { consultantId: 'cons-2' },
+      makeUser({ roleName: 'consultant' }),
+    );
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows a consultant updating other fields without touching consultantId', async () => {
+    const { service, update } = makeService();
+    await service.update('cl1', { companyName: 'Acme 2' }, makeUser({ roleName: 'consultant' }));
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows an admin to clear consultantId', async () => {
+    const { service, update } = makeService();
+    await service.update(
+      'cl1',
+      { consultantId: null } as unknown as UpdateClientDto,
+      makeUser({ roleName: 'admin' }),
+    );
+    expect(update).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -154,19 +231,64 @@ describe('ClientsService.findAll — consultantId filter', () => {
 
   it('does not filter by consultant when consultantId is omitted', async () => {
     const { service, findMany } = makeService();
-    await service.findAll({ ...baseQuery });
+    await service.findAll({ ...baseQuery }, makeUser());
     expect(findMany.mock.calls[0][0].where).not.toHaveProperty('consultantId');
   });
 
   it('maps the "" Unassigned sentinel to a null FK filter, not a no-op', async () => {
     const { service, findMany } = makeService();
-    await service.findAll({ ...baseQuery, consultantId: '' });
+    await service.findAll({ ...baseQuery, consultantId: '' }, makeUser());
     expect(findMany.mock.calls[0][0].where.consultantId).toBeNull();
   });
 
   it('filters by the given consultant id', async () => {
     const { service, findMany } = makeService();
-    await service.findAll({ ...baseQuery, consultantId: 'cons-1' });
+    await service.findAll({ ...baseQuery, consultantId: 'cons-1' }, makeUser());
     expect(findMany.mock.calls[0][0].where.consultantId).toBe('cons-1');
+  });
+});
+
+// A consultant must only ever see their own book of companies. This is
+// enforced server-side (not just hidden in the UI) because business logic
+// guarantees a consultant is never assigned more than ~20 companies — the
+// list never needs pagination for that role, but only if it's actually
+// scoped to them.
+describe('ClientsService.findAll — consultant role scoping', () => {
+  function makeService(rows: unknown[] = []) {
+    const findMany = jest.fn().mockResolvedValue(rows);
+    const count = jest.fn().mockResolvedValue(rows.length);
+    const $transaction = jest.fn((ops: Promise<unknown>[]) => Promise.all(ops));
+    const prisma = { client: { findMany, count }, $transaction } as unknown as ExtendedPrismaClient;
+    const base = {} as unknown as PrismaService;
+    return { service: new ClientsService(prisma, base), findMany };
+  }
+
+  const baseQuery: QueryClientsDto = {
+    page: 1,
+    pageSize: 20,
+    sortOrder: SortOrder.asc,
+    status: ClientStatusFilter.ALL,
+    quality: ClientQualityFilter.ALL,
+  };
+
+  it('forces the filter to the caller\'s own consultantId, even when none is passed', async () => {
+    const { service, findMany } = makeService();
+    await service.findAll({ ...baseQuery }, makeUser({ roleName: 'consultant', consultantId: 'cons-me' }));
+    expect(findMany.mock.calls[0][0].where.consultantId).toBe('cons-me');
+  });
+
+  it('ignores a caller-supplied consultantId and uses the caller\'s own id instead', async () => {
+    const { service, findMany } = makeService();
+    await service.findAll(
+      { ...baseQuery, consultantId: 'someone-elses-id' },
+      makeUser({ roleName: 'consultant', consultantId: 'cons-me' }),
+    );
+    expect(findMany.mock.calls[0][0].where.consultantId).toBe('cons-me');
+  });
+
+  it('does not restrict non-consultant roles (e.g. manager)', async () => {
+    const { service, findMany } = makeService();
+    await service.findAll({ ...baseQuery }, makeUser({ roleName: 'manager', consultantId: 'mgr-1' }));
+    expect(findMany.mock.calls[0][0].where).not.toHaveProperty('consultantId');
   });
 });

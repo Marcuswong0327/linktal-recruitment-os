@@ -2,13 +2,15 @@
 // Datasource: PostgreSQL on Neon (auth is handled by NextAuth + Azure AD, not Neon)
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [pg_trgm]
 }
 
 // ============================================================================
@@ -119,6 +121,7 @@ model Consultant {
   candidates   Candidate[]
   stakeholderContacts StakeholderContactHistory[]
   candidateContacts   CandidateContactHistory[]
+  candidateSavedSearches CandidateSavedSearch[]
 }
 
 // ============================================================================
@@ -137,17 +140,21 @@ model Industry {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  clients   Client[]
+  clients    Client[]
+  candidates Candidate[] // Shared taxonomy: same catalog Client.industry uses.
 }
 
-// Same as Industry, for Client.specialization.
+// Same as Industry, for Client.specialization. Also shared by Candidate, but
+// as a many-to-many (a candidate can carry several specializations, unlike
+// Client's single specializationId) via the CandidateSpecialization join.
 model Specialization {
   id        String   @id @default(cuid())
   name      String   @unique
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  clients   Client[]
+  clients                  Client[]
+  candidateSpecializations CandidateSpecialization[]
 }
 
 model Client {
@@ -275,6 +282,20 @@ model ClientJobResearch {
 // CANDIDATE (Job seekers)
 // ============================================================================
 
+// Reference table for Candidate.roleType — same pattern as Industry/
+// Specialization/StakeholderRoleType: a fixed row instead of free text, kept
+// as its own catalog rather than reusing StakeholderRoleType, since a
+// candidate's role type is an employment category (e.g. Permanent/Contract),
+// not the functional/department classification stakeholders use.
+model CandidateRoleType {
+  id         String      @id @default(cuid())
+  name       String      @unique
+  isActive   Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  candidates Candidate[]
+}
+
 model Candidate {
   id                String                      @id @default(cuid())
   displayId         String                      @unique @default(dbgenerated("('CDD-'::text || lpad((nextval('\"Candidate_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: CDD-####
@@ -285,8 +306,10 @@ model Candidate {
   mobile            String?
   country           String?
   city              String?
-  industry          String?
-  roleType          String?
+  industryId        String?
+  industry          Industry?                   @relation(fields: [industryId], references: [id], onDelete: SetNull)
+  roleTypeId        String?
+  roleType          CandidateRoleType?          @relation(fields: [roleTypeId], references: [id], onDelete: SetNull)
   currentPosition   String?
   currentCompany    String?
   yearsExperience   Int?
@@ -294,7 +317,7 @@ model Candidate {
   linkedinUrl       String?
   resumeUrl         String?
   workHistory       Json? // JSONB: [{company, role, startDate, endDate}]
-  specializations   Json? // JSONB: ["string"]
+  skills            Json? // JSONB: ["string"] — free-entry tags, distinct from specializations (a shared, reference-table taxonomy).
   status            CandidateStatus             @default(COLD)
   notes             Json? // JSONB: [{id, content, timestamp, by, editedAt, editedBy}] — internal note timeline, newest last; edit/delete restricted to the note's author (or an admin). Mirrors Client.notes.
   consultantId      String? // Owning consultant — same shape as Client.consultantId, distinct from CandidateContactHistory.contactedById (who actually made a given contact).
@@ -307,12 +330,57 @@ model Candidate {
   screeningHistory  CandidateScreeningHistory[]
   contactHistory    CandidateContactHistory[]
   submissions       CandidateSubmission[]
+  specializations   CandidateSpecialization[]
 
   @@index([status])
   @@index([email])
   @@index([deletedAt])
   @@index([consultantId])
   @@index([lastContactedAt])
+  @@index([industryId])
+  @@index([roleTypeId])
+  // Trigram indexes back the quick-search's ILIKE/`contains` filters — turns
+  // a substring scan on these columns into an index scan instead of a
+  // sequential one, which is what keeps search fast as the candidate pool
+  // grows (see 20260719021500_candidate_search_trigram_indexes).
+  @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_fullName_trgm_idx")
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_email_trgm_idx")
+  @@index([currentPosition(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_currentPosition_trgm_idx")
+  @@index([currentCompany(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_currentCompany_trgm_idx")
+  @@index([city(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_city_trgm_idx")
+  @@index([country(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_country_trgm_idx")
+  @@index([mobile(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_mobile_trgm_idx")
+  @@index([displayId(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_displayId_trgm_idx")
+}
+
+// Many-to-many join: a candidate can carry several specializations (unlike
+// Client, which has a single specializationId). Explicit join model rather
+// than an implicit Prisma m2m so the backfill migration can write to a named
+// table directly.
+model CandidateSpecialization {
+  candidateId      String
+  candidate        Candidate      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  specializationId String
+  specialization   Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+
+  @@id([candidateId, specializationId])
+  @@index([specializationId])
+}
+
+// A consultant's saved candidate search — the filter state is opaque JSON
+// (same shape as QueryCandidatesDto's filter fields) rather than individual
+// columns, since the filter set is expected to keep growing and none of it
+// needs to be queried on independently (only ever fetched whole, by owner).
+model CandidateSavedSearch {
+  id           String     @id @default(cuid())
+  name         String
+  consultantId String
+  consultant   Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+  filters      Json
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([consultantId])
 }
 
 model CandidateScreeningHistory {
