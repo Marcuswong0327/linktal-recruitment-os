@@ -6,4 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 
-export type CandidateEntityNotesItem = { [key: string]: unknown };
+export interface AddCandidateNoteDto {
+  /** Note content */
+  content: string;
+}

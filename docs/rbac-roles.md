@@ -205,6 +205,9 @@ runs on the base client with batch transactions).
 | `GET/POST /candidates/saved-searches` | `saved_search:read` / `:create` | admin, manager, consultant, researcher — always scoped to the caller's own consultantId |
 | `DELETE /candidates/saved-searches/:id` | `saved_search:delete` | admin, manager, consultant, researcher — 404s if the id belongs to another consultant |
 | `GET/POST/PATCH/DELETE /job-orders` | `job_order:*` | per matrix |
+| `GET /candidates/:id/pipeline-timeline` | `candidate:read` | scoped to a candidate the caller can already read, not `audit:read` |
+| `GET /job-orders/:id/pipeline-timeline` | `job_order:read` | scoped to a job order the caller can already read, not `audit:read` |
+| `GET/POST/PATCH/DELETE /candidate-submissions` | `submission:*` | per matrix |
 | `GET /consultants` | `consultant:read` | admin, manager |
 | `POST /consultants` | `consultant:create` | admin, manager (no privileged roles for managers) |
 | `PATCH/DELETE /consultants/:id` | `consultant:update` / `:delete` | **admin only** (service guard) |

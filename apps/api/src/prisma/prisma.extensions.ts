@@ -75,11 +75,40 @@ export function toJson(v: unknown): unknown {
   return v;
 }
 
+// Prisma's own nested-write shapes for relations are always a keyed wrapper
+// object (`{ create: [...] }`, `{ connect: { id } }`) — never a bare array,
+// and always containing one of these operation keys. Anything else that
+// reaches here as an object/array is a literal value being written directly
+// to a scalar/Json field (e.g. `data.notes = [...]` for a JSONB timeline).
+const RELATION_OP_KEYS = new Set([
+  'create',
+  'createMany',
+  'connect',
+  'connectOrCreate',
+  'disconnect',
+  'delete',
+  'deleteMany',
+  'update',
+  'updateMany',
+  'upsert',
+]);
+
 /** Unwrap Prisma's atomic write forms (`{ set: x }`) to the plain value. */
 function resolveWriteValue(raw: unknown): { value: unknown; isScalar: boolean } {
+  if (Array.isArray(raw)) {
+    // A bare array is always a literal JSON value (e.g. a note timeline),
+    // never a relation nested-write — those are always wrapped in an object.
+    return { value: raw, isScalar: true };
+  }
   if (raw !== null && typeof raw === 'object') {
-    if ('set' in (raw as AnyArgs)) return { value: (raw as AnyArgs).set, isScalar: true };
-    return { value: raw, isScalar: false }; // relation op / nested — skip in diff
+    const keys = Object.keys(raw as AnyArgs);
+    if (keys.includes('set')) return { value: (raw as AnyArgs).set, isScalar: true };
+    if (keys.some((k) => RELATION_OP_KEYS.has(k))) {
+      return { value: raw, isScalar: false }; // relation nested-write — skip in diff
+    }
+    // No relation-op keys recognized — a plain object literal written
+    // directly to a Json field, not a nested-write wrapper.
+    return { value: raw, isScalar: true };
   }
   return { value: raw, isScalar: true };
 }
@@ -129,7 +158,13 @@ export function deriveAction(
 
 function baseMetadata(extra?: AnyArgs) {
   const requestId = RequestContext.getRequestId();
-  return { ...(requestId ? { requestId } : {}), ...extra };
+  // Every audit row this extension writes comes from a live app request —
+  // scripts that write historical/imported data (e.g. import-excel.ts) use
+  // the base, unextended PrismaClient and never reach this code at all, so
+  // there's nothing to disambiguate here today. This just makes that
+  // explicit/self-describing rather than implicit, for whenever a second
+  // write channel (a real import UI, a scheduled job) is added later.
+  return { source: 'app', ...(requestId ? { requestId } : {}), ...extra };
 }
 
 async function writeAudit(

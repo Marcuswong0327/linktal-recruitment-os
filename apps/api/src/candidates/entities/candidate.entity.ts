@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Candidate, CandidateStatus, Prisma } from '@prisma/client';
+import { CandidateNoteDto } from '../dto/candidate-note.dto';
 
 /**
  * OpenAPI response shape for a Candidate.
@@ -13,6 +14,10 @@ import { Candidate, CandidateStatus, Prisma } from '@prisma/client';
  * the column, just as `null` when empty. An explicit `type` is required: a
  * `T | null` union reflects as `Object` at runtime, which would otherwise emit
  * `type: object` instead of the real scalar type.
+ *
+ * `notes` is excluded from the `Omit` below and typed as `CandidateNoteDto[]`
+ * ourselves — same reasoning as `ClientEntity.notes`: Prisma's `Json` maps to
+ * `JsonValue`, which has no room for a concrete shape.
  *
  * `lastContact*` fields aren't part of the raw `Candidate` model — they're
  * resolved from the most recent `CandidateContactHistory` row (see
@@ -29,7 +34,7 @@ import { Candidate, CandidateStatus, Prisma } from '@prisma/client';
  * get plain strings instead of joining against /industries,
  * /candidate-role-types or /specializations themselves.
  */
-export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedById'> {
+export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedById' | 'notes'> {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'CDD-0001' }) displayId!: string;
   @ApiProperty({ example: 'John Smith' }) fullName!: string;
@@ -78,13 +83,7 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
   })
   specializationIds!: string[];
   @ApiProperty({ enum: CandidateStatus }) status!: CandidateStatus;
-  @ApiProperty({
-    type: 'array',
-    items: { type: 'object' },
-    nullable: true,
-    description: '[{ content, timestamp, by }]',
-  })
-  notes!: Prisma.JsonValue;
+  @ApiProperty({ type: [CandidateNoteDto], nullable: true }) notes!: CandidateNoteDto[] | null;
   @ApiProperty({ type: String, nullable: true }) consultantId!: string | null;
   @ApiProperty({
     type: Date,

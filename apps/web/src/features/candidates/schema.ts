@@ -60,7 +60,6 @@ export const createCandidateSchema = z.object({
   mobile: z.string().max(30).optional(),
   currentPosition: z.string().max(120).optional(),
   status: z.nativeEnum(CreateCandidateDtoStatus),
-  notes: z.string().max(2000).optional(),
 });
 
 export type CreateCandidateInput = z.infer<typeof createCandidateSchema>;
