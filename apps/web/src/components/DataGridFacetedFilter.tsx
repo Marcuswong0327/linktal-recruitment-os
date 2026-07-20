@@ -81,23 +81,9 @@ export function DataGridFacetedFilter({
         {selectedSet.size > 0 ? (
           <>
             <span className="mx-0.5 h-4 w-px bg-border" />
-            {selectedSet.size <= 2 ? (
-              options
-                .filter((option) => selectedSet.has(option.value))
-                .map((option) => (
-                  <Badge
-                    key={option.value}
-                    variant={option.variant ?? 'default'}
-                    className="rounded-sm px-1 font-normal"
-                  >
-                    {option.label}
-                  </Badge>
-                ))
-            ) : (
-              <Badge variant="muted" className="rounded-sm px-1 font-normal">
-                {selectedSet.size} selected
-              </Badge>
-            )}
+            <Badge variant="muted" className="rounded-sm px-1 font-normal">
+              {selectedSet.size} selected
+            </Badge>
           </>
         ) : null}
         <ChevronDown className="opacity-50" />
