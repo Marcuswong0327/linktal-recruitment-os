@@ -17,7 +17,7 @@
    2. Companies (Clients & Stakeholders) — _pending_
    3. Job Orders — _pending_
    4. Candidates — _pending_
-   5. Consultants (Admin) — _pending_
+   5. [Consultants (Admin)](#35-consultants-admin)
    6. Roles & Permissions (Admin) — _pending_
    7. Activity Log (Admin) — _pending_
 4. [Planned Features (Out of Scope)](#4-planned-features-out-of-scope)
@@ -86,6 +86,31 @@ Covers `/sign-in` and `/profile`. Two sign-in methods are supported:
 | AUTH-12 | All                                 | Visiting `/sign-in` While Already Signed In                     | While signed in, navigate directly to the `/sign-in` URL.                                                                                                   | Automatically redirected to Dashboard.                                                                                                        |        |
 | AUTH-13 | All                                 | Sign Out                                                        | From the account menu, click **Sign out**.                                                                                                                  | Session ends; visiting any protected page afterwards redirects to `/sign-in`.                                                                 |        |
 | AUTH-14 | All                                 | View Profile                                                    | Navigate to `/profile`.                                                                                                                                     | Shows name, email, avatar, assigned role badge, and Consultant ID. Fields are read-only — there is currently no self-service edit form.       |        |
+
+### 3.5 Consultants (Admin)
+
+Covers `/consultants` — a list of every consultant (recruiter) account, where an
+Admin manages role and active status. There is currently **no "add consultant"
+form** — new accounts only appear here via self-registration ([AUTH-07](#31-authentication--profile))
+or a Microsoft sign-in ([AUTH-02](#31-authentication--profile)/[AUTH-04](#31-authentication--profile)); an
+Admin approves a pending self-registration by switching that row's Status to Active.
+
+This page is **Admin-only in the UI** — even though some other roles hold
+read/create permissions on the underlying `consultant` resource (see
+[`docs/rbac-roles.md`](./rbac-roles.md)), the nav item and page are hidden from
+everyone except the Admin role.
+
+| ID     | Role(s)                                            | Test Scenario                                                | Steps                                                                                                                             | Expected Result                                                                                                                                | Status |
+| ------ | --------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+| CON-01 | Admin                                               | View Consultants List (Happy Flow)                              | Navigate to `/consultants`.                                                                                                       | Table lists every consultant with Name, Email, Role, Status, and Joined date; search box and Role/Status filters are available.                   |        |
+| CON-02 | Manager, Consultant, Finance, Researcher, Viewer    | Access Consultants Page (Unhappy Flow — No Access)              | Sign in as a non-Admin role and try to reach `/consultants` (nav item is hidden — try the direct URL too).                        | "Access Denied" is shown, regardless of that role's underlying `consultant` permission.                                                          |        |
+| CON-03 | Admin                                                | Approve a Pending Self-Registered Account (Happy Flow)          | Locate the newly self-registered consultant (Status = Inactive), change **Status** to **Active**.                                | Row updates to Active; success toast; that person can now sign in ([AUTH-07](#31-authentication--profile)).                                       |        |
+| CON-04 | Admin                                                | Deactivate a Consultant (Happy Flow)                             | Change another consultant's **Status** to **Inactive**.                                                                          | Success toast; that consultant is immediately blocked from signing in / using the app ([AUTH-10](#31-authentication--profile)/[AUTH-11](#31-authentication--profile)). |        |
+| CON-05 | Admin                                                | Change a Consultant's Role (Happy Flow)                          | Change another consultant's **Role** dropdown to a different role.                                                               | Success toast; that consultant's permissions match the new role on their next request.                                                            |        |
+| CON-06 | Admin                                                | Bulk Update Role/Status (Happy Flow)                             | Select several consultants via the row checkboxes, then **Bulk actions → Set role** (or **Set status**).                        | A summary toast reports how many succeeded/failed; all selected rows update accordingly.                                                          |        |
+| CON-07 | Admin                                                | Self-Lockout on Own Row (Unhappy Flow)                           | Find your own row in the list.                                                                                                    | Your own row can't be selected for bulk actions, and its Role/Status controls are disabled — you cannot change your own role or deactivate yourself here. |        |
+| CON-08 | Admin                                                | Cannot Demote/Deactivate the Last Active Admin (Unhappy Flow)    | With exactly one active Admin in the system, attempt (from a different admin account) to change that admin's role away from Admin, or set their Status to Inactive. | Blocked with: "Cannot demote or deactivate the last active admin."                                                                                 |        |
+| CON-09 | Admin                                                | Search & Filter Consultants (Happy Flow)                         | Type into the search box, and/or apply the Role and Status filter pills.                                                        | List narrows to matching consultants; filters can be combined.                                                                                     |        |
 
 ---
 
