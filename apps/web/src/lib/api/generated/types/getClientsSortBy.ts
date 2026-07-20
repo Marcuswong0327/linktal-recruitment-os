@@ -14,4 +14,6 @@ export const GetClientsSortBy = {
   feePercentage: 'feePercentage',
   guaranteePeriod: 'guaranteePeriod',
   createdAt: 'createdAt',
+  lastContactedAt: 'lastContactedAt',
+  quality: 'quality',
 } as const;

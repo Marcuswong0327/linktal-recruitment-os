@@ -13,4 +13,5 @@ export const GetStakeholdersSortBy = {
   displayId: 'displayId',
   fullName: 'fullName',
   createdAt: 'createdAt',
+  lastContactedAt: 'lastContactedAt',
 } as const;

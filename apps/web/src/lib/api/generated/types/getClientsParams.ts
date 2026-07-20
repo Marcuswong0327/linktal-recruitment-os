@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { GetClientsQuality } from './getClientsQuality';
 import type { GetClientsSortBy } from './getClientsSortBy';
 import type { GetClientsSortOrder } from './getClientsSortOrder';
 import type { GetClientsStatus } from './getClientsStatus';
@@ -22,7 +23,7 @@ page?: number;
  */
 pageSize?: number;
 /**
- * Column to sort by. Defaults to most recently created.
+ * Column to sort by. Defaults to most recently contacted.
  */
 sortBy?: GetClientsSortBy;
 sortOrder?: GetClientsSortOrder;
@@ -39,6 +40,10 @@ status?: GetClientsStatus;
  */
 industry?: string;
 /**
+ * Filter by specialization (contains, case-insensitive)
+ */
+specialization?: string;
+/**
  * Filter by country (contains, case-insensitive)
  */
 country?: string;
@@ -50,6 +55,10 @@ city?: string;
  * Filter by owning consultant ID (exact match)
  */
 consultantId?: string;
+/**
+ * Filter by lead quality. Defaults to ALL (every quality); pass a specific value to narrow.
+ */
+quality?: GetClientsQuality;
 /**
  * Filter by Terms of Business signed
  */

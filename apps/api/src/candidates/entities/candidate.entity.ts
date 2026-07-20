@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Candidate, CandidateStatus, Prisma } from '@prisma/client';
+import { CandidateNoteDto } from '../dto/candidate-note.dto';
 
 /**
  * OpenAPI response shape for a Candidate.
@@ -13,8 +14,27 @@ import { Candidate, CandidateStatus, Prisma } from '@prisma/client';
  * the column, just as `null` when empty. An explicit `type` is required: a
  * `T | null` union reflects as `Object` at runtime, which would otherwise emit
  * `type: object` instead of the real scalar type.
+ *
+ * `notes` is excluded from the `Omit` below and typed as `CandidateNoteDto[]`
+ * ourselves — same reasoning as `ClientEntity.notes`: Prisma's `Json` maps to
+ * `JsonValue`, which has no room for a concrete shape.
+ *
+ * `lastContact*` fields aren't part of the raw `Candidate` model — they're
+ * resolved from the most recent `CandidateContactHistory` row (see
+ * CandidatesService), added here so exports get readable columns without the
+ * caller joining contact history + consultants themselves. `lastContactedAt`
+ * is the exception: it's a real denormalized column (needed for sorting), the
+ * other three are resolved live from that latest row since they're
+ * display-only.
+ *
+ * `industry`/`roleType`/`specializations` aren't part of the raw `Candidate`
+ * model either (only `industryId`/`roleTypeId` are, and specializations is a
+ * many-to-many relation with no scalar column at all) — same reasoning as
+ * StakeholderEntity.roleType: the resolved name(s) are added here so callers
+ * get plain strings instead of joining against /industries,
+ * /candidate-role-types or /specializations themselves.
  */
-export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedById'> {
+export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedById' | 'notes'> {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'CDD-0001' }) displayId!: string;
   @ApiProperty({ example: 'John Smith' }) fullName!: string;
@@ -24,8 +44,12 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
   @ApiProperty({ type: String, nullable: true }) mobile!: string | null;
   @ApiProperty({ type: String, nullable: true }) country!: string | null;
   @ApiProperty({ type: String, nullable: true }) city!: string | null;
-  @ApiProperty({ type: String, nullable: true }) industry!: string | null;
-  @ApiProperty({ type: String, nullable: true }) roleType!: string | null;
+  @ApiProperty({ type: String, nullable: true }) industryId!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Resolved industry name' })
+  industry!: string | null;
+  @ApiProperty({ type: String, nullable: true }) roleTypeId!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Resolved role type name' })
+  roleType!: string | null;
   @ApiProperty({ type: String, nullable: true }) currentPosition!: string | null;
   @ApiProperty({ type: String, nullable: true }) currentCompany!: string | null;
   @ApiProperty({ type: Number, nullable: true }) yearsExperience!: number | null;
@@ -39,10 +63,40 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
     description: '[{ company, role, startDate, endDate }]',
   })
   workHistory!: Prisma.JsonValue;
-  @ApiProperty({ type: 'array', items: { type: 'string' }, nullable: true })
-  specializations!: Prisma.JsonValue;
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'string' },
+    nullable: true,
+    description: 'Free-entry skill tags',
+  })
+  skills!: Prisma.JsonValue;
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'string' },
+    description: 'Resolved specialization names',
+  })
+  specializations!: string[];
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'string' },
+    description: 'Specialization IDs backing `specializations` — what an editable multi-select actually binds to',
+  })
+  specializationIds!: string[];
   @ApiProperty({ enum: CandidateStatus }) status!: CandidateStatus;
-  @ApiProperty({ type: String, nullable: true }) notes!: string | null;
+  @ApiProperty({ type: [CandidateNoteDto], nullable: true }) notes!: CandidateNoteDto[] | null;
+  @ApiProperty({ type: String, nullable: true }) consultantId!: string | null;
+  @ApiProperty({
+    type: Date,
+    nullable: true,
+    description: "Latest contactedAt across this candidate's contact history; null if never contacted",
+  })
+  lastContactedAt!: Date | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Contact method of the most recent contact (email, call, meeting, linkedin)' })
+  lastContactType!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Notes from the most recent contact' })
+  lastContactNotes!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Resolved name of the consultant who made the most recent contact' })
+  lastContactedBy!: string | null;
   @ApiProperty() createdAt!: Date;
   @ApiProperty() updatedAt!: Date;
 }

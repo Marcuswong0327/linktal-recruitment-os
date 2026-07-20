@@ -1,17 +1,16 @@
 import { auth } from '@/auth';
 import { AccessDenied } from '@/components/app-shell/AccessDenied';
-import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
+import { PageLayout } from '@/components/app-shell/PageLayout';
 import { hasPermission } from '@/lib/auth/permissions';
-import { CandidatesTable } from '@/features/candidates/CandidatesTable';
+import { CandidateSearchGate } from '@/features/candidates/CandidateSearchGate';
 
 export default async function CandidatesPage() {
   const session = await auth();
 
   return (
     <PageLayout>
-      <PageHeader title="Candidates" description="Your talent pool — screening status, salary and availability." />
       {hasPermission(session, 'candidate', 'read') ? (
-        <CandidatesTable
+        <CandidateSearchGate
           canCreate={hasPermission(session, 'candidate', 'create')}
           canDelete={hasPermission(session, 'candidate', 'delete')}
         />

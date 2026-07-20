@@ -1,12 +1,75 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { RequestContext } from '../common/request-context';
+import { AuthUser } from '../auth/auth.types';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
-import { CandidateStatusFilter, QueryCandidatesDto } from './dto/query-candidates.dto';
+import { QueryCandidatesDto } from './dto/query-candidates.dto';
+import { CreateCandidateContactHistoryDto } from './dto/create-candidate-contact-history.dto';
+import { AddCandidateNoteDto, CandidateNoteDto, UpdateCandidateNoteDto } from './dto/candidate-note.dto';
+
+// lastContactedAt is a plain scalar column (see schema.prisma) — denormalized
+// for sorting, same reasoning as Client/Stakeholder.lastContactedAt. The rest
+// of the "latest contact" detail (type/notes/who) isn't sorted or filtered
+// on, so it's resolved live via the top-1 contact history row instead of
+// also being denormalized — display-only, cheap per row.
+//
+// industry/roleType are `select: { name: true } }`-included and flattened
+// back onto the entity as plain strings (see toEntity), same pattern as
+// StakeholderEntity.roleType. specializations is a many-to-many with no
+// scalar column at all, so it's always resolved this way — there's no
+// "sometimes denormalized" version of it.
+const CANDIDATE_INCLUDE = {
+  contactHistory: {
+    orderBy: { contactedAt: 'desc' },
+    take: 1,
+    select: { contactType: true, notes: true, contactedBy: { select: { fullName: true } } },
+  },
+  industry: { select: { name: true } },
+  roleType: { select: { name: true } },
+  // specializationId (the join row's own scalar) is kept alongside the
+  // resolved name — the name is display-only, the id is what an editable
+  // multi-select actually needs to preselect/diff against.
+  specializations: { select: { specializationId: true, specialization: { select: { name: true } } } },
+} satisfies Prisma.CandidateInclude;
+
+type CandidateWithRelations = {
+  contactHistory: { contactType: string; notes: string | null; contactedBy: { fullName: string } | null }[];
+  industry: { name: string } | null;
+  roleType: { name: string } | null;
+  specializations: { specializationId: string; specialization: { name: string } }[];
+};
+
+function toEntity<T extends CandidateWithRelations>(candidate: T) {
+  const { contactHistory, industry, roleType, specializations, ...rest } = candidate;
+  const latest = contactHistory[0];
+  return {
+    ...rest,
+    industry: industry?.name ?? null,
+    roleType: roleType?.name ?? null,
+    specializations: specializations.map((s) => s.specialization.name),
+    specializationIds: specializations.map((s) => s.specializationId),
+    lastContactType: latest?.contactType ?? null,
+    lastContactNotes: latest?.notes ?? null,
+    lastContactedBy: latest?.contactedBy?.fullName ?? null,
+  };
+}
+
+/** contains/insensitive text filter — undefined when the value is empty, so it's omitted from `where` rather than matching everything. */
+function contains(value?: string) {
+  return value ? { contains: value, mode: Prisma.QueryMode.insensitive } : undefined;
+}
 
 @Injectable()
 export class CandidatesService {
@@ -20,38 +83,91 @@ export class CandidatesService {
   async findAll(query: QueryCandidatesDto) {
     const { page, pageSize, sortBy, sortOrder, q } = query;
 
-    const where: Prisma.CandidateWhereInput = {};
+    // Built as an AND-ed list of independent conditions rather than
+    // assigning fields onto one `where` object, since more than one
+    // condition here needs its own `OR` (skills, free-text q) — top-level
+    // `where.OR` assignments would just clobber each other.
+    const and: Prisma.CandidateWhereInput[] = [];
 
-    if (query.status !== CandidateStatusFilter.ALL) {
-      where.status = query.status as unknown as Prisma.CandidateWhereInput['status'];
+    if (query.statuses?.length) and.push({ status: { in: query.statuses } });
+    if (query.industryIds?.length) and.push({ industryId: { in: query.industryIds } });
+    if (query.roleTypeIds?.length) and.push({ roleTypeId: { in: query.roleTypeIds } });
+    if (query.specializationIds?.length) {
+      and.push({ specializations: { some: { specializationId: { in: query.specializationIds } } } });
+    }
+    if (query.consultantIds?.length) and.push({ consultantId: { in: query.consultantIds } });
+    if (query.submissionStatuses?.length) {
+      and.push({ submissions: { some: { status: { in: query.submissionStatuses } } } });
+    }
+    if (query.placementStatuses?.length) {
+      and.push({ submissions: { some: { placement: { status: { in: query.placementStatuses } } } } });
+    }
+    if (query.skills?.length) {
+      // OR: a candidate matches if they carry *any* of the selected tags.
+      and.push({ OR: query.skills.map((skill) => ({ skills: { array_contains: [skill] } })) });
     }
 
-    // contains/insensitive text filters
-    const contains = (value?: string) =>
-      value ? { contains: value, mode: Prisma.QueryMode.insensitive } : undefined;
-    where.industry = contains(query.industry);
-    where.roleType = contains(query.roleType);
-    where.country = contains(query.country);
-    where.city = contains(query.city);
-    where.currentCompany = contains(query.currentCompany);
-    where.currentPosition = contains(query.currentPosition);
+    if (query.location) {
+      // "Location" is one filter over two columns — matches either.
+      and.push({
+        OR: [
+          { city: { contains: query.location, mode: Prisma.QueryMode.insensitive } },
+          { country: { contains: query.location, mode: Prisma.QueryMode.insensitive } },
+        ],
+      });
+    }
+    const companyFilter = contains(query.currentCompany);
+    if (companyFilter) and.push({ currentCompany: companyFilter });
+    const positionFilter = contains(query.currentPosition);
+    if (positionFilter) and.push({ currentPosition: positionFilter });
 
     if (query.yearsExperienceMin != null || query.yearsExperienceMax != null) {
-      where.yearsExperience = {
-        ...(query.yearsExperienceMin != null ? { gte: query.yearsExperienceMin } : {}),
-        ...(query.yearsExperienceMax != null ? { lte: query.yearsExperienceMax } : {}),
-      };
+      and.push({
+        yearsExperience: {
+          ...(query.yearsExperienceMin != null ? { gte: query.yearsExperienceMin } : {}),
+          ...(query.yearsExperienceMax != null ? { lte: query.yearsExperienceMax } : {}),
+        },
+      });
     }
 
+    if (query.lastContactedFrom || query.lastContactedTo) {
+      and.push({
+        lastContactedAt: {
+          ...(query.lastContactedFrom ? { gte: new Date(query.lastContactedFrom) } : {}),
+          ...(query.lastContactedTo ? { lte: new Date(query.lastContactedTo) } : {}),
+        },
+      });
+    }
+
+    // Quick search: scalar columns (backed by the trigram indexes added in
+    // 20260719021500_candidate_search_trigram_indexes) plus industry/role
+    // type's resolved name via relation. Skills/specializations are
+    // deliberately left out — substring matching inside a JSON array / a
+    // joined many-to-many isn't worth the complexity for free-text search;
+    // they're filter-only (industryIds/roleTypeIds/specializationIds/skills).
     if (q) {
-      where.OR = [
-        { fullName: { contains: q, mode: Prisma.QueryMode.insensitive } },
-        { email: { contains: q, mode: Prisma.QueryMode.insensitive } },
-        { currentCompany: { contains: q, mode: Prisma.QueryMode.insensitive } },
-        { displayId: { contains: q, mode: Prisma.QueryMode.insensitive } },
-      ];
+      and.push({
+        OR: [
+          { fullName: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { email: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { currentCompany: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { displayId: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { currentPosition: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { city: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { country: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { mobile: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { industry: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
+          { roleType: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
+        ],
+      });
     }
 
+    const where: Prisma.CandidateWhereInput = and.length > 0 ? { AND: and } : {};
+
+    // status sorts by Postgres's native enum ordinal (COLD < WARM < HOT <
+    // PLACED, per the declaration order in schema.prisma) — no CASE
+    // expression needed, `ORDER BY "status"` already gives the temperature
+    // order.
     const orderBy: Prisma.CandidateOrderByWithRelationInput = sortBy
       ? { [sortBy]: sortOrder }
       : { createdAt: 'desc' };
@@ -65,37 +181,72 @@ export class CandidatesService {
         orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
+        include: CANDIDATE_INCLUDE,
       }),
       this.prisma.candidate.count({ where }),
     ]);
 
-    return { data, total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
+    return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }
 
   async findOne(id: string) {
-    const candidate = await this.prisma.candidate.findUnique({ where: { id } });
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { id },
+      include: CANDIDATE_INCLUDE,
+    });
     if (!candidate) {
       throw new NotFoundException(`Candidate ${id} not found`);
     }
-    return candidate;
+    return toEntity(candidate);
   }
 
   async findByDisplayId(displayId: string) {
-    const candidate = await this.prisma.candidate.findUnique({ where: { displayId } });
+    const candidate = await this.prisma.candidate.findUnique({
+      where: { displayId },
+      include: CANDIDATE_INCLUDE,
+    });
     if (!candidate) {
       throw new NotFoundException(`Candidate ${displayId} not found`);
     }
-    return candidate;
+    return toEntity(candidate);
   }
 
-  create(dto: CreateCandidateDto) {
+  async create(dto: CreateCandidateDto) {
     // displayId is assigned by the DB (Candidate_displayId_seq default).
-    return this.prisma.candidate.create({ data: this.toPrismaData(dto) });
+    const candidate = await this.prisma.candidate.create({
+      data: {
+        ...this.toPrismaData(dto),
+        ...(dto.specializationIds !== undefined
+          ? { specializations: { create: dto.specializationIds.map((specializationId) => ({ specializationId })) } }
+          : {}),
+      },
+      include: CANDIDATE_INCLUDE,
+    });
+    return toEntity(candidate);
   }
 
   async update(id: string, dto: UpdateCandidateDto) {
     await this.findOne(id);
-    return this.prisma.candidate.update({ where: { id }, data: this.toPrismaData(dto) });
+    const candidate = await this.prisma.candidate.update({
+      where: { id },
+      data: {
+        ...this.toPrismaData(dto),
+        // Specializations is a to-many join, not a scalar column — a full
+        // list replace (clear then recreate) is simplest and correct here;
+        // a candidate's specialization list is short, so there's no need for
+        // a diffing update.
+        ...(dto.specializationIds !== undefined
+          ? {
+              specializations: {
+                deleteMany: {},
+                create: dto.specializationIds.map((specializationId) => ({ specializationId })),
+              },
+            }
+          : {}),
+      },
+      include: CANDIDATE_INCLUDE,
+    });
+    return toEntity(candidate);
   }
 
   /**
@@ -129,10 +280,12 @@ export class CandidatesService {
     if (!existing.deletedAt) {
       throw new BadRequestException(`Candidate ${id} is not deleted`);
     }
-    return this.prisma.candidate.update({
+    const candidate = await this.prisma.candidate.update({
       where: { id },
       data: { deletedAt: null, deletedById: null },
+      include: CANDIDATE_INCLUDE,
     });
+    return toEntity(candidate);
   }
 
   /**
@@ -159,20 +312,153 @@ export class CandidatesService {
   }
 
   /**
-   * Split the JSON columns out of the DTO. Class instances don't structurally
-   * satisfy Prisma's `InputJsonValue` (no index signature), so they're cast
-   * explicitly while the scalar fields keep their compile-time checks.
+   * Logs a contact and bumps the denormalized lastContactedAt — but only if
+   * this contact is newer than what's already stored (a backdated log entry
+   * shouldn't clobber a more recent one). contactedById always comes from
+   * the caller's own session (never the request body) — a contact can only
+   * ever be attributed to whoever is actually submitting it.
+   */
+  async addContactHistory(id: string, dto: CreateCandidateContactHistoryDto, consultantId: string) {
+    const candidate = await this.base.candidate.findUnique({
+      where: { id },
+      select: { lastContactedAt: true },
+    });
+    if (!candidate) {
+      throw new NotFoundException(`Candidate ${id} not found`);
+    }
+    const contactedAt = dto.contactedAt ? new Date(dto.contactedAt) : new Date();
+
+    const created = await this.prisma.candidateContactHistory.create({
+      data: {
+        candidateId: id,
+        contactType: dto.contactType,
+        notes: dto.notes,
+        contactedAt,
+        contactedById: consultantId,
+      },
+    });
+
+    if (!candidate.lastContactedAt || contactedAt > candidate.lastContactedAt) {
+      await this.prisma.candidate.update({ where: { id }, data: { lastContactedAt: contactedAt } });
+    }
+
+    return created;
+  }
+
+  private getNotes(candidate: { notes: unknown }): CandidateNoteDto[] {
+    return Array.isArray(candidate.notes) ? (candidate.notes as unknown as CandidateNoteDto[]) : [];
+  }
+
+  private async saveNotes(id: string, notes: CandidateNoteDto[]) {
+    const candidate = await this.prisma.candidate.update({
+      where: { id },
+      data: { notes: notes as unknown as Prisma.InputJsonValue },
+      include: CANDIDATE_INCLUDE,
+    });
+    return toEntity(candidate);
+  }
+
+  /** Only the note's own author, or an admin, may edit/delete it. */
+  private assertCanModifyNote(note: CandidateNoteDto, user: AuthUser) {
+    if (note.by !== user.consultantId && user.roleName !== 'admin') {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: "Only the note's author or an admin can modify it.",
+      });
+    }
+  }
+
+  private findNoteOrThrow(notes: CandidateNoteDto[], noteId: string) {
+    const index = notes.findIndex((n) => n.id === noteId);
+    if (index === -1) {
+      throw new NotFoundException(`Note ${noteId} not found`);
+    }
+    return index;
+  }
+
+  /** A note's own last-modified marker — its `editedAt`, or `timestamp` if never edited. */
+  private noteVersion(note: CandidateNoteDto): string {
+    return note.editedAt ?? note.timestamp;
+  }
+
+  /**
+   * Optimistic concurrency check: rejects the request if the note changed
+   * since the caller last read it (detected by comparing `noteVersion`), so a
+   * second edit/delete can't silently clobber one that landed moments before
+   * it. Skipped when the caller doesn't pass `expectedVersion` at all.
+   */
+  private assertNotStale(note: CandidateNoteDto, expectedVersion: string | undefined) {
+    if (expectedVersion !== undefined && this.noteVersion(note) !== expectedVersion) {
+      throw new ConflictException({
+        code: 'NOTE_CONFLICT',
+        message: 'This note was changed by someone else. Reload and try again.',
+      });
+    }
+  }
+
+  /** Appends one entry to the candidate's note timeline (never overwrites prior entries). */
+  async addNote(id: string, dto: AddCandidateNoteDto, consultantId: string) {
+    const candidate = await this.findOne(id);
+    const next: CandidateNoteDto[] = [
+      ...this.getNotes(candidate),
+      {
+        id: randomUUID(),
+        content: dto.content,
+        timestamp: new Date().toISOString(),
+        by: consultantId,
+        editedAt: null,
+        editedBy: null,
+      },
+    ];
+    return this.saveNotes(id, next);
+  }
+
+  /** Edits one note's content in place; restricted to its author or an admin. */
+  async updateNote(id: string, noteId: string, dto: UpdateCandidateNoteDto, user: AuthUser) {
+    const candidate = await this.findOne(id);
+    const notes = this.getNotes(candidate);
+    const index = this.findNoteOrThrow(notes, noteId);
+    this.assertCanModifyNote(notes[index], user);
+    this.assertNotStale(notes[index], dto.expectedVersion);
+
+    const next = [...notes];
+    next[index] = {
+      ...next[index],
+      content: dto.content,
+      editedAt: new Date().toISOString(),
+      editedBy: user.consultantId,
+    };
+    return this.saveNotes(id, next);
+  }
+
+  /** Removes one note from the timeline; restricted to its author or an admin. */
+  async deleteNote(id: string, noteId: string, user: AuthUser, expectedVersion?: string) {
+    const candidate = await this.findOne(id);
+    const notes = this.getNotes(candidate);
+    const index = this.findNoteOrThrow(notes, noteId);
+    this.assertCanModifyNote(notes[index], user);
+    this.assertNotStale(notes[index], expectedVersion);
+
+    const next = notes.filter((n) => n.id !== noteId);
+    return this.saveNotes(id, next);
+  }
+
+  /**
+   * Split the JSON columns and the specializationIds relation out of the DTO.
+   * Class instances don't structurally satisfy Prisma's `InputJsonValue` (no
+   * index signature), so JSON fields are cast explicitly while the scalar
+   * fields keep their compile-time checks. `specializationIds` is a nested
+   * relation write, not a column — callers (create/update) build that part
+   * of the payload themselves from `dto.specializationIds` directly.
    */
   private toPrismaData<T extends CreateCandidateDto | UpdateCandidateDto>(dto: T) {
-    const { workHistory, specializations, ...rest } = dto;
+    const { workHistory, skills, specializationIds: _specializationIds, ...rest } = dto;
     return {
       ...rest,
       ...(workHistory !== undefined
         ? { workHistory: workHistory as unknown as Prisma.InputJsonValue }
         : {}),
-      ...(specializations !== undefined
-        ? { specializations: specializations as unknown as Prisma.InputJsonValue }
-        : {}),
+      ...(skills !== undefined ? { skills: skills as unknown as Prisma.InputJsonValue } : {}),
     };
   }
 }

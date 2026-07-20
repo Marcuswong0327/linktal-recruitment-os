@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { PrismaClient, CandidateStatus, ClientStatus, JobOrderStatus, SubmissionStatus, PlacementStatus } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { dataFile } from './data-dir';
 
 const prisma = new PrismaClient();
@@ -22,6 +23,24 @@ function parseExcelDate(value: unknown): Date | null {
     return isNaN(parsed.getTime()) ? null : parsed;
   }
   return null;
+}
+
+// Client.notes is now a JSONB timeline ([{id, content, timestamp, by, editedAt, editedBy}])
+// — wraps a single legacy free-text value as its first (only) entry. `by` is
+// null since imported notes have no consultant attribution.
+function toNoteTimeline(content: string | null) {
+  return content
+    ? [
+        {
+          id: randomUUID(),
+          content,
+          timestamp: new Date().toISOString(),
+          by: null,
+          editedAt: null,
+          editedBy: null,
+        },
+      ]
+    : undefined;
 }
 
 // Helper to clean string values
@@ -138,6 +157,19 @@ async function importClients() {
       if (match) feePercentage = parseInt(match[1], 10);
     }
 
+    // Industry is now a reference table, not free text — upsert-by-name to
+    // reuse an existing row (or create one) and link by id.
+    const industryName = cleanString(row.Industry);
+    const industryId = industryName
+      ? (
+          await prisma.industry.upsert({
+            where: { name: industryName },
+            create: { name: industryName },
+            update: {},
+          })
+        ).id
+      : undefined;
+
     try {
       await prisma.client.upsert({
         where: { displayId },
@@ -145,10 +177,10 @@ async function importClients() {
           displayId,
           companyName,
           country: cleanString(row.Country),
-          industry: cleanString(row.Industry),
+          industryId,
           city: cleanString(row.City),
           website: cleanString(row.Website),
-          notes: cleanString(row.Notes),
+          notes: toNoteTimeline(cleanString(row.Notes)),
           status: mapClientStatus(cleanString(row['Status '])),
           feePercentage,
           guaranteePeriod: row['Guarantee Period '] || 90,
@@ -156,7 +188,7 @@ async function importClients() {
         update: {
           companyName,
           country: cleanString(row.Country),
-          industry: cleanString(row.Industry),
+          industryId,
           city: cleanString(row.City),
           status: mapClientStatus(cleanString(row['Status '])),
         },
@@ -376,11 +408,38 @@ async function importCandidates() {
       });
     }
 
-    // Build specializations array
-    const specializations: string[] = [];
-    if (row.Specialization_1) specializations.push(row.Specialization_1);
-    if (row.Specialization_2) specializations.push(row.Specialization_2);
-    if (row.Specialization_3) specializations.push(row.Specialization_3);
+    // Build specializations array — same shared Specialization catalog
+    // Clients use, upserted by name and linked via the CandidateSpecialization
+    // join (a candidate can carry several, unlike Client's single FK).
+    const specializationNames: string[] = [];
+    if (row.Specialization_1) specializationNames.push(row.Specialization_1);
+    if (row.Specialization_2) specializationNames.push(row.Specialization_2);
+    if (row.Specialization_3) specializationNames.push(row.Specialization_3);
+    const specializationIds = await Promise.all(
+      specializationNames.map(async (name) =>
+        (
+          await prisma.specialization.upsert({ where: { name }, create: { name }, update: {} })
+        ).id,
+      ),
+    );
+
+    // Industry (shared with Client) and role type (candidate-scoped) are
+    // reference tables, not free text — upsert-by-name to reuse an existing
+    // row (or create one) and link by id, same pattern as importClients().
+    const industryName = cleanString(row['Industry ']);
+    const industryId = industryName
+      ? (await prisma.industry.upsert({ where: { name: industryName }, create: { name: industryName }, update: {} })).id
+      : undefined;
+    const roleTypeName = cleanString(row['Role Type']);
+    const roleTypeId = roleTypeName
+      ? (
+          await prisma.candidateRoleType.upsert({
+            where: { name: roleTypeName },
+            create: { name: roleTypeName },
+            update: {},
+          })
+        ).id
+      : undefined;
 
     try {
       await prisma.candidate.upsert({
@@ -394,13 +453,16 @@ async function importCandidates() {
           mobile: cleanString(row.Mobile),
           country: cleanString(row.Country),
           city: cleanString(row['City ']),
-          industry: cleanString(row['Industry ']),
-          roleType: cleanString(row['Role Type']),
+          industryId,
+          roleTypeId,
           linkedinUrl: cleanString(row['Linkedln URL']),
           currentCompany: cleanString(row['Company_1 (Latest)']),
           currentPosition: cleanString(row['Role_1 (Latest)']),
           workHistory: workHistory.length > 0 ? workHistory : undefined,
-          specializations: specializations.length > 0 ? specializations : undefined,
+          specializations:
+            specializationIds.length > 0
+              ? { create: specializationIds.map((specializationId) => ({ specializationId })) }
+              : undefined,
           status: mapCandidateStatus(cleanString(row['Status '])),
         },
         update: {
@@ -565,7 +627,7 @@ async function ensureClientAndJobOrder(companyName: string): Promise<{ clientId:
         displayId,
         companyName,
         status: 'WARM', // They have submissions, so at least warm
-        notes: 'Auto-created from Job Interviewing History import',
+        notes: toNoteTimeline('Auto-created from Job Interviewing History import'),
       },
     });
     console.log(`  📝 Created missing client: ${companyName} (${displayId})`);

@@ -5,13 +5,16 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { CreateClientDtoQuality } from './createClientDtoQuality';
 import type { CreateClientDtoStatus } from './createClientDtoStatus';
 
 export interface CreateClientDto {
   /** Company name */
   companyName: string;
-  /** Industry */
-  industry?: string;
+  /** Industry ID */
+  industryId?: string;
+  /** Specialization ID */
+  specializationId?: string;
   /** Country */
   country?: string;
   /** City */
@@ -26,8 +29,8 @@ export interface CreateClientDto {
   guaranteePeriod?: number;
   /** Status; defaults to COLD when omitted */
   status?: CreateClientDtoStatus;
-  /** Notes */
-  notes?: string;
+  /** Lead quality; defaults to MEDIUM when omitted */
+  quality?: CreateClientDtoQuality;
   /** Owning consultant ID */
   consultantId?: string;
 }

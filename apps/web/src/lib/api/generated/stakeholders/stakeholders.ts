@@ -25,10 +25,12 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  CreateStakeholderContactHistoryDto,
   CreateStakeholderDto,
   ErrorResponse,
   GetStakeholdersParams,
   PaginatedStakeholdersEntity,
+  StakeholderContactHistoryEntity,
   StakeholderEntity,
   UpdateStakeholderDto
 } from '../types';
@@ -83,6 +85,14 @@ export const getGetStakeholdersUrl = (params?: GetStakeholdersParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["clientIds","roleTypeIds"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
 
     if (value !== undefined) {
       normalizedParams.append(key, value === null ? 'null' : String(value))
@@ -736,4 +746,104 @@ export const useDeleteStakeholder = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getDeleteStakeholderMutationOptions(options), queryClient);
+    }
+    export type addStakeholderContactHistoryResponse201 = {
+  data: StakeholderContactHistoryEntity
+  status: 201
+}
+
+export type addStakeholderContactHistoryResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type addStakeholderContactHistoryResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type addStakeholderContactHistoryResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type addStakeholderContactHistoryResponseSuccess = (addStakeholderContactHistoryResponse201) & {
+  headers: Headers;
+};
+export type addStakeholderContactHistoryResponseError = (addStakeholderContactHistoryResponse400 | addStakeholderContactHistoryResponse404 | addStakeholderContactHistoryResponse500) & {
+  headers: Headers;
+};
+
+export type addStakeholderContactHistoryResponse = (addStakeholderContactHistoryResponseSuccess | addStakeholderContactHistoryResponseError)
+
+export const getAddStakeholderContactHistoryUrl = (id: string,) => {
+
+
+
+
+  return `/stakeholders/${id}/contact-history`
+}
+
+/**
+ * @summary Log a contact with a stakeholder — the calling consultant is recorded automatically
+ */
+export const addStakeholderContactHistory = async (id: string,
+    createStakeholderContactHistoryDto: CreateStakeholderContactHistoryDto, options?: RequestInit): Promise<addStakeholderContactHistoryResponse> => {
+
+  return customFetch<addStakeholderContactHistoryResponse>(getAddStakeholderContactHistoryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createStakeholderContactHistoryDto)
+  }
+);}
+
+
+
+
+
+export const getAddStakeholderContactHistoryMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addStakeholderContactHistory>>, TError,{id: string;data: CreateStakeholderContactHistoryDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addStakeholderContactHistory>>, TError,{id: string;data: CreateStakeholderContactHistoryDto}, TContext> => {
+
+const mutationKey = ['addStakeholderContactHistory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addStakeholderContactHistory>>, {id: string;data: CreateStakeholderContactHistoryDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  addStakeholderContactHistory(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddStakeholderContactHistoryMutationResult = NonNullable<Awaited<ReturnType<typeof addStakeholderContactHistory>>>
+    export type AddStakeholderContactHistoryMutationBody = CreateStakeholderContactHistoryDto
+    export type AddStakeholderContactHistoryMutationError = ErrorResponse
+
+    /**
+ * @summary Log a contact with a stakeholder — the calling consultant is recorded automatically
+ */
+export const useAddStakeholderContactHistory = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addStakeholderContactHistory>>, TError,{id: string;data: CreateStakeholderContactHistoryDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addStakeholderContactHistory>>,
+        TError,
+        {id: string;data: CreateStakeholderContactHistoryDto},
+        TContext
+      > => {
+      return useMutation(getAddStakeholderContactHistoryMutationOptions(options), queryClient);
     }

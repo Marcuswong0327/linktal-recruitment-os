@@ -13,6 +13,8 @@ export interface CreateStakeholderDto {
   fullName: string;
   /** Job title */
   jobTitle?: string;
+  /** Role type ID (see /stakeholder-role-types) */
+  roleTypeId?: string;
   /** Email address */
   email?: string;
   /** Mobile number */

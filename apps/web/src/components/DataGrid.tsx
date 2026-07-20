@@ -6,6 +6,7 @@ import {
   type ColumnFiltersState,
   type ColumnSizingState,
   type FilterFn,
+  type Row,
   type RowSelectionState,
   type SortingState,
   flexRender,
@@ -14,15 +15,35 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, Search, X } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsUpDown,
+  Loader2,
+  Search,
+  X,
+} from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { DataGridFacetedFilter, type FacetedFilterOption } from '@/components/DataGridFacetedFilter';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  DataGridFacetedFilter,
+  type FacetedFilterOption,
+} from '@/components/DataGridFacetedFilter';
 
 const SELECT_COLUMN_ID = '__select';
 
@@ -85,7 +106,9 @@ export interface DataGridServerProps {
 
 /** Keeps a row when its cell value is one of the selected filter values. */
 const facetedFilterFn: FilterFn<unknown> = (row, columnId, filterValue) =>
-  !Array.isArray(filterValue) || filterValue.length === 0 ? true : filterValue.includes(row.getValue(columnId));
+  !Array.isArray(filterValue) || filterValue.length === 0
+    ? true
+    : filterValue.includes(row.getValue(columnId));
 
 /** Raise-only merge — a column's measured width should only ever grow (header pass vs. cell pass), never shrink back down. */
 function raiseSizes(prev: Record<string, number>, next: Record<string, number>) {
@@ -105,6 +128,8 @@ interface DataGridProps<TData> {
   data: TData[];
   /** Placeholder for the global search box. */
   searchPlaceholder?: string;
+  /** Hides the built-in search box — for pages where search lives elsewhere (e.g. a dedicated search-first landing above the grid) so it isn't duplicated. Sorting/filtering still work as normal. */
+  hideSearch?: boolean;
   /** Faceted (multi-select) filters shown in the toolbar. */
   filters?: DataGridFilter[];
   /** Rendered on the right side of the toolbar (filters, "Add" button, etc.). */
@@ -143,12 +168,26 @@ interface DataGridProps<TData> {
   onSelectionChange?: (rows: TData[]) => void;
   /** Per-row override for whether a row's checkbox can be selected (default: all can). */
   canSelectRow?: (row: TData) => boolean;
+  /**
+   * Click-and-drag across rows to range-select, like a spreadsheet (mousedown
+   * on one row, drag to another, release). Requires `onSelectionChange`.
+   * Starting the drag on an interactive cell (marked `data-no-row-drag`) is
+   * ignored so it doesn't fight that control's own click/open behavior.
+   */
+  enableRowRangeSelect?: boolean;
+  /**
+   * Hides the checkbox column while keeping `onSelectionChange`/selection
+   * state itself — for tables where drag range-select is the only way rows
+   * get picked, so the checkboxes would just be redundant UI.
+   */
+  hideSelectColumn?: boolean;
 }
 
 export function DataGrid<TData>({
   columns,
   data,
   searchPlaceholder = 'Search…',
+  hideSearch = false,
   filters,
   toolbar,
   onRowClick,
@@ -160,11 +199,36 @@ export function DataGrid<TData>({
   getRowId,
   onSelectionChange,
   canSelectRow,
+  enableRowRangeSelect = false,
+  hideSelectColumn = false,
 }: DataGridProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
+
+  // ⌘K/Ctrl+K focuses the search box, matching the convention used by
+  // GitHub/Linear/Slack/Vercel. Defaults to the Windows/Linux label until
+  // mounted (avoids an SSR/client hydration mismatch), then flips to ⌘ on
+  // Mac. The listener itself accepts either modifier regardless of detected
+  // platform, since a Mac user on an external Windows keyboard still expects
+  // Ctrl+K to work.
+  const searchInputRef = React.useRef<HTMLInputElement>(null);
+  const [isMac, setIsMac] = React.useState(false);
+  React.useEffect(() => {
+    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform ?? navigator.userAgent));
+  }, []);
+  React.useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // Selection is page-scoped (see onSelectionChange doc) — drop it when the
   // visible rows change out from under it. Bails out when already empty:
@@ -213,10 +277,15 @@ export function DataGrid<TData>({
   const [headerOnlySizes, setHeaderOnlySizes] = React.useState<Record<string, number>>({});
 
   // Attach the faceted filter fn to whichever columns are declared filterable.
-  const filterColumnIds = React.useMemo(() => new Set((filters ?? []).map((f) => f.columnId)), [filters]);
+  const filterColumnIds = React.useMemo(
+    () => new Set((filters ?? []).map((f) => f.columnId)),
+    [filters],
+  );
   const tableColumns = React.useMemo(() => {
     const withFilters = columns.map((col) => {
-      const id = (col as { id?: string; accessorKey?: string }).id ?? (col as { accessorKey?: string }).accessorKey;
+      const id =
+        (col as { id?: string; accessorKey?: string }).id ??
+        (col as { accessorKey?: string }).accessorKey;
       let result = col;
       if (id && filterColumnIds.has(id)) {
         result = { ...result, filterFn: facetedFilterFn as FilterFn<TData> };
@@ -224,7 +293,7 @@ export function DataGrid<TData>({
       const measured = id ? measuredSizes[id] : undefined;
       if (measured !== undefined) {
         const strict = (result.meta as DataGridColumnMeta | undefined)?.strictMinSize;
-        const minFloor = strict ? measured : (id ? headerOnlySizes[id] : undefined);
+        const minFloor = strict ? measured : id ? headerOnlySizes[id] : undefined;
         result = {
           ...result,
           minSize: Math.max(minFloor ?? 0, result.minSize ?? 0),
@@ -236,7 +305,7 @@ export function DataGrid<TData>({
       }
       return result;
     });
-    if (!onSelectionChange) return withFilters;
+    if (!onSelectionChange || hideSelectColumn) return withFilters;
 
     const selectColumn: ColumnDef<TData, unknown> = {
       id: SELECT_COLUMN_ID,
@@ -258,7 +327,7 @@ export function DataGrid<TData>({
         </div>
       ),
       cell: ({ row }) => (
-        <div onClick={(e) => e.stopPropagation()}>
+        <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
           <Checkbox
             checked={row.getIsSelected()}
             onCheckedChange={(checked) => row.toggleSelected(!!checked)}
@@ -269,9 +338,20 @@ export function DataGrid<TData>({
       ),
     };
     return [selectColumn, ...withFilters];
-  }, [columns, filterColumnIds, onSelectionChange, measuredSizes, headerOnlySizes]);
+  }, [
+    columns,
+    filterColumnIds,
+    onSelectionChange,
+    hideSelectColumn,
+    measuredSizes,
+    headerOnlySizes,
+  ]);
 
   const gridContainerRef = React.useRef<HTMLDivElement>(null);
+  // Wraps the whole component (toolbar + grid + footer) — used to detect
+  // clicks outside the entire DataGrid, not just the bordered rows box, so
+  // e.g. clicking the search input doesn't count as "outside".
+  const rootRef = React.useRef<HTMLDivElement>(null);
 
   // Pass 1: header-only sizing. Runs as soon as headers render, independent
   // of loading state — cell content isn't available yet while `isLoading`,
@@ -310,7 +390,11 @@ export function DataGrid<TData>({
     onRowSelectionChange: setRowSelection,
     onColumnSizingChange: setColumnSizing,
     getRowId: getRowId as ((row: TData) => string) | undefined,
-    enableRowSelection: !onSelectionChange ? false : canSelectRow ? (row) => canSelectRow(row.original) : true,
+    enableRowSelection: !onSelectionChange
+      ? false
+      : canSelectRow
+        ? (row) => canSelectRow(row.original)
+        : true,
     enableColumnResizing: true,
     columnResizeMode: 'onChange',
     // Undeclared-size columns previously shared remaining space equally via
@@ -354,6 +438,95 @@ export function DataGrid<TData>({
   const hasData = data.length > 0;
   const totalColumns = table.getAllLeafColumns().length;
 
+  // Row range-select: mousedown on a row, drag to another, release — like
+  // dragging across cells in a spreadsheet. `dragStateRef` (not state) tracks
+  // the gesture without re-rendering on every pixel of mouse movement;
+  // `moved` distinguishes a genuine drag from a plain click so a click still
+  // reaches `onRowClick` (e.g. navigating to the row's detail page)
+  // untouched, and a drag suppresses that click instead of also navigating.
+  const dragStateRef = React.useRef<{ anchorId: string; moved: boolean } | null>(null);
+  const suppressNextClickRef = React.useRef(false);
+  const [isRowDragging, setIsRowDragging] = React.useState(false);
+
+  const rowIndexById = React.useMemo(() => {
+    const map = new Map<string, number>();
+    rows.forEach((r, i) => map.set(r.id, i));
+    return map;
+  }, [rows]);
+
+  const handleRowMouseDown = React.useCallback(
+    (e: React.MouseEvent, row: Row<TData>) => {
+      if (!enableRowRangeSelect || e.button !== 0) return;
+      // Let interactive cells (pills, comboboxes, the row's own link) handle
+      // their own mousedown — starting a drag from inside one would fight
+      // its click/open behavior.
+      if ((e.target as HTMLElement).closest('[data-no-row-drag]')) return;
+      e.preventDefault(); // suppress native text selection while dragging
+      dragStateRef.current = { anchorId: row.id, moved: false };
+    },
+    [enableRowRangeSelect],
+  );
+
+  const handleRowMouseEnter = React.useCallback(
+    (row: Row<TData>) => {
+      const state = dragStateRef.current;
+      if (!state) return;
+      state.moved = true;
+      setIsRowDragging(true);
+      const anchorIdx = rowIndexById.get(state.anchorId);
+      const currentIdx = rowIndexById.get(row.id);
+      if (anchorIdx === undefined || currentIdx === undefined) return;
+      const [lo, hi] = anchorIdx <= currentIdx ? [anchorIdx, currentIdx] : [currentIdx, anchorIdx];
+      const next: RowSelectionState = {};
+      for (let i = lo; i <= hi; i++) {
+        const r = rows[i];
+        if (r.getCanSelect()) next[r.id] = true;
+      }
+      setRowSelection(next);
+    },
+    [rowIndexById, rows],
+  );
+
+  // Ends the drag wherever the mouse is released, even outside the table.
+  // Marking a completed drag here (rather than in the row's own onMouseUp)
+  // is what lets the row under the cursor suppress its onClick — the click
+  // that follows mouseup would otherwise also fire `onRowClick`.
+  React.useEffect(() => {
+    if (!enableRowRangeSelect) return;
+    function handleMouseUp() {
+      if (dragStateRef.current?.moved) {
+        suppressNextClickRef.current = true;
+      }
+      dragStateRef.current = null;
+      setIsRowDragging(false);
+    }
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => document.removeEventListener('mouseup', handleMouseUp);
+  }, [enableRowRangeSelect]);
+
+  // Clicking outside the whole component clears the current selection, like
+  // a spreadsheet. Popup content (menus, dialogs, comboboxes, tooltips) is
+  // portaled elsewhere in the DOM, so it wouldn't otherwise be seen as
+  // "inside" — excluded by role instead, so e.g. confirming a bulk-delete in
+  // its dialog doesn't clear the selection out from under the action.
+  React.useEffect(() => {
+    if (!onSelectionChange) return;
+    function handlePointerDown(e: PointerEvent) {
+      const target = e.target as HTMLElement;
+      if (rootRef.current?.contains(target)) return;
+      if (
+        target.closest(
+          '[role="menu"], [role="dialog"], [role="alertdialog"], [role="listbox"], [role="tooltip"]',
+        )
+      ) {
+        return;
+      }
+      setRowSelection((prev) => (Object.keys(prev).length === 0 ? prev : {}));
+    }
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [onSelectionChange]);
+
   // Pass 2: refine upward with actual cell content once real rows are
   // available (a short header like "TOB" undersells the pill it holds). Cell
   // content depends on which page/rows are loaded — measuring on every data
@@ -391,26 +564,40 @@ export function DataGrid<TData>({
     // flex-1/min-h-0 let the grid fill a height-locked page and scroll its
     // own rows (which also makes the sticky header work); in an unconstrained
     // parent they're inert and the grid sizes to its content as before.
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div ref={rootRef} className="flex min-h-0 flex-1 flex-col gap-3">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-1 flex-wrap items-center gap-2">
-          <div className="relative w-full max-w-xs">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={globalFilter}
-              onChange={(e) => setGlobalFilter(e.target.value)}
-              placeholder={searchPlaceholder}
-              className="pl-8"
-            />
-          </div>
+          {!hideSearch ? (
+            <div className="relative w-full max-w-xs">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                ref={searchInputRef}
+                value={globalFilter}
+                onChange={(e) => setGlobalFilter(e.target.value)}
+                placeholder={searchPlaceholder}
+                className="pl-8 pr-12"
+              />
+              {!globalFilter && (
+                <div className="pointer-events-none absolute top-1/2 right-2 flex -translate-y-1/2 items-center gap-0.5">
+                  <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
+                  <Kbd>K</Kbd>
+                </div>
+              )}
+            </div>
+          ) : null}
           {(filters ?? []).map((filter) => {
             const column = table.getColumn(filter.columnId);
             if (!column) return null;
             const selected = (column.getFilterValue() as string[]) ?? [];
-            const onChange = (values: string[]) => column.setFilterValue(values.length ? values : undefined);
+            const onChange = (values: string[]) =>
+              column.setFilterValue(values.length ? values : undefined);
             if (filter.render) {
-              return <React.Fragment key={filter.columnId}>{filter.render({ selected, onChange })}</React.Fragment>;
+              return (
+                <React.Fragment key={filter.columnId}>
+                  {filter.render({ selected, onChange })}
+                </React.Fragment>
+              );
             }
             return (
               <DataGridFacetedFilter
@@ -437,7 +624,10 @@ export function DataGrid<TData>({
         {toolbar ? <div className="flex items-center gap-2">{toolbar}</div> : null}
       </div>
       {/* Grid */}
-      <div ref={gridContainerRef} className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card">
+      <div
+        ref={gridContainerRef}
+        className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card"
+      >
         {/* Vertical gridlines + tight rows for the spreadsheet look.
             table-fixed: widths come from the header row (header.getSize(),
             resizable), never from cell content, so columns don't shift as
@@ -464,7 +654,10 @@ export function DataGrid<TData>({
                       style={{ width: header.getSize() }}
                       className={cn('relative', columnAlignClass(header.column.columnDef.meta))}
                     >
-                      <span data-measure-column={header.column.id} className="inline-block max-w-full">
+                      <span
+                        data-measure-column={header.column.id}
+                        className="inline-block max-w-full"
+                      >
                         {header.isPlaceholder ? null : canSort ? (
                           <button
                             type="button"
@@ -504,7 +697,7 @@ export function DataGrid<TData>({
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody>
+          <TableBody className={cn(isRowDragging && 'select-none')}>
             {isLoading ? (
               Array.from({ length: skeletonRows }).map((_, rowIndex) => (
                 <TableRow key={`skeleton-${rowIndex}`} className="hover:bg-transparent">
@@ -520,12 +713,33 @@ export function DataGrid<TData>({
                 {rows.map((row) => (
                   <TableRow
                     key={row.id}
-                    onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                    data-state={row.getIsSelected() ? 'selected' : undefined}
+                    onMouseDown={
+                      enableRowRangeSelect ? (e) => handleRowMouseDown(e, row) : undefined
+                    }
+                    onMouseEnter={enableRowRangeSelect ? () => handleRowMouseEnter(row) : undefined}
+                    onClick={
+                      onRowClick
+                        ? () => {
+                            if (suppressNextClickRef.current) {
+                              suppressNextClickRef.current = false;
+                              return;
+                            }
+                            onRowClick(row.original);
+                          }
+                        : undefined
+                    }
                     className={cn(onRowClick && 'cursor-pointer')}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id} className={columnAlignClass(cell.column.columnDef.meta)}>
-                        <span data-measure-column={cell.column.id} className="inline-block max-w-full">
+                      <TableCell
+                        key={cell.id}
+                        className={columnAlignClass(cell.column.columnDef.meta)}
+                      >
+                        <span
+                          data-measure-column={cell.column.id}
+                          className="inline-block max-w-full"
+                        >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </span>
                       </TableCell>
@@ -537,7 +751,10 @@ export function DataGrid<TData>({
                     (the primitive strips it from :last-child). */}
                 {!server || server.page >= server.pageCount ? (
                   <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={totalColumns} className="py-3 text-center text-xs text-muted-foreground">
+                    <TableCell
+                      colSpan={totalColumns}
+                      className="py-3 text-center text-xs text-muted-foreground"
+                    >
                       -- END OF LIST --
                     </TableCell>
                   </TableRow>
@@ -545,8 +762,13 @@ export function DataGrid<TData>({
               </>
             ) : (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={totalColumns} className="h-32 text-center text-sm text-muted-foreground">
-                  {!hasData && !isFiltered ? (emptyState ?? 'No records yet.') : 'No results match your search.'}
+                <TableCell
+                  colSpan={totalColumns}
+                  className="h-32 text-center text-sm text-muted-foreground"
+                >
+                  {!hasData && !isFiltered
+                    ? (emptyState ?? 'No records yet.')
+                    : 'No results match your search.'}
                 </TableCell>
               </TableRow>
             )}
@@ -564,35 +786,45 @@ export function DataGrid<TData>({
                 : `${(server.page - 1) * server.pageSize + 1}–${Math.min(server.page * server.pageSize, server.total)} of ${server.total} ${server.total === 1 ? 'row' : 'rows'}`}
           </p>
           <div className="flex items-center gap-2">
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              {isFetching && !isLoading ? (
-                <Loader2 className="size-3 animate-spin" aria-hidden />
-              ) : null}
-              Page {server.page} of {Math.max(server.pageCount, 1)}
-            </p>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              disabled={isLoading || isFetching || server.page <= 1}
-              onClick={() => server.onPageChange(server.page - 1)}
-            >
-              <ChevronLeft />
-              <span className="sr-only">Previous page</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              disabled={isLoading || isFetching || server.page >= server.pageCount}
-              onClick={() => server.onPageChange(server.page + 1)}
-            >
-              <ChevronRight />
-              <span className="sr-only">Next page</span>
-            </Button>
+            {/* A single page never needs a page indicator or Prev/Next —
+                showing "Page 1 of 1" with both buttons disabled is just
+                noise. Still shows the fetching spinner via the row-count
+                text on the left. */}
+            {server.pageCount > 1 ? (
+              <>
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  {isFetching && !isLoading ? (
+                    <Loader2 className="size-3 animate-spin" aria-hidden />
+                  ) : null}
+                  Page {server.page} of {server.pageCount}
+                </p>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  disabled={isLoading || isFetching || server.page <= 1}
+                  onClick={() => server.onPageChange(server.page - 1)}
+                >
+                  <ChevronLeft />
+                  <span className="sr-only">Previous page</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  disabled={isLoading || isFetching || server.page >= server.pageCount}
+                  onClick={() => server.onPageChange(server.page + 1)}
+                >
+                  <ChevronRight />
+                  <span className="sr-only">Next page</span>
+                </Button>
+              </>
+            ) : null}
           </div>
         </div>
       ) : (
         <p className="px-1 text-xs text-muted-foreground">
-          {isLoading ? 'Loading…' : `${rows.length} of ${data.length} ${data.length === 1 ? 'row' : 'rows'}`}
+          {isLoading
+            ? 'Loading…'
+            : `${rows.length} of ${data.length} ${data.length === 1 ? 'row' : 'rows'}`}
         </p>
       )}
     </div>

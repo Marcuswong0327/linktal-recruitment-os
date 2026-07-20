@@ -12,7 +12,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { ClientStatus } from '@prisma/client';
+import { ClientQuality, ClientStatus } from '@prisma/client';
 
 export class CreateClientDto {
   @ApiProperty({ description: 'Company name', example: 'Acme Corp' })
@@ -21,10 +21,15 @@ export class CreateClientDto {
   @MaxLength(200)
   companyName!: string;
 
-  @ApiPropertyOptional({ description: 'Industry', example: 'Manufacturing' })
+  @ApiPropertyOptional({ description: 'Industry ID' })
   @IsOptional()
   @IsString()
-  industry?: string;
+  industryId?: string;
+
+  @ApiPropertyOptional({ description: 'Specialization ID' })
+  @IsOptional()
+  @IsString()
+  specializationId?: string;
 
   @ApiPropertyOptional({ description: 'Country', example: 'Australia' })
   @IsOptional()
@@ -64,10 +69,10 @@ export class CreateClientDto {
   @IsEnum(ClientStatus)
   status?: ClientStatus;
 
-  @ApiPropertyOptional({ description: 'Notes' })
+  @ApiPropertyOptional({ description: 'Lead quality; defaults to MEDIUM when omitted', enum: ClientQuality, example: 'MEDIUM' })
   @IsOptional()
-  @IsString()
-  notes?: string;
+  @IsEnum(ClientQuality)
+  quality?: ClientQuality;
 
   @ApiPropertyOptional({ description: 'Owning consultant ID' })
   @IsOptional()

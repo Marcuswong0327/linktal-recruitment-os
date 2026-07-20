@@ -7,6 +7,7 @@
  */
 import type { CandidateEntityStatus } from './candidateEntityStatus';
 import type { CandidateEntityWorkHistoryItem } from './candidateEntityWorkHistoryItem';
+import type { CandidateNoteDto } from './candidateNoteDto';
 
 export interface CandidateEntity {
   id: string;
@@ -25,8 +26,18 @@ export interface CandidateEntity {
   /** @nullable */
   city: string | null;
   /** @nullable */
+  industryId: string | null;
+  /**
+     * Resolved industry name
+     * @nullable
+     */
   industry: string | null;
   /** @nullable */
+  roleTypeId: string | null;
+  /**
+     * Resolved role type name
+     * @nullable
+     */
   roleType: string | null;
   /** @nullable */
   currentPosition: string | null;
@@ -45,11 +56,40 @@ export interface CandidateEntity {
      * @nullable
      */
   workHistory: CandidateEntityWorkHistoryItem[] | null;
-  /** @nullable */
-  specializations: string[] | null;
+  /**
+     * Free-entry skill tags
+     * @nullable
+     */
+  skills: string[] | null;
+  /** Resolved specialization names */
+  specializations: string[];
+  /** Specialization IDs backing `specializations` — what an editable multi-select actually binds to */
+  specializationIds: string[];
   status: CandidateEntityStatus;
   /** @nullable */
-  notes: string | null;
+  notes: CandidateNoteDto[] | null;
+  /** @nullable */
+  consultantId: string | null;
+  /**
+     * Latest contactedAt across this candidate's contact history; null if never contacted
+     * @nullable
+     */
+  lastContactedAt: string | null;
+  /**
+     * Contact method of the most recent contact (email, call, meeting, linkedin)
+     * @nullable
+     */
+  lastContactType: string | null;
+  /**
+     * Notes from the most recent contact
+     * @nullable
+     */
+  lastContactNotes: string | null;
+  /**
+     * Resolved name of the consultant who made the most recent contact
+     * @nullable
+     */
+  lastContactedBy: string | null;
   createdAt: string;
   updatedAt: string;
 }

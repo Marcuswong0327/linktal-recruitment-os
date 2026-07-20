@@ -1,12 +1,83 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { RequestContext } from '../common/request-context';
+import { AuthUser } from '../auth/auth.types';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { ClientStatusFilter, QueryClientsDto } from './dto/query-clients.dto';
+import { ClientQualityFilter, ClientStatusFilter, QueryClientsDto } from './dto/query-clients.dto';
+import { AddClientNoteDto, ClientNoteDto, UpdateClientNoteDto } from './dto/client-note.dto';
+
+// Industry/specialization are FK relations now, not scalars — every read
+// needs this to get the resolved name back, and every write needs it to
+// return one (ClientEntity documents them as plain `string | null`, not the
+// nested `{id, name, ...}` object Prisma would otherwise hand back).
+//
+// lastContactType/Notes/By aren't sorted or filtered on (unlike
+// lastContactedAt, which is a denormalized column for that reason), so
+// they're resolved live instead: each non-deleted stakeholder's own top-1
+// contact row (bounded — a client typically has a handful of stakeholders),
+// flattened and reduced to the single most recent one in `toEntity`. A
+// two-hop "latest across all stakeholders" aggregate isn't expressible as a
+// single Prisma relation `orderBy`/`take`, so this fetches the small
+// candidate set and picks the max in application code instead of a raw query.
+const CLIENT_INCLUDE = {
+  industry: { select: { name: true } },
+  specialization: { select: { name: true } },
+  stakeholders: {
+    where: { deletedAt: null },
+    select: {
+      contactHistory: {
+        orderBy: { contactedAt: 'desc' },
+        take: 1,
+        select: { contactType: true, notes: true, contactedAt: true, contactedBy: { select: { fullName: true } } },
+      },
+    },
+  },
+} satisfies Prisma.ClientInclude;
+
+type LatestContactRow = {
+  contactType: string;
+  notes: string | null;
+  contactedAt: Date;
+  contactedBy: { fullName: string } | null;
+};
+
+type ClientWithRelations = {
+  industry: { name: string } | null;
+  specialization: { name: string } | null;
+  stakeholders: { contactHistory: LatestContactRow[] }[];
+};
+
+function latestContact(rows: LatestContactRow[]): LatestContactRow | undefined {
+  return rows.reduce<LatestContactRow | undefined>(
+    (max, row) => (!max || row.contactedAt > max.contactedAt ? row : max),
+    undefined,
+  );
+}
+
+function toEntity<T extends ClientWithRelations>(client: T) {
+  const { industry, specialization, stakeholders, ...rest } = client;
+  const latest = latestContact(stakeholders.flatMap((s) => s.contactHistory));
+  return {
+    ...rest,
+    industry: industry?.name ?? null,
+    specialization: specialization?.name ?? null,
+    lastContactType: latest?.contactType ?? null,
+    lastContactNotes: latest?.notes ?? null,
+    lastContactedBy: latest?.contactedBy?.fullName ?? null,
+  };
+}
 
 @Injectable()
 export class ClientsService {
@@ -17,7 +88,7 @@ export class ClientsService {
     private readonly base: PrismaService,
   ) {}
 
-  async findAll(query: QueryClientsDto) {
+  async findAll(query: QueryClientsDto, user: AuthUser) {
     const { page, pageSize, sortBy, sortOrder, q } = query;
 
     const where: Prisma.ClientWhereInput = {};
@@ -26,14 +97,30 @@ export class ClientsService {
       where.status = query.status as unknown as Prisma.ClientWhereInput['status'];
     }
 
+    if (query.quality !== ClientQualityFilter.ALL) {
+      where.quality = query.quality as unknown as Prisma.ClientWhereInput['quality'];
+    }
+
     // contains/insensitive text filters
     const contains = (value?: string) =>
       value ? { contains: value, mode: Prisma.QueryMode.insensitive } : undefined;
-    where.industry = contains(query.industry);
+    const containsName = (value?: string) => {
+      const filter = contains(value);
+      return filter ? { name: filter } : undefined;
+    };
+    where.industry = containsName(query.industry);
+    where.specialization = containsName(query.specialization);
     where.country = contains(query.country);
     where.city = contains(query.city);
 
-    if (query.consultantId !== undefined) {
+    if (user.roleName === 'consultant') {
+      // Consultants only ever see their own book of companies — enforced
+      // here, not just hidden in the UI, so a crafted `consultantId` query
+      // param can't be used to browse someone else's clients. Overrides
+      // whatever the caller passed; there's no "view others" mode for this
+      // role.
+      where.consultantId = user.consultantId;
+    } else if (query.consultantId !== undefined) {
       // '' is the frontend's "Unassigned" sentinel — maps to a null FK, not a no-op.
       where.consultantId = query.consultantId === '' ? null : query.consultantId;
     }
@@ -50,50 +137,177 @@ export class ClientsService {
       ];
     }
 
-    const orderBy: Prisma.ClientOrderByWithRelationInput = sortBy
-      ? { [sortBy]: sortOrder }
-      : { createdAt: 'desc' };
+    // Default: most-recently-contacted first. lastContactedAt is null for
+    // clients with no contact history yet — "nulls: last" keeps those at the
+    // bottom regardless of sort direction, rather than Postgres's default
+    // (nulls first on desc), which would otherwise put never-contacted
+    // clients at the very top.
+    const orderBy: Prisma.ClientOrderByWithRelationInput =
+      sortBy === 'lastContactedAt' || !sortBy
+        ? { lastContactedAt: { sort: sortBy ? sortOrder : 'desc', nulls: 'last' } }
+        : { [sortBy]: sortOrder };
 
     // Parallel, not $transaction: these two reads don't need one consistent
     // DB snapshot, and running them concurrently instead of sequentially
     // (BEGIN/Q1/Q2/COMMIT) roughly halves the network round trips to Neon.
     const [data, total] = await Promise.all([
       this.prisma.client.findMany({
+        
         where,
         orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
+        include: CLIENT_INCLUDE,
       }),
       this.prisma.client.count({ where }),
     ]);
 
-    return { data, total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
+    return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }
 
   async findOne(id: string) {
-    const client = await this.prisma.client.findUnique({ where: { id } });
+    const client = await this.prisma.client.findUnique({ where: { id }, include: CLIENT_INCLUDE });
     if (!client) {
       throw new NotFoundException(`Client ${id} not found`);
     }
-    return client;
+    return toEntity(client);
   }
 
   async findByDisplayId(displayId: string) {
-    const client = await this.prisma.client.findUnique({ where: { displayId } });
+    const client = await this.prisma.client.findUnique({
+      where: { displayId },
+      include: CLIENT_INCLUDE,
+    });
     if (!client) {
       throw new NotFoundException(`Client ${displayId} not found`);
     }
-    return client;
+    return toEntity(client);
   }
 
-  create(dto: CreateClientDto) {
+  async create(dto: CreateClientDto) {
     // displayId is assigned by the DB (Client_displayId_seq default).
-    return this.prisma.client.create({ data: dto });
+    const client = await this.prisma.client.create({ data: dto, include: CLIENT_INCLUDE });
+    return toEntity(client);
   }
 
-  async update(id: string, dto: UpdateClientDto) {
+  async update(id: string, dto: UpdateClientDto, user: AuthUser) {
+    // A consultant can reassign a company to another consultant, but can't
+    // orphan it — 'consultantId' present and falsy means "clear the FK"
+    // (see the null-vs-undefined regression test above), which combined with
+    // the consultant-only scoping in `findAll` would otherwise let them drop
+    // a company out of their own book entirely, with no one left owning it.
+    if (
+      user.roleName === 'consultant' &&
+      'consultantId' in dto &&
+      !dto.consultantId
+    ) {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: 'Consultants cannot unassign a company from a consultant.',
+      });
+    }
+
     await this.findOne(id);
-    return this.prisma.client.update({ where: { id }, data: dto });
+    const client = await this.prisma.client.update({ where: { id }, data: dto, include: CLIENT_INCLUDE });
+    return toEntity(client);
+  }
+
+  private getNotes(client: { notes: unknown }): ClientNoteDto[] {
+    return Array.isArray(client.notes) ? (client.notes as unknown as ClientNoteDto[]) : [];
+  }
+
+  private async saveNotes(id: string, notes: ClientNoteDto[]) {
+    const client = await this.prisma.client.update({
+      where: { id },
+      data: { notes: notes as unknown as Prisma.InputJsonValue },
+      include: CLIENT_INCLUDE,
+    });
+    return toEntity(client);
+  }
+
+  /** Only the note's own author, or an admin, may edit/delete it. */
+  private assertCanModifyNote(note: ClientNoteDto, user: AuthUser) {
+    if (note.by !== user.consultantId && user.roleName !== 'admin') {
+      throw new ForbiddenException({
+        code: 'FORBIDDEN',
+        message: "Only the note's author or an admin can modify it.",
+      });
+    }
+  }
+
+  private findNoteOrThrow(notes: ClientNoteDto[], noteId: string) {
+    const index = notes.findIndex((n) => n.id === noteId);
+    if (index === -1) {
+      throw new NotFoundException(`Note ${noteId} not found`);
+    }
+    return index;
+  }
+
+  /** A note's own last-modified marker — its `editedAt`, or `timestamp` if never edited. */
+  private noteVersion(note: ClientNoteDto): string {
+    return note.editedAt ?? note.timestamp;
+  }
+
+  /**
+   * Optimistic concurrency check: rejects the request if the note changed
+   * since the caller last read it (detected by comparing `noteVersion`), so a
+   * second edit/delete can't silently clobber one that landed moments before
+   * it. Skipped when the caller doesn't pass `expectedVersion` at all.
+   */
+  private assertNotStale(note: ClientNoteDto, expectedVersion: string | undefined) {
+    if (expectedVersion !== undefined && this.noteVersion(note) !== expectedVersion) {
+      throw new ConflictException({
+        code: 'NOTE_CONFLICT',
+        message: 'This note was changed by someone else. Reload and try again.',
+      });
+    }
+  }
+
+  /** Appends one entry to the client's note timeline (never overwrites prior entries). */
+  async addNote(id: string, dto: AddClientNoteDto, consultantId: string) {
+    const client = await this.findOne(id);
+    const next: ClientNoteDto[] = [
+      ...this.getNotes(client),
+      {
+        id: randomUUID(),
+        content: dto.content,
+        timestamp: new Date().toISOString(),
+        by: consultantId,
+        editedAt: null,
+        editedBy: null,
+      },
+    ];
+    return this.saveNotes(id, next);
+  }
+
+  /** Edits one note's content in place; restricted to its author or an admin. */
+  async updateNote(id: string, noteId: string, dto: UpdateClientNoteDto, user: AuthUser) {
+    const client = await this.findOne(id);
+    const notes = this.getNotes(client);
+    const index = this.findNoteOrThrow(notes, noteId);
+    this.assertCanModifyNote(notes[index], user);
+    this.assertNotStale(notes[index], dto.expectedVersion);
+
+    const next = [...notes];
+    next[index] = {
+      ...next[index],
+      content: dto.content,
+      editedAt: new Date().toISOString(),
+      editedBy: user.consultantId,
+    };
+    return this.saveNotes(id, next);
+  }
+
+  /** Removes one note from the timeline; restricted to its author or an admin. */
+  async deleteNote(id: string, noteId: string, user: AuthUser, expectedVersion?: string) {
+    const client = await this.findOne(id);
+    const notes = this.getNotes(client);
+    const index = this.findNoteOrThrow(notes, noteId);
+    this.assertCanModifyNote(notes[index], user);
+    this.assertNotStale(notes[index], expectedVersion);
+
+    const next = notes.filter((n) => n.id !== noteId);
+    return this.saveNotes(id, next);
   }
 
   /**
@@ -140,10 +354,12 @@ export class ClientsService {
     if (!existing.deletedAt) {
       throw new BadRequestException(`Client ${id} is not deleted`);
     }
-    return this.prisma.client.update({
+    const client = await this.prisma.client.update({
       where: { id },
       data: { deletedAt: null, deletedById: null },
+      include: CLIENT_INCLUDE,
     });
+    return toEntity(client);
   }
 
   /**

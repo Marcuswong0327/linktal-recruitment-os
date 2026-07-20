@@ -2,13 +2,15 @@
 // Datasource: PostgreSQL on Neon (auth is handled by NextAuth + Azure AD, not Neon)
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [pg_trgm]
 }
 
 // ============================================================================
@@ -25,6 +27,15 @@ enum ClientStatus {
   COLD
   WARM
   TRADED
+}
+
+// Declaration order matters: Postgres native enums sort by declaration
+// (ordinal) order, not alphabetically, so this order is what makes
+// `ORDER BY quality` come out as LOW < MEDIUM < HIGH.
+enum ClientQuality {
+  LOW
+  MEDIUM
+  HIGH
 }
 
 enum CandidateStatus {
@@ -107,43 +118,101 @@ model Consultant {
   updatedAt    DateTime   @updatedAt
   clients      Client[]
   jobOrders    JobOrder[]
+  candidates   Candidate[]
+  stakeholderContacts StakeholderContactHistory[]
+  candidateContacts   CandidateContactHistory[]
+  candidateSavedSearches CandidateSavedSearch[]
 }
 
 // ============================================================================
 // CLIENT (Companies hiring)
 // ============================================================================
 
+// Reference table for Client.industry — a fixed row instead of free text, so
+// values stay consistent and reusable. No admin management page: the company
+// form's combobox doubles as the catalog editor (pick existing or type new,
+// which creates a row here). isActive isn't surfaced anywhere yet — it's
+// forward-looking, for when hiding one from the picker without deleting it
+// (and orphaning clients that reference it) becomes a real need.
+model Industry {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  clients    Client[]
+  candidates Candidate[] // Shared taxonomy: same catalog Client.industry uses.
+}
+
+// Same as Industry, for Client.specialization. Also shared by Candidate, but
+// as a many-to-many (a candidate can carry several specializations, unlike
+// Client's single specializationId) via the CandidateSpecialization join.
+model Specialization {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  clients                  Client[]
+  candidateSpecializations CandidateSpecialization[]
+}
+
 model Client {
-  id              String              @id @default(cuid())
-  displayId       String              @unique @default(dbgenerated("('Client-'::text || lpad((nextval('\"Client_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Client-####
-  companyName     String
-  industry        String?
-  country         String?
-  city            String?
-  website         String?
-  tobSigned       Boolean             @default(false) // Terms of Business signed
-  feePercentage   Float? // Fee as percentage of package (null until agreed)
-  guaranteePeriod Int                 @default(90) // Guarantee period in days
-  status          ClientStatus        @default(COLD)
-  notes           String?
-  consultantId    String?
-  consultant      Consultant?         @relation(fields: [consultantId], references: [id])
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  deletedAt       DateTime? // Soft delete: null = live
-  deletedById     String? // Logical ref to Consultant.id (no FK)
-  stakeholders    Stakeholder[]
-  jobResearch     ClientJobResearch[]
-  jobOrders       JobOrder[]
+  id               String              @id @default(cuid())
+  displayId        String              @unique @default(dbgenerated("('Client-'::text || lpad((nextval('\"Client_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Client-####
+  companyName      String
+  industryId       String?
+  industry         Industry?           @relation(fields: [industryId], references: [id], onDelete: SetNull)
+  specializationId String?
+  specialization   Specialization?     @relation(fields: [specializationId], references: [id], onDelete: SetNull)
+  country          String?
+  city             String?
+  website          String?
+  tobSigned        Boolean             @default(false) // Terms of Business signed
+  feePercentage    Float? // Fee as percentage of package (null until agreed)
+  guaranteePeriod  Int                 @default(90) // Guarantee period in days
+  status           ClientStatus        @default(COLD)
+  quality          ClientQuality       @default(MEDIUM)
+  notes            Json? // JSONB: [{id, content, timestamp, by, editedAt, editedBy}] — internal note timeline, newest last; edit/delete restricted to the note's author (or an admin)
+  lastContactedAt  DateTime? // Denormalized: max(StakeholderContactHistory.contactedAt) across this client's stakeholders. Lets the list sort by it without a cross-table aggregate on every page load; source of truth stays StakeholderContactHistory.
+  consultantId     String?
+  consultant       Consultant?         @relation(fields: [consultantId], references: [id])
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  deletedAt        DateTime? // Soft delete: null = live
+  deletedById      String? // Logical ref to Consultant.id (no FK)
+  stakeholders     Stakeholder[]
+  jobResearch      ClientJobResearch[]
+  jobOrders        JobOrder[]
 
   @@index([status])
   @@index([consultantId])
   @@index([deletedAt])
+  @@index([industryId])
+  @@index([specializationId])
+  @@index([lastContactedAt])
+  @@index([quality])
 }
 
 // ============================================================================
 // STAKEHOLDER (Contacts at client companies)
 // ============================================================================
+
+// Reference table for Stakeholder.roleType — same pattern as Industry/
+// Specialization: a fixed row instead of a hardcoded enum, so the category
+// list can grow (a new job-title category typed into the combobox creates a
+// row here) without a migration. Seeded with a starting set (Director,
+// Hiring Manager, HR, Talent Acquisition, Operations, Finance, Department
+// Head, Other) and backfilled onto existing stakeholders by keyword-matching
+// their current jobTitle (see scripts/backfill-stakeholder-role-types.ts).
+model StakeholderRoleType {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  stakeholders Stakeholder[]
+}
 
 model Stakeholder {
   id              String                      @id @default(cuid())
@@ -152,10 +221,13 @@ model Stakeholder {
   client          Client                      @relation(fields: [clientId], references: [id], onDelete: Cascade)
   fullName        String
   jobTitle        String?
+  roleTypeId      String? // Derived from jobTitle by default (see backfill script), but independently editable — corrects a bad auto-classification without rewriting the person's actual title.
+  roleType        StakeholderRoleType?        @relation(fields: [roleTypeId], references: [id], onDelete: SetNull)
   email           String?
   mobile          String?
   isDecisionMaker Boolean                     @default(false)
   notes           String?
+  lastContactedAt DateTime? // Denormalized: max(StakeholderContactHistory.contactedAt) for this stakeholder. Prisma's relation-aggregate `orderBy` only supports `_count` (not `_max`) on to-many relations, so — same reasoning as Client.lastContactedAt — sorting needs a real column, not a live join, even though this is only one hop away.
   createdAt       DateTime                    @default(now())
   updatedAt       DateTime                    @updatedAt
   deletedAt       DateTime? // Soft delete: null = live
@@ -164,6 +236,8 @@ model Stakeholder {
 
   @@index([clientId])
   @@index([deletedAt])
+  @@index([roleTypeId])
+  @@index([lastContactedAt])
 }
 
 model StakeholderContactHistory {
@@ -171,11 +245,14 @@ model StakeholderContactHistory {
   stakeholderId String
   stakeholder   Stakeholder @relation(fields: [stakeholderId], references: [id], onDelete: Cascade)
   contactType   String // email, call, meeting, linkedin
+  contactedById String? // Consultant who made this specific contact — distinct from Client.consultantId (the account owner); any consultant can log a contact.
+  contactedBy   Consultant? @relation(fields: [contactedById], references: [id], onDelete: SetNull)
   notes         String?
   contactedAt   DateTime    @default(now())
   createdAt     DateTime    @default(now())
 
   @@index([stakeholderId])
+  @@index([contactedById])
 }
 
 // ============================================================================
@@ -205,6 +282,20 @@ model ClientJobResearch {
 // CANDIDATE (Job seekers)
 // ============================================================================
 
+// Reference table for Candidate.roleType — same pattern as Industry/
+// Specialization/StakeholderRoleType: a fixed row instead of free text, kept
+// as its own catalog rather than reusing StakeholderRoleType, since a
+// candidate's role type is an employment category (e.g. Permanent/Contract),
+// not the functional/department classification stakeholders use.
+model CandidateRoleType {
+  id         String      @id @default(cuid())
+  name       String      @unique
+  isActive   Boolean     @default(true)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  candidates Candidate[]
+}
+
 model Candidate {
   id                String                      @id @default(cuid())
   displayId         String                      @unique @default(dbgenerated("('CDD-'::text || lpad((nextval('\"Candidate_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: CDD-####
@@ -215,8 +306,10 @@ model Candidate {
   mobile            String?
   country           String?
   city              String?
-  industry          String?
-  roleType          String?
+  industryId        String?
+  industry          Industry?                   @relation(fields: [industryId], references: [id], onDelete: SetNull)
+  roleTypeId        String?
+  roleType          CandidateRoleType?          @relation(fields: [roleTypeId], references: [id], onDelete: SetNull)
   currentPosition   String?
   currentCompany    String?
   yearsExperience   Int?
@@ -224,19 +317,70 @@ model Candidate {
   linkedinUrl       String?
   resumeUrl         String?
   workHistory       Json? // JSONB: [{company, role, startDate, endDate}]
-  specializations   Json? // JSONB: ["string"]
+  skills            Json? // JSONB: ["string"] — free-entry tags, distinct from specializations (a shared, reference-table taxonomy).
   status            CandidateStatus             @default(COLD)
-  notes             String?
+  notes             Json? // JSONB: [{id, content, timestamp, by, editedAt, editedBy}] — internal note timeline, newest last; edit/delete restricted to the note's author (or an admin). Mirrors Client.notes.
+  consultantId      String? // Owning consultant — same shape as Client.consultantId, distinct from CandidateContactHistory.contactedById (who actually made a given contact).
+  consultant        Consultant?                 @relation(fields: [consultantId], references: [id])
+  lastContactedAt   DateTime? // Denormalized: max(CandidateContactHistory.contactedAt). Same reasoning as Client/Stakeholder.lastContactedAt — sorting needs a real column, not a live aggregate join.
   createdAt         DateTime                    @default(now())
   updatedAt         DateTime                    @updatedAt
   deletedAt         DateTime? // Soft delete: null = live
   deletedById       String? // Logical ref to Consultant.id (no FK)
   screeningHistory  CandidateScreeningHistory[]
+  contactHistory    CandidateContactHistory[]
   submissions       CandidateSubmission[]
+  specializations   CandidateSpecialization[]
 
   @@index([status])
   @@index([email])
   @@index([deletedAt])
+  @@index([consultantId])
+  @@index([lastContactedAt])
+  @@index([industryId])
+  @@index([roleTypeId])
+  // Trigram indexes back the quick-search's ILIKE/`contains` filters — turns
+  // a substring scan on these columns into an index scan instead of a
+  // sequential one, which is what keeps search fast as the candidate pool
+  // grows (see 20260719021500_candidate_search_trigram_indexes).
+  @@index([fullName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_fullName_trgm_idx")
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_email_trgm_idx")
+  @@index([currentPosition(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_currentPosition_trgm_idx")
+  @@index([currentCompany(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_currentCompany_trgm_idx")
+  @@index([city(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_city_trgm_idx")
+  @@index([country(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_country_trgm_idx")
+  @@index([mobile(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_mobile_trgm_idx")
+  @@index([displayId(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_displayId_trgm_idx")
+}
+
+// Many-to-many join: a candidate can carry several specializations (unlike
+// Client, which has a single specializationId). Explicit join model rather
+// than an implicit Prisma m2m so the backfill migration can write to a named
+// table directly.
+model CandidateSpecialization {
+  candidateId      String
+  candidate        Candidate      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  specializationId String
+  specialization   Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+
+  @@id([candidateId, specializationId])
+  @@index([specializationId])
+}
+
+// A consultant's saved candidate search — the filter state is opaque JSON
+// (same shape as QueryCandidatesDto's filter fields) rather than individual
+// columns, since the filter set is expected to keep growing and none of it
+// needs to be queried on independently (only ever fetched whole, by owner).
+model CandidateSavedSearch {
+  id           String     @id @default(cuid())
+  name         String
+  consultantId String
+  consultant   Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+  filters      Json
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([consultantId])
 }
 
 model CandidateScreeningHistory {
@@ -248,6 +392,25 @@ model CandidateScreeningHistory {
   createdAt   DateTime  @default(now())
 
   @@index([candidateId])
+}
+
+// Mirrors StakeholderContactHistory exactly — kept separate from
+// CandidateScreeningHistory on purpose: a quick call/email/LinkedIn touch
+// isn't the same event as a formal screening pass, and conflating them would
+// make "logged a contact" look like "screened this candidate".
+model CandidateContactHistory {
+  id            String      @id @default(cuid())
+  candidateId   String
+  candidate     Candidate   @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  contactType   String // email, call, meeting, linkedin
+  contactedById String? // Consultant who made this specific contact — distinct from Candidate.consultantId (the owning consultant); any consultant can log a contact.
+  contactedBy   Consultant? @relation(fields: [contactedById], references: [id], onDelete: SetNull)
+  notes         String?
+  contactedAt   DateTime    @default(now())
+  createdAt     DateTime    @default(now())
+
+  @@index([candidateId])
+  @@index([contactedById])
 }
 
 // ============================================================================

@@ -6,13 +6,12 @@
  * OpenAPI spec version: 1.0
  */
 
-export type GetCandidatesStatus = typeof GetCandidatesStatus[keyof typeof GetCandidatesStatus];
+export type GetCandidatesStatusesItem = typeof GetCandidatesStatusesItem[keyof typeof GetCandidatesStatusesItem];
 
 
-export const GetCandidatesStatus = {
+export const GetCandidatesStatusesItem = {
   COLD: 'COLD',
   WARM: 'WARM',
   HOT: 'HOT',
   PLACED: 'PLACED',
-  ALL: 'ALL',
 } as const;
