@@ -428,6 +428,17 @@ export function CompaniesTable({
         emptyState="No companies yet. Add your first client to get started."
         getRowId={(c) => c.id}
         onSelectionChange={setSelectedCompanies}
+        footerActions={
+          <Button
+            size="sm"
+            disabled={!canCreate}
+            title={canCreate ? undefined : "You don't have permission to add companies"}
+            onClick={() => setCreating(true)}
+          >
+            <Plus />
+            Add Company
+          </Button>
+        }
         toolbar={
           selectedCompanies.length > 0 ? (
             <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
@@ -525,18 +536,7 @@ export function CompaniesTable({
                 }
               />
             </div>
-          ) : (
-            <Button
-              size="lg"
-              disabled={!canCreate}
-              title={canCreate ? undefined : "You don't have permission to add companies"}
-              className="animate-in fade-in-0 duration-200"
-              onClick={() => setCreating(true)}
-            >
-              <Plus />
-              Add Company
-            </Button>
-          )
+          ) : null
         }
         server={{
           total: result?.total ?? 0,

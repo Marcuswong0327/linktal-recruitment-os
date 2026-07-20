@@ -134,6 +134,8 @@ interface DataGridProps<TData> {
   filters?: DataGridFilter[];
   /** Rendered on the right side of the toolbar (filters, "Add" button, etc.). */
   toolbar?: React.ReactNode;
+  /** Rendered in the footer, to the left of the row-count text (e.g. a primary "Add" action). */
+  footerActions?: React.ReactNode;
   /** Fires when a row is clicked — used to open the entity detail drawer. */
   onRowClick?: (row: TData) => void;
   /** Shown when there are zero rows (before filtering). */
@@ -190,6 +192,7 @@ export function DataGrid<TData>({
   hideSearch = false,
   filters,
   toolbar,
+  footerActions,
   onRowClick,
   emptyState,
   isLoading = false,
@@ -778,13 +781,16 @@ export function DataGrid<TData>({
       {/* Footer: row count, plus page controls in server mode */}
       {server ? (
         <div className="flex items-center justify-between px-1">
-          <p className="text-xs text-muted-foreground">
-            {isLoading
-              ? 'Loading…'
-              : server.total === 0
-                ? '0 rows'
-                : `${(server.page - 1) * server.pageSize + 1}–${Math.min(server.page * server.pageSize, server.total)} of ${server.total} ${server.total === 1 ? 'row' : 'rows'}`}
-          </p>
+          <div className="flex items-center gap-3">
+            {footerActions}
+            <p className="text-xs text-muted-foreground">
+              {isLoading
+                ? 'Loading…'
+                : server.total === 0
+                  ? '0 rows'
+                  : `${(server.page - 1) * server.pageSize + 1}–${Math.min(server.page * server.pageSize, server.total)} of ${server.total} ${server.total === 1 ? 'row' : 'rows'}`}
+            </p>
+          </div>
           <div className="flex items-center gap-2">
             {/* A single page never needs a page indicator or Prev/Next —
                 showing "Page 1 of 1" with both buttons disabled is just
@@ -821,11 +827,14 @@ export function DataGrid<TData>({
           </div>
         </div>
       ) : (
-        <p className="px-1 text-xs text-muted-foreground">
-          {isLoading
-            ? 'Loading…'
-            : `${rows.length} of ${data.length} ${data.length === 1 ? 'row' : 'rows'}`}
-        </p>
+        <div className="flex items-center gap-3 px-1">
+          {footerActions}
+          <p className="text-xs text-muted-foreground">
+            {isLoading
+              ? 'Loading…'
+              : `${rows.length} of ${data.length} ${data.length === 1 ? 'row' : 'rows'}`}
+          </p>
+        </div>
       )}
     </div>
   );
