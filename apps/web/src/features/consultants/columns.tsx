@@ -1,10 +1,17 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
+import { Info } from 'lucide-react';
 
 import { EnumSelect } from '@/components/EnumSelect';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { type Consultant, type ConsultantRole, consultantRoleLabels, consultantRoleTriggerClassName, consultantRoles } from './schema';
+import {
+  type Consultant,
+  type ConsultantRole,
+  consultantRoleLabels,
+  consultantRoleTriggerClassName,
+  consultantRoles,
+} from './schema';
 
 function initials(name: string) {
   return name
@@ -31,8 +38,16 @@ const roleOptions = consultantRoles.map((value) => ({
   triggerClassName: consultantRoleTriggerClassName[value],
 }));
 const statusOptions = [
-  { value: 'true', label: 'Active', triggerClassName: 'border-success/30 bg-success/10 text-success' },
-  { value: 'false', label: 'Inactive', triggerClassName: 'border-destructive/30 bg-destructive/10 text-destructive' },
+  {
+    value: 'true',
+    label: 'Active',
+    triggerClassName: 'border-success/30 bg-success/10 text-success',
+  },
+  {
+    value: 'false',
+    label: 'Inactive',
+    triggerClassName: 'border-destructive/30 bg-destructive/10 text-destructive',
+  },
 ];
 
 interface ConsultantColumnsOptions {
@@ -69,7 +84,9 @@ export function getConsultantColumns({
     {
       accessorKey: 'email',
       header: 'Email',
-      cell: ({ row }) => <span className="block truncate text-muted-foreground">{row.original.email}</span>,
+      cell: ({ row }) => (
+        <span className="block truncate text-muted-foreground">{row.original.email}</span>
+      ),
     },
     {
       id: 'roleName',
@@ -81,44 +98,57 @@ export function getConsultantColumns({
         const user = row.original;
         const disabled = isSelf(user) || pendingId === user.id;
         return (
-          <EnumSelect
-            value={user.role?.name ?? ''}
-            onValueChange={(v) => onRoleChange(user, v as ConsultantRole)}
-            options={roleOptions}
-            placeholder="No role"
-            disabled={disabled}
-            className="w-fit mx-auto"
-          />
+          <div data-no-row-drag>
+            <EnumSelect
+              value={user.role?.name ?? ''}
+              onValueChange={(v) => onRoleChange(user, v as ConsultantRole)}
+              options={roleOptions}
+              placeholder="No role"
+              disabled={disabled}
+              size="badge"
+              className="w-fit mx-auto"
+            />
+          </div>
         );
       },
     },
     {
       accessorKey: 'isActive',
-      header: 'Status',
       size: 150,
+      enableSorting: false,
       meta: { align: 'center' },
+      header: () => (
+        <span className="inline-flex items-center gap-1">
+          Status
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button type="button" className="text-muted-foreground hover:text-foreground">
+                  <Info className="size-3.5" />
+                </button>
+              }
+            />
+            <TooltipContent>
+              Active consultants can sign in and access the app; inactive consultants are blocked
+              from signing in.
+            </TooltipContent>
+          </Tooltip>
+        </span>
+      ),
       cell: ({ row }) => {
         const user = row.original;
         const disabled = isSelf(user) || pendingId === user.id;
         return (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <div>
-                  <EnumSelect
-                    value={String(user.isActive)}
-                    onValueChange={(v) => onStatusChange(user, v === 'true')}
-                    options={statusOptions}
-                    disabled={disabled}
-                    className="w-fit mx-auto"
-                  />
-                </div>
-              }
+          <div data-no-row-drag>
+            <EnumSelect
+              value={String(user.isActive)}
+              onValueChange={(v) => onStatusChange(user, v === 'true')}
+              options={statusOptions}
+              disabled={disabled}
+              size="badge"
+              className="w-fit mx-auto"
             />
-            <TooltipContent>
-              {user.isActive ? 'Can sign in and access the app' : 'Blocked from signing in'}
-            </TooltipContent>
-          </Tooltip>
+          </div>
         );
       },
     },
@@ -135,7 +165,10 @@ export function getConsultantColumns({
       accessorKey: 'createdAt',
       header: 'Joined',
       size: 140,
-      cell: ({ row }) => <span className="text-muted-foreground">{formatDate(row.original.createdAt)}</span>,
+      meta: { align: 'center' },
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{formatDate(row.original.createdAt)}</span>
+      ),
     },
   ];
 }

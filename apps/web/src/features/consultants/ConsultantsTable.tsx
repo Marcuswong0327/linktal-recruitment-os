@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
 import { ChevronDown } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -25,14 +26,22 @@ import {
 } from '@/lib/api/generated/consultants/consultants';
 import type { UpdateConsultantDto } from '@/lib/api/generated/types';
 import { getConsultantColumns } from './columns';
-import { type Consultant, type ConsultantRole, consultantRoleLabels, consultantRoles } from './schema';
+import {
+  type Consultant,
+  type ConsultantRole,
+  consultantRoleLabels,
+  consultantRoles,
+} from './schema';
 
 const PAGE_SIZE = 20;
 
 // Badge variants for the filter dropdown pills — a close approximation of
 // the select trigger palette in columns.tsx (Badge has a fixed variant set,
 // so "accent" for researcher maps to the closest neutral, "outline").
-const roleFilterVariant: Record<ConsultantRole, 'default' | 'info' | 'warning' | 'secondary' | 'outline' | 'muted'> = {
+const roleFilterVariant: Record<
+  ConsultantRole,
+  'default' | 'info' | 'warning' | 'secondary' | 'outline' | 'muted'
+> = {
   admin: 'default',
   manager: 'info',
   finance: 'warning',
@@ -98,8 +107,10 @@ export function ConsultantsTable() {
   const pendingId = updateUser.isPending ? (updateUser.variables?.id ?? null) : null;
 
   function handleQueryChange({ search, columnFilters }: DataGridQuery) {
-    const roleFilter = columnFilters.find((f) => f.id === 'roleName')?.value as string[] | undefined;
-    const statusFilter = columnFilters.find((f) => f.id === 'isActive')?.value as string[] | undefined;
+    const roleFilter = columnFilters.find((f) => f.id === 'roleName')?.value as
+      string[] | undefined;
+    const statusFilter = columnFilters.find((f) => f.id === 'isActive')?.value as
+      string[] | undefined;
     setSearch(search.trim() || undefined);
     setRole(roleFilter?.[0]);
     setIsActive(statusFilter?.[0] === undefined ? undefined : statusFilter[0] === 'true');
@@ -117,7 +128,8 @@ export function ConsultantsTable() {
     const failed = results.filter((r) => r.status === 'rejected').length;
     const succeeded = results.length - failed;
     queryClient.invalidateQueries({ queryKey: getGetConsultantsQueryKey() });
-    if (succeeded > 0) toast.success(`${actionLabel} for ${succeeded} user${succeeded === 1 ? '' : 's'}`);
+    if (succeeded > 0)
+      toast.success(`${actionLabel} for ${succeeded} user${succeeded === 1 ? '' : 's'}`);
     if (failed > 0) toast.error(`Failed for ${failed} user${failed === 1 ? '' : 's'}`);
     setIsBulkUpdating(false);
     setSelectedUsers([]);
@@ -128,8 +140,10 @@ export function ConsultantsTable() {
       getConsultantColumns({
         pendingId,
         isSelf: (user: Consultant) => user.id === currentConsultantId,
-        onRoleChange: (user, newRole: ConsultantRole) => updateUser.mutate({ id: user.id, data: { roleName: newRole } }),
-        onStatusChange: (user, newIsActive) => updateUser.mutate({ id: user.id, data: { isActive: newIsActive } }),
+        onRoleChange: (user, newRole: ConsultantRole) =>
+          updateUser.mutate({ id: user.id, data: { roleName: newRole } }),
+        onStatusChange: (user, newIsActive) =>
+          updateUser.mutate({ id: user.id, data: { isActive: newIsActive } }),
       }),
     [pendingId, currentConsultantId, updateUser],
   );
@@ -154,12 +168,14 @@ export function ConsultantsTable() {
       getRowId={(user) => user.id}
       canSelectRow={(user) => user.id !== currentConsultantId}
       onSelectionChange={setSelectedUsers}
+      enableRowRangeSelect
+      hideSelectColumn
       toolbar={
         selectedUsers.length > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
-                <Button variant="outline" size="lg" disabled={isBulkUpdating}>
+                <Button size="lg" disabled={isBulkUpdating}>
                   {isBulkUpdating ? 'Updating…' : `Bulk actions (${selectedUsers.length})`}
                   <ChevronDown />
                 </Button>
@@ -172,9 +188,11 @@ export function ConsultantsTable() {
                   {consultantRoles.map((r) => (
                     <DropdownMenuItem
                       key={r}
-                      onClick={() => handleBulkUpdate({ roleName: r }, `Role set to ${consultantRoleLabels[r]}`)}
+                      onClick={() =>
+                        handleBulkUpdate({ roleName: r }, `Role set to ${consultantRoleLabels[r]}`)
+                      }
                     >
-                      {consultantRoleLabels[r]}
+                      <Badge variant={roleFilterVariant[r]}>{consultantRoleLabels[r]}</Badge>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuSubContent>
@@ -182,14 +200,15 @@ export function ConsultantsTable() {
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>Set status</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
-                  <DropdownMenuItem onClick={() => handleBulkUpdate({ isActive: true }, 'Activated')}>
-                    Active
+                  <DropdownMenuItem
+                    onClick={() => handleBulkUpdate({ isActive: true }, 'Activated')}
+                  >
+                    <Badge variant="success">Active</Badge>
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    variant="destructive"
                     onClick={() => handleBulkUpdate({ isActive: false }, 'Deactivated')}
                   >
-                    Inactive
+                    <Badge variant="destructive">Inactive</Badge>
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
