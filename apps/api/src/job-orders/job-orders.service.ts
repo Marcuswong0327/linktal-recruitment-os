@@ -1,41 +1,108 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, SubmissionStatus } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
+import { AuthUser } from '../auth/auth.types';
 import { CreateJobOrderDto } from './dto/create-job-order.dto';
 import { UpdateJobOrderDto } from './dto/update-job-order.dto';
-import { JobOrderStatusFilter, QueryJobOrdersDto } from './dto/query-job-orders.dto';
+import { QueryJobOrdersDto } from './dto/query-job-orders.dto';
+
+// Feeds the Job Orders sheet's Submissions/Interviewing/Placed pipeline
+// columns (and the dedicated page's pipeline popover). `deletedAt: null` is
+// explicit here (not left to the extended client's soft-delete middleware,
+// which intercepts top-level CandidateSubmission calls, not this nested
+// include) — a removed submission must not reappear in a pipeline cell.
+const PIPELINE_SUBMISSIONS_INCLUDE = {
+  submissions: {
+    where: { deletedAt: null },
+    select: {
+      id: true,
+      status: true,
+      candidateId: true,
+      submittedAt: true,
+      candidate: { select: { fullName: true } },
+      placement: { select: { baseSalary: true, feeValue: true, startDate: true } },
+      interviews: {
+        where: { deletedAt: null },
+        orderBy: { interviewDate: 'desc' },
+        take: 1,
+        select: { interviewDate: true },
+      },
+    },
+  },
+} satisfies Prisma.JobOrderInclude;
+
+type JobOrderWithPipeline = {
+  submissions: {
+    id: string;
+    status: SubmissionStatus;
+    candidateId: string;
+    submittedAt: Date;
+    candidate: { fullName: string } | null;
+    placement: { baseSalary: number | null; feeValue: number | null; startDate: Date | null } | null;
+    interviews: { interviewDate: Date }[];
+  }[];
+};
+
+function toEntity<T extends JobOrderWithPipeline>(jobOrder: T) {
+  const { submissions, ...rest } = jobOrder;
+  return {
+    ...rest,
+    pipelineSubmissions: submissions.map((s) => ({
+      submissionId: s.id,
+      candidateId: s.candidateId,
+      candidateName: s.candidate?.fullName ?? 'Unknown candidate',
+      status: s.status,
+      submittedAt: s.submittedAt,
+      latestInterviewDate: s.interviews[0]?.interviewDate ?? null,
+      placementBaseSalary: s.placement?.baseSalary ?? null,
+      placementFeeValue: s.placement?.feeValue ?? null,
+      placementStartDate: s.placement?.startDate ?? null,
+    })),
+  };
+}
 
 @Injectable()
 export class JobOrdersService {
   constructor(@Inject(EXTENDED_PRISMA) private readonly prisma: ExtendedPrismaClient) {}
 
-  async findAll(query: QueryJobOrdersDto) {
+  async findAll(query: QueryJobOrdersDto, user: AuthUser) {
     const { page, pageSize, sortBy, sortOrder, q } = query;
 
     const where: Prisma.JobOrderWhereInput = {};
 
-    if (query.status !== JobOrderStatusFilter.ALL) {
-      where.status = query.status as unknown as Prisma.JobOrderWhereInput['status'];
+    if (query.statuses?.length) {
+      where.status = { in: query.statuses };
+    }
+
+    if (query.qualities?.length) {
+      where.quality = { in: query.qualities };
     }
 
     if (query.clientId) {
       where.clientId = query.clientId;
     }
 
-    if (query.consultantId) {
-      where.consultantId = query.consultantId;
+    if (user.roleName === 'consultant') {
+      // Consultants only ever see their own book of job orders — enforced
+      // here, not just hidden in the UI, so a crafted `consultantIds` query
+      // param can't be used to browse someone else's. Overrides whatever the
+      // caller passed; there's no "view others" mode for this role. Every
+      // other role (manager/finance/researcher/admin) sees the full list.
+      where.consultantId = user.consultantId;
+    } else if (query.consultantIds?.length) {
+      where.consultantId = { in: query.consultantIds };
     }
 
     // contains/insensitive text filters
     const contains = (value?: string) =>
       value ? { contains: value, mode: Prisma.QueryMode.insensitive } : undefined;
-    where.jobType = contains(query.jobType);
-    where.location = contains(query.location);
+    where.city = contains(query.city);
+    where.suburb = contains(query.suburb);
     where.department = contains(query.department);
 
-    if (query.priorityLevel != null) {
-      where.priorityLevel = query.priorityLevel;
+    if (query.priorityLevels?.length) {
+      where.priorityLevel = { in: query.priorityLevels };
     }
 
     // Salary overlap: a job's [salaryMin, salaryMax] band intersects the queried bounds.
@@ -54,9 +121,14 @@ export class JobOrdersService {
       ];
     }
 
-    const orderBy: Prisma.JobOrderOrderByWithRelationInput = sortBy
-      ? { [sortBy]: sortOrder }
-      : { createdAt: 'desc' };
+    // Default: Active first. JobOrderStatus is declared ACTIVE/PLACED/CLOSED/
+    // ON_HOLD (see schema.prisma), and Postgres native enums sort by
+    // declaration order — so `status asc` already puts Active first, same
+    // trick used for Client.quality. Received-date is the secondary sort so
+    // same-status rows still land in a stable, useful order.
+    const orderBy: Prisma.JobOrderOrderByWithRelationInput[] = sortBy
+      ? [{ [sortBy]: sortOrder }]
+      : [{ status: 'asc' }, { receivedAt: 'desc' }];
 
     // Parallel, not $transaction: these two reads don't need one consistent
     // DB snapshot, and running them concurrently instead of sequentially
@@ -67,37 +139,56 @@ export class JobOrdersService {
         orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
+        include: PIPELINE_SUBMISSIONS_INCLUDE,
       }),
       this.prisma.jobOrder.count({ where }),
     ]);
 
-    return { data, total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
+    return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }
 
   async findOne(id: string) {
-    const jobOrder = await this.prisma.jobOrder.findUnique({ where: { id } });
+    const jobOrder = await this.prisma.jobOrder.findUnique({
+      where: { id },
+      include: PIPELINE_SUBMISSIONS_INCLUDE,
+    });
     if (!jobOrder) {
       throw new NotFoundException(`Job order ${id} not found`);
     }
-    return jobOrder;
+    return toEntity(jobOrder);
   }
 
   async findByDisplayId(displayId: string) {
-    const jobOrder = await this.prisma.jobOrder.findUnique({ where: { displayId } });
+    const jobOrder = await this.prisma.jobOrder.findUnique({
+      where: { displayId },
+      include: PIPELINE_SUBMISSIONS_INCLUDE,
+    });
     if (!jobOrder) {
       throw new NotFoundException(`Job order ${displayId} not found`);
     }
-    return jobOrder;
+    return toEntity(jobOrder);
   }
 
-  create(dto: CreateJobOrderDto) {
-    // displayId is assigned by the DB (JobOrder_displayId_seq default).
-    return this.prisma.jobOrder.create({ data: dto });
+  async create(dto: CreateJobOrderDto) {
+    // displayId is assigned by the DB (JobOrder_displayId_seq default). A
+    // brand-new job order has no submissions yet, but still runs through
+    // toEntity so the response shape (pipelineSubmissions: []) matches every
+    // other endpoint instead of omitting the field.
+    const jobOrder = await this.prisma.jobOrder.create({
+      data: dto,
+      include: PIPELINE_SUBMISSIONS_INCLUDE,
+    });
+    return toEntity(jobOrder);
   }
 
   async update(id: string, dto: UpdateJobOrderDto) {
     await this.findOne(id);
-    return this.prisma.jobOrder.update({ where: { id }, data: dto });
+    const jobOrder = await this.prisma.jobOrder.update({
+      where: { id },
+      data: dto,
+      include: PIPELINE_SUBMISSIONS_INCLUDE,
+    });
+    return toEntity(jobOrder);
   }
 
   /**

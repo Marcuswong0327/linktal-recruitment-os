@@ -222,6 +222,11 @@ erDiagram
     }
 
     %% ==================== JOB ORDER DOMAIN ====================
+    %% city/suburb replaced the single `location` field (2026-07-20) to match
+    %% the Job Orders Portfolio mockup's two-column split — existing values
+    %% carried over into `city` as-is via a RENAME COLUMN, no data lost.
+    %% isReplacement/isCollaborated are flags only (no linked record) per the
+    %% confirmed "treat a replacement as a new job order" decision.
     JobOrder {
         string id PK
         string displayId "unique, nullable"
@@ -229,8 +234,8 @@ erDiagram
         string consultantId FK "nullable"
         string jobTitle
         string department
-        string location
-        string jobType "Full-time|Part-time|Contract"
+        string city "renamed from location 2026-07-20"
+        string suburb
         float salaryMin
         float salaryMax
         string salaryCurrency "default AUD"
@@ -239,14 +244,17 @@ erDiagram
         string description
         string requirements
         enum status "ACTIVE|PLACED|CLOSED|ON_HOLD, default ACTIVE"
+        enum quality "LOW|MEDIUM|HIGH, default MEDIUM - quality of the job order/posting itself"
         int priorityLevel "1=High,2=Medium,3=Low; default 2"
+        boolean isReplacement "default false - opened to replace a placement that fell through in the guarantee period"
+        boolean isCollaborated "default false - two+ consultants worked this job order together (split-desk)"
         datetime receivedAt
         datetime closedAt
         datetime createdAt
         datetime updatedAt
     }
 
-    %% ==================== SUBMISSION / PLACEMENT DOMAIN ====================
+    %% ==================== SUBMISSION / INTERVIEW / PLACEMENT DOMAIN ====================
     CandidateSubmission {
         string id PK
         string candidateId FK
@@ -258,15 +266,39 @@ erDiagram
         datetime updatedAt
     }
 
+    %% Interview rounds within a submission's Interviewing stage. roundLabel
+    %% is free text ("1st Interview", "Final Interview", ...) rather than a
+    %% fixed enum — agencies don't share one round-naming convention, and this
+    %% way adding a new round name needs no migration.
+    Interview {
+        string id PK
+        string submissionId FK
+        string roundLabel "free text, e.g. '1st Interview', 'Final Interview'"
+        datetime interviewDate
+        enum outcome "SCHEDULED|PENDING|PASSED|FAILED|CANCELLED, default SCHEDULED"
+        string notes
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    %% Fee calc (CLAUDE.md's confirmed decisions):
+    %%   baseSalary * (1 + superPercentage/100) = totalPackage
+    %%   totalPackage * feePercentage/100 = feeValue        (feeType PERCENTAGE)
+    %%   ... or a directly-entered flat amount              (feeType FLAT)
+    %%   guaranteeEndDate = startDate + client.guaranteePeriod
     Placement {
         string id PK
         string displayId "unique, nullable: PLC-XXXX"
         string submissionId FK "unique - one placement per submission"
-        float salary
+        float baseSalary "renamed from salary 2026-07-20"
+        float superPercentage "default 12"
+        float totalPackage "auto: baseSalary * (1 + superPercentage/100)"
+        enum feeType "PERCENTAGE|FLAT, default PERCENTAGE"
+        float feePercentage
+        float feeValue "renamed from fee 2026-07-20; auto (PERCENTAGE): totalPackage * feePercentage/100"
         datetime startDate
         datetime guaranteeEndDate "auto: startDate + client.guaranteePeriod"
-        float fee
-        float feePercentage
+        boolean accountsNotified "default false"
         enum status "ACTIVE|COMPLETED|FAILED, default ACTIVE"
         string notes
         datetime createdAt
@@ -318,6 +350,7 @@ erDiagram
     Candidate ||--o{ CandidateContactHistory : "has"
     Candidate ||--o{ CandidateSubmission : "submitted via"
     JobOrder ||--o{ CandidateSubmission : "receives"
+    CandidateSubmission ||--o{ Interview : "has rounds"
     CandidateSubmission ||--o| Placement : "results in"
 ```
 
@@ -349,9 +382,10 @@ erDiagram
 | **CandidateScreeningHistory** | Screening notes (`notes` as JSONB) | — |
 | **CandidateContactHistory** | Communications with candidates (mirrors `StakeholderContactHistory`) | — |
 | **CandidateSavedSearch** | A consultant's saved candidate search (personal, `filters` as opaque JSON) | — |
-| **JobOrder** | Open positions | optional custom |
+| **JobOrder** | Open positions (`city`/`suburb`, `quality`, `isReplacement`/`isCollaborated` flags) | optional custom |
 | **CandidateSubmission** | Candidate → JobOrder submissions | unique(candidateId, jobOrderId) |
-| **Placement** | Successful placements (fee/guarantee) | `PLC-XXXX` |
+| **Interview** | Interview rounds within a submission's Interviewing stage (`roundLabel`, date, outcome) | — |
+| **Placement** | Successful placements (fee calc per CLAUDE.md's confirmed decisions, guarantee period) | `PLC-XXXX` |
 | **AuditLog** | Append-only history of every write to an audited model — see [Audit & History Tracking](#audit--history-tracking) | — |
 
 ### JSONB Fields
@@ -376,16 +410,27 @@ erDiagram
 | **ClientQuality** | `LOW` · `MEDIUM` (default) · `HIGH` — declared in this order so the native Postgres enum sorts ordinally, not alphabetically |
 | **CandidateStatus** | `COLD` · `WARM` · `HOT` · `PLACED` |
 | **JobOrderStatus** | `ACTIVE` · `PLACED` · `CLOSED` · `ON_HOLD` |
+| **JobOrderQuality** | `LOW` · `MEDIUM` (default) · `HIGH` — same declared-order trick as `ClientQuality`, so it sorts ordinally |
 | **SubmissionStatus** | `SUBMITTED` · `INTERVIEWING` · `REJECTED` · `PLACED` |
+| **InterviewOutcome** | `SCHEDULED` (default) · `PENDING` · `PASSED` · `FAILED` · `CANCELLED` |
 | **PlacementStatus** | `ACTIVE` · `COMPLETED` · `FAILED` |
+| **PlacementFeeType** | `PERCENTAGE` (default) · `FLAT` |
 | **UserStatus** *(enum defined, not yet used by a model)* | `ACTIVE` · `INACTIVE` · `SUSPENDED` |
 
 ## RBAC
 
 Roles and permissions are created by `apps/api/prisma/seed.ts`. Access is
-**role + resource + action** — there is **no row-level / "own" scoping**; a
-permission like `candidate:read` grants read on all candidates. Enforcement:
-`@RequirePermission(resource, action)` on controllers → `PermissionsGuard`.
+**role + resource + action** (enforced by `@RequirePermission(resource, action)`
+on controllers → `PermissionsGuard`) for most resources — a permission like
+`candidate:read` grants read on every candidate, no row-level restriction.
+
+**Two resources are the exception**: `client` and `job_order` add a
+service-level **row-scoping** rule on top of the permission check — a caller
+with the `consultant` role only ever sees/queries their **own** book
+(`consultantId = caller`), enforced in `ClientsService.findAll` /
+`JobOrdersService.findAll` regardless of what a `consultantIds` query param
+asks for. Every other role (`manager`/`finance`/`researcher`/`admin`) sees the
+full list — this is a visibility scope, not a different permission grant.
 
 ### Resources & actions (seed)
 
@@ -424,6 +469,7 @@ permission like `candidate:read` grants read on all candidates. Enforcement:
 7. **Candidate → ScreeningHistory** — screening notes.
 8. **Candidate → CandidateSubmission ← JobOrder** — submissions (unique per candidate+job).
 9. **CandidateSubmission → Placement** — one placement per successful submission.
+9a. **CandidateSubmission → Interview** — a submission can carry several interview rounds (round label, date, outcome), tracked while it's in the `INTERVIEWING` stage.
 10. **Candidate → ContactHistory ← Consultant** — mirrors #4 for candidates (`CandidateContactHistory`, `contactedById`).
 11. **Industry / Specialization → Client**, **StakeholderRoleType → Stakeholder** — reference-table categorization (see `Industry` note above the ERD).
 12. **Industry / CandidateRoleType → Candidate** — same reference-table pattern; Industry is the same shared catalog Client uses, CandidateRoleType is its own (employment type, not Stakeholder's functional classification).
@@ -468,8 +514,8 @@ single generic mechanism rather than bespoke tracking per entity.
 `apps/api/src/prisma/prisma.extensions.ts` defines one Prisma Client
 Extension that intercepts every write (`$allOperations`) for the models
 listed in `AUDITED_MODELS` — `Client`, `Stakeholder`, `ClientJobResearch`,
-`Candidate`, `JobOrder`, `CandidateSubmission`, `Placement`, `Consultant`,
-`Role`, `Permission`. For each write it inserts one `AuditLog` row recording:
+`Candidate`, `JobOrder`, `CandidateSubmission`, `Placement`, `Interview`,
+`Consultant`, `Role`, `Permission`. For each write it inserts one `AuditLog` row recording:
 who (`actorId`, from the request's `RequestContext`, `null` = system/import),
 when (`createdAt`), which record (`entityType` + `entityId`), what changed
 (`changes`: `{ field: { from, to } }` for updates, the full row for creates),

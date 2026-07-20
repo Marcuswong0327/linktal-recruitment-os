@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
-import { Combobox } from '@base-ui/react/combobox';
-import { ChevronDown, Plus, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ChevronDown, Plus, Rocket, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
@@ -28,25 +29,13 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
+import { Combobox } from '@base-ui/react/combobox';
+import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import { ClientCombobox } from '@/components/ClientCombobox';
-import {
-  ConsultantCombobox,
   ConsultantComboboxPopup,
   useConsultantLookup,
 } from '@/components/ConsultantCombobox';
-import { ConsultantFilter } from '@/components/ConsultantFilter';
-import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
-import { EnumSelect } from '@/components/EnumSelect';
-import { FormField } from '@/components/FormField';
+import { useGetCandidates } from '@/lib/api/generated/candidates/candidates';
 import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import {
@@ -54,23 +43,25 @@ import {
   getGetJobOrdersQueryKey,
   updateJobOrder as updateJobOrderRequest,
   useGetJobOrders,
-  useUpdateJobOrder,
 } from '@/lib/api/generated/job-orders/job-orders';
 import type {
-  ClientEntity,
   ConsultantEntity,
-  GetJobOrdersStatus,
+  GetJobOrdersQualitiesItem,
+  GetJobOrdersStatusesItem,
   UpdateJobOrderDto,
 } from '@/lib/api/generated/types';
 import { getJobOrderColumns } from './columns';
 import {
   type JobOrder,
-  type JobOrderStatus,
+  jobOrderQualities,
+  jobOrderQualityLabels,
   jobOrderStatusLabels,
   jobOrderStatuses,
   priorityLabels,
   priorityOptions,
   priorityVariant,
+  qualityOptions,
+  qualityVariant,
   statusOptions,
   statusVariant,
 } from './schema';
@@ -84,13 +75,14 @@ export function JobOrdersTable({
   canCreate?: boolean;
   canDelete?: boolean;
 }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
-  const [status, setStatus] = React.useState<GetJobOrdersStatus | undefined>();
-  const [priorityLevel, setPriorityLevel] = React.useState<number | undefined>();
-  const [consultantId, setConsultantId] = React.useState<string | undefined>();
-  const [editing, setEditing] = React.useState<JobOrder | null>(null);
+  const [statuses, setStatuses] = React.useState<GetJobOrdersStatusesItem[] | undefined>();
+  const [qualities, setQualities] = React.useState<GetJobOrdersQualitiesItem[] | undefined>();
+  const [priorityLevels, setPriorityLevels] = React.useState<number[] | undefined>();
+  const [consultantIds, setConsultantIds] = React.useState<string[] | undefined>();
   const [selectedJobOrders, setSelectedJobOrders] = React.useState<JobOrder[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = React.useState(false);
@@ -98,12 +90,12 @@ export function JobOrdersTable({
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
 
   const { data, isLoading, isFetching, isError, error } = useGetJobOrders(
-    { page, pageSize: PAGE_SIZE, q: search, status, priorityLevel, consultantId },
+    { page, pageSize: PAGE_SIZE, q: search, statuses, qualities, priorityLevels, consultantIds },
     { query: { placeholderData: keepPreviousData } },
   );
 
   // Client-side joins: the API returns clientId/consultantId only, so pull
-  // both lists once to resolve names for the table and edit form.
+  // both lists once to resolve names for the table.
   const { data: clientsData } = useGetClients({ pageSize: 100 });
   const clients = clientsData?.status === 200 ? clientsData.data.data : [];
   const clientName = React.useCallback(
@@ -113,37 +105,36 @@ export function JobOrdersTable({
 
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
-
-  const jobOrderFilters: DataGridFilter[] = React.useMemo(
-    () => [
-      { columnId: 'status', title: 'Status', single: true, options: statusOptions },
-      { columnId: 'priorityLevel', title: 'Priority', single: true, options: priorityOptions },
-      {
-        columnId: 'consultantId',
-        title: 'Consultant',
-        single: true,
-        render: ({ selected, onChange }) => (
-          <ConsultantFilter
-            value={selected[0]}
-            onValueChange={(v) => onChange(v !== undefined ? [v] : [])}
-            consultants={consultants}
-          />
-        ),
-      },
-    ],
+  const consultantName = React.useCallback(
+    (id: string | null) => (id ? (consultants.find((c) => c.id === id)?.fullName ?? 'Unknown') : '—'),
     [consultants],
   );
 
-  const updateJobOrder = useUpdateJobOrder({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
-        toast.success('Saved changes');
-        setEditing(null);
+  // For the Candidates column's multi-select picker.
+  const { data: candidatesData } = useGetCandidates({ pageSize: 100 });
+  const candidates = candidatesData?.status === 200 ? candidatesData.data.data : [];
+
+  const consultantFilterOptions = React.useMemo(
+    () => consultants.map((c) => ({ value: c.id, label: c.fullName })),
+    [consultants],
+  );
+
+  // Filters render inside their column's header (2.1) instead of a toolbar
+  // row, and every one is multi-select — the API takes arrays for all four.
+  const jobOrderFilters: DataGridFilter[] = React.useMemo(
+    () => [
+      { columnId: 'status', title: 'Status', options: statusOptions, inHeader: true },
+      { columnId: 'quality', title: 'Quality', options: qualityOptions, inHeader: true },
+      { columnId: 'priorityLevel', title: 'Priority', options: priorityOptions, inHeader: true },
+      {
+        columnId: 'consultantId',
+        title: 'Consultant',
+        options: consultantFilterOptions,
+        inHeader: true,
       },
-      onError: (err) => toast.error(err.message || 'Failed to update job order'),
-    },
-  });
+    ],
+    [consultantFilterOptions],
+  );
 
   const result = data?.status === 200 ? data.data : undefined;
   const jobOrders = result?.data ?? [];
@@ -151,36 +142,21 @@ export function JobOrdersTable({
   function handleQueryChange({ search, columnFilters }: DataGridQuery) {
     const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as
       string[] | undefined;
+    const qualityFilter = columnFilters.find((f) => f.id === 'quality')?.value as
+      string[] | undefined;
     const priorityFilter = columnFilters.find((f) => f.id === 'priorityLevel')?.value as
       string[] | undefined;
     const consultantFilter = columnFilters.find((f) => f.id === 'consultantId')?.value as
       string[] | undefined;
     setSearch(search.trim() || undefined);
-    setStatus(statusFilter?.[0] as GetJobOrdersStatus | undefined);
-    setPriorityLevel(priorityFilter?.[0] === undefined ? undefined : Number(priorityFilter[0]));
-    setConsultantId(consultantFilter?.[0]);
+    setStatuses(statusFilter?.length ? (statusFilter as GetJobOrdersStatusesItem[]) : undefined);
+    setQualities(qualityFilter?.length ? (qualityFilter as GetJobOrdersQualitiesItem[]) : undefined);
+    setPriorityLevels(priorityFilter?.length ? priorityFilter.map(Number) : undefined);
+    setConsultantIds(consultantFilter?.length ? consultantFilter : undefined);
     setPage(1);
   }
 
-  function handleSave(updated: JobOrder) {
-    updateJobOrder.mutate({
-      id: updated.id,
-      data: {
-        jobTitle: updated.jobTitle,
-        clientId: updated.clientId,
-        consultantId: updated.consultantId ?? undefined,
-        department: updated.department ?? undefined,
-        location: updated.location ?? undefined,
-        jobType: updated.jobType ?? undefined,
-        salaryMin: updated.salaryMin ?? undefined,
-        salaryMax: updated.salaryMax ?? undefined,
-        status: updated.status,
-        priorityLevel: updated.priorityLevel ?? undefined,
-      },
-    });
-  }
-
-  // Bypasses the useUpdateJobOrder hook (which only tracks one in-flight call
+  // Bypasses any single-mutation hook (which only tracks one in-flight call
   // at a time) — bulk fires several concurrent requests, and we want a single
   // summary toast, not one per row.
   async function handleBulkUpdate(data: UpdateJobOrderDto, actionLabel: string) {
@@ -213,8 +189,8 @@ export function JobOrdersTable({
   }
 
   const columns = React.useMemo(
-    () => getJobOrderColumns({ clientName, consultants }),
-    [clientName, consultants],
+    () => getJobOrderColumns({ clientName, consultantName, candidates }),
+    [clientName, consultantName, candidates],
   );
 
   if (isError) {
@@ -234,7 +210,9 @@ export function JobOrdersTable({
         isFetching={isFetching}
         searchPlaceholder="Search job orders…"
         filters={jobOrderFilters}
-        onRowClick={setEditing}
+        // Job Order info isn't directly editable from the main sheet (2.2) —
+        // every row (not just the title link) opens the dedicated page.
+        onRowClick={(jobOrder) => router.push(`/job-orders/${jobOrder.id}`)}
         emptyState="No job orders yet. Create one against a client to get started."
         getRowId={(j) => j.id}
         toolbar={
@@ -299,6 +277,24 @@ export function JobOrdersTable({
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
                   <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>Set quality</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent>
+                      {jobOrderQualities.map((q) => (
+                        <DropdownMenuItem
+                          key={q}
+                          onClick={() =>
+                            handleBulkUpdate(
+                              { quality: q },
+                              `Set to ${jobOrderQualityLabels[q]} quality`,
+                            )
+                          }
+                        >
+                          <Badge variant={qualityVariant[q]}>{jobOrderQualityLabels[q]}</Badge>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                  <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Set priority</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
                       {Object.entries(priorityLabels).map(([value, label]) => (
@@ -341,18 +337,7 @@ export function JobOrdersTable({
                 }
               />
             </div>
-          ) : (
-            <Button
-              size="lg"
-              // disabled={!canCreate}
-              disabled={true}
-              title={canCreate ? undefined : "You don't have permission to add job orders"}
-              className="animate-in fade-in-0 duration-200"
-            >
-              <Plus />
-              Add Job Order
-            </Button>
-          )
+          ) : null
         }
         server={{
           total: result?.total ?? 0,
@@ -364,21 +349,45 @@ export function JobOrdersTable({
         }}
       />
 
-      <Sheet open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
-        <SheetContent className="w-full sm:max-w-md">
-          {editing ? (
-            <EditJobOrderForm
-              key={editing.id}
-              jobOrder={editing}
-              clients={clients}
-              consultants={consultants}
-              isSaving={updateJobOrder.isPending}
-              onSave={handleSave}
-              onCancel={() => setEditing(null)}
-            />
-          ) : null}
-        </SheetContent>
-      </Sheet>
+      {/* Bottom-of-sheet, not the toolbar (2.1) — Adding is a navigation to
+          the dedicated create page (2.2), not an inline quick-add. */}
+      <div className="flex justify-center gap-3">
+        {canCreate ? (
+          <Button size="lg" nativeButton={false} render={<Link href="/job-orders/new" />}>
+            <Plus />
+            Add Job Order
+          </Button>
+        ) : (
+          <Button size="lg" disabled title="You don't have permission to add job orders">
+            <Plus />
+            Add Job Order
+          </Button>
+        )}
+
+        {/* 2.5: choose between the internal Companies database or Seek to
+            go find more clients. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button size="lg" variant="outline">
+                <Rocket />
+                Business Development
+                <ChevronDown />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="center">
+            <DropdownMenuItem onClick={() => router.push('/companies')}>
+              Companies (our database)
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => window.open('https://www.seek.com.au', '_blank', 'noopener,noreferrer')}
+            >
+              Seek
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </>
   );
 }
@@ -421,141 +430,5 @@ function BulkConsultantPicker({
     >
       <ConsultantComboboxPopup byId={byId} labelFor={labelFor} anchor={anchorRef} />
     </Combobox.Root>
-  );
-}
-
-function EditJobOrderForm({
-  jobOrder,
-  clients,
-  consultants,
-  isSaving,
-  onSave,
-  onCancel,
-}: {
-  jobOrder: JobOrder;
-  clients: ClientEntity[];
-  consultants: ConsultantEntity[];
-  isSaving: boolean;
-  onSave: (jobOrder: JobOrder) => void;
-  onCancel: () => void;
-}) {
-  const [jobTitle, setJobTitle] = React.useState(jobOrder.jobTitle);
-  const [clientId, setClientId] = React.useState(jobOrder.clientId);
-  const [consultantId, setConsultantId] = React.useState(jobOrder.consultantId ?? '');
-  const [department, setDepartment] = React.useState(jobOrder.department ?? '');
-  const [location, setLocation] = React.useState(jobOrder.location ?? '');
-  const [jobType, setJobType] = React.useState(jobOrder.jobType ?? '');
-  const [status, setStatus] = React.useState<JobOrderStatus>(jobOrder.status);
-  const [salaryMin, setSalaryMin] = React.useState(
-    jobOrder.salaryMin != null ? String(jobOrder.salaryMin) : '',
-  );
-  const [salaryMax, setSalaryMax] = React.useState(
-    jobOrder.salaryMax != null ? String(jobOrder.salaryMax) : '',
-  );
-  const [priorityLevel, setPriorityLevel] = React.useState(
-    jobOrder.priorityLevel != null ? String(jobOrder.priorityLevel) : '',
-  );
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    onSave({
-      ...jobOrder,
-      jobTitle,
-      clientId,
-      consultantId: consultantId || null,
-      department: department || null,
-      location: location || null,
-      jobType: jobType || null,
-      status,
-      salaryMin: salaryMin === '' ? null : Number(salaryMin),
-      salaryMax: salaryMax === '' ? null : Number(salaryMax),
-      priorityLevel: priorityLevel === '' ? null : Number(priorityLevel),
-    });
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="flex h-full flex-col">
-      <SheetHeader>
-        <SheetTitle>Edit job order</SheetTitle>
-        <SheetDescription>Update the {jobOrder.jobTitle} role.</SheetDescription>
-      </SheetHeader>
-
-      <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
-        <FormField label="Role" htmlFor="jo-title">
-          <Input id="jo-title" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
-        </FormField>
-        <FormField label="Client" htmlFor="jo-client">
-          <ClientCombobox
-            id="jo-client"
-            value={clientId}
-            onValueChange={setClientId}
-            clients={clients}
-          />
-        </FormField>
-        <FormField label="Consultant" htmlFor="jo-consultant">
-          <ConsultantCombobox
-            id="jo-consultant"
-            value={consultantId}
-            onValueChange={setConsultantId}
-            consultants={consultants}
-          />
-        </FormField>
-        <FormField label="Department" htmlFor="jo-department">
-          <Input
-            id="jo-department"
-            value={department}
-            onChange={(e) => setDepartment(e.target.value)}
-          />
-        </FormField>
-        <FormField label="Location" htmlFor="jo-location">
-          <Input id="jo-location" value={location} onChange={(e) => setLocation(e.target.value)} />
-        </FormField>
-        <FormField label="Job type" htmlFor="jo-job-type">
-          <Input id="jo-job-type" value={jobType} onChange={(e) => setJobType(e.target.value)} />
-        </FormField>
-        <FormField label="Status" htmlFor="jo-status">
-          <EnumSelect
-            id="jo-status"
-            value={status}
-            onValueChange={(v) => setStatus(v as JobOrderStatus)}
-            options={statusOptions}
-          />
-        </FormField>
-        <FormField label="Priority" htmlFor="jo-priority">
-          <EnumSelect
-            id="jo-priority"
-            value={priorityLevel}
-            onValueChange={setPriorityLevel}
-            options={priorityOptions}
-            placeholder="Not set"
-          />
-        </FormField>
-        <FormField label="Salary min" htmlFor="jo-salary-min">
-          <Input
-            id="jo-salary-min"
-            type="number"
-            value={salaryMin}
-            onChange={(e) => setSalaryMin(e.target.value)}
-          />
-        </FormField>
-        <FormField label="Salary max" htmlFor="jo-salary-max">
-          <Input
-            id="jo-salary-max"
-            type="number"
-            value={salaryMax}
-            onChange={(e) => setSalaryMax(e.target.value)}
-          />
-        </FormField>
-      </div>
-
-      <SheetFooter className="flex-row justify-end">
-        <Button type="button" variant="outline" size="lg" onClick={onCancel} disabled={isSaving}>
-          Cancel
-        </Button>
-        <Button type="submit" size="lg" disabled={isSaving}>
-          {isSaving ? 'Saving…' : 'Save changes'}
-        </Button>
-      </SheetFooter>
-    </form>
   );
 }

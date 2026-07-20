@@ -3141,7 +3141,7 @@
             "name": "sortBy",
             "required": false,
             "in": "query",
-            "description": "Column to sort by. Defaults to most recently created.",
+            "description": "Column to sort by. Defaults to status ascending (Active first — JobOrderStatus is declared ACTIVE/PLACED/CLOSED/ON_HOLD, so a native-enum sort already puts Active first) then most recently received.",
             "schema": {
               "type": "string",
               "enum": [
@@ -3179,20 +3179,38 @@
             }
           },
           {
-            "name": "status",
+            "name": "statuses",
             "required": false,
             "in": "query",
-            "description": "Filter by status. Defaults to ALL (every status); pass a specific status to narrow.",
+            "description": "Filter by status (one or more). Omit for all statuses.",
             "schema": {
-              "default": "ALL",
-              "type": "string",
-              "enum": [
-                "ACTIVE",
-                "PLACED",
-                "CLOSED",
-                "ON_HOLD",
-                "ALL"
-              ]
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "PLACED",
+                  "CLOSED",
+                  "ON_HOLD"
+                ]
+              }
+            }
+          },
+          {
+            "name": "qualities",
+            "required": false,
+            "in": "query",
+            "description": "Filter by quality (one or more). Omit for all qualities.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "LOW",
+                  "MEDIUM",
+                  "HIGH"
+                ]
+              }
             }
           },
           {
@@ -3205,28 +3223,31 @@
             }
           },
           {
-            "name": "consultantId",
+            "name": "consultantIds",
             "required": false,
             "in": "query",
-            "description": "Filter by consultant ID (exact match)",
+            "description": "Filter by owning consultant ID(s). Ignored (overridden by the caller's own id) for the `consultant` role.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "city",
+            "required": false,
+            "in": "query",
+            "description": "Filter by city (contains, case-insensitive)",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "jobType",
+            "name": "suburb",
             "required": false,
             "in": "query",
-            "description": "Filter by job type (contains, case-insensitive)",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "location",
-            "required": false,
-            "in": "query",
-            "description": "Filter by location (contains, case-insensitive)",
+            "description": "Filter by suburb (contains, case-insensitive)",
             "schema": {
               "type": "string"
             }
@@ -3241,14 +3262,15 @@
             }
           },
           {
-            "name": "priorityLevel",
+            "name": "priorityLevels",
             "required": false,
             "in": "query",
-            "description": "Filter by priority level (1=High, 2=Medium, 3=Low)",
+            "description": "Filter by priority level(s) (1=High, 2=Medium, 3=Low). Omit for all.",
             "schema": {
-              "minimum": 1,
-              "maximum": 3,
-              "type": "number"
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
             }
           },
           {
@@ -5311,6 +5333,639 @@
         ]
       }
     },
+    "/interviews": {
+      "get": {
+        "operationId": "getInterviews",
+        "parameters": [
+          {
+            "name": "submissionId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by submission ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Interview rounds, earliest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InterviewEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List interview rounds, filtered by submissionId",
+        "tags": [
+          "Interviews"
+        ]
+      },
+      "post": {
+        "operationId": "createInterview",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInterviewDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Interview round created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add an interview round to a submission",
+        "tags": [
+          "Interviews"
+        ]
+      }
+    },
+    "/interviews/{id}": {
+      "get": {
+        "operationId": "getInterview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Interview round found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get interview round by ID",
+        "tags": [
+          "Interviews"
+        ]
+      },
+      "patch": {
+        "operationId": "updateInterview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateInterviewDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Interview round updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update an interview round (e.g. record its outcome)",
+        "tags": [
+          "Interviews"
+        ]
+      },
+      "delete": {
+        "operationId": "deleteInterview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Interview round removed"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove an interview round (soft-delete, recoverable)",
+        "tags": [
+          "Interviews"
+        ]
+      }
+    },
+    "/placements": {
+      "get": {
+        "operationId": "getPlacements",
+        "parameters": [
+          {
+            "name": "submissionId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by submission ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "jobOrderId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by job order ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Placements",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlacementEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List placements, filtered by submissionId and/or jobOrderId",
+        "tags": [
+          "Placements"
+        ]
+      },
+      "post": {
+        "operationId": "createPlacement",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlacementDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Placement created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacementEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a placement for a submission — auto-calculates totalPackage/feeValue/guaranteeEndDate, and marks the candidate Placed, the job order Placed (once fully filled), and the client Traded (on their first placement)",
+        "tags": [
+          "Placements"
+        ]
+      }
+    },
+    "/placements/{id}": {
+      "get": {
+        "operationId": "getPlacement",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Placement found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacementEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get placement by ID",
+        "tags": [
+          "Placements"
+        ]
+      },
+      "patch": {
+        "operationId": "updatePlacement",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlacementDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Placement updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlacementEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a placement",
+        "tags": [
+          "Placements"
+        ]
+      },
+      "delete": {
+        "operationId": "deletePlacement",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Placement removed"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove a placement (soft-delete, recoverable)",
+        "tags": [
+          "Placements"
+        ]
+      }
+    },
     "/candidate-role-types": {
       "get": {
         "operationId": "getCandidateRoleTypes",
@@ -7125,6 +7780,63 @@
           "createdAt"
         ]
       },
+      "JobOrderPipelineCandidateEntity": {
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string"
+          },
+          "candidateId": {
+            "type": "string"
+          },
+          "candidateName": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "INTERVIEWING",
+              "REJECTED",
+              "PLACED"
+            ]
+          },
+          "submittedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "latestInterviewDate": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "This submission's most recent interview round"
+          },
+          "placementBaseSalary": {
+            "type": "number",
+            "nullable": true
+          },
+          "placementFeeValue": {
+            "type": "number",
+            "nullable": true
+          },
+          "placementStartDate": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "submissionId",
+          "candidateId",
+          "candidateName",
+          "status",
+          "submittedAt",
+          "latestInterviewDate",
+          "placementBaseSalary",
+          "placementFeeValue",
+          "placementStartDate"
+        ]
+      },
       "JobOrderEntity": {
         "type": "object",
         "properties": {
@@ -7150,11 +7862,11 @@
             "type": "string",
             "nullable": true
           },
-          "location": {
+          "city": {
             "type": "string",
             "nullable": true
           },
-          "jobType": {
+          "suburb": {
             "type": "string",
             "nullable": true
           },
@@ -7196,10 +7908,24 @@
               "ON_HOLD"
             ]
           },
+          "quality": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ]
+          },
           "priorityLevel": {
             "type": "number",
             "nullable": true,
             "description": "1=High, 2=Medium, 3=Low"
+          },
+          "isReplacement": {
+            "type": "boolean"
+          },
+          "isCollaborated": {
+            "type": "boolean"
           },
           "receivedAt": {
             "format": "date-time",
@@ -7217,6 +7943,12 @@
           "updatedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "pipelineSubmissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobOrderPipelineCandidateEntity"
+            }
           }
         },
         "required": [
@@ -7226,8 +7958,8 @@
           "consultantId",
           "jobTitle",
           "department",
-          "location",
-          "jobType",
+          "city",
+          "suburb",
           "salaryMin",
           "salaryMax",
           "salaryCurrency",
@@ -7236,11 +7968,15 @@
           "description",
           "requirements",
           "status",
+          "quality",
           "priorityLevel",
+          "isReplacement",
+          "isCollaborated",
           "receivedAt",
           "closedAt",
           "createdAt",
-          "updatedAt"
+          "updatedAt",
+          "pipelineSubmissions"
         ]
       },
       "PaginatedJobOrdersEntity": {
@@ -7302,15 +8038,15 @@
             "description": "Department",
             "example": "Operations"
           },
-          "location": {
+          "city": {
             "type": "string",
-            "description": "Location",
+            "description": "City",
             "example": "Brisbane"
           },
-          "jobType": {
+          "suburb": {
             "type": "string",
-            "description": "Job type",
-            "example": "Full-time"
+            "description": "Suburb",
+            "example": "Fortitude Valley"
           },
           "salaryMin": {
             "type": "number",
@@ -7359,11 +8095,31 @@
             ],
             "example": "ACTIVE"
           },
+          "quality": {
+            "type": "string",
+            "description": "Quality of the job order/posting; defaults to MEDIUM when omitted",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ],
+            "example": "MEDIUM"
+          },
           "priorityLevel": {
             "type": "number",
             "description": "Priority: 1=High, 2=Medium, 3=Low",
             "example": 2,
             "default": 2
+          },
+          "isReplacement": {
+            "type": "boolean",
+            "description": "This job order was opened to replace a placement that fell through within the guarantee period; defaults to false",
+            "default": false
+          },
+          "isCollaborated": {
+            "type": "boolean",
+            "description": "Two or more consultants worked this job order together (split-desk); defaults to false",
+            "default": false
           }
         },
         "required": [
@@ -7392,15 +8148,15 @@
             "description": "Department",
             "example": "Operations"
           },
-          "location": {
+          "city": {
             "type": "string",
-            "description": "Location",
+            "description": "City",
             "example": "Brisbane"
           },
-          "jobType": {
+          "suburb": {
             "type": "string",
-            "description": "Job type",
-            "example": "Full-time"
+            "description": "Suburb",
+            "example": "Fortitude Valley"
           },
           "salaryMin": {
             "type": "number",
@@ -7449,11 +8205,31 @@
             ],
             "example": "ACTIVE"
           },
+          "quality": {
+            "type": "string",
+            "description": "Quality of the job order/posting; defaults to MEDIUM when omitted",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ],
+            "example": "MEDIUM"
+          },
           "priorityLevel": {
             "type": "number",
             "description": "Priority: 1=High, 2=Medium, 3=Low",
             "example": 2,
             "default": 2
+          },
+          "isReplacement": {
+            "type": "boolean",
+            "description": "This job order was opened to replace a placement that fell through within the guarantee period; defaults to false",
+            "default": false
+          },
+          "isCollaborated": {
+            "type": "boolean",
+            "description": "Two or more consultants worked this job order together (split-desk); defaults to false",
+            "default": false
           }
         }
       },
@@ -8073,6 +8849,334 @@
           "notes": {
             "type": "string",
             "description": "Notes"
+          }
+        }
+      },
+      "InterviewEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "submissionId": {
+            "type": "string"
+          },
+          "roundLabel": {
+            "type": "string",
+            "example": "1st Interview"
+          },
+          "interviewDate": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "SCHEDULED",
+              "PENDING",
+              "PASSED",
+              "FAILED",
+              "CANCELLED"
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "submissionId",
+          "roundLabel",
+          "interviewDate",
+          "outcome",
+          "notes",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateInterviewDto": {
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string",
+            "description": "Submission this interview round belongs to"
+          },
+          "roundLabel": {
+            "type": "string",
+            "description": "Round label",
+            "example": "1st Interview"
+          },
+          "interviewDate": {
+            "type": "string",
+            "description": "When this round is/was scheduled"
+          },
+          "outcome": {
+            "type": "string",
+            "description": "Outcome; defaults to SCHEDULED when omitted",
+            "enum": [
+              "SCHEDULED",
+              "PENDING",
+              "PASSED",
+              "FAILED",
+              "CANCELLED"
+            ],
+            "example": "SCHEDULED"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes"
+          }
+        },
+        "required": [
+          "submissionId",
+          "roundLabel",
+          "interviewDate"
+        ]
+      },
+      "UpdateInterviewDto": {
+        "type": "object",
+        "properties": {
+          "roundLabel": {
+            "type": "string",
+            "description": "Round label",
+            "example": "1st Interview"
+          },
+          "interviewDate": {
+            "type": "string",
+            "description": "When this round is/was scheduled"
+          },
+          "outcome": {
+            "type": "string",
+            "description": "Outcome; defaults to SCHEDULED when omitted",
+            "enum": [
+              "SCHEDULED",
+              "PENDING",
+              "PASSED",
+              "FAILED",
+              "CANCELLED"
+            ],
+            "example": "SCHEDULED"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes"
+          }
+        }
+      },
+      "PlacementEntity": {
+        "type": "object",
+        "properties": {
+          "displayId": {
+            "type": "string",
+            "nullable": true,
+            "example": "PLC-0001"
+          },
+          "id": {
+            "type": "string"
+          },
+          "submissionId": {
+            "type": "string"
+          },
+          "baseSalary": {
+            "type": "number",
+            "nullable": true
+          },
+          "superPercentage": {
+            "type": "number"
+          },
+          "totalPackage": {
+            "type": "number",
+            "nullable": true,
+            "description": "Auto: baseSalary * (1 + superPercentage / 100)"
+          },
+          "feeType": {
+            "type": "string",
+            "enum": [
+              "PERCENTAGE",
+              "FLAT"
+            ]
+          },
+          "feePercentage": {
+            "type": "number",
+            "nullable": true
+          },
+          "feeValue": {
+            "type": "number",
+            "nullable": true,
+            "description": "Auto (PERCENTAGE): totalPackage * feePercentage / 100"
+          },
+          "startDate": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "guaranteeEndDate": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "Auto: startDate + client.guaranteePeriod"
+          },
+          "accountsNotified": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "COMPLETED",
+              "FAILED"
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "displayId",
+          "id",
+          "submissionId",
+          "baseSalary",
+          "superPercentage",
+          "totalPackage",
+          "feeType",
+          "feePercentage",
+          "feeValue",
+          "startDate",
+          "guaranteeEndDate",
+          "accountsNotified",
+          "status",
+          "notes",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreatePlacementDto": {
+        "type": "object",
+        "properties": {
+          "submissionId": {
+            "type": "string",
+            "description": "Submission being placed (must be unique — one placement per submission)"
+          },
+          "baseSalary": {
+            "type": "number",
+            "description": "Base salary offered",
+            "example": 90000
+          },
+          "superPercentage": {
+            "type": "number",
+            "description": "Superannuation percentage; defaults to 12 (per Terms of Business)",
+            "example": 12,
+            "default": 12
+          },
+          "feeType": {
+            "type": "string",
+            "description": "Fee type; defaults to PERCENTAGE",
+            "enum": [
+              "PERCENTAGE",
+              "FLAT"
+            ],
+            "default": "PERCENTAGE"
+          },
+          "feePercentage": {
+            "type": "number",
+            "description": "Fee percentage of total package (only used when feeType = PERCENTAGE)",
+            "example": 15
+          },
+          "feeValue": {
+            "type": "number",
+            "description": "Flat fee value (only used when feeType = FLAT — ignored/overwritten by the auto-calc when feeType = PERCENTAGE)",
+            "example": 13500
+          },
+          "startDate": {
+            "type": "string",
+            "description": "Candidate's start date = invoice date. guaranteeEndDate auto-calculates from this + the client's guarantee period."
+          },
+          "accountsNotified": {
+            "type": "boolean",
+            "description": "Whether accounts/finance has been notified of this placement",
+            "default": false
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes"
+          }
+        },
+        "required": [
+          "submissionId"
+        ]
+      },
+      "UpdatePlacementDto": {
+        "type": "object",
+        "properties": {
+          "baseSalary": {
+            "type": "number",
+            "description": "Base salary offered",
+            "example": 90000
+          },
+          "superPercentage": {
+            "type": "number",
+            "description": "Superannuation percentage; defaults to 12 (per Terms of Business)",
+            "example": 12,
+            "default": 12
+          },
+          "feeType": {
+            "type": "string",
+            "description": "Fee type; defaults to PERCENTAGE",
+            "enum": [
+              "PERCENTAGE",
+              "FLAT"
+            ],
+            "default": "PERCENTAGE"
+          },
+          "feePercentage": {
+            "type": "number",
+            "description": "Fee percentage of total package (only used when feeType = PERCENTAGE)",
+            "example": 15
+          },
+          "feeValue": {
+            "type": "number",
+            "description": "Flat fee value (only used when feeType = FLAT — ignored/overwritten by the auto-calc when feeType = PERCENTAGE)",
+            "example": 13500
+          },
+          "startDate": {
+            "type": "string",
+            "description": "Candidate's start date = invoice date. guaranteeEndDate auto-calculates from this + the client's guarantee period."
+          },
+          "accountsNotified": {
+            "type": "boolean",
+            "description": "Whether accounts/finance has been notified of this placement",
+            "default": false
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notes"
+          },
+          "status": {
+            "type": "string",
+            "description": "Placement status — e.g. mark FAILED if the candidate leaves within the guarantee period",
+            "enum": [
+              "ACTIVE",
+              "COMPLETED",
+              "FAILED"
+            ]
           }
         }
       },

@@ -5,7 +5,9 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { JobOrderEntityQuality } from './jobOrderEntityQuality';
 import type { JobOrderEntityStatus } from './jobOrderEntityStatus';
+import type { JobOrderPipelineCandidateEntity } from './jobOrderPipelineCandidateEntity';
 
 export interface JobOrderEntity {
   id: string;
@@ -17,9 +19,9 @@ export interface JobOrderEntity {
   /** @nullable */
   department: string | null;
   /** @nullable */
-  location: string | null;
+  city: string | null;
   /** @nullable */
-  jobType: string | null;
+  suburb: string | null;
   /** @nullable */
   salaryMin: number | null;
   /** @nullable */
@@ -33,14 +35,18 @@ export interface JobOrderEntity {
   /** @nullable */
   requirements: string | null;
   status: JobOrderEntityStatus;
+  quality: JobOrderEntityQuality;
   /**
      * 1=High, 2=Medium, 3=Low
      * @nullable
      */
   priorityLevel: number | null;
+  isReplacement: boolean;
+  isCollaborated: boolean;
   receivedAt: string;
   /** @nullable */
   closedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  pipelineSubmissions: JobOrderPipelineCandidateEntity[];
 }

@@ -62,6 +62,12 @@ export interface DataGridFilter {
    * Clear/isFiltered handling, unified with the other filters.
    */
   render?: (props: { selected: string[]; onChange: (values: string[]) => void }) => React.ReactNode;
+  /**
+   * Renders this filter's trigger inside the column's header cell (a compact
+   * icon button) instead of the toolbar row. State, "Clear" and isFiltered
+   * behavior are unchanged — only where the trigger appears moves.
+   */
+  inHeader?: boolean;
 }
 
 /** Per-column presentation hints, set via `meta` on a ColumnDef. */
@@ -281,6 +287,13 @@ export function DataGrid<TData>({
     () => new Set((filters ?? []).map((f) => f.columnId)),
     [filters],
   );
+  const headerFilterByColumnId = React.useMemo(() => {
+    const map = new Map<string, DataGridFilter>();
+    for (const f of filters ?? []) {
+      if (f.inHeader) map.set(f.columnId, f);
+    }
+    return map;
+  }, [filters]);
   const tableColumns = React.useMemo(() => {
     const withFilters = columns.map((col) => {
       const id =
@@ -366,11 +379,15 @@ export function DataGrid<TData>({
       const id = el.dataset.measureColumn;
       if (!id) return;
       // th padding (px-3 = 0.75rem each side) isn't part of the span itself.
-      next[id] = Math.ceil(el.scrollWidth) + 24;
+      // +28 extra when this column also carries a header-embedded filter
+      // trigger (icon-sm button) sitting next to the label, which the
+      // measured span itself doesn't include.
+      const filterAllowance = headerFilterByColumnId.has(id) ? 28 : 0;
+      next[id] = Math.ceil(el.scrollWidth) + 24 + filterAllowance;
     });
     setMeasuredSizes((prev) => raiseSizes(prev, next));
     setHeaderOnlySizes((prev) => raiseSizes(prev, next));
-  }, [columns]);
+  }, [columns, headerFilterByColumnId]);
 
   // Re-measure pass 2 (see effect below) once per column set — header
   // labels/cell kinds don't otherwise change; new columns showing up should
@@ -586,7 +603,9 @@ export function DataGrid<TData>({
               )}
             </div>
           ) : null}
-          {(filters ?? []).map((filter) => {
+          {(filters ?? [])
+            .filter((filter) => !filter.inHeader)
+            .map((filter) => {
             const column = table.getColumn(filter.columnId);
             if (!column) return null;
             const selected = (column.getFilterValue() as string[]) ?? [];
@@ -648,36 +667,63 @@ export function DataGrid<TData>({
                   const canSort = header.column.getCanSort();
                   const sorted = header.column.getIsSorted();
                   const canResize = header.column.getCanResize();
+                  const headerFilter = headerFilterByColumnId.get(header.column.id);
                   return (
                     <TableHead
                       key={header.id}
                       style={{ width: header.getSize() }}
                       className={cn('relative', columnAlignClass(header.column.columnDef.meta))}
                     >
-                      <span
-                        data-measure-column={header.column.id}
-                        className="inline-block max-w-full"
-                      >
-                        {header.isPlaceholder ? null : canSort ? (
-                          <button
-                            type="button"
-                            onClick={header.column.getToggleSortingHandler()}
-                            // uppercase: Preflight sets text-transform:none on
-                            // buttons, cancelling the th's uppercase style.
-                            className="inline-flex items-center gap-1 rounded-sm uppercase hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                          >
-                            {flexRender(header.column.columnDef.header, header.getContext())}
-                            {sorted === 'asc' ? (
-                              <ArrowUp className="size-3" />
-                            ) : sorted === 'desc' ? (
-                              <ArrowDown className="size-3" />
-                            ) : (
-                              <ChevronsUpDown className="size-3 opacity-50" />
-                            )}
-                          </button>
-                        ) : (
-                          flexRender(header.column.columnDef.header, header.getContext())
-                        )}
+                      <span className="inline-flex max-w-full items-center gap-1">
+                        <span
+                          data-measure-column={header.column.id}
+                          className="inline-block max-w-full"
+                        >
+                          {header.isPlaceholder ? null : canSort ? (
+                            <button
+                              type="button"
+                              onClick={header.column.getToggleSortingHandler()}
+                              // uppercase: Preflight sets text-transform:none on
+                              // buttons, cancelling the th's uppercase style.
+                              className="inline-flex items-center gap-1 rounded-sm uppercase hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                            >
+                              {flexRender(header.column.columnDef.header, header.getContext())}
+                              {sorted === 'asc' ? (
+                                <ArrowUp className="size-3" />
+                              ) : sorted === 'desc' ? (
+                                <ArrowDown className="size-3" />
+                              ) : (
+                                <ChevronsUpDown className="size-3 opacity-50" />
+                              )}
+                            </button>
+                          ) : (
+                            flexRender(header.column.columnDef.header, header.getContext())
+                          )}
+                        </span>
+                        {headerFilter ? (
+                          <span data-no-row-drag>
+                            {(() => {
+                              const selected =
+                                (header.column.getFilterValue() as string[]) ?? [];
+                              const onChange = (values: string[]) =>
+                                header.column.setFilterValue(
+                                  values.length ? values : undefined,
+                                );
+                              return headerFilter.render ? (
+                                headerFilter.render({ selected, onChange })
+                              ) : (
+                                <DataGridFacetedFilter
+                                  title={headerFilter.title}
+                                  options={headerFilter.options ?? []}
+                                  selected={selected}
+                                  single={headerFilter.single}
+                                  onChange={onChange}
+                                  compact
+                                />
+                              );
+                            })()}
+                          </span>
+                        ) : null}
                       </span>
                       {canResize ? (
                         <div

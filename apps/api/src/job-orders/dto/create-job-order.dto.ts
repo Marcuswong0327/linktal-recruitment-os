@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsNumber,
@@ -10,7 +11,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { JobOrderStatus } from '@prisma/client';
+import { JobOrderQuality, JobOrderStatus } from '@prisma/client';
 
 export class CreateJobOrderDto {
   @ApiProperty({ description: 'Client ID this job order belongs to' })
@@ -33,15 +34,15 @@ export class CreateJobOrderDto {
   @IsString()
   department?: string;
 
-  @ApiPropertyOptional({ description: 'Location', example: 'Brisbane' })
+  @ApiPropertyOptional({ description: 'City', example: 'Brisbane' })
   @IsOptional()
   @IsString()
-  location?: string;
+  city?: string;
 
-  @ApiPropertyOptional({ description: 'Job type', example: 'Full-time' })
+  @ApiPropertyOptional({ description: 'Suburb', example: 'Fortitude Valley' })
   @IsOptional()
   @IsString()
-  jobType?: string;
+  suburb?: string;
 
   @ApiPropertyOptional({ description: 'Minimum salary', example: 120000 })
   @IsOptional()
@@ -88,10 +89,25 @@ export class CreateJobOrderDto {
   @IsEnum(JobOrderStatus)
   status?: JobOrderStatus;
 
+  @ApiPropertyOptional({ description: 'Quality of the job order/posting; defaults to MEDIUM when omitted', enum: JobOrderQuality, example: 'MEDIUM' })
+  @IsOptional()
+  @IsEnum(JobOrderQuality)
+  quality?: JobOrderQuality;
+
   @ApiPropertyOptional({ description: 'Priority: 1=High, 2=Medium, 3=Low', example: 2, default: 2 })
   @IsOptional()
   @IsInt()
   @Min(1)
   @Max(3)
   priorityLevel?: number;
+
+  @ApiPropertyOptional({ description: 'This job order was opened to replace a placement that fell through within the guarantee period; defaults to false', default: false })
+  @IsOptional()
+  @IsBoolean()
+  isReplacement?: boolean;
+
+  @ApiPropertyOptional({ description: 'Two or more consultants worked this job order together (split-desk); defaults to false', default: false })
+  @IsOptional()
+  @IsBoolean()
+  isCollaborated?: boolean;
 }

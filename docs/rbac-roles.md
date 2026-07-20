@@ -85,6 +85,18 @@ Plain-English summary:
 The permission table is resource-level; these rules depend on the *target's*
 state or the *actor*, so they live in the services.
 
+### Clients & Job Orders (own-book scoping)
+Both `GET /clients` and `GET /job-orders` add a row-level rule on top of the
+`client:read`/`job_order:read` permission check: a caller whose role is
+**`consultant`** only ever sees their **own** book — `ClientsService.findAll`
+/ `JobOrdersService.findAll` force `where.consultantId = caller.consultantId`,
+overriding whatever `consultantId`/`consultantIds` the query string asks for
+(so a crafted query param can't be used to browse someone else's clients or
+job orders). Every other role — **manager, finance, researcher, admin** —
+sees the **full list**, unfiltered. This is a visibility scope, not a
+different permission grant; `job_order:read` (etc.) is unchanged in the
+matrix above for every role.
+
 ### Consultants (`/consultants`, guarded by `consultant`)
 Managing a consultant is **admin-only IAM**, even though managers hold the
 `consultant` permissions:
@@ -208,6 +220,8 @@ runs on the base client with batch transactions).
 | `GET /candidates/:id/pipeline-timeline` | `candidate:read` | scoped to a candidate the caller can already read, not `audit:read` |
 | `GET /job-orders/:id/pipeline-timeline` | `job_order:read` | scoped to a job order the caller can already read, not `audit:read` |
 | `GET/POST/PATCH/DELETE /candidate-submissions` | `submission:*` | per matrix |
+| `GET/POST/PATCH/DELETE /interviews` | `submission:read` / `:update` (create/update/delete all gated on `:update` — a round is a sub-resource of its submission, same pattern as contact-history above; there's no separate `interview` permission) | admin, manager, consultant (read-only: finance, researcher, viewer) |
+| `GET/POST/PATCH/DELETE /placements` | `placement:*` | per matrix — `POST` auto-calculates fee fields and updates the candidate/job order/client (see `manual-vs-automated-workflows.md` Rule 6) |
 | `GET /consultants` | `consultant:read` | admin, manager |
 | `POST /consultants` | `consultant:create` | admin, manager (no privileged roles for managers) |
 | `PATCH/DELETE /consultants/:id` | `consultant:update` / `:delete` | **admin only** (service guard) |

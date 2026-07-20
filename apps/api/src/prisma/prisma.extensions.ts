@@ -25,6 +25,7 @@ const SOFT_DELETE_MODELS = new Set([
   'JobOrder',
   'CandidateSubmission',
   'Placement',
+  'Interview',
 ]);
 
 // Soft-delete set plus the RBAC/identity tables (hard-deleted, but still audited).

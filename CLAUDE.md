@@ -52,7 +52,7 @@ The database schema was derived from these Excel files:
 | **Permission** | Granular permissions (resource + action) |
 | **RolePermission** | Junction: roles ↔ permissions |
 
-### Core Entities (10 tables)
+### Core Entities (11 tables)
 
 | Entity | Description | ID Format |
 |--------|-------------|-----------|
@@ -63,11 +63,16 @@ The database schema was derived from these Excel files:
 | **ClientJobResearch** | Job openings research (historical/prospecting) | auto |
 | **Candidate** | Job seekers (workHistory as JSONB) | CDD-XXXX |
 | **CandidateScreeningHistory** | Screening notes (notes as JSONB) | auto |
-| **JobOrder** | Open positions (optional link to Research) | auto |
+| **JobOrder** | Open positions (`city`/`suburb`, `quality`, `isReplacement`/`isCollaborated` flags; optional link to Research) | auto |
 | **CandidateSubmission** | Submissions to jobs | auto |
-| **Placement** | Successful placements (fee calculation) | auto |
+| **Interview** | Interview rounds within a submission's Interviewing stage (`roundLabel`, date, outcome) | auto |
+| **Placement** | Successful placements (fee calculation) | PLC-XXXX |
 
-### Placement Fee Fields (Confirmed)
+### Placement Fee Fields (Confirmed — ✅ implemented)
+
+`apps/api/src/placements/placements.service.ts` — see
+`docs/manual-vs-automated-workflows.md` Rule 6 for the full auto-update flow
+this triggers (candidate/job order/client status).
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -75,10 +80,11 @@ The database schema was derived from these Excel files:
 | superPercentage | Decimal | Default 12% |
 | totalPackage | Decimal | Auto: baseSalary × (1 + super%) |
 | feePercentage | Decimal | e.g., 15% |
-| feeValue | Decimal | Auto: totalPackage × feePercentage |
-| feeType | Enum | 'percentage' or 'flat' |
+| feeValue | Decimal | Auto (feeType PERCENTAGE): totalPackage × feePercentage — or a directly-entered flat amount (feeType FLAT) |
+| feeType | Enum | `PERCENTAGE` or `FLAT` |
 | startDate | DateTime | Candidate's first day = Invoice date |
-| guaranteeEndDate | DateTime | Auto: startDate + 90 days |
+| guaranteeEndDate | DateTime | Auto: startDate + client's guaranteePeriod |
+| accountsNotified | Boolean | Whether accounts/finance has been notified of this placement |
 
 ### JSONB Fields (Flexible Arrays)
 
@@ -100,6 +106,7 @@ Client (1) ──── (N) JobOrder (N) ──── (1) Consultant
 JobOrder (N) ──→ (0..1) ClientJobResearch (optional link)
 Candidate (1) ──── (N) ScreeningHistory
 Candidate (1) ──── (N) Submission (N) ──── (1) JobOrder
+Submission (1) ──── (N) Interview
 Submission (1) ──── (0..1) Placement
 ```
 
@@ -127,9 +134,13 @@ Submission (1) ──── (0..1) Placement
 
 - **User**: Active | Inactive | Suspended
 - **Client**: Cold | Warm | Traded
+- **Client/JobOrder Quality**: Low | Medium | High
 - **Candidate**: Cold | Warm | Hot | Placed
 - **JobOrder**: Active | Placed | Closed | On Hold
 - **Submission**: Submitted | Interviewing | Rejected | Placed
+- **Interview Outcome**: Scheduled | Pending | Passed | Failed | Cancelled
+- **Placement**: Active | Completed | Failed
+- **Placement Fee Type**: Percentage | Flat
 
 ## Recruitment Workflow
 
@@ -142,18 +153,20 @@ Submission (1) ──── (0..1) Placement
 6. Place         → Placement (successful hire)
 ```
 
-## Status Auto-Update Flow (Pending Confirmation)
+## Status Auto-Update Flow
 
-See `docs/manual-vs-automated-workflows.md` for full details.
+See `docs/manual-vs-automated-workflows.md` for full details and status per
+trigger (most of Client/Stakeholder/Candidate status auto-updates are still
+**pending**; the Placement-triggered updates below are **implemented**).
 
-| Trigger | Should Update |
-|---------|---------------|
-| ContactHistory created | Stakeholder.status → Warm |
-| ScreeningHistory created | Candidate.status → Warm |
-| Placement created | Candidate.status → Placed |
-| Placement created | JobOrder.status → Placed (if all openings filled) |
-| Placement created | Client.status → Traded (if first placement) |
-| Placement failed within guarantee | Alert consultant |
+| Trigger | Should Update | Status |
+|---------|---------------|--------|
+| ContactHistory created | Stakeholder.status → Warm | ❌ pending |
+| ScreeningHistory created | Candidate.status → Warm | ❌ pending |
+| Placement created | Candidate.status → Placed | ✅ implemented |
+| Placement created | JobOrder.filledCount += 1; status → Placed (if all openings filled) | ✅ implemented |
+| Placement created | Client.status → Traded (if first placement) | ✅ implemented |
+| Placement failed within guarantee | Alert consultant | ❌ pending |
 
 ## Guarantee Period Logic (Confirmed)
 
@@ -251,6 +264,6 @@ pnpm prisma:migrate   # Run migrations
 | File | Description |
 |------|-------------|
 | `docs/database-erd.md` | Full Mermaid ERD diagram and column mappings |
-| `docs/manual-vs-automated-workflows.md` | Manual vs automated workflows + auto-update rules (roadmap) |
+| `docs/manual-vs-automated-workflows.md` | Manual vs automated workflows + auto-update rules — mostly roadmap, but includes a real walkthrough of the built Job Orders pipeline (candidates roster, drag-and-drop panel, interview rounds, placement creation) |
 | `docs/migrations.md` | DB migration workflow: rollout, rollback, Railway deploy |
 | `docs/rbac-roles.md` | RBAC: role/permission matrix + conditional rules (admin protection, last-admin, self-service) |

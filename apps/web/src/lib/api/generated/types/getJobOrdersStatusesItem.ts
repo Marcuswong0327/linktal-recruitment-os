@@ -6,13 +6,12 @@
  * OpenAPI spec version: 1.0
  */
 
-export type GetJobOrdersStatus = typeof GetJobOrdersStatus[keyof typeof GetJobOrdersStatus];
+export type GetJobOrdersStatusesItem = typeof GetJobOrdersStatusesItem[keyof typeof GetJobOrdersStatusesItem];
 
 
-export const GetJobOrdersStatus = {
+export const GetJobOrdersStatusesItem = {
   ACTIVE: 'ACTIVE',
   PLACED: 'PLACED',
   CLOSED: 'CLOSED',
   ON_HOLD: 'ON_HOLD',
-  ALL: 'ALL',
 } as const;

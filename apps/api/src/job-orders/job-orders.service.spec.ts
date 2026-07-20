@@ -4,7 +4,7 @@ import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 
 describe('JobOrdersService.create', () => {
   it('creates without setting displayId (DB sequence owns it) and returns the row', async () => {
-    const created = { id: 'j1', displayId: 'JO-0069', jobTitle: 'Production Manager' };
+    const created = { id: 'j1', displayId: 'JO-0069', jobTitle: 'Production Manager', submissions: [] };
     const create = jest.fn().mockResolvedValue(created);
     const prisma = { jobOrder: { create } } as unknown as ExtendedPrismaClient;
     const service = new JobOrdersService(prisma);
@@ -14,7 +14,8 @@ describe('JobOrdersService.create', () => {
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0].data).not.toHaveProperty('displayId');
-    expect(result).toBe(created);
+    expect(result).toMatchObject({ id: 'j1', displayId: 'JO-0069', jobTitle: 'Production Manager' });
+    expect(result.pipelineSubmissions).toEqual([]);
   });
 });
 
@@ -22,7 +23,7 @@ describe('JobOrdersService.remove (cascade soft-delete)', () => {
   it('cascades to its submissions + their placements, then deletes the job order', async () => {
     const prisma = {
       jobOrder: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'j1', jobTitle: 'PM' }),
+        findUnique: jest.fn().mockResolvedValue({ id: 'j1', jobTitle: 'PM', submissions: [] }),
         delete: jest.fn().mockResolvedValue({ id: 'j1' }),
       },
       candidateSubmission: {

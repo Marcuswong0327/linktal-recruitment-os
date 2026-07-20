@@ -596,7 +596,7 @@ async function importJobOrders() {
           clientId: client.id,
           consultantId: consultant?.id,
           jobTitle,
-          location: cleanString(row['City (lookup)']),
+          city: cleanString(row['City (lookup)']),
           openings: row['Numbers of Openings'] || 1,
           status: mapJobOrderStatus(cleanString(row['Status (optional) '])),
           receivedAt: parseExcelDate(row['Job Created Date']) || new Date(),

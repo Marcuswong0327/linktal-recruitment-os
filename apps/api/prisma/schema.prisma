@@ -52,6 +52,14 @@ enum JobOrderStatus {
   ON_HOLD
 }
 
+// Same declaration-order trick as ClientQuality (see its comment above) —
+// LOW < MEDIUM < HIGH lets `ORDER BY quality` come out meaningfully sorted.
+enum JobOrderQuality {
+  LOW
+  MEDIUM
+  HIGH
+}
+
 enum SubmissionStatus {
   SUBMITTED
   INTERVIEWING
@@ -63,6 +71,19 @@ enum PlacementStatus {
   ACTIVE
   COMPLETED
   FAILED
+}
+
+enum PlacementFeeType {
+  PERCENTAGE
+  FLAT
+}
+
+enum InterviewOutcome {
+  SCHEDULED
+  PENDING
+  PASSED
+  FAILED
+  CANCELLED
 }
 
 // ============================================================================
@@ -426,8 +447,8 @@ model JobOrder {
   consultant     Consultant?           @relation(fields: [consultantId], references: [id])
   jobTitle       String
   department     String?
-  location       String?
-  jobType        String? // Full-time, Part-time, Contract
+  city           String? // Renamed from `location` — matches the Job Orders Portfolio mockup's separate City/Suburb columns. Existing values carried over as-is (free text like "NSW Sydney"); not a real geo split, just the same field renamed.
+  suburb         String?
   salaryMin      Float?
   salaryMax      Float?
   salaryCurrency String?               @default("AUD")
@@ -436,7 +457,10 @@ model JobOrder {
   description    String?
   requirements   String?
   status         JobOrderStatus        @default(ACTIVE)
+  quality        JobOrderQuality       @default(MEDIUM)
   priorityLevel  Int?                  @default(2) // 1=High, 2=Medium, 3=Low
+  isReplacement  Boolean               @default(false) // This job order was opened to replace a placement that fell through within the guarantee period. Flag only — no linking back to the failed placement (per the confirmed "treat as new job" decision).
+  isCollaborated Boolean               @default(false) // Two or more consultants worked this job order together (split-desk). Flag only, no multi-owner linking.
   receivedAt     DateTime              @default(now())
   closedAt       DateTime?
   createdAt      DateTime              @default(now())
@@ -448,6 +472,7 @@ model JobOrder {
   @@index([clientId])
   @@index([consultantId])
   @@index([status])
+  @@index([quality])
   @@index([deletedAt])
 }
 
@@ -469,6 +494,7 @@ model CandidateSubmission {
   deletedAt   DateTime? // Soft delete: null = live
   deletedById String? // Logical ref to Consultant.id (no FK)
   placement   Placement?
+  interviews  Interview[]
 
   // NOTE: unique is not partial (Fix 2 skipped) — a soft-deleted row still
   // holds (candidateId, jobOrderId). Re-submit must restore the dead row.
@@ -480,19 +506,53 @@ model CandidateSubmission {
 }
 
 // ============================================================================
+// INTERVIEW (Rounds within a submission's Interviewing stage)
+// ============================================================================
+
+// One CandidateSubmission can carry several rounds ("1st Interview", "Final
+// Interview", ...) — roundLabel is free text rather than a fixed enum, since
+// agencies don't all use the same round-naming convention and this shouldn't
+// need a migration to add "2nd Interview" or "Panel Interview" etc.
+model Interview {
+  id            String            @id @default(cuid())
+  submissionId  String
+  submission    CandidateSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  roundLabel    String // e.g. "1st Interview", "Final Interview"
+  interviewDate DateTime
+  outcome       InterviewOutcome  @default(SCHEDULED)
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime? // Soft delete: null = live
+  deletedById   String? // Logical ref to Consultant.id (no FK)
+
+  @@index([submissionId])
+  @@index([interviewDate])
+  @@index([deletedAt])
+}
+
+// ============================================================================
 // PLACEMENT (Successful placements)
 // ============================================================================
 
+// Fee Calculation (see CLAUDE.md's confirmed decisions):
+//   Base Salary * (1 + Super%) = Total Package
+//   Total Package * Fee% = Placement Fee (feeType PERCENTAGE) — or a flat feeValue (feeType FLAT)
+//   guaranteeEndDate = startDate + client.guaranteePeriod (via submission -> jobOrder -> client)
 model Placement {
   id               String              @id @default(cuid())
   displayId        String?             @unique // Format: "PLC-XXXX"
   submissionId     String              @unique
   submission       CandidateSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  salary           Float?
+  baseSalary       Float?
+  superPercentage  Float               @default(12) // Default per Terms of Business
+  totalPackage     Float? // Auto: baseSalary * (1 + superPercentage / 100)
+  feeType          PlacementFeeType    @default(PERCENTAGE)
+  feePercentage    Float?
+  feeValue         Float? // Auto (PERCENTAGE): totalPackage * feePercentage / 100. Entered directly when feeType = FLAT.
   startDate        DateTime?
   guaranteeEndDate DateTime? // Auto-calculated: startDate + client.guaranteePeriod
-  fee              Float?
-  feePercentage    Float?
+  accountsNotified Boolean             @default(false)
   status           PlacementStatus     @default(ACTIVE)
   notes            String?
   createdAt        DateTime            @default(now())

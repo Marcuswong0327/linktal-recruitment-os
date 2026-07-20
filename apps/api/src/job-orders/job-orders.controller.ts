@@ -16,7 +16,8 @@ import { UpdateJobOrderDto } from './dto/update-job-order.dto';
 import { QueryJobOrdersDto } from './dto/query-job-orders.dto';
 import { JobOrderEntity } from './entities/job-order.entity';
 import { PaginatedJobOrdersEntity } from './entities/paginated-job-orders.entity';
-import { RequirePermission } from '../auth/auth.decorators';
+import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
+import { AuthUser } from '../auth/auth.types';
 import { AuditService } from '../audit/audit.service';
 import { PipelineTimelineEventEntity } from '../audit/entities/pipeline-timeline-event.entity';
 
@@ -36,8 +37,8 @@ export class JobOrdersController {
     summary: 'List job orders (paginated, filterable, sortable)',
   })
   @ApiResponse({ status: 200, description: 'Paginated job orders', type: PaginatedJobOrdersEntity })
-  findAll(@Query() query: QueryJobOrdersDto) {
-    return this.jobOrders.findAll(query);
+  findAll(@Query() query: QueryJobOrdersDto, @CurrentUser() user: AuthUser) {
+    return this.jobOrders.findAll(query, user);
   }
 
   @Get('by-display-id/:displayId')
