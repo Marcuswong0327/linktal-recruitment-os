@@ -113,6 +113,10 @@ export function SavedSearchesMenu({ currentFilters, hasActiveQuery, onApply }: S
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
+                // Without this, Base UI's menu typeahead intercepts every
+                // printable keystroke (to jump-search menu items) before it
+                // reaches this input, so nothing could be typed.
+                e.stopPropagation();
                 if (e.key === 'Enter') handleSave();
               }}
               placeholder="Name this search…"
