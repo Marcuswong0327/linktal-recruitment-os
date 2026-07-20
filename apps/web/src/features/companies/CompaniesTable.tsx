@@ -49,6 +49,7 @@ import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
+import { NameComboboxFilter } from '@/components/NameComboboxFilter';
 import {
   deleteClient as deleteClientRequest,
   getGetClientsQueryKey,
@@ -73,6 +74,8 @@ import {
   type ConsultantEntity,
   type GetClientsQuality,
   type GetClientsStatus,
+  type IndustryEntity,
+  type SpecializationEntity,
   type UpdateClientDto,
 } from '@/lib/api/generated/types';
 import { getCompanyColumns, qualityOptions, statusOptions, statusVariant, tobOptions } from './columns';
@@ -121,6 +124,8 @@ export function CompaniesTable({
   const [search, setSearch] = React.useState<string | undefined>();
   const [status, setStatus] = React.useState<GetClientsStatus | undefined>();
   const [quality, setQuality] = React.useState<GetClientsQuality | undefined>();
+  const [industry, setIndustry] = React.useState<string | undefined>();
+  const [specialization, setSpecialization] = React.useState<string | undefined>();
   const [tobSigned, setTobSigned] = React.useState<boolean | undefined>();
   const [consultantId, setConsultantId] = React.useState<string | undefined>();
   const [sortBy, setSortBy] = React.useState<GetClientsSortBy | undefined>();
@@ -133,7 +138,19 @@ export function CompaniesTable({
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
 
   const { data, isLoading, isFetching, isError, error } = useGetClients(
-    { page, pageSize: PAGE_SIZE, q: search, status, quality, tobSigned, consultantId, sortBy, sortOrder },
+    {
+      page,
+      pageSize: PAGE_SIZE,
+      q: search,
+      status,
+      quality,
+      industry,
+      specialization,
+      tobSigned,
+      consultantId,
+      sortBy,
+      sortOrder,
+    },
     { query: { placeholderData: keepPreviousData } },
   );
 
@@ -142,6 +159,12 @@ export function CompaniesTable({
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
   const { labelFor: consultantLabelFor } = useConsultantLookup(consultants);
+  // Also drives the Industry/Specialization filter pickers below.
+  const { data: industryData } = useGetIndustries();
+  const industries: IndustryEntity[] = industryData?.status === 200 ? industryData.data : [];
+  const { data: specializationData } = useGetSpecializations();
+  const specializations: SpecializationEntity[] =
+    specializationData?.status === 200 ? specializationData.data : [];
   // Disables a row's inline pills (relationship/TOB/consultant) while any one of them is saving.
   const [pendingRowId, setPendingRowId] = React.useState<string | null>(null);
 
@@ -149,6 +172,32 @@ export function CompaniesTable({
     () => [
       { columnId: 'status', title: 'Relationship', single: true, options: statusOptions },
       { columnId: 'quality', title: 'Quality', single: true, options: qualityOptions },
+      {
+        columnId: 'industry',
+        title: 'Industry',
+        single: true,
+        render: ({ selected, onChange }: { selected: string[]; onChange: (value: string[]) => void }) => (
+          <NameComboboxFilter
+            title="Industry"
+            value={selected[0]}
+            onValueChange={(v) => onChange(v !== undefined ? [v] : [])}
+            options={industries}
+          />
+        ),
+      },
+      {
+        columnId: 'specialization',
+        title: 'Specialization',
+        single: true,
+        render: ({ selected, onChange }: { selected: string[]; onChange: (value: string[]) => void }) => (
+          <NameComboboxFilter
+            title="Specialization"
+            value={selected[0]}
+            onValueChange={(v) => onChange(v !== undefined ? [v] : [])}
+            options={specializations}
+          />
+        ),
+      },
       { columnId: 'tobSigned', title: 'TOB', single: true, options: tobOptions },
       ...(isConsultant
         ? []
@@ -170,7 +219,7 @@ export function CompaniesTable({
             },
           ]),
     ],
-    [consultants, isConsultant],
+    [consultants, industries, specializations, isConsultant],
   );
 
   const createClient = useCreateClient({
@@ -192,6 +241,10 @@ export function CompaniesTable({
       string[] | undefined;
     const qualityFilter = columnFilters.find((f) => f.id === 'quality')?.value as
       string[] | undefined;
+    const industryFilter = columnFilters.find((f) => f.id === 'industry')?.value as
+      string[] | undefined;
+    const specializationFilter = columnFilters.find((f) => f.id === 'specialization')?.value as
+      string[] | undefined;
     const tobFilter = columnFilters.find((f) => f.id === 'tobSigned')?.value as
       string[] | undefined;
     const consultantFilter = columnFilters.find((f) => f.id === 'consultantId')?.value as
@@ -204,6 +257,8 @@ export function CompaniesTable({
     setSearch(search.trim() || undefined);
     setStatus(statusFilter?.[0] as GetClientsStatus | undefined);
     setQuality(qualityFilter?.[0] as GetClientsQuality | undefined);
+    setIndustry(industryFilter?.[0]);
+    setSpecialization(specializationFilter?.[0]);
     setTobSigned(tobFilter?.[0] === undefined ? undefined : tobFilter[0] === 'true');
     setConsultantId(consultantFilter?.[0]);
     setSortBy(sortField);
