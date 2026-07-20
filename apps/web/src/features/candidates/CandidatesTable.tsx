@@ -26,7 +26,11 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
+import { DataGrid, type DataGridQuery } from '@/components/DataGrid';
+import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
+import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { TagListFilter } from '@/components/TagListFilter';
+import { TextFilter } from '@/components/TextFilter';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { useConsultantLookup } from '@/components/ConsultantCombobox';
@@ -39,12 +43,10 @@ import {
   useGetCandidates,
   useUpdateCandidate,
 } from '@/lib/api/generated/candidates/candidates';
-import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import type {
+  ConsultantEntity,
   CreateCandidateContactHistoryDto,
-  GetCandidatesParams,
   GetCandidatesSortBy,
-  GetCandidatesStatus,
   UpdateCandidateDto,
 } from '@/lib/api/generated/types';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -59,6 +61,7 @@ import {
 import { candidateColumns } from './columns';
 import { CandidateRowActions } from './CandidateRowActions';
 import { exportCandidatesToExcel } from './exportToExcel';
+import { placementStatusLabels, submissionStatusLabels, type useCandidateSearch } from './useCandidateSearch';
 
 const statusOptions = candidateStatuses.map((value) => ({
   value,
@@ -67,10 +70,8 @@ const statusOptions = candidateStatuses.map((value) => ({
   triggerClassName: candidateStatusTriggerClassName[value],
 }));
 
-const candidateFilters: DataGridFilter[] = [
-  // single: the API takes one status value (or ALL).
-  { columnId: 'status', title: 'Status', options: statusOptions, single: true },
-];
+const submissionStatusOptions = Object.entries(submissionStatusLabels).map(([value, label]) => ({ value, label }));
+const placementStatusOptions = Object.entries(placementStatusLabels).map(([value, label]) => ({ value, label }));
 
 const PAGE_SIZE = 20;
 
@@ -86,7 +87,19 @@ interface CandidateFormValues {
   salaryExpectation: string | null;
 }
 
-export function CandidatesTable({ canCreate = true, canDelete = true }: { canCreate?: boolean; canDelete?: boolean }) {
+export function CandidatesTable({
+  canCreate = true,
+  canDelete = true,
+  search,
+  consultants,
+}: {
+  canCreate?: boolean;
+  canDelete?: boolean;
+  /** Filter/search state lifted into the search-gate parent — shared with its top dropdowns and Active Filters chips. */
+  search: ReturnType<typeof useCandidateSearch>;
+  /** Fetched once by the parent (also needed there for the query-language and chip labels) — avoids fetching it twice. */
+  consultants: ConsultantEntity[];
+}) {
   const queryClient = useQueryClient();
   const [loggingContactFor, setLoggingContactFor] = React.useState<Candidate | null>(null);
 
@@ -113,22 +126,25 @@ export function CandidatesTable({ canCreate = true, canDelete = true }: { canCre
     [canDelete],
   );
   const [page, setPage] = React.useState(1);
-  const [query, setQuery] = React.useState<Pick<GetCandidatesParams, 'q' | 'status' | 'sortBy' | 'sortOrder'>>({});
   const [editing, setEditing] = React.useState<Candidate | null>(null);
   const [selectedCandidates, setSelectedCandidates] = React.useState<Candidate[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = React.useState(false);
 
+  // The search-gate's filter state is the single source of truth for query
+  // params; reset to page 1 whenever it actually changes (queryParams is
+  // memoized on `filters`, so this only fires on a real change, not every
+  // render).
+  React.useEffect(() => setPage(1), [search.queryParams]);
+
   const { data, isLoading, isFetching, isError, error } = useGetCandidates(
-    { page, pageSize: PAGE_SIZE, ...query },
+    { page, pageSize: PAGE_SIZE, ...search.queryParams },
     // Keep the previous page's rows while the next one loads (no flash).
     { query: { placeholderData: keepPreviousData } },
   );
 
   // Candidate.consultantId is a raw ID (not server-resolved, same convention
   // as Client.consultantId) — resolved client-side for the export column.
-  const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
-  const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
   const { labelFor: consultantLabelFor } = useConsultantLookup(consultants);
 
   const updateCandidate = useUpdateCandidate({
@@ -147,16 +163,13 @@ export function CandidatesTable({ canCreate = true, canDelete = true }: { canCre
   const result = data?.status === 200 ? data.data : undefined;
   const candidates = result?.data ?? [];
 
-  function handleQueryChange({ search, sorting, columnFilters }: DataGridQuery) {
-    const statusFilter = (columnFilters.find((f) => f.id === 'status')?.value as string[] | undefined) ?? [];
+  // Search/status/etc. are driven by the lifted `search` state (and its own
+  // toolbar filters below), not by DataGrid's built-in search box or column
+  // filters — this only ever sees column-header sort clicks.
+  function handleQueryChange({ sorting }: DataGridQuery) {
     const sort = sorting[0];
-    setQuery({
-      q: search.trim() || undefined,
-      status: statusFilter.length === 1 ? (statusFilter[0] as GetCandidatesStatus) : undefined,
-      sortBy: sort ? (sort.id as GetCandidatesSortBy) : undefined,
-      sortOrder: sort ? (sort.desc ? 'desc' : 'asc') : undefined,
-    });
-    setPage(1);
+    search.set('sortBy', sort ? (sort.id as GetCandidatesSortBy) : undefined);
+    search.set('sortOrder', sort ? (sort.desc ? 'desc' : 'asc') : undefined);
   }
 
   function handleSave(values: CandidateFormValues) {
@@ -227,14 +240,63 @@ export function CandidatesTable({ canCreate = true, canDelete = true }: { canCre
 
   return (
     <>
+      <div className="flex flex-wrap items-center gap-2">
+        <DataGridFacetedFilter
+          title="Status"
+          options={statusOptions}
+          selected={search.filters.statuses}
+          onChange={(values) => search.set('statuses', values as CandidateStatus[])}
+        />
+        <TextFilter
+          title="Location"
+          value={search.filters.location}
+          onChange={(value) => search.set('location', value)}
+          placeholder="City or country…"
+        />
+        <TagListFilter
+          title="Skills"
+          values={search.filters.skills}
+          onChange={(values) => search.set('skills', values)}
+          placeholder="Type a skill, Enter to add…"
+        />
+        <DataGridFacetedFilter
+          title="Consultant"
+          options={consultants.map((c) => ({ value: c.id, label: c.fullName }))}
+          selected={search.filters.consultantIds}
+          onChange={(values) => search.set('consultantIds', values)}
+        />
+        <DataGridFacetedFilter
+          title="Submission status"
+          options={submissionStatusOptions}
+          selected={search.filters.submissionStatuses}
+          onChange={(values) => search.set('submissionStatuses', values as typeof search.filters.submissionStatuses)}
+        />
+        <DataGridFacetedFilter
+          title="Placement status"
+          options={placementStatusOptions}
+          selected={search.filters.placementStatuses}
+          onChange={(values) => search.set('placementStatuses', values as typeof search.filters.placementStatuses)}
+        />
+        <DateRangeFilter
+          title="Last contacted"
+          from={search.filters.lastContactedFrom}
+          to={search.filters.lastContactedTo}
+          onChange={({ from, to }) => {
+            search.set('lastContactedFrom', from);
+            search.set('lastContactedTo', to);
+          }}
+        />
+      </div>
+
       <DataGrid
         columns={columns}
         data={candidates}
         isLoading={isLoading}
         isFetching={isFetching}
-        searchPlaceholder="Search candidates…"
-        filters={candidateFilters}
+        hideSearch
         onRowClick={setEditing}
+        enableRowRangeSelect
+        hideSelectColumn
         getRowId={(c) => c.id}
         onSelectionChange={setSelectedCandidates}
         server={{

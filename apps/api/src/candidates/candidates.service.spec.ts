@@ -1,12 +1,26 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { CandidateStatus, PlacementStatus, SubmissionStatus } from '@prisma/client';
 import { CandidatesService } from './candidates.service';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
+import { QueryCandidatesDto, SortOrder } from './dto/query-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 
+function baseQuery(overrides: Partial<QueryCandidatesDto> = {}): QueryCandidatesDto {
+  return { page: 1, pageSize: 20, sortOrder: SortOrder.asc, ...overrides } as QueryCandidatesDto;
+}
+
 describe('CandidatesService.create', () => {
   it('creates without setting displayId (DB sequence owns it) and returns the row', async () => {
-    const created = { id: 'c1', displayId: 'CDD-0105', fullName: 'Jane Doe', contactHistory: [] };
+    const created = {
+      id: 'c1',
+      displayId: 'CDD-0105',
+      fullName: 'Jane Doe',
+      contactHistory: [],
+      industry: null,
+      roleType: null,
+      specializations: [],
+    };
     const create = jest.fn().mockResolvedValue(created);
     const prisma = { candidate: { create } } as unknown as ExtendedPrismaClient;
     const base = {} as unknown as PrismaService;
@@ -21,9 +35,33 @@ describe('CandidatesService.create', () => {
       id: 'c1',
       displayId: 'CDD-0105',
       fullName: 'Jane Doe',
+      industry: null,
+      roleType: null,
+      specializations: [],
+      specializationIds: [],
       lastContactType: null,
       lastContactNotes: null,
       lastContactedBy: null,
+    });
+  });
+
+  it('nests specializationIds as a create on the join relation', async () => {
+    const created = {
+      id: 'c1',
+      fullName: 'Jane Doe',
+      contactHistory: [],
+      industry: null,
+      roleType: null,
+      specializations: [],
+    };
+    const create = jest.fn().mockResolvedValue(created);
+    const prisma = { candidate: { create } } as unknown as ExtendedPrismaClient;
+    const service = new CandidatesService(prisma, {} as unknown as PrismaService);
+
+    await service.create({ fullName: 'Jane Doe', specializationIds: ['spec1', 'spec2'] });
+
+    expect(create.mock.calls[0][0].data.specializations).toEqual({
+      create: [{ specializationId: 'spec1' }, { specializationId: 'spec2' }],
     });
   });
 });
@@ -35,7 +73,14 @@ describe('CandidatesService.remove (cascade soft-delete)', () => {
   function setup(submissionIds: string[]) {
     const prisma = {
       candidate: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'c1', fullName: 'Jane', contactHistory: [] }),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'c1',
+          fullName: 'Jane',
+          contactHistory: [],
+          industry: null,
+          roleType: null,
+          specializations: [],
+        }),
         delete: jest.fn().mockResolvedValue({ id: 'c1' }),
       },
       candidateSubmission: {
@@ -81,7 +126,11 @@ describe('CandidatesService.remove (cascade soft-delete)', () => {
 describe('CandidatesService.restore', () => {
   function setup(existing: unknown) {
     const prisma = {
-      candidate: { update: jest.fn().mockResolvedValue({ id: 'c1', contactHistory: [] }) },
+      candidate: {
+        update: jest
+          .fn()
+          .mockResolvedValue({ id: 'c1', contactHistory: [], industry: null, roleType: null, specializations: [] }),
+      },
     };
     const base = { candidate: { findUnique: jest.fn().mockResolvedValue(existing) } };
     const service = new CandidatesService(
@@ -149,5 +198,119 @@ describe('CandidatesService.purge', () => {
     );
     await expect(service.purge('missing')).rejects.toBeInstanceOf(NotFoundException);
     expect(base.candidate.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('CandidatesService.findAll (where-clause construction)', () => {
+  function setup() {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = { candidate: { findMany, count } } as unknown as ExtendedPrismaClient;
+    const service = new CandidatesService(prisma, {} as unknown as PrismaService);
+    return { findMany, count, service };
+  }
+
+  it('combines FK/array filters as AND-ed `in` clauses', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(
+      baseQuery({
+        statuses: [CandidateStatus.WARM, CandidateStatus.HOT],
+        industryIds: ['ind1'],
+        roleTypeIds: ['role1'],
+        specializationIds: ['spec1'],
+        consultantIds: ['cons1'],
+      }),
+    );
+
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toEqual(
+      expect.arrayContaining([
+        { status: { in: [CandidateStatus.WARM, CandidateStatus.HOT] } },
+        { industryId: { in: ['ind1'] } },
+        { roleTypeId: { in: ['role1'] } },
+        { specializations: { some: { specializationId: { in: ['spec1'] } } } },
+        { consultantId: { in: ['cons1'] } },
+      ]),
+    );
+  });
+
+  it('OR-matches any selected skill via JSON array_contains', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ skills: ['CNC', 'Welding'] }));
+
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toContainEqual({
+      OR: [{ skills: { array_contains: ['CNC'] } }, { skills: { array_contains: ['Welding'] } }],
+    });
+  });
+
+  it('filters by submission and placement status through the submissions relation', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(
+      baseQuery({
+        submissionStatuses: [SubmissionStatus.INTERVIEWING],
+        placementStatuses: [PlacementStatus.ACTIVE],
+      }),
+    );
+
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toEqual(
+      expect.arrayContaining([
+        { submissions: { some: { status: { in: [SubmissionStatus.INTERVIEWING] } } } },
+        { submissions: { some: { placement: { status: { in: [PlacementStatus.ACTIVE] } } } } },
+      ]),
+    );
+  });
+
+  it('filters lastContactedAt by the given from/to range', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ lastContactedFrom: '2026-01-01', lastContactedTo: '2026-06-30' }));
+
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toContainEqual({
+      lastContactedAt: { gte: new Date('2026-01-01'), lte: new Date('2026-06-30') },
+    });
+  });
+
+  it('broadens quick search across scalar columns plus industry/roleType relation names', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ q: 'Sydney' }));
+
+    const where = findMany.mock.calls[0][0].where;
+    const orClause = where.AND.find((c: Record<string, unknown>) => 'OR' in c);
+    expect(orClause.OR).toEqual(
+      expect.arrayContaining([
+        { industry: { name: { contains: 'Sydney', mode: 'insensitive' } } },
+        { roleType: { name: { contains: 'Sydney', mode: 'insensitive' } } },
+        { city: { contains: 'Sydney', mode: 'insensitive' } },
+      ]),
+    );
+  });
+
+  it('matches location against city OR country', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ location: 'Sydney' }));
+
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toContainEqual({
+      OR: [
+        { city: { contains: 'Sydney', mode: 'insensitive' } },
+        { country: { contains: 'Sydney', mode: 'insensitive' } },
+      ],
+    });
+  });
+
+  it('sorts by status using Postgres enum ordinal order (no CASE expression)', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ sortBy: 'status' as QueryCandidatesDto['sortBy'], sortOrder: SortOrder.asc }));
+
+    expect(findMany.mock.calls[0][0].orderBy).toEqual({ status: SortOrder.asc });
+  });
+
+  it('produces an empty where when no filters are given', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery());
+
+    expect(findMany.mock.calls[0][0].where).toEqual({});
   });
 });

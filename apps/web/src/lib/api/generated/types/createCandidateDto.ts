@@ -23,10 +23,10 @@ export interface CreateCandidateDto {
   country?: string;
   /** City */
   city?: string;
-  /** Industry */
-  industry?: string;
-  /** Role type */
-  roleType?: string;
+  /** Industry ID (see /industries) */
+  industryId?: string;
+  /** Role type ID (see /candidate-role-types) */
+  roleTypeId?: string;
   /** Current position */
   currentPosition?: string;
   /** Current company */
@@ -41,12 +41,12 @@ export interface CreateCandidateDto {
   resumeUrl?: string;
   /** Work history entries */
   workHistory?: WorkHistoryItemDto[];
-  /** Specialization tags */
-  specializations?: string[];
+  /** Specialization IDs (see /specializations) */
+  specializationIds?: string[];
+  /** Free-entry skill tags */
+  skills?: string[];
   /** Status; defaults to COLD when omitted */
   status?: CreateCandidateDtoStatus;
-  /** Notes */
-  notes?: string;
   /** Owning consultant ID */
   consultantId?: string;
 }

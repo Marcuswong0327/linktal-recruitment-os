@@ -1,14 +1,17 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
-import { CandidateStatus } from '@prisma/client';
+import { Transform, Type } from 'class-transformer';
+import { IsArray, IsEnum, IsISO8601, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { CandidateStatus, PlacementStatus, SubmissionStatus } from '@prisma/client';
 
 /**
- * Columns the list may be sorted by. Deliberately narrow: IDs, names, and
- * numeric fields — the things with a meaningful order. Categorical / free-text
- * columns (status, industry, roleType, country, city, currentCompany,
- * currentPosition, email) are exposed as filters instead, since sorting by them
- * only yields arbitrary alphabetical groupings.
+ * Columns the list may be sorted by. Deliberately narrow: IDs, names, numeric
+ * fields, and lastContactedAt (a denormalized column — see
+ * Candidate.lastContactedAt in schema.prisma). Categorical / free-text
+ * columns (industry, roleType, country, city, currentCompany,
+ * currentPosition, email) are exposed as filters instead, since sorting by
+ * them only yields arbitrary alphabetical groupings. `status` is included
+ * despite being categorical — its values have a meaningful temperature order
+ * (Cold < Warm < Hot < Placed), unlike the other enums here.
  */
 export enum CandidateSortField {
   displayId = 'displayId',
@@ -16,6 +19,8 @@ export enum CandidateSortField {
   familyName = 'familyName',
   givenName = 'givenName',
   yearsExperience = 'yearsExperience',
+  lastContactedAt = 'lastContactedAt',
+  status = 'status',
 }
 
 export enum SortOrder {
@@ -23,17 +28,8 @@ export enum SortOrder {
   desc = 'desc',
 }
 
-/**
- * Status filter for the list. Mirrors CandidateStatus but adds ALL so callers
- * can opt out of the status filter entirely (the default narrows to PLACED).
- */
-export enum CandidateStatusFilter {
-  COLD = 'COLD',
-  WARM = 'WARM',
-  HOT = 'HOT',
-  PLACED = 'PLACED',
-  ALL = 'ALL',
-}
+/** Normalizes a querystring value into a string array — Express/Nest won't auto-array a lone `?key=x`. */
+const toArray = ({ value }: { value: unknown }) => (Array.isArray(value) ? value : value === undefined ? value : [value]);
 
 export class QueryCandidatesDto {
   @ApiPropertyOptional({ description: 'Page number (1-based)', minimum: 1, default: 1 })
@@ -65,40 +61,73 @@ export class QueryCandidatesDto {
   sortOrder: SortOrder = SortOrder.asc;
 
   @ApiPropertyOptional({
-    description: 'Free-text search across fullName, email, currentCompany and displayId',
+    description:
+      'Free-text search across fullName, email, displayId, mobile, city, country, currentPosition, currentCompany, and industry/role type name',
   })
   @IsOptional()
   @IsString()
   q?: string;
 
-  @ApiPropertyOptional({
-    description: 'Filter by status. Defaults to ALL (every status); pass a specific status to narrow.',
-    enum: CandidateStatusFilter,
-    default: CandidateStatusFilter.ALL,
-  })
+  @ApiPropertyOptional({ description: 'Filter by status (one or more). Omit for all statuses.', enum: CandidateStatus, isArray: true })
   @IsOptional()
-  @IsEnum(CandidateStatusFilter)
-  status: CandidateStatusFilter = CandidateStatusFilter.ALL;
+  @Transform(toArray)
+  @IsArray()
+  @IsEnum(CandidateStatus, { each: true })
+  statuses?: CandidateStatus[];
 
-  @ApiPropertyOptional({ description: 'Filter by industry (contains, case-insensitive)' })
+  @ApiPropertyOptional({ description: 'Filter by industry ID(s) (see /industries)', type: [String] })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  industryIds?: string[];
+
+  @ApiPropertyOptional({ description: 'Filter by role type ID(s) (see /candidate-role-types)', type: [String] })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  roleTypeIds?: string[];
+
+  @ApiPropertyOptional({ description: 'Filter by specialization ID(s) (see /specializations)', type: [String] })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  specializationIds?: string[];
+
+  @ApiPropertyOptional({ description: 'Filter by skill tag(s) (exact match against the free-entry skills list)', type: [String] })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  skills?: string[];
+
+  @ApiPropertyOptional({ description: 'Filter by owning consultant ID(s)', type: [String] })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  consultantIds?: string[];
+
+  @ApiPropertyOptional({ description: 'Filter by submission status (has at least one submission with this status)', enum: SubmissionStatus, isArray: true })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsEnum(SubmissionStatus, { each: true })
+  submissionStatuses?: SubmissionStatus[];
+
+  @ApiPropertyOptional({ description: 'Filter by placement status (has at least one placement with this status)', enum: PlacementStatus, isArray: true })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsEnum(PlacementStatus, { each: true })
+  placementStatuses?: PlacementStatus[];
+
+  @ApiPropertyOptional({ description: 'Filter by location — matches city OR country (contains, case-insensitive)' })
   @IsOptional()
   @IsString()
-  industry?: string;
-
-  @ApiPropertyOptional({ description: 'Filter by role type (contains, case-insensitive)' })
-  @IsOptional()
-  @IsString()
-  roleType?: string;
-
-  @ApiPropertyOptional({ description: 'Filter by country (contains, case-insensitive)' })
-  @IsOptional()
-  @IsString()
-  country?: string;
-
-  @ApiPropertyOptional({ description: 'Filter by city (contains, case-insensitive)' })
-  @IsOptional()
-  @IsString()
-  city?: string;
+  location?: string;
 
   @ApiPropertyOptional({ description: 'Filter by current company (contains, case-insensitive)' })
   @IsOptional()
@@ -124,10 +153,13 @@ export class QueryCandidatesDto {
   @Min(0)
   yearsExperienceMax?: number;
 
-  /** Convenience: resolve the effective Prisma status filter (undefined = no filter). */
-  get statusFilter(): CandidateStatus | undefined {
-    return this.status === CandidateStatusFilter.ALL
-      ? undefined
-      : (this.status as unknown as CandidateStatus);
-  }
+  @ApiPropertyOptional({ description: 'Only candidates last contacted on/after this date (ISO 8601)' })
+  @IsOptional()
+  @IsISO8601()
+  lastContactedFrom?: string;
+
+  @ApiPropertyOptional({ description: 'Only candidates last contacted on/before this date (ISO 8601)' })
+  @IsOptional()
+  @IsISO8601()
+  lastContactedTo?: string;
 }
