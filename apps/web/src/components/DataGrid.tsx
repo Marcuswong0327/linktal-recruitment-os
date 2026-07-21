@@ -568,11 +568,11 @@ export function DataGrid<TData>({
     // own rows (which also makes the sticky header work); in an unconstrained
     // parent they're inert and the grid sizes to its content as before.
     <div ref={rootRef} className="flex min-h-0 flex-1 flex-col gap-3">
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-1 flex-wrap items-center gap-2">
+      {/* Toolbar: search + primary action on their own row, filters wrap freely on the next */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
           {!hideSearch ? (
-            <div className="relative w-full max-w-xs">
+            <div className="relative w-80">
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 ref={searchInputRef}
@@ -589,6 +589,11 @@ export function DataGrid<TData>({
               )}
             </div>
           ) : null}
+        </div>
+        {toolbar ? <div className="flex items-center gap-2">{toolbar}</div> : null}
+      </div>
+      {(filters ?? []).length > 0 || isFiltered ? (
+        <div className="flex flex-wrap items-center gap-2">
           {(filters ?? []).map((filter) => {
             const column = table.getColumn(filter.columnId);
             if (!column) return null;
@@ -624,8 +629,7 @@ export function DataGrid<TData>({
             </button>
           ) : null}
         </div>
-        {toolbar ? <div className="flex items-center gap-2">{toolbar}</div> : null}
-      </div>
+      ) : null}
       {/* Grid */}
       <div
         ref={gridContainerRef}
@@ -782,7 +786,6 @@ export function DataGrid<TData>({
       {server ? (
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-3">
-            {footerActions}
             <p className="text-xs text-muted-foreground">
               {isLoading
                 ? 'Loading…'
@@ -790,6 +793,7 @@ export function DataGrid<TData>({
                   ? '0 rows'
                   : `${(server.page - 1) * server.pageSize + 1}–${Math.min(server.page * server.pageSize, server.total)} of ${server.total} ${server.total === 1 ? 'row' : 'rows'}`}
             </p>
+            {footerActions}
           </div>
           <div className="flex items-center gap-2">
             {/* A single page never needs a page indicator or Prev/Next —
@@ -828,12 +832,12 @@ export function DataGrid<TData>({
         </div>
       ) : (
         <div className="flex items-center gap-3 px-1">
-          {footerActions}
           <p className="text-xs text-muted-foreground">
             {isLoading
               ? 'Loading…'
               : `${rows.length} of ${data.length} ${data.length === 1 ? 'row' : 'rows'}`}
           </p>
+          {footerActions}
         </div>
       )}
     </div>
