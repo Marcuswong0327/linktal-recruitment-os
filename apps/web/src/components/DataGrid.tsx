@@ -44,6 +44,11 @@ import {
   DataGridFacetedFilter,
   type FacetedFilterOption,
 } from '@/components/DataGridFacetedFilter';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 
 const SELECT_COLUMN_ID = '__select';
 
@@ -80,6 +85,30 @@ export interface DataGridColumnMeta {
 function columnAlignClass(meta: unknown): string | undefined {
   const align = (meta as DataGridColumnMeta | undefined)?.align;
   return align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : undefined;
+}
+
+/** Wraps `children` in a right-click menu when `content` is given; otherwise a passthrough. */
+function OptionalContextMenu({
+  content,
+  open,
+  onOpenChange,
+  disabled,
+  children,
+}: {
+  content: React.ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Blocks the native `contextmenu` listener outright — e.g. while a row drag is in progress. */
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  if (!content) return <>{children}</>;
+  return (
+    <ContextMenu open={open} onOpenChange={onOpenChange} disabled={disabled}>
+      <ContextMenuTrigger className="flex min-h-0 flex-1 flex-col">{children}</ContextMenuTrigger>
+      <ContextMenuContent>{content}</ContextMenuContent>
+    </ContextMenu>
+  );
 }
 
 /** Search/sort/filter state reported to the caller in server mode. */
@@ -183,6 +212,13 @@ interface DataGridProps<TData> {
    * get picked, so the checkboxes would just be redundant UI.
    */
   hideSelectColumn?: boolean;
+  /**
+   * Right-click menu shown while at least one row is selected — the same
+   * actions as `toolbar`'s bulk-actions menu, reachable by right-clicking
+   * anywhere over the grid instead of only via that button. Ignored (no
+   * special context menu) while nothing is selected.
+   */
+  selectionContextMenu?: React.ReactNode;
 }
 
 export function DataGrid<TData>({
@@ -204,11 +240,13 @@ export function DataGrid<TData>({
   canSelectRow,
   enableRowRangeSelect = false,
   hideSelectColumn = false,
+  selectionContextMenu,
 }: DataGridProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
+  const [contextMenuOpen, setContextMenuOpen] = React.useState(false);
 
   // ⌘K/Ctrl+K focuses the search box, matching the convention used by
   // GitHub/Linear/Slack/Vercel. Defaults to the Windows/Linux label until
@@ -631,6 +669,19 @@ export function DataGrid<TData>({
         </div>
       ) : null}
       {/* Grid */}
+      <OptionalContextMenu
+        content={selectionContextMenu}
+        open={contextMenuOpen}
+        // isRowDragging blocks the trigger itself (some trackpads fire a
+        // native `contextmenu` mid-drag — e.g. a resting second finger read
+        // as a two-finger "secondary click"); the dragStateRef check below
+        // is a backstop for the brief window right after mousedown, before
+        // isRowDragging flips true.
+        disabled={isRowDragging}
+        onOpenChange={(open) =>
+          setContextMenuOpen(open && selectedRowModel.rows.length > 0 && !dragStateRef.current)
+        }
+      >
       <div
         ref={gridContainerRef}
         className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card"
@@ -782,6 +833,7 @@ export function DataGrid<TData>({
           </TableBody>
         </Table>
       </div>
+      </OptionalContextMenu>
       {/* Footer: row count, plus page controls in server mode */}
       {server ? (
         <div className="flex items-center justify-between px-1">

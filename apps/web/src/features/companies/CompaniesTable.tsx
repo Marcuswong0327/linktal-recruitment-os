@@ -21,6 +21,12 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
+  ContextMenuItem,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+} from '@/components/ui/context-menu';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -540,6 +546,43 @@ export function CompaniesTable({
                 </AlertDialogContent>
               </AlertDialog>
             </div>
+          ) : null
+        }
+        selectionContextMenu={
+          !isViewer && selectedCompanies.length > 0 ? (
+            <>
+              <ContextMenuItem onClick={handleExport}>
+                <Download />
+                Export to Excel
+              </ContextMenuItem>
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>Set relationship</ContextMenuSubTrigger>
+                <ContextMenuSubContent>
+                  {clientStatuses.map((s) => (
+                    <ContextMenuItem
+                      key={s}
+                      onClick={() =>
+                        handleBulkUpdate({ status: s }, `Relationship set to ${clientStatusLabels[s]}`)
+                      }
+                    >
+                      <Badge variant={statusVariant[s]}>{clientStatusLabels[s]}</Badge>
+                    </ContextMenuItem>
+                  ))}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+              <ContextMenuItem onClick={() => setConsultantPickerOpen(true)}>
+                Set consultant
+              </ContextMenuItem>
+              <ContextMenuItem onClick={handleEnrichStakeholders}>
+                Enrich Data with Stakeholders
+              </ContextMenuItem>
+              {canDelete ? (
+                <ContextMenuItem variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>
+                  <Trash2 />
+                  Delete
+                </ContextMenuItem>
+              ) : null}
+            </>
           ) : null
         }
         server={{
