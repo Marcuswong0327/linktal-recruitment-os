@@ -141,7 +141,7 @@ function validateGuaranteePeriod(value: string): string | undefined {
   return undefined;
 }
 
-export function CompanyDetail({ id }: { id: string }) {
+export function CompanyDetail({ id, canEdit = true }: { id: string; canEdit?: boolean }) {
   const { data, isLoading, isError, error } = useGetClient(id);
   const company = data?.status === 200 ? data.data : undefined;
 
@@ -177,7 +177,9 @@ export function CompanyDetail({ id }: { id: string }) {
   }
 
   // key: remount the form when a different company loads so local state resets.
-  return <CompanyEditForm key={company.id} company={company} consultants={consultants} />;
+  return (
+    <CompanyEditForm key={company.id} company={company} consultants={consultants} canEdit={canEdit} />
+  );
 }
 
 /** Empty strings/inputs become `null` (not omitted) so a cleared field actually saves as cleared. */
@@ -215,9 +217,11 @@ function toPatch(values: {
 function CompanyEditForm({
   company,
   consultants,
+  canEdit,
 }: {
   company: Company;
   consultants: ConsultantEntity[];
+  canEdit: boolean;
 }) {
   const queryClient = useQueryClient();
 
@@ -274,7 +278,7 @@ function CompanyEditForm({
     : null;
   const { labelFor: consultantLabelFor } = useConsultantLookup(consultants, currentUser);
   const canModifyNote = (note: { by: string | null }) =>
-    note.by === session?.user?.consultantId || session?.user?.roleName === 'admin';
+    canEdit && (note.by === session?.user?.consultantId || session?.user?.roleName === 'admin');
   const [noteDraft, setNoteDraft] = React.useState('');
   const [editingNoteId, setEditingNoteId] = React.useState<string | null>(null);
   const [editDraft, setEditDraft] = React.useState('');
@@ -468,32 +472,34 @@ function CompanyEditForm({
               <span className="font-mono text-xs text-muted-foreground">{company.displayId}</span>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {hasErrors && Object.keys(touched).length > 0 ? (
-              <span className="text-xs text-destructive">Fix the highlighted fields to save</span>
-            ) : isDirty && !updateClient.isPending ? (
-              <span className="text-xs text-muted-foreground">Unsaved changes</span>
-            ) : null}
-            <Button
-              type="submit"
-              form="company-form"
-              size="lg"
-              disabled={updateClient.isPending || !isDirty}
-            >
-              {updateClient.isPending ? (
-                'Saving…'
-              ) : (
-                <>
-                  Save changes
-                  {isDirty ? (
-                    <Kbd className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground">
-                      <CornerDownLeft className="size-2.5" />
-                    </Kbd>
-                  ) : null}
-                </>
-              )}
-            </Button>
-          </div>
+          {canEdit ? (
+            <div className="flex items-center gap-3">
+              {hasErrors && Object.keys(touched).length > 0 ? (
+                <span className="text-xs text-destructive">Fix the highlighted fields to save</span>
+              ) : isDirty && !updateClient.isPending ? (
+                <span className="text-xs text-muted-foreground">Unsaved changes</span>
+              ) : null}
+              <Button
+                type="submit"
+                form="company-form"
+                size="lg"
+                disabled={updateClient.isPending || !isDirty}
+              >
+                {updateClient.isPending ? (
+                  'Saving…'
+                ) : (
+                  <>
+                    Save changes
+                    {isDirty ? (
+                      <Kbd className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground">
+                        <CornerDownLeft className="size-2.5" />
+                      </Kbd>
+                    ) : null}
+                  </>
+                )}
+              </Button>
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -520,6 +526,7 @@ function CompanyEditForm({
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
                     onBlur={() => markTouched('companyName')}
+                    disabled={!canEdit}
                   />
                 </FormField>
                 <FormField
@@ -533,6 +540,7 @@ function CompanyEditForm({
                     onValueChange={setIndustryId}
                     options={industries}
                     onCreate={handleCreateIndustry}
+                    disabled={!canEdit}
                   />
                 </FormField>
                 <FormField
@@ -546,16 +554,23 @@ function CompanyEditForm({
                     onValueChange={setSpecializationId}
                     options={specializations}
                     onCreate={handleCreateSpecialization}
+                    disabled={!canEdit}
                   />
                 </FormField>
                 <FormField label="City" htmlFor="city">
-                  <Input id="city" value={city} onChange={(e) => setCity(e.target.value)} />
+                  <Input
+                    id="city"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    disabled={!canEdit}
+                  />
                 </FormField>
                 <FormField label="Country" htmlFor="country">
                   <Input
                     id="country"
                     value={country}
                     onChange={(e) => setCountry(e.target.value)}
+                    disabled={!canEdit}
                   />
                 </FormField>
                 <FormField
@@ -569,6 +584,7 @@ function CompanyEditForm({
                     type="url"
                     placeholder="https://…"
                     value={website}
+                    disabled={!canEdit}
                     onChange={(e) => setWebsite(e.target.value)}
                     onBlur={() => markTouched('website')}
                   />
@@ -595,6 +611,7 @@ function CompanyEditForm({
                     value={status}
                     onValueChange={(v) => setStatus(v as ClientStatus)}
                     options={statusOptions}
+                    disabled={!canEdit}
                   />
                 </FormField>
                 <FormField
@@ -607,6 +624,7 @@ function CompanyEditForm({
                     value={quality}
                     onValueChange={(v) => setQuality(v as ClientQuality)}
                     options={qualityOptions}
+                    disabled={!canEdit}
                   />
                 </FormField>
                 <FormField
@@ -619,6 +637,7 @@ function CompanyEditForm({
                     value={String(tobSigned)}
                     onValueChange={(v) => setTobSigned(v === 'true')}
                     options={tobOptions}
+                    disabled={!canEdit}
                   />
                 </FormField>
                 <FormField
@@ -635,6 +654,7 @@ function CompanyEditForm({
                     value={feePercentage}
                     onChange={(e) => setFeePercentage(e.target.value)}
                     onBlur={() => markTouched('feePercentage')}
+                    disabled={!canEdit}
                   />
                 </FormField>
                 <FormField
@@ -651,6 +671,7 @@ function CompanyEditForm({
                     value={guaranteePeriod}
                     onChange={(e) => setGuaranteePeriod(e.target.value)}
                     onBlur={() => markTouched('guaranteePeriod')}
+                    disabled={!canEdit}
                   />
                 </FormField>
                 <FormField
@@ -665,6 +686,7 @@ function CompanyEditForm({
                     consultants={consultants}
                     currentUser={currentUser}
                     allowUnassign={session?.user?.roleName !== 'consultant'}
+                    disabled={!canEdit}
                   />
                 </FormField>
               </CardContent>
@@ -679,28 +701,30 @@ function CompanyEditForm({
                 <CardDescription>Internal notes — not visible to the client.</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
-                <div className="flex items-start gap-2">
-                  <textarea
-                    id="notes"
-                    aria-label="Add a note"
-                    placeholder="Add a note…"
-                    className={textareaClass}
-                    value={noteDraft}
-                    onChange={(e) => setNoteDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAddNote(e);
-                    }}
-                  />
-                  <Button
-                    type="button"
-                    size="icon"
-                    disabled={addNote.isPending || !noteDraft.trim()}
-                    onClick={handleAddNote}
-                    aria-label="Add note"
-                  >
-                    <SendHorizontal />
-                  </Button>
-                </div>
+                {canEdit ? (
+                  <div className="flex items-start gap-2">
+                    <textarea
+                      id="notes"
+                      aria-label="Add a note"
+                      placeholder="Add a note…"
+                      className={textareaClass}
+                      value={noteDraft}
+                      onChange={(e) => setNoteDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAddNote(e);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      disabled={addNote.isPending || !noteDraft.trim()}
+                      onClick={handleAddNote}
+                      aria-label="Add note"
+                    >
+                      <SendHorizontal />
+                    </Button>
+                  </div>
+                ) : null}
                 {company.notes && company.notes.length > 0 ? (
                   <ul className="flex flex-col gap-3">
                     {[...company.notes].reverse().map((note) =>

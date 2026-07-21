@@ -44,6 +44,11 @@ import {
   DataGridFacetedFilter,
   type FacetedFilterOption,
 } from '@/components/DataGridFacetedFilter';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 
 const SELECT_COLUMN_ID = '__select';
 
@@ -82,6 +87,30 @@ function columnAlignClass(meta: unknown): string | undefined {
   return align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : undefined;
 }
 
+/** Wraps `children` in a right-click menu when `content` is given; otherwise a passthrough. */
+function OptionalContextMenu({
+  content,
+  open,
+  onOpenChange,
+  disabled,
+  children,
+}: {
+  content: React.ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Blocks the native `contextmenu` listener outright — e.g. while a row drag is in progress. */
+  disabled?: boolean;
+  children: React.ReactNode;
+}) {
+  if (!content) return <>{children}</>;
+  return (
+    <ContextMenu open={open} onOpenChange={onOpenChange} disabled={disabled}>
+      <ContextMenuTrigger className="flex min-h-0 flex-1 flex-col">{children}</ContextMenuTrigger>
+      <ContextMenuContent>{content}</ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
 /** Search/sort/filter state reported to the caller in server mode. */
 export interface DataGridQuery {
   search: string;
@@ -102,6 +131,16 @@ export interface DataGridServerProps {
    * The caller maps this to API params and should reset the page to 1.
    */
   onQueryChange: (query: DataGridQuery) => void;
+  /**
+   * Infinite-scroll mode: no Prev/Next controls. Instead, `onPageChange(page
+   * + 1)` fires automatically once the user scrolls near the last loaded
+   * row. `data` must contain every row loaded so far (pages 1..page
+   * concatenated), not just the current page — same as `onPageChange` would
+   * otherwise require, just accumulated by the caller instead of replaced.
+   */
+  infiniteScroll?: boolean;
+  /** A next-page fetch is in flight — shows a footer spinner and blocks re-triggering `onPageChange` (infiniteScroll only). */
+  isFetchingNextPage?: boolean;
 }
 
 /** Keeps a row when its cell value is one of the selected filter values. */
@@ -134,6 +173,8 @@ interface DataGridProps<TData> {
   filters?: DataGridFilter[];
   /** Rendered on the right side of the toolbar (filters, "Add" button, etc.). */
   toolbar?: React.ReactNode;
+  /** Rendered in the footer, to the left of the row-count text (e.g. a primary "Add" action). */
+  footerActions?: React.ReactNode;
   /** Fires when a row is clicked — used to open the entity detail drawer. */
   onRowClick?: (row: TData) => void;
   /** Shown when there are zero rows (before filtering). */
@@ -181,6 +222,13 @@ interface DataGridProps<TData> {
    * get picked, so the checkboxes would just be redundant UI.
    */
   hideSelectColumn?: boolean;
+  /**
+   * Right-click menu shown while at least one row is selected — the same
+   * actions as `toolbar`'s bulk-actions menu, reachable by right-clicking
+   * anywhere over the grid instead of only via that button. Ignored (no
+   * special context menu) while nothing is selected.
+   */
+  selectionContextMenu?: React.ReactNode;
 }
 
 export function DataGrid<TData>({
@@ -190,6 +238,7 @@ export function DataGrid<TData>({
   hideSearch = false,
   filters,
   toolbar,
+  footerActions,
   onRowClick,
   emptyState,
   isLoading = false,
@@ -201,11 +250,13 @@ export function DataGrid<TData>({
   canSelectRow,
   enableRowRangeSelect = false,
   hideSelectColumn = false,
+  selectionContextMenu,
 }: DataGridProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
+  const [contextMenuOpen, setContextMenuOpen] = React.useState(false);
 
   // ⌘K/Ctrl+K focuses the search box, matching the convention used by
   // GitHub/Linear/Slack/Vercel. Defaults to the Windows/Linux label until
@@ -527,6 +578,40 @@ export function DataGrid<TData>({
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [onSelectionChange]);
 
+  // Infinite scroll: observes a sentinel row placed after the last loaded
+  // row and requests the next page once it scrolls into view. IntersectionObserver's
+  // default root (the viewport) still correctly reports visibility through
+  // the table's own nested scroll container, so no explicit root wiring is
+  // needed here.
+  //
+  // `server` is a fresh object literal every render (the caller passes
+  // `server={{ ... }}` inline), so a ref callback that closed over it
+  // directly would tear down and recreate the observer on every render —
+  // and since `observer.observe()` fires its callback immediately with the
+  // *current* intersection state, recreating it while the sentinel is still
+  // in view (e.g. right after loading a page, before new rows push it
+  // off-screen) re-fires `onPageChange` again before `isFetchingNextPage`
+  // has had a chance to become true, snowballing into duplicate page
+  // fetches. Reading `server` from a ref instead keeps the callback fresh
+  // without ever recreating the observer itself.
+  const serverRef = React.useRef(server);
+  serverRef.current = server;
+  const loadMoreRef = React.useCallback((node: HTMLTableRowElement | null) => {
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const s = serverRef.current;
+        if (!s?.infiniteScroll) return;
+        if (entry?.isIntersecting && s.page < s.pageCount && !s.isFetchingNextPage) {
+          s.onPageChange(s.page + 1);
+        }
+      },
+      { rootMargin: '300px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   // Pass 2: refine upward with actual cell content once real rows are
   // available (a short header like "TOB" undersells the pill it holds). Cell
   // content depends on which page/rows are loaded — measuring on every data
@@ -565,11 +650,11 @@ export function DataGrid<TData>({
     // own rows (which also makes the sticky header work); in an unconstrained
     // parent they're inert and the grid sizes to its content as before.
     <div ref={rootRef} className="flex min-h-0 flex-1 flex-col gap-3">
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-1 flex-wrap items-center gap-2">
+      {/* Toolbar: search + primary action on their own row, filters wrap freely on the next */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
           {!hideSearch ? (
-            <div className="relative w-full max-w-xs">
+            <div className="relative w-80">
               <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 ref={searchInputRef}
@@ -586,6 +671,11 @@ export function DataGrid<TData>({
               )}
             </div>
           ) : null}
+        </div>
+        {toolbar ? <div className="flex items-center gap-2">{toolbar}</div> : null}
+      </div>
+      {(filters ?? []).length > 0 || isFiltered ? (
+        <div className="flex flex-wrap items-center gap-2">
           {(filters ?? []).map((filter) => {
             const column = table.getColumn(filter.columnId);
             if (!column) return null;
@@ -621,9 +711,21 @@ export function DataGrid<TData>({
             </button>
           ) : null}
         </div>
-        {toolbar ? <div className="flex items-center gap-2">{toolbar}</div> : null}
-      </div>
+      ) : null}
       {/* Grid */}
+      <OptionalContextMenu
+        content={selectionContextMenu}
+        open={contextMenuOpen}
+        // isRowDragging blocks the trigger itself (some trackpads fire a
+        // native `contextmenu` mid-drag — e.g. a resting second finger read
+        // as a two-finger "secondary click"); the dragStateRef check below
+        // is a backstop for the brief window right after mousedown, before
+        // isRowDragging flips true.
+        disabled={isRowDragging}
+        onOpenChange={(open) =>
+          setContextMenuOpen(open && selectedRowModel.rows.length > 0 && !dragStateRef.current)
+        }
+      >
       <div
         ref={gridContainerRef}
         className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card"
@@ -746,6 +848,21 @@ export function DataGrid<TData>({
                     ))}
                   </TableRow>
                 ))}
+                {server?.infiniteScroll && server.page < server.pageCount ? (
+                  <TableRow ref={loadMoreRef} className="hover:bg-transparent">
+                    <TableCell
+                      colSpan={totalColumns}
+                      className="py-3 text-center text-xs text-muted-foreground"
+                    >
+                      {server.isFetchingNextPage ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Loader2 className="size-3 animate-spin" aria-hidden />
+                          Loading more…
+                        </span>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
                 {/* End-of-list marker on the final page. As the new last child
                     it also restores the bottom border of the last data row
                     (the primitive strips it from :last-child). */}
@@ -775,22 +892,29 @@ export function DataGrid<TData>({
           </TableBody>
         </Table>
       </div>
+      </OptionalContextMenu>
       {/* Footer: row count, plus page controls in server mode */}
       {server ? (
         <div className="flex items-center justify-between px-1">
-          <p className="text-xs text-muted-foreground">
-            {isLoading
-              ? 'Loading…'
-              : server.total === 0
-                ? '0 rows'
-                : `${(server.page - 1) * server.pageSize + 1}–${Math.min(server.page * server.pageSize, server.total)} of ${server.total} ${server.total === 1 ? 'row' : 'rows'}`}
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-muted-foreground">
+              {isLoading
+                ? 'Loading…'
+                : server.total === 0
+                  ? '0 rows'
+                  : server.infiniteScroll
+                    ? `Showing ${rows.length} of ${server.total} ${server.total === 1 ? 'row' : 'rows'}`
+                    : `${(server.page - 1) * server.pageSize + 1}–${Math.min(server.page * server.pageSize, server.total)} of ${server.total} ${server.total === 1 ? 'row' : 'rows'}`}
+            </p>
+            {footerActions}
+          </div>
           <div className="flex items-center gap-2">
             {/* A single page never needs a page indicator or Prev/Next —
                 showing "Page 1 of 1" with both buttons disabled is just
                 noise. Still shows the fetching spinner via the row-count
-                text on the left. */}
-            {server.pageCount > 1 ? (
+                text on the left. Infinite scroll never shows Prev/Next —
+                the sentinel row drives paging instead. */}
+            {!server.infiniteScroll && server.pageCount > 1 ? (
               <>
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   {isFetching && !isLoading ? (
@@ -821,11 +945,14 @@ export function DataGrid<TData>({
           </div>
         </div>
       ) : (
-        <p className="px-1 text-xs text-muted-foreground">
-          {isLoading
-            ? 'Loading…'
-            : `${rows.length} of ${data.length} ${data.length === 1 ? 'row' : 'rows'}`}
-        </p>
+        <div className="flex items-center gap-3 px-1">
+          <p className="text-xs text-muted-foreground">
+            {isLoading
+              ? 'Loading…'
+              : `${rows.length} of ${data.length} ${data.length === 1 ? 'row' : 'rows'}`}
+          </p>
+          {footerActions}
+        </div>
       )}
     </div>
   );
