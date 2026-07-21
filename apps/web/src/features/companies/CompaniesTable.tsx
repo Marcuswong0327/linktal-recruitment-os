@@ -6,7 +6,7 @@ import { Combobox } from '@base-ui/react/combobox';
 import { ChevronDown, Download, Plus, Trash2 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
-import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   AlertDialog,
@@ -57,10 +57,10 @@ import { FormField } from '@/components/FormField';
 import { NameComboboxFilter } from '@/components/NameComboboxFilter';
 import {
   deleteClient as deleteClientRequest,
+  getClients,
   getGetClientsQueryKey,
   updateClient as updateClientRequest,
   useCreateClient,
-  useGetClients,
 } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import {
@@ -129,7 +129,6 @@ export function CompaniesTable({
   // there'd be nothing to do with a selection) no row selection at all,
   // rather than showing disabled controls for actions they can never take.
   const isViewer = session?.user?.roleName === 'viewer';
-  const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
   const [status, setStatus] = React.useState<GetClientsStatus | undefined>();
   const [quality, setQuality] = React.useState<GetClientsQuality | undefined>();
@@ -147,22 +146,50 @@ export function CompaniesTable({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
 
-  const { data, isLoading, isFetching, isError, error } = useGetClients(
-    {
-      page,
-      pageSize: PAGE_SIZE,
-      q: search,
-      status,
-      quality,
-      industry,
-      specialization,
-      tobSigned,
-      consultantId,
-      sortBy,
-      sortOrder,
+  // Companies load a page at a time but accumulate — no Prev/Next controls,
+  // the grid fetches the next page itself as the user scrolls near the
+  // bottom (see DataGrid's `infiniteScroll`). Changing any filter/search/sort
+  // value below changes this query's key, which resets the accumulated pages
+  // and starts over from page 1 — same as the old `setPage(1)` did.
+  const {
+    data,
+    isLoading,
+    isFetching,
+    isFetchingNextPage,
+    fetchNextPage,
+    isError,
+    error,
+  } = useInfiniteQuery({
+    queryKey: [
+      ...getGetClientsQueryKey(),
+      'infinite',
+      { pageSize: PAGE_SIZE, q: search, status, quality, industry, specialization, tobSigned, consultantId, sortBy, sortOrder },
+    ],
+    queryFn: ({ pageParam, signal }) =>
+      getClients(
+        {
+          page: pageParam,
+          pageSize: PAGE_SIZE,
+          q: search,
+          status,
+          quality,
+          industry,
+          specialization,
+          tobSigned,
+          consultantId,
+          sortBy,
+          sortOrder,
+        },
+        { signal },
+      ),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.status !== 200) return undefined;
+      const { page, pageCount } = lastPage.data;
+      return page < pageCount ? page + 1 : undefined;
     },
-    { query: { placeholderData: keepPreviousData } },
-  );
+    placeholderData: keepPreviousData,
+  });
 
   // Client-side join: the API returns consultantId only, so pull the full
   // consultant list once to resolve names for the table and edit form.
@@ -243,8 +270,30 @@ export function CompaniesTable({
     },
   });
 
-  const result = data?.status === 200 ? data.data : undefined;
-  const companies = result?.data ?? [];
+  const pages = data?.pages ?? [];
+  // Memoized on `data` (only changes when a fetch actually resolves) rather
+  // than recomputed every render — DataGrid clears row selection whenever
+  // its `data` prop gets a new array reference (so a page swap doesn't leave
+  // a stale selection behind), and selecting rows itself triggers a
+  // re-render here; an unmemoized array would get a fresh reference on that
+  // re-render and immediately wipe the selection it just set.
+  //
+  // Deduped by id as a safety net — a mutation shifting sort order (e.g. the
+  // default lastContactedAt sort) between an already-loaded page and a
+  // refetch of it can otherwise land the same row in two pages at once.
+  const companies = React.useMemo(
+    () =>
+      Array.from(
+        new Map(
+          (data?.pages ?? []).flatMap((p) =>
+            p.status === 200 ? p.data.data.map((c) => [c.id, c] as const) : [],
+          ),
+        ).values(),
+      ),
+    [data],
+  );
+  const lastPage = pages.length > 0 ? pages[pages.length - 1] : undefined;
+  const lastPageOk = lastPage?.status === 200 ? lastPage.data : undefined;
 
   function handleQueryChange({ search, sorting, columnFilters }: DataGridQuery) {
     const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as
@@ -273,7 +322,6 @@ export function CompaniesTable({
     setConsultantId(consultantFilter?.[0]);
     setSortBy(sortField);
     setSortOrder(sort?.desc ? GetClientsSortOrder.desc : GetClientsSortOrder.asc);
-    setPage(1);
   }
 
   function handleCreate(values: CompanyFormValues) {
@@ -586,12 +634,14 @@ export function CompaniesTable({
           ) : null
         }
         server={{
-          total: result?.total ?? 0,
-          page,
+          total: lastPageOk?.total ?? 0,
+          page: Math.max(pages.length, 1),
           pageSize: PAGE_SIZE,
-          pageCount: result?.pageCount ?? 1,
-          onPageChange: setPage,
+          pageCount: lastPageOk?.pageCount ?? 1,
+          onPageChange: () => fetchNextPage(),
           onQueryChange: handleQueryChange,
+          infiniteScroll: true,
+          isFetchingNextPage,
         }}
       />
 

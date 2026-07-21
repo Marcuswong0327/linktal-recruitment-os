@@ -131,6 +131,16 @@ export interface DataGridServerProps {
    * The caller maps this to API params and should reset the page to 1.
    */
   onQueryChange: (query: DataGridQuery) => void;
+  /**
+   * Infinite-scroll mode: no Prev/Next controls. Instead, `onPageChange(page
+   * + 1)` fires automatically once the user scrolls near the last loaded
+   * row. `data` must contain every row loaded so far (pages 1..page
+   * concatenated), not just the current page — same as `onPageChange` would
+   * otherwise require, just accumulated by the caller instead of replaced.
+   */
+  infiniteScroll?: boolean;
+  /** A next-page fetch is in flight — shows a footer spinner and blocks re-triggering `onPageChange` (infiniteScroll only). */
+  isFetchingNextPage?: boolean;
 }
 
 /** Keeps a row when its cell value is one of the selected filter values. */
@@ -568,6 +578,40 @@ export function DataGrid<TData>({
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [onSelectionChange]);
 
+  // Infinite scroll: observes a sentinel row placed after the last loaded
+  // row and requests the next page once it scrolls into view. IntersectionObserver's
+  // default root (the viewport) still correctly reports visibility through
+  // the table's own nested scroll container, so no explicit root wiring is
+  // needed here.
+  //
+  // `server` is a fresh object literal every render (the caller passes
+  // `server={{ ... }}` inline), so a ref callback that closed over it
+  // directly would tear down and recreate the observer on every render —
+  // and since `observer.observe()` fires its callback immediately with the
+  // *current* intersection state, recreating it while the sentinel is still
+  // in view (e.g. right after loading a page, before new rows push it
+  // off-screen) re-fires `onPageChange` again before `isFetchingNextPage`
+  // has had a chance to become true, snowballing into duplicate page
+  // fetches. Reading `server` from a ref instead keeps the callback fresh
+  // without ever recreating the observer itself.
+  const serverRef = React.useRef(server);
+  serverRef.current = server;
+  const loadMoreRef = React.useCallback((node: HTMLTableRowElement | null) => {
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const s = serverRef.current;
+        if (!s?.infiniteScroll) return;
+        if (entry?.isIntersecting && s.page < s.pageCount && !s.isFetchingNextPage) {
+          s.onPageChange(s.page + 1);
+        }
+      },
+      { rootMargin: '300px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   // Pass 2: refine upward with actual cell content once real rows are
   // available (a short header like "TOB" undersells the pill it holds). Cell
   // content depends on which page/rows are loaded — measuring on every data
@@ -804,6 +848,21 @@ export function DataGrid<TData>({
                     ))}
                   </TableRow>
                 ))}
+                {server?.infiniteScroll && server.page < server.pageCount ? (
+                  <TableRow ref={loadMoreRef} className="hover:bg-transparent">
+                    <TableCell
+                      colSpan={totalColumns}
+                      className="py-3 text-center text-xs text-muted-foreground"
+                    >
+                      {server.isFetchingNextPage ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Loader2 className="size-3 animate-spin" aria-hidden />
+                          Loading more…
+                        </span>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
                 {/* End-of-list marker on the final page. As the new last child
                     it also restores the bottom border of the last data row
                     (the primitive strips it from :last-child). */}
@@ -843,7 +902,9 @@ export function DataGrid<TData>({
                 ? 'Loading…'
                 : server.total === 0
                   ? '0 rows'
-                  : `${(server.page - 1) * server.pageSize + 1}–${Math.min(server.page * server.pageSize, server.total)} of ${server.total} ${server.total === 1 ? 'row' : 'rows'}`}
+                  : server.infiniteScroll
+                    ? `Showing ${rows.length} of ${server.total} ${server.total === 1 ? 'row' : 'rows'}`
+                    : `${(server.page - 1) * server.pageSize + 1}–${Math.min(server.page * server.pageSize, server.total)} of ${server.total} ${server.total === 1 ? 'row' : 'rows'}`}
             </p>
             {footerActions}
           </div>
@@ -851,8 +912,9 @@ export function DataGrid<TData>({
             {/* A single page never needs a page indicator or Prev/Next —
                 showing "Page 1 of 1" with both buttons disabled is just
                 noise. Still shows the fetching spinner via the row-count
-                text on the left. */}
-            {server.pageCount > 1 ? (
+                text on the left. Infinite scroll never shows Prev/Next —
+                the sentinel row drives paging instead. */}
+            {!server.infiniteScroll && server.pageCount > 1 ? (
               <>
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   {isFetching && !isLoading ? (
