@@ -19,5 +19,6 @@ export default async function CompanyPage({
   }
 
   const { id } = await params;
-  return <CompanyDetail id={id} />;
+  const canEdit = hasPermission(session, 'client', 'update');
+  return <CompanyDetail id={id} canEdit={canEdit} />;
 }

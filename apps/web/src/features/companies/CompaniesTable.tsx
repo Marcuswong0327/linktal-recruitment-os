@@ -6,7 +6,7 @@ import { Combobox } from '@base-ui/react/combobox';
 import { ChevronDown, Download, Plus, Trash2 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
-import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   AlertDialog,
@@ -17,10 +17,15 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  ContextMenuItem,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+} from '@/components/ui/context-menu';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,12 +54,13 @@ import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
+import { NameComboboxFilter } from '@/components/NameComboboxFilter';
 import {
   deleteClient as deleteClientRequest,
+  getClients,
   getGetClientsQueryKey,
   updateClient as updateClientRequest,
   useCreateClient,
-  useGetClients,
 } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import {
@@ -73,6 +79,8 @@ import {
   type ConsultantEntity,
   type GetClientsQuality,
   type GetClientsStatus,
+  type IndustryEntity,
+  type SpecializationEntity,
   type UpdateClientDto,
 } from '@/lib/api/generated/types';
 import { getCompanyColumns, qualityOptions, statusOptions, statusVariant, tobOptions } from './columns';
@@ -117,10 +125,15 @@ export function CompaniesTable({
   // disabled.
   const { data: session } = useSession();
   const isConsultant = session?.user?.roleName === 'consultant';
-  const [page, setPage] = React.useState(1);
+  // Viewers are read-only end to end — no create, no bulk actions, and (since
+  // there'd be nothing to do with a selection) no row selection at all,
+  // rather than showing disabled controls for actions they can never take.
+  const isViewer = session?.user?.roleName === 'viewer';
   const [search, setSearch] = React.useState<string | undefined>();
   const [status, setStatus] = React.useState<GetClientsStatus | undefined>();
   const [quality, setQuality] = React.useState<GetClientsQuality | undefined>();
+  const [industry, setIndustry] = React.useState<string | undefined>();
+  const [specialization, setSpecialization] = React.useState<string | undefined>();
   const [tobSigned, setTobSigned] = React.useState<boolean | undefined>();
   const [consultantId, setConsultantId] = React.useState<string | undefined>();
   const [sortBy, setSortBy] = React.useState<GetClientsSortBy | undefined>();
@@ -130,18 +143,65 @@ export function CompaniesTable({
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = React.useState(false);
   const [consultantPickerOpen, setConsultantPickerOpen] = React.useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
 
-  const { data, isLoading, isFetching, isError, error } = useGetClients(
-    { page, pageSize: PAGE_SIZE, q: search, status, quality, tobSigned, consultantId, sortBy, sortOrder },
-    { query: { placeholderData: keepPreviousData } },
-  );
+  // Companies load a page at a time but accumulate — no Prev/Next controls,
+  // the grid fetches the next page itself as the user scrolls near the
+  // bottom (see DataGrid's `infiniteScroll`). Changing any filter/search/sort
+  // value below changes this query's key, which resets the accumulated pages
+  // and starts over from page 1 — same as the old `setPage(1)` did.
+  const {
+    data,
+    isLoading,
+    isFetching,
+    isFetchingNextPage,
+    fetchNextPage,
+    isError,
+    error,
+  } = useInfiniteQuery({
+    queryKey: [
+      ...getGetClientsQueryKey(),
+      'infinite',
+      { pageSize: PAGE_SIZE, q: search, status, quality, industry, specialization, tobSigned, consultantId, sortBy, sortOrder },
+    ],
+    queryFn: ({ pageParam, signal }) =>
+      getClients(
+        {
+          page: pageParam,
+          pageSize: PAGE_SIZE,
+          q: search,
+          status,
+          quality,
+          industry,
+          specialization,
+          tobSigned,
+          consultantId,
+          sortBy,
+          sortOrder,
+        },
+        { signal },
+      ),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.status !== 200) return undefined;
+      const { page, pageCount } = lastPage.data;
+      return page < pageCount ? page + 1 : undefined;
+    },
+    placeholderData: keepPreviousData,
+  });
 
   // Client-side join: the API returns consultantId only, so pull the full
   // consultant list once to resolve names for the table and edit form.
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
   const { labelFor: consultantLabelFor } = useConsultantLookup(consultants);
+  // Also drives the Industry/Specialization filter pickers below.
+  const { data: industryData } = useGetIndustries();
+  const industries: IndustryEntity[] = industryData?.status === 200 ? industryData.data : [];
+  const { data: specializationData } = useGetSpecializations();
+  const specializations: SpecializationEntity[] =
+    specializationData?.status === 200 ? specializationData.data : [];
   // Disables a row's inline pills (relationship/TOB/consultant) while any one of them is saving.
   const [pendingRowId, setPendingRowId] = React.useState<string | null>(null);
 
@@ -149,6 +209,32 @@ export function CompaniesTable({
     () => [
       { columnId: 'status', title: 'Relationship', single: true, options: statusOptions },
       { columnId: 'quality', title: 'Quality', single: true, options: qualityOptions },
+      {
+        columnId: 'industry',
+        title: 'Industry',
+        single: true,
+        render: ({ selected, onChange }: { selected: string[]; onChange: (value: string[]) => void }) => (
+          <NameComboboxFilter
+            title="Industry"
+            value={selected[0]}
+            onValueChange={(v) => onChange(v !== undefined ? [v] : [])}
+            options={industries}
+          />
+        ),
+      },
+      {
+        columnId: 'specialization',
+        title: 'Specialization',
+        single: true,
+        render: ({ selected, onChange }: { selected: string[]; onChange: (value: string[]) => void }) => (
+          <NameComboboxFilter
+            title="Specialization"
+            value={selected[0]}
+            onValueChange={(v) => onChange(v !== undefined ? [v] : [])}
+            options={specializations}
+          />
+        ),
+      },
       { columnId: 'tobSigned', title: 'TOB', single: true, options: tobOptions },
       ...(isConsultant
         ? []
@@ -170,7 +256,7 @@ export function CompaniesTable({
             },
           ]),
     ],
-    [consultants, isConsultant],
+    [consultants, industries, specializations, isConsultant],
   );
 
   const createClient = useCreateClient({
@@ -184,13 +270,39 @@ export function CompaniesTable({
     },
   });
 
-  const result = data?.status === 200 ? data.data : undefined;
-  const companies = result?.data ?? [];
+  const pages = data?.pages ?? [];
+  // Memoized on `data` (only changes when a fetch actually resolves) rather
+  // than recomputed every render — DataGrid clears row selection whenever
+  // its `data` prop gets a new array reference (so a page swap doesn't leave
+  // a stale selection behind), and selecting rows itself triggers a
+  // re-render here; an unmemoized array would get a fresh reference on that
+  // re-render and immediately wipe the selection it just set.
+  //
+  // Deduped by id as a safety net — a mutation shifting sort order (e.g. the
+  // default lastContactedAt sort) between an already-loaded page and a
+  // refetch of it can otherwise land the same row in two pages at once.
+  const companies = React.useMemo(
+    () =>
+      Array.from(
+        new Map(
+          (data?.pages ?? []).flatMap((p) =>
+            p.status === 200 ? p.data.data.map((c) => [c.id, c] as const) : [],
+          ),
+        ).values(),
+      ),
+    [data],
+  );
+  const lastPage = pages.length > 0 ? pages[pages.length - 1] : undefined;
+  const lastPageOk = lastPage?.status === 200 ? lastPage.data : undefined;
 
   function handleQueryChange({ search, sorting, columnFilters }: DataGridQuery) {
     const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as
       string[] | undefined;
     const qualityFilter = columnFilters.find((f) => f.id === 'quality')?.value as
+      string[] | undefined;
+    const industryFilter = columnFilters.find((f) => f.id === 'industry')?.value as
+      string[] | undefined;
+    const specializationFilter = columnFilters.find((f) => f.id === 'specialization')?.value as
       string[] | undefined;
     const tobFilter = columnFilters.find((f) => f.id === 'tobSigned')?.value as
       string[] | undefined;
@@ -204,11 +316,12 @@ export function CompaniesTable({
     setSearch(search.trim() || undefined);
     setStatus(statusFilter?.[0] as GetClientsStatus | undefined);
     setQuality(qualityFilter?.[0] as GetClientsQuality | undefined);
+    setIndustry(industryFilter?.[0]);
+    setSpecialization(specializationFilter?.[0]);
     setTobSigned(tobFilter?.[0] === undefined ? undefined : tobFilter[0] === 'true');
     setConsultantId(consultantFilter?.[0]);
     setSortBy(sortField);
     setSortOrder(sort?.desc ? GetClientsSortOrder.desc : GetClientsSortOrder.asc);
-    setPage(1);
   }
 
   function handleCreate(values: CompanyFormValues) {
@@ -368,52 +481,27 @@ export function CompaniesTable({
         searchPlaceholder="Search Companies"
         filters={companyFilters}
         onRowClick={(company) => router.push(`/companies/${company.id}`)}
-        enableRowRangeSelect
+        enableRowRangeSelect={!isViewer}
         hideSelectColumn
         emptyState="No companies yet. Add your first client to get started."
         getRowId={(c) => c.id}
-        onSelectionChange={setSelectedCompanies}
+        onSelectionChange={isViewer ? undefined : setSelectedCompanies}
+        footerActions={
+          isViewer ? undefined : (
+            <Button
+              size="sm"
+              disabled={!canCreate}
+              title={canCreate ? undefined : "You don't have permission to add companies"}
+              onClick={() => setCreating(true)}
+            >
+              <Plus />
+              Add Company
+            </Button>
+          )
+        }
         toolbar={
-          selectedCompanies.length > 0 ? (
+          !isViewer && selectedCompanies.length > 0 ? (
             <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
-              <Button size="lg" variant="outline" onClick={handleExport}>
-                <Download />
-                Export to Excel
-              </Button>
-
-              <AlertDialog>
-                <AlertDialogTrigger
-                  render={
-                    <Button
-                      variant="destructive"
-                      size="lg"
-                      disabled={!canDelete || isBulkDeleting}
-                      title={
-                        canDelete ? undefined : "You don't have permission to delete companies"
-                      }
-                    >
-                      <Trash2 />
-                      Delete
-                    </Button>
-                  }
-                />
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      Delete {selectedCompanies.length} compan
-                      {selectedCompanies.length === 1 ? 'y' : 'ies'}?
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This permanently removes the selected companies and can't be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleBulkDelete}>Delete</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
@@ -424,6 +512,10 @@ export function CompaniesTable({
                   }
                 />
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleExport}>
+                    <Download />
+                    Export to Excel
+                  </DropdownMenuItem>
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Set relationship</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
@@ -448,6 +540,15 @@ export function CompaniesTable({
                   <DropdownMenuItem onClick={handleEnrichStakeholders}>
                     Enrich Data with Stakeholders
                   </DropdownMenuItem>
+                  {canDelete ? (
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => setDeleteConfirmOpen(true)}
+                    >
+                      <Trash2 />
+                      Delete
+                    </DropdownMenuItem>
+                  ) : null}
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -469,27 +570,78 @@ export function CompaniesTable({
                   )
                 }
               />
+
+              {/* Controlled rather than a nested AlertDialogTrigger — same reason
+                  as BulkConsultantPicker above: opens after the dropdown item's
+                  own click closes the menu, instead of nesting inside it. */}
+              <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Delete {selectedCompanies.length} compan
+                      {selectedCompanies.length === 1 ? 'y' : 'ies'}?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This permanently removes the selected companies and can't be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction disabled={isBulkDeleting} onClick={handleBulkDelete}>
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
-          ) : (
-            <Button
-              size="lg"
-              disabled={!canCreate}
-              title={canCreate ? undefined : "You don't have permission to add companies"}
-              className="animate-in fade-in-0 duration-200"
-              onClick={() => setCreating(true)}
-            >
-              <Plus />
-              Add Company
-            </Button>
-          )
+          ) : null
+        }
+        selectionContextMenu={
+          !isViewer && selectedCompanies.length > 0 ? (
+            <>
+              <ContextMenuItem onClick={handleExport}>
+                <Download />
+                Export to Excel
+              </ContextMenuItem>
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>Set relationship</ContextMenuSubTrigger>
+                <ContextMenuSubContent>
+                  {clientStatuses.map((s) => (
+                    <ContextMenuItem
+                      key={s}
+                      onClick={() =>
+                        handleBulkUpdate({ status: s }, `Relationship set to ${clientStatusLabels[s]}`)
+                      }
+                    >
+                      <Badge variant={statusVariant[s]}>{clientStatusLabels[s]}</Badge>
+                    </ContextMenuItem>
+                  ))}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+              <ContextMenuItem onClick={() => setConsultantPickerOpen(true)}>
+                Set consultant
+              </ContextMenuItem>
+              <ContextMenuItem onClick={handleEnrichStakeholders}>
+                Enrich Data with Stakeholders
+              </ContextMenuItem>
+              {canDelete ? (
+                <ContextMenuItem variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>
+                  <Trash2 />
+                  Delete
+                </ContextMenuItem>
+              ) : null}
+            </>
+          ) : null
         }
         server={{
-          total: result?.total ?? 0,
-          page,
+          total: lastPageOk?.total ?? 0,
+          page: Math.max(pages.length, 1),
           pageSize: PAGE_SIZE,
-          pageCount: result?.pageCount ?? 1,
-          onPageChange: setPage,
+          pageCount: lastPageOk?.pageCount ?? 1,
+          onPageChange: () => fetchNextPage(),
           onQueryChange: handleQueryChange,
+          infiniteScroll: true,
+          isFetchingNextPage,
         }}
       />
 
