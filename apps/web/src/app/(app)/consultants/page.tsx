@@ -5,13 +5,12 @@ import { ConsultantsTable } from '@/features/consultants/ConsultantsTable';
 
 export default async function ConsultantsPage() {
   const session = await auth();
-  // Managing consultants (role + active status) is admin-only IAM — gate on the
-  // role directly now that the dedicated `user` permission has been retired.
+  // Managing consultants (role + active status) is admin-only IAM — gate on the role directly
   const isAdmin = session?.user?.roleName === 'admin';
 
   return (
     <PageLayout>
-      <PageHeader title="Consultants" description="Manage recruiters — roles and account status." />
+      <PageHeader title="Consultants" description="Manage Recruiters — Roles and Account Status." />
       {isAdmin ? <ConsultantsTable /> : <AccessDenied resource="consultants" />}
     </PageLayout>
   );
