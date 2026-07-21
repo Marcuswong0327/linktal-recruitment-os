@@ -17,7 +17,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -120,6 +119,10 @@ export function CompaniesTable({
   // disabled.
   const { data: session } = useSession();
   const isConsultant = session?.user?.roleName === 'consultant';
+  // Viewers are read-only end to end — no create, no bulk actions, and (since
+  // there'd be nothing to do with a selection) no row selection at all,
+  // rather than showing disabled controls for actions they can never take.
+  const isViewer = session?.user?.roleName === 'viewer';
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
   const [status, setStatus] = React.useState<GetClientsStatus | undefined>();
@@ -135,6 +138,7 @@ export function CompaniesTable({
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = React.useState(false);
   const [consultantPickerOpen, setConsultantPickerOpen] = React.useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
 
   const { data, isLoading, isFetching, isError, error } = useGetClients(
@@ -423,63 +427,27 @@ export function CompaniesTable({
         searchPlaceholder="Search Companies"
         filters={companyFilters}
         onRowClick={(company) => router.push(`/companies/${company.id}`)}
-        enableRowRangeSelect
+        enableRowRangeSelect={!isViewer}
         hideSelectColumn
         emptyState="No companies yet. Add your first client to get started."
         getRowId={(c) => c.id}
-        onSelectionChange={setSelectedCompanies}
+        onSelectionChange={isViewer ? undefined : setSelectedCompanies}
         footerActions={
-          <Button
-            size="sm"
-            disabled={!canCreate}
-            title={canCreate ? undefined : "You don't have permission to add companies"}
-            onClick={() => setCreating(true)}
-          >
-            <Plus />
-            Add Company
-          </Button>
+          isViewer ? undefined : (
+            <Button
+              size="sm"
+              disabled={!canCreate}
+              title={canCreate ? undefined : "You don't have permission to add companies"}
+              onClick={() => setCreating(true)}
+            >
+              <Plus />
+              Add Company
+            </Button>
+          )
         }
         toolbar={
-          selectedCompanies.length > 0 ? (
+          !isViewer && selectedCompanies.length > 0 ? (
             <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
-              <Button size="lg" variant="outline" onClick={handleExport}>
-                <Download />
-                Export to Excel
-              </Button>
-
-              <AlertDialog>
-                <AlertDialogTrigger
-                  render={
-                    <Button
-                      variant="destructive"
-                      size="lg"
-                      disabled={!canDelete || isBulkDeleting}
-                      title={
-                        canDelete ? undefined : "You don't have permission to delete companies"
-                      }
-                    >
-                      <Trash2 />
-                      Delete
-                    </Button>
-                  }
-                />
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      Delete {selectedCompanies.length} compan
-                      {selectedCompanies.length === 1 ? 'y' : 'ies'}?
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This permanently removes the selected companies and can't be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleBulkDelete}>Delete</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-
               <DropdownMenu>
                 <DropdownMenuTrigger
                   render={
@@ -490,6 +458,10 @@ export function CompaniesTable({
                   }
                 />
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleExport}>
+                    <Download />
+                    Export to Excel
+                  </DropdownMenuItem>
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Set relationship</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent>
@@ -514,6 +486,15 @@ export function CompaniesTable({
                   <DropdownMenuItem onClick={handleEnrichStakeholders}>
                     Enrich Data with Stakeholders
                   </DropdownMenuItem>
+                  {canDelete ? (
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => setDeleteConfirmOpen(true)}
+                    >
+                      <Trash2 />
+                      Delete
+                    </DropdownMenuItem>
+                  ) : null}
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -535,6 +516,29 @@ export function CompaniesTable({
                   )
                 }
               />
+
+              {/* Controlled rather than a nested AlertDialogTrigger — same reason
+                  as BulkConsultantPicker above: opens after the dropdown item's
+                  own click closes the menu, instead of nesting inside it. */}
+              <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Delete {selectedCompanies.length} compan
+                      {selectedCompanies.length === 1 ? 'y' : 'ies'}?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This permanently removes the selected companies and can't be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction disabled={isBulkDeleting} onClick={handleBulkDelete}>
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           ) : null
         }
