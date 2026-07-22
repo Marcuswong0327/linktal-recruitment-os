@@ -34,8 +34,8 @@ export class StakeholdersController {
     summary: 'List stakeholders (paginated, filterable, sortable)',
   })
   @ApiResponse({ status: 200, description: 'Paginated stakeholders', type: PaginatedStakeholdersEntity })
-  findAll(@Query() query: QueryStakeholdersDto) {
-    return this.stakeholders.findAll(query);
+  findAll(@Query() query: QueryStakeholdersDto, @CurrentUser() user: AuthUser) {
+    return this.stakeholders.findAll(query, user);
   }
 
   @Get('by-display-id/:displayId')
@@ -50,8 +50,8 @@ export class StakeholdersController {
   @RequirePermission('stakeholder', 'read')
   @ApiOperation({ operationId: 'getStakeholder', summary: 'Get stakeholder by ID' })
   @ApiResponse({ status: 200, description: 'Stakeholder found', type: StakeholderEntity })
-  findOne(@Param('id') id: string) {
-    return this.stakeholders.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.stakeholders.findOne(id, user);
   }
 
   @Post()
@@ -66,8 +66,8 @@ export class StakeholdersController {
   @RequirePermission('stakeholder', 'update')
   @ApiOperation({ operationId: 'updateStakeholder', summary: 'Update a stakeholder' })
   @ApiResponse({ status: 200, description: 'Stakeholder updated', type: StakeholderEntity })
-  update(@Param('id') id: string, @Body() dto: UpdateStakeholderDto) {
-    return this.stakeholders.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateStakeholderDto, @CurrentUser() user: AuthUser) {
+    return this.stakeholders.update(id, dto, user);
   }
 
   @Delete(':id')
@@ -75,8 +75,8 @@ export class StakeholdersController {
   @RequirePermission('stakeholder', 'delete')
   @ApiOperation({ operationId: 'deleteStakeholder', summary: 'Delete a stakeholder' })
   @ApiResponse({ status: 204, description: 'Stakeholder deleted' })
-  remove(@Param('id') id: string) {
-    return this.stakeholders.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.stakeholders.remove(id, user);
   }
 
   @Post(':id/contact-history')

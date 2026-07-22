@@ -143,6 +143,23 @@ model Consultant {
   stakeholderContacts StakeholderContactHistory[]
   candidateContacts   CandidateContactHistory[]
   candidateSavedSearches CandidateSavedSearch[]
+  industries   ConsultantIndustry[]
+}
+
+// Many-to-many: which industries a consultant is scoped to (they can carry
+// several, unlike Client/Candidate's single industryId). Explicit join model
+// rather than an implicit Prisma m2m — same reasoning as
+// CandidateSpecialization — so it can be written as individual top-level
+// create/delete calls (audited by the generic Prisma extension) instead of a
+// nested relation write (which the extension can't diff).
+model ConsultantIndustry {
+  consultantId String
+  consultant   Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+  industryId   String
+  industry     Industry   @relation(fields: [industryId], references: [id], onDelete: Cascade)
+
+  @@id([consultantId, industryId])
+  @@index([industryId])
 }
 
 // ============================================================================
@@ -163,6 +180,7 @@ model Industry {
   updatedAt DateTime @updatedAt
   clients    Client[]
   candidates Candidate[] // Shared taxonomy: same catalog Client.industry uses.
+  consultants ConsultantIndustry[]
 }
 
 // Same as Industry, for Client.specialization. Also shared by Candidate, but

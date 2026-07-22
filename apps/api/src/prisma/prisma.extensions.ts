@@ -29,7 +29,10 @@ const SOFT_DELETE_MODELS = new Set([
 ]);
 
 // Soft-delete set plus the RBAC/identity tables (hard-deleted, but still audited).
-const AUDITED_MODELS = new Set([...SOFT_DELETE_MODELS, 'Consultant', 'Role', 'Permission']);
+// ConsultantIndustry is written as individual top-level create/delete calls
+// (never a nested relation write on Consultant), so this interception layer
+// actually sees and diffs each row — see ConsultantsService.setIndustries.
+const AUDITED_MODELS = new Set([...SOFT_DELETE_MODELS, 'Consultant', 'Role', 'Permission', 'ConsultantIndustry']);
 
 const READ_MANY_OPS = new Set([
   'findMany',

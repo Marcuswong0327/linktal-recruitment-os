@@ -52,11 +52,12 @@ The database schema was derived from these Excel files:
 | **Permission** | Granular permissions (resource + action) |
 | **RolePermission** | Junction: roles ↔ permissions |
 
-### Core Entities (11 tables)
+### Core Entities (12 tables)
 
 | Entity | Description | ID Format |
 |--------|-------------|-----------|
 | **Consultant** | Recruiter profile (linked to User) | consultant-XXXX |
+| **ConsultantIndustry** | Junction: consultants ↔ industries they're scoped to (many-to-many — see `docs/rbac-roles.md` §3) | auto |
 | **Client** | Client companies (employers) | Client-XXXX |
 | **Stakeholder** | Contacts at client companies | Stake-XXXX |
 | **StakeholderContactHistory** | Communication with stakeholders | auto |

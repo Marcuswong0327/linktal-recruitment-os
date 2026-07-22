@@ -22,6 +22,7 @@ const RESOURCES = [
   "saved_search",
   "report",
   "audit",
+  "consultant_industry",
 ] as const;
 
 // Define all actions
@@ -47,6 +48,12 @@ const CREATE_READ_ONLY_RESOURCES = new Set<string>([
 // (rename isn't supported — delete + re-save covers it).
 const CREATE_READ_DELETE_RESOURCES = new Set<string>(["saved_search"]);
 
+// Assigning industries to a consultant is a full-set-replace PUT (view + edit
+// the whole list in one call), not separate create/delete endpoints — same
+// reasoning as the create/read-only resources above, just a different pair
+// of actions.
+const READ_UPDATE_RESOURCES = new Set<string>(["consultant_industry"]);
+
 // The activity log is sensitive — keep it admin-only, so it's excluded from the
 // "read everything" grants that managers otherwise get.
 const ADMIN_ONLY_RESOURCES = new Set<string>(["audit"]);
@@ -59,7 +66,9 @@ const actionsFor = (resource: string): readonly string[] =>
       ? ["create", "read"]
       : CREATE_READ_DELETE_RESOURCES.has(resource)
         ? ["create", "read", "delete"]
-        : ACTIONS;
+        : READ_UPDATE_RESOURCES.has(resource)
+          ? ["read", "update"]
+          : ACTIONS;
 
 // Define role permissions matrix
 const ROLE_PERMISSIONS: Record<string, { resources: string[]; actions: string[] }[]> = {
@@ -73,6 +82,10 @@ const ROLE_PERMISSIONS: Record<string, { resources: string[]; actions: string[] 
     // the audit log stay admin-only.
     { resources: readableBy(true), actions: ["read"] },
     { resources: ["candidate", "client", "stakeholder", "job_order", "job_research", "submission", "placement", "consultant", "role", "industry", "specialization", "stakeholder_role_type", "candidate_role_type", "saved_search"], actions: ["create", "update", "delete"] },
+    // Assigning industries to a consultant — admin gets this for free via the
+    // blanket grant above; managers need it listed explicitly (self/peer
+    // escalation rules for who they can target are enforced in code, not here).
+    { resources: ["consultant_industry"], actions: ["update"] },
     { resources: ["report"], actions: ["create"] },
   ],
   consultant: [
@@ -173,13 +186,15 @@ async function main() {
   }
 
   // Prune stale permissions (their role links cascade away): resources no longer
-  // in the matrix (e.g. the removed 'user'), and non-read actions on read-only
-  // resources (e.g. permission:create/update/delete).
+  // in the matrix (e.g. the removed 'user'), non-read actions on read-only
+  // resources (e.g. permission:create/update/delete), and create/delete on
+  // read-update-only resources (e.g. consultant_industry:create/delete).
   const pruned = await prisma.permission.deleteMany({
     where: {
       OR: [
         { resource: { notIn: [...RESOURCES] } },
         { resource: { in: [...READ_ONLY_RESOURCES] }, action: { not: "read" } },
+        { resource: { in: [...READ_UPDATE_RESOURCES] }, action: { notIn: ["read", "update"] } },
       ],
     },
   });

@@ -119,6 +119,7 @@ export * from './roleEntity';
 export * from './roleSummaryEntity';
 export * from './sessionUserEntity';
 export * from './sessionUserEntityEmail';
+export * from './setConsultantIndustriesDto';
 export * from './specializationEntity';
 export * from './stakeholderContactHistoryEntity';
 export * from './stakeholderEntity';

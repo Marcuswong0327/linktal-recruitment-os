@@ -43,8 +43,8 @@ export class ClientsController {
   @RequirePermission('client', 'read')
   @ApiOperation({ operationId: 'getClient', summary: 'Get client by ID' })
   @ApiResponse({ status: 200, description: 'Client found', type: ClientEntity })
-  findOne(@Param('id') id: string) {
-    return this.clients.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.clients.findOne(id, user);
   }
 
   @Post()
@@ -68,7 +68,7 @@ export class ClientsController {
   @ApiOperation({ operationId: 'addClientNote', summary: "Append a note to a client's timeline" })
   @ApiResponse({ status: 201, description: 'Client updated', type: ClientEntity })
   addNote(@Param('id') id: string, @Body() dto: AddClientNoteDto, @CurrentUser() user: AuthUser) {
-    return this.clients.addNote(id, dto, user.consultantId);
+    return this.clients.addNote(id, dto, user);
   }
 
   @Patch(':id/notes/:noteId')
@@ -111,8 +111,8 @@ export class ClientsController {
     summary: 'Soft-delete a client (recoverable, cascades)',
   })
   @ApiResponse({ status: 204, description: 'Client soft-deleted' })
-  remove(@Param('id') id: string) {
-    return this.clients.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.clients.remove(id, user);
   }
 
   @Post(':id/restore')

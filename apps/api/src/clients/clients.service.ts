@@ -12,6 +12,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { RequestContext } from '../common/request-context';
+import {
+  assertConsultantIndustryMatch,
+  assertInJobScope,
+  clearMismatchedClientAssignment,
+  industryScope,
+} from '../common/industry-scope';
+import { redactConsultantField } from '../common/redact-consultant-field';
 import { AuthUser } from '../auth/auth.types';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
@@ -129,12 +136,29 @@ export class ClientsService {
       where.tobSigned = query.tobSigned;
     }
 
+    // Built as an AND-ed list rather than assigning `where.OR` directly —
+    // the free-text search below also needs its own `OR`, and a second
+    // top-level `where.OR` assignment would silently clobber the first
+    // instead of combining with it (see CandidatesService.findAll for the
+    // same idiom already established there).
+    const and: Prisma.ClientWhereInput[] = [];
+
     if (q) {
-      where.OR = [
-        { companyName: { contains: q, mode: Prisma.QueryMode.insensitive } },
-        { displayId: { contains: q, mode: Prisma.QueryMode.insensitive } },
-        { website: { contains: q, mode: Prisma.QueryMode.insensitive } },
-      ];
+      and.push({
+        OR: [
+          { companyName: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { displayId: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { website: { contains: q, mode: Prisma.QueryMode.insensitive } },
+        ],
+      });
+    }
+
+    if (user.roleName === 'consultant') {
+      and.push(industryScope(user.industryIds));
+    }
+
+    if (and.length > 0) {
+      where.AND = and;
     }
 
     // Default: most-recently-contacted first. lastContactedAt is null for
@@ -162,15 +186,28 @@ export class ClientsService {
       this.prisma.client.count({ where }),
     ]);
 
-    return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
+    return {
+      data: data.map((c) => redactConsultantField(toEntity(c), user)),
+      total,
+      page,
+      pageSize,
+      pageCount: Math.ceil(total / pageSize),
+    };
   }
 
-  async findOne(id: string) {
+  /**
+   * `user` gates the "not under your job scope" check below (findOne/update/
+   * remove are single-record access — a scoped consultant hitting an
+   * out-of-scope record directly gets an explicit 403, unlike `findAll`,
+   * which just silently filters).
+   */
+  async findOne(id: string, user: AuthUser) {
     const client = await this.prisma.client.findUnique({ where: { id }, include: CLIENT_INCLUDE });
     if (!client) {
       throw new NotFoundException(`Client ${id} not found`);
     }
-    return toEntity(client);
+    assertInJobScope(user, client.industryId);
+    return redactConsultantField(toEntity(client), user);
   }
 
   async findByDisplayId(displayId: string) {
@@ -185,6 +222,11 @@ export class ClientsService {
   }
 
   async create(dto: CreateClientDto) {
+    // Industry-first: a consultant can only be assigned once the company
+    // already has an industry tagged, and only if they hold that industry.
+    if (dto.consultantId) {
+      await assertConsultantIndustryMatch(this.prisma, dto.consultantId, dto.industryId ?? null);
+    }
     // displayId is assigned by the DB (Client_displayId_seq default).
     const client = await this.prisma.client.create({ data: dto, include: CLIENT_INCLUDE });
     return toEntity(client);
@@ -207,22 +249,44 @@ export class ClientsService {
       });
     }
 
-    await this.findOne(id);
-    const client = await this.prisma.client.update({ where: { id }, data: dto, include: CLIENT_INCLUDE });
-    return toEntity(client);
+    const existing = await this.findOne(id, user);
+
+    // Industry-first: only validated when a consultant is explicitly being
+    // set/changed here — an industry-only edit never blocks on this (that's
+    // what the auto-clear below is for instead of erroring).
+    if ('consultantId' in dto && dto.consultantId) {
+      const effectiveIndustryId = 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId;
+      await assertConsultantIndustryMatch(this.prisma, dto.consultantId, effectiveIndustryId);
+    }
+
+    let client = await this.prisma.client.update({ where: { id }, data: dto, include: CLIENT_INCLUDE });
+
+    // Bidirectional auto-clear: the industry changed without an explicit
+    // consultant change in the same request — silently unassign if the
+    // existing consultant no longer matches, rather than blocking the edit.
+    // Re-fetch only if it actually cleared something, so the response
+    // reflects it — most industry edits won't touch the consultant at all.
+    if ('industryId' in dto && !('consultantId' in dto)) {
+      const cleared = await clearMismatchedClientAssignment(this.prisma, id, dto.industryId ?? null);
+      if (cleared) {
+        client = await this.prisma.client.findUniqueOrThrow({ where: { id }, include: CLIENT_INCLUDE });
+      }
+    }
+
+    return redactConsultantField(toEntity(client), user);
   }
 
   private getNotes(client: { notes: unknown }): ClientNoteDto[] {
     return Array.isArray(client.notes) ? (client.notes as unknown as ClientNoteDto[]) : [];
   }
 
-  private async saveNotes(id: string, notes: ClientNoteDto[]) {
+  private async saveNotes(id: string, notes: ClientNoteDto[], user: AuthUser) {
     const client = await this.prisma.client.update({
       where: { id },
       data: { notes: notes as unknown as Prisma.InputJsonValue },
       include: CLIENT_INCLUDE,
     });
-    return toEntity(client);
+    return redactConsultantField(toEntity(client), user);
   }
 
   /** Only the note's own author, or an admin, may edit/delete it. */
@@ -264,25 +328,25 @@ export class ClientsService {
   }
 
   /** Appends one entry to the client's note timeline (never overwrites prior entries). */
-  async addNote(id: string, dto: AddClientNoteDto, consultantId: string) {
-    const client = await this.findOne(id);
+  async addNote(id: string, dto: AddClientNoteDto, user: AuthUser) {
+    const client = await this.findOne(id, user);
     const next: ClientNoteDto[] = [
       ...this.getNotes(client),
       {
         id: randomUUID(),
         content: dto.content,
         timestamp: new Date().toISOString(),
-        by: consultantId,
+        by: user.consultantId,
         editedAt: null,
         editedBy: null,
       },
     ];
-    return this.saveNotes(id, next);
+    return this.saveNotes(id, next, user);
   }
 
   /** Edits one note's content in place; restricted to its author or an admin. */
   async updateNote(id: string, noteId: string, dto: UpdateClientNoteDto, user: AuthUser) {
-    const client = await this.findOne(id);
+    const client = await this.findOne(id, user);
     const notes = this.getNotes(client);
     const index = this.findNoteOrThrow(notes, noteId);
     this.assertCanModifyNote(notes[index], user);
@@ -295,19 +359,19 @@ export class ClientsService {
       editedAt: new Date().toISOString(),
       editedBy: user.consultantId,
     };
-    return this.saveNotes(id, next);
+    return this.saveNotes(id, next, user);
   }
 
   /** Removes one note from the timeline; restricted to its author or an admin. */
   async deleteNote(id: string, noteId: string, user: AuthUser, expectedVersion?: string) {
-    const client = await this.findOne(id);
+    const client = await this.findOne(id, user);
     const notes = this.getNotes(client);
     const index = this.findNoteOrThrow(notes, noteId);
     this.assertCanModifyNote(notes[index], user);
     this.assertNotStale(notes[index], expectedVersion);
 
     const next = notes.filter((n) => n.id !== noteId);
-    return this.saveNotes(id, next);
+    return this.saveNotes(id, next, user);
   }
 
   /**
@@ -316,8 +380,8 @@ export class ClientsService {
    * Sequential soft-deletes on the extended client (each audited); children
    * first, parent last, so a partial failure stays recoverable via `restore`.
    */
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, user: AuthUser) {
+    await this.findOne(id, user);
 
     const jobOrders = await this.prisma.jobOrder.findMany({
       where: { clientId: id },

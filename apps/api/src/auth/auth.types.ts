@@ -24,6 +24,8 @@ export interface TokenClaims {
 export interface AccessTokenClaims extends TokenClaims {
   roleName: string | null;
   permissions: string[];
+  /** ConsultantIndustry ids assigned at mint time — same refresh-latency trade-off as roleName/permissions. */
+  industryIds: string[];
 }
 
 /** The authenticated principal attached to each request after the guards run. */
@@ -37,4 +39,6 @@ export interface AuthUser {
   isActive: boolean;
   /** Flat set of `resource:action` strings for O(1) permission checks. */
   permissions: Set<string>;
+  /** Industries this consultant is scoped to (only meaningful for roleName === 'consultant' — every other role is unrestricted regardless of this list). */
+  industryIds: string[];
 }

@@ -4280,6 +4280,82 @@
         ]
       }
     },
+    "/consultants/{id}/industries": {
+      "put": {
+        "operationId": "setConsultantIndustries",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetConsultantIndustriesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Industries updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultantEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace a consultant's assigned industries (admin/manager only; self/peer-manager escalation rules enforced in the service)",
+        "tags": [
+          "Consultants"
+        ]
+      }
+    },
     "/roles": {
       "get": {
         "operationId": "getRoles",
@@ -6123,6 +6199,13 @@
             "items": {
               "type": "string"
             }
+          },
+          "industryIds": {
+            "description": "Industry ids this consultant is scoped to (only enforced for roleName === \"consultant\")",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -6130,7 +6213,8 @@
           "email",
           "fullName",
           "roleName",
-          "permissions"
+          "permissions",
+          "industryIds"
         ]
       },
       "LoginResponseEntity": {
@@ -8295,6 +8379,19 @@
                 "$ref": "#/components/schemas/RoleSummaryEntity"
               }
             ]
+          },
+          "industries": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "industryIds": {
+            "description": "Industry IDs backing `industries`",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -8422,6 +8519,21 @@
             ]
           }
         }
+      },
+      "SetConsultantIndustriesDto": {
+        "type": "object",
+        "properties": {
+          "industryIds": {
+            "description": "Industry IDs (see /industries) — replaces the whole set",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "industryIds"
+        ]
       },
       "PermissionSummaryEntity": {
         "type": "object",

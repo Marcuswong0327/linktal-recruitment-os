@@ -677,16 +677,24 @@ function CompanyEditForm({
                 <FormField
                   label="Consultant"
                   htmlFor="consultantId"
-                  description="The consultant who owns this client relationship."
+                  description={
+                    !industryId
+                      ? 'Tag an industry before assigning a consultant'
+                      : 'The consultant who owns this client relationship.'
+                  }
                 >
                   <ConsultantCombobox
                     id="consultantId"
                     value={consultantId}
                     onValueChange={setConsultantId}
-                    consultants={consultants}
+                    consultants={
+                      !industryId
+                        ? []
+                        : consultants.filter((c) => c.industryIds === undefined || c.industryIds.includes(industryId))
+                    }
                     currentUser={currentUser}
                     allowUnassign={session?.user?.roleName !== 'consultant'}
-                    disabled={!canEdit}
+                    disabled={!canEdit || !industryId}
                   />
                 </FormField>
               </CardContent>

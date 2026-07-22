@@ -11,9 +11,10 @@ const DEFAULT_ROLE = 'viewer';
 // has no role yet — they're real recruiters, so they get the consultant role.
 const LINKED_DEFAULT_ROLE = 'consultant';
 
-// Consultant + its role + the role's permissions, in one query.
+// Consultant + its role + the role's permissions + its assigned industries, in one query.
 const withRole = {
   role: { include: { permissions: { include: { permission: true } } } },
+  industries: { select: { industryId: true } },
 } as const;
 
 type ConsultantWithRole = {
@@ -27,6 +28,7 @@ type ConsultantWithRole = {
     name: string;
     permissions: { permission: { resource: string; action: string } }[];
   } | null;
+  industries: { industryId: string }[];
 };
 
 @Injectable()
@@ -258,6 +260,7 @@ export class RbacService {
       roleName: consultant.role?.name ?? null,
       isActive: consultant.isActive,
       permissions,
+      industryIds: consultant.industries.map((ci) => ci.industryId),
     };
   }
 }

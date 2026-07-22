@@ -22,9 +22,12 @@ import {
   getGetConsultantsQueryKey,
   updateConsultant as updateConsultantRequest,
   useGetConsultants,
+  useSetConsultantIndustries,
   useUpdateConsultant,
 } from '@/lib/api/generated/consultants/consultants';
+import { useGetIndustries } from '@/lib/api/generated/industries/industries';
 import type { UpdateConsultantDto } from '@/lib/api/generated/types';
+import { hasPermission } from '@/lib/auth/permissions';
 import { getConsultantColumns } from './columns';
 import {
   type Consultant,
@@ -83,10 +86,27 @@ export function ConsultantsTable() {
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
 
   const currentConsultantId = session?.user?.consultantId;
+  // Column is present at all only when the caller can see assigned
+  // industries; editable within that only when they can also change them —
+  // matches the API omitting `industries`/`industryIds` entirely (not just
+  // returning them empty) without `consultant_industry:read`.
+  const canReadIndustries = hasPermission(session, 'consultant_industry', 'read');
+  const canEditIndustries = hasPermission(session, 'consultant_industry', 'update');
 
   const { data, isLoading, isFetching, isError, error } = useGetConsultants(
     { page, pageSize: PAGE_SIZE, q: search, roleName: role, isActive },
     { query: { placeholderData: keepPreviousData } },
+  );
+
+  const { data: industriesData } = useGetIndustries({
+    query: { enabled: canReadIndustries },
+  });
+  const industryOptions = React.useMemo(
+    () =>
+      industriesData?.status === 200
+        ? industriesData.data.map((i) => ({ value: i.id, label: i.name }))
+        : [],
+    [industriesData],
   );
 
   const updateUser = useUpdateConsultant({
@@ -102,9 +122,23 @@ export function ConsultantsTable() {
     },
   });
 
+  const setIndustries = useSetConsultantIndustries({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetConsultantsQueryKey() });
+        toast.success('Industries updated');
+      },
+      onError: (err) => toast.error(err.message || 'Failed to update industries'),
+    },
+  });
+
   const result = data?.status === 200 ? data.data : undefined;
   const users = result?.data ?? [];
-  const pendingId = updateUser.isPending ? (updateUser.variables?.id ?? null) : null;
+  const pendingId = updateUser.isPending
+    ? (updateUser.variables?.id ?? null)
+    : setIndustries.isPending
+      ? (setIndustries.variables?.id ?? null)
+      : null;
 
   function handleQueryChange({ search, columnFilters }: DataGridQuery) {
     const roleFilter = columnFilters.find((f) => f.id === 'roleName')?.value as
@@ -144,8 +178,16 @@ export function ConsultantsTable() {
           updateUser.mutate({ id: user.id, data: { roleName: newRole } }),
         onStatusChange: (user, newIsActive) =>
           updateUser.mutate({ id: user.id, data: { isActive: newIsActive } }),
+        industries: canReadIndustries
+          ? {
+              options: industryOptions,
+              onIndustriesChange: canEditIndustries
+                ? (user, industryIds) => setIndustries.mutate({ id: user.id, data: { industryIds } })
+                : undefined,
+            }
+          : undefined,
       }),
-    [pendingId, currentConsultantId, updateUser],
+    [pendingId, currentConsultantId, updateUser, canReadIndustries, canEditIndustries, industryOptions, setIndustries],
   );
 
   if (isError) {

@@ -57,12 +57,20 @@ interface JobOrderColumnsOptions {
   consultantName: (id: string | null) => string;
   /** Full candidate roster for the Candidates column's multi-select picker. */
   candidates: CandidateEntity[];
+  /**
+   * Omits the Consultant column — every row is scoped to this consultant's
+   * own job orders (see JobOrdersService.findAll) and the field is redacted
+   * server-side too, so the column would just repeat their own name (or
+   * nothing) on every row. Same reasoning as Companies' `hideConsultantColumn`.
+   */
+  hideConsultantColumn?: boolean;
 }
 
 export function getJobOrderColumns({
   clientName,
   consultantName,
   candidates,
+  hideConsultantColumn,
 }: JobOrderColumnsOptions): ColumnDef<JobOrder>[] {
   return [
     {
@@ -176,13 +184,17 @@ export function getJobOrderColumns({
         </span>
       ),
     },
-    {
-      accessorKey: 'consultantId',
-      header: 'Consultant',
-      enableSorting: false,
-      meta: { align: 'center' },
-      cell: ({ row }) => <span>{consultantName(row.original.consultantId)}</span>,
-    },
+    ...(hideConsultantColumn
+      ? []
+      : [
+          {
+            accessorKey: 'consultantId',
+            header: 'Consultant',
+            enableSorting: false,
+            meta: { align: 'center' },
+            cell: ({ row }) => <span>{consultantName(row.original.consultantId)}</span>,
+          } satisfies ColumnDef<JobOrder>,
+        ]),
     {
       id: 'candidates',
       header: 'Candidates',

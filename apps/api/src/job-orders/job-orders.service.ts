@@ -2,6 +2,13 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, SubmissionStatus } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
+import {
+  assertConsultantIndustryMatchForJobOrder,
+  assertInJobScope,
+  consultantHasIndustry,
+  industryScopeViaClient,
+} from '../common/industry-scope';
+import { redactConsultantField } from '../common/redact-consultant-field';
 import { AuthUser } from '../auth/auth.types';
 import { CreateJobOrderDto } from './dto/create-job-order.dto';
 import { UpdateJobOrderDto } from './dto/update-job-order.dto';
@@ -13,6 +20,10 @@ import { QueryJobOrdersDto } from './dto/query-job-orders.dto';
 // which intercepts top-level CandidateSubmission calls, not this nested
 // include) — a removed submission must not reappear in a pipeline cell.
 const PIPELINE_SUBMISSIONS_INCLUDE = {
+  // industryId is fetched alongside the pipeline purely for the job-scope
+  // check below (a Job Order has no industry of its own, only via its
+  // Client) — stripped back out in `toEntity`, never part of the API response.
+  client: { select: { industryId: true } },
   submissions: {
     where: { deletedAt: null },
     select: {
@@ -33,6 +44,7 @@ const PIPELINE_SUBMISSIONS_INCLUDE = {
 } satisfies Prisma.JobOrderInclude;
 
 type JobOrderWithPipeline = {
+  client: { industryId: string | null } | null;
   submissions: {
     id: string;
     status: SubmissionStatus;
@@ -45,7 +57,7 @@ type JobOrderWithPipeline = {
 };
 
 function toEntity<T extends JobOrderWithPipeline>(jobOrder: T) {
-  const { submissions, ...rest } = jobOrder;
+  const { submissions, client: _client, ...rest } = jobOrder;
   return {
     ...rest,
     pipelineSubmissions: submissions.map((s) => ({
@@ -113,12 +125,27 @@ export class JobOrdersService {
       where.salaryMin = { lte: query.salaryMax };
     }
 
+    // Built as an AND-ed list rather than a second top-level `where.OR` —
+    // the free-text search below needs its own `OR`, which a plain
+    // assignment would otherwise clobber instead of combining with.
+    const and: Prisma.JobOrderWhereInput[] = [];
+
     if (q) {
-      where.OR = [
-        { jobTitle: { contains: q, mode: Prisma.QueryMode.insensitive } },
-        { displayId: { contains: q, mode: Prisma.QueryMode.insensitive } },
-        { description: { contains: q, mode: Prisma.QueryMode.insensitive } },
-      ];
+      and.push({
+        OR: [
+          { jobTitle: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { displayId: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { description: { contains: q, mode: Prisma.QueryMode.insensitive } },
+        ],
+      });
+    }
+
+    if (user.roleName === 'consultant') {
+      and.push(industryScopeViaClient(user.industryIds));
+    }
+
+    if (and.length > 0) {
+      where.AND = and;
     }
 
     // Default: Active first. JobOrderStatus is declared ACTIVE/PLACED/CLOSED/
@@ -144,10 +171,16 @@ export class JobOrdersService {
       this.prisma.jobOrder.count({ where }),
     ]);
 
-    return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
+    return {
+      data: data.map((jo) => redactConsultantField(toEntity(jo), user)),
+      total,
+      page,
+      pageSize,
+      pageCount: Math.ceil(total / pageSize),
+    };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user: AuthUser) {
     const jobOrder = await this.prisma.jobOrder.findUnique({
       where: { id },
       include: PIPELINE_SUBMISSIONS_INCLUDE,
@@ -155,7 +188,8 @@ export class JobOrdersService {
     if (!jobOrder) {
       throw new NotFoundException(`Job order ${id} not found`);
     }
-    return toEntity(jobOrder);
+    assertInJobScope(user, jobOrder.client?.industryId ?? null);
+    return redactConsultantField(toEntity(jobOrder), user);
   }
 
   async findByDisplayId(displayId: string) {
@@ -170,6 +204,13 @@ export class JobOrdersService {
   }
 
   async create(dto: CreateJobOrderDto) {
+    // Industry-first: a consultant can only be assigned once the job
+    // order's client already has an industry tagged, and only if they hold
+    // that industry — resolved via the client since JobOrder has none of
+    // its own.
+    if (dto.consultantId) {
+      await assertConsultantIndustryMatchForJobOrder(this.prisma, dto.consultantId, dto.clientId);
+    }
     // displayId is assigned by the DB (JobOrder_displayId_seq default). A
     // brand-new job order has no submissions yet, but still runs through
     // toEntity so the response shape (pipelineSubmissions: []) matches every
@@ -181,14 +222,39 @@ export class JobOrdersService {
     return toEntity(jobOrder);
   }
 
-  async update(id: string, dto: UpdateJobOrderDto) {
-    await this.findOne(id);
-    const jobOrder = await this.prisma.jobOrder.update({
+  async update(id: string, dto: UpdateJobOrderDto, user: AuthUser) {
+    const existing = await this.findOne(id, user);
+
+    // Industry-first: only validated when a consultant is explicitly being
+    // set/changed here — re-linking to a different client never blocks on
+    // this by itself (that's what the auto-clear below is for instead of
+    // erroring).
+    if ('consultantId' in dto && dto.consultantId) {
+      const effectiveClientId = 'clientId' in dto && dto.clientId ? dto.clientId : existing.clientId;
+      await assertConsultantIndustryMatchForJobOrder(this.prisma, dto.consultantId, effectiveClientId);
+    }
+
+    let jobOrder = await this.prisma.jobOrder.update({
       where: { id },
       data: dto,
       include: PIPELINE_SUBMISSIONS_INCLUDE,
     });
-    return toEntity(jobOrder);
+
+    // Bidirectional auto-clear: re-linked to a different client without an
+    // explicit consultant change in the same request — silently unassign if
+    // the existing consultant no longer matches the new client's industry.
+    if ('clientId' in dto && dto.clientId && !('consultantId' in dto) && existing.consultantId) {
+      const client = await this.prisma.client.findUnique({
+        where: { id: dto.clientId },
+        select: { industryId: true },
+      });
+      if (!(await consultantHasIndustry(this.prisma, existing.consultantId, client?.industryId ?? null))) {
+        await this.prisma.jobOrder.update({ where: { id }, data: { consultantId: null } });
+        jobOrder = await this.prisma.jobOrder.findUniqueOrThrow({ where: { id }, include: PIPELINE_SUBMISSIONS_INCLUDE });
+      }
+    }
+
+    return redactConsultantField(toEntity(jobOrder), user);
   }
 
   /**
@@ -196,8 +262,8 @@ export class JobOrdersService {
    * placements (children first). Sequential soft-deletes on the extended
    * client (each audited); recoverable via a restore if a step fails.
    */
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, user: AuthUser) {
+    await this.findOne(id, user);
     const submissions = await this.prisma.candidateSubmission.findMany({
       where: { jobOrderId: id },
       select: { id: true },

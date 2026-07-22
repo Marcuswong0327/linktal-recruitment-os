@@ -7,6 +7,8 @@ interface ApiSessionUser {
   roleName: string | null;
   /** Flat 'resource:action' strings — same shape the API's @RequirePermission checks against. */
   permissions: string[];
+  /** Industry ids this consultant is scoped to — only enforced when roleName === 'consultant'. */
+  industryIds: string[];
 }
 
 declare module 'next-auth' {
@@ -21,6 +23,7 @@ declare module 'next-auth' {
       consultantId?: string;
       roleName?: string | null;
       permissions?: string[];
+      industryIds?: string[];
     };
   }
 }
@@ -50,5 +53,6 @@ declare module '@auth/core/types' {
     consultantId?: string;
     roleName?: string | null;
     permissions?: string[];
+    industryIds?: string[];
   }
 }

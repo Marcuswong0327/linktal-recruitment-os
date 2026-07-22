@@ -107,6 +107,19 @@ Pipeline History card (every stage-change event, from the audit log).
 > the candidates list. What's still manual/automated below is unchanged by this
 > — it's still the consultant typing the log entry, not an AI transcript or an
 > auto-detected email/call.
+>
+> **Stakeholder Enrichment Workspace loads all results, not paginated.** From
+> the Companies list, "Enrich Data with Stakeholders" selects a set of
+> companies and opens this workspace filtered to `clientIds`. Rather than
+> paginating (like every other list in the app), it drains every matching page
+> from the backend (100 rows/request, the API's max) up front and renders the
+> full result. This is a deliberate call, not an oversight: `Stakeholder.clientId`
+> is indexed, so the query itself scales fine, and realistic usage is a
+> consultant's own handful of companies or an occasional larger admin batch —
+> not thousands of stakeholders at once. If that assumption stops holding (bulk
+> workflows routinely producing many hundreds+ of stakeholders per selection),
+> revisit this: either restore real pagination here, or cap how many companies
+> can be selected for enrichment in one go.
 
 | Manual | Automated |
 |--------|-----------|

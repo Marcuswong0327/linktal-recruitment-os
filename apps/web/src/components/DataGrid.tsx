@@ -513,6 +513,9 @@ export function DataGrid<TData>({
   // reaches `onRowClick` (e.g. navigating to the row's detail page)
   // untouched, and a drag suppresses that click instead of also navigating.
   const dragStateRef = React.useRef<{ anchorId: string; moved: boolean } | null>(null);
+  // Latest pointer position during a drag — read by the auto-scroll rAF loop
+  // below, which needs it on frames where no mousemove fired.
+  const dragPointerRef = React.useRef<{ x: number; y: number } | null>(null);
   const suppressNextClickRef = React.useRef(false);
   const [isRowDragging, setIsRowDragging] = React.useState(false);
 
@@ -522,27 +525,19 @@ export function DataGrid<TData>({
     return map;
   }, [rows]);
 
-  const handleRowMouseDown = React.useCallback(
-    (e: React.MouseEvent, row: Row<TData>) => {
-      if (!enableRowRangeSelect || e.button !== 0) return;
-      // Let interactive cells (pills, comboboxes, the row's own link) handle
-      // their own mousedown — starting a drag from inside one would fight
-      // its click/open behavior.
-      if ((e.target as HTMLElement).closest('[data-no-row-drag]')) return;
-      e.preventDefault(); // suppress native text selection while dragging
-      dragStateRef.current = { anchorId: row.id, moved: false };
-    },
-    [enableRowRangeSelect],
-  );
-
-  const handleRowMouseEnter = React.useCallback(
-    (row: Row<TData>) => {
+  // Extends the selection from the drag's anchor row up to `rowId`. Shared by
+  // the per-row `mouseenter` handler (fast movement over already-loaded rows)
+  // and the auto-scroll loop below (which hit-tests the row under the cursor
+  // itself, since rows sliding under a *stationary* cursor during auto-scroll
+  // never fire a native `mouseenter`).
+  const applySelectionRange = React.useCallback(
+    (rowId: string) => {
       const state = dragStateRef.current;
       if (!state) return;
       state.moved = true;
       setIsRowDragging(true);
       const anchorIdx = rowIndexById.get(state.anchorId);
-      const currentIdx = rowIndexById.get(row.id);
+      const currentIdx = rowIndexById.get(rowId);
       if (anchorIdx === undefined || currentIdx === undefined) return;
       const [lo, hi] = anchorIdx <= currentIdx ? [anchorIdx, currentIdx] : [currentIdx, anchorIdx];
       const next: RowSelectionState = {};
@@ -555,6 +550,107 @@ export function DataGrid<TData>({
     [rowIndexById, rows],
   );
 
+  const handleRowMouseEnter = React.useCallback(
+    (row: Row<TData>) => applySelectionRange(row.id),
+    [applySelectionRange],
+  );
+
+  // Auto-scroll + selection-extension while dragging near the top/bottom edge
+  // of the grid's scroll container — the same gesture a spreadsheet supports:
+  // drag past the visible rows and it scrolls (and, here, paginates via the
+  // existing `loadMoreRef` sentinel/IntersectionObserver as more rows scroll
+  // into view) to keep extending the selection, rather than the drag simply
+  // stalling once it reaches the last rendered row.
+  //
+  // Runs on a rAF loop instead of `mousemove` alone because the selection
+  // needs to keep extending even while the pointer sits still at the edge —
+  // rows are moving under it, not the other way around, so nothing else would
+  // keep firing. The loop itself only runs while a drag is in flight (started
+  // in handleRowMouseDown, stopped on mouseup) rather than for the component's
+  // whole lifetime, so it isn't burning a frame callback while idle.
+  const autoScrollFrameRef = React.useRef<number | null>(null);
+
+  const stopAutoScrollLoop = React.useCallback(() => {
+    if (autoScrollFrameRef.current !== null) {
+      cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
+    }
+  }, []);
+
+  const startAutoScrollLoop = React.useCallback(() => {
+    if (autoScrollFrameRef.current !== null) return; // already running
+    const EDGE_ZONE = 48; // px from the container's top/bottom edge
+    const MAX_SCROLL_SPEED = 16; // px per frame, at the very edge
+    let lastHitRowId: string | null = null;
+
+    function tick() {
+      const pointer = dragPointerRef.current;
+      if (!dragStateRef.current || !pointer) {
+        autoScrollFrameRef.current = null;
+        return;
+      }
+      autoScrollFrameRef.current = requestAnimationFrame(tick);
+
+      const scrollEl = gridContainerRef.current?.querySelector<HTMLElement>(
+        '[data-slot="table-container"]',
+      );
+      if (!scrollEl) return;
+      const rect = scrollEl.getBoundingClientRect();
+
+      const distFromTop = pointer.y - rect.top;
+      const distFromBottom = rect.bottom - pointer.y;
+      if (distFromTop >= 0 && distFromTop < EDGE_ZONE) {
+        scrollEl.scrollTop -= MAX_SCROLL_SPEED * (1 - distFromTop / EDGE_ZONE);
+      } else if (distFromBottom >= 0 && distFromBottom < EDGE_ZONE) {
+        scrollEl.scrollTop += MAX_SCROLL_SPEED * (1 - distFromBottom / EDGE_ZONE);
+      }
+
+      // Hit-test the row under the pointer directly, rather than relying on
+      // `mouseenter` — the pointer may not have moved at all this frame even
+      // though auto-scroll just brought new rows underneath it.
+      const clampedY = Math.min(Math.max(pointer.y, rect.top + 1), rect.bottom - 1);
+      const target = document
+        .elementFromPoint(pointer.x, clampedY)
+        ?.closest<HTMLElement>('[data-row-id]');
+      const hitRowId = target?.dataset.rowId;
+      if (hitRowId && hitRowId !== lastHitRowId) {
+        lastHitRowId = hitRowId;
+        applySelectionRange(hitRowId);
+      }
+    }
+    autoScrollFrameRef.current = requestAnimationFrame(tick);
+  }, [applySelectionRange]);
+
+  // Cancel a still-running loop if the component unmounts mid-drag.
+  React.useEffect(() => stopAutoScrollLoop, [stopAutoScrollLoop]);
+
+  const handleRowMouseDown = React.useCallback(
+    (e: React.MouseEvent, row: Row<TData>) => {
+      if (!enableRowRangeSelect || e.button !== 0) return;
+      // Let interactive cells (pills, comboboxes, the row's own link) handle
+      // their own mousedown — starting a drag from inside one would fight
+      // its click/open behavior.
+      if ((e.target as HTMLElement).closest('[data-no-row-drag]')) return;
+      e.preventDefault(); // suppress native text selection while dragging
+      dragStateRef.current = { anchorId: row.id, moved: false };
+      dragPointerRef.current = { x: e.clientX, y: e.clientY };
+      startAutoScrollLoop();
+    },
+    [enableRowRangeSelect, startAutoScrollLoop],
+  );
+
+  // Tracks pointer position during a drag — the auto-scroll loop needs it on
+  // frames where the pointer didn't move but rows still scrolled underneath.
+  React.useEffect(() => {
+    if (!enableRowRangeSelect) return;
+    function handleMouseMove(e: MouseEvent) {
+      if (!dragStateRef.current) return;
+      dragPointerRef.current = { x: e.clientX, y: e.clientY };
+    }
+    document.addEventListener('mousemove', handleMouseMove);
+    return () => document.removeEventListener('mousemove', handleMouseMove);
+  }, [enableRowRangeSelect]);
+
   // Ends the drag wherever the mouse is released, even outside the table.
   // Marking a completed drag here (rather than in the row's own onMouseUp)
   // is what lets the row under the cursor suppress its onClick — the click
@@ -566,11 +662,13 @@ export function DataGrid<TData>({
         suppressNextClickRef.current = true;
       }
       dragStateRef.current = null;
+      dragPointerRef.current = null;
+      stopAutoScrollLoop();
       setIsRowDragging(false);
     }
     document.addEventListener('mouseup', handleMouseUp);
     return () => document.removeEventListener('mouseup', handleMouseUp);
-  }, [enableRowRangeSelect]);
+  }, [enableRowRangeSelect, stopAutoScrollLoop]);
 
   // Clicking outside the whole component clears the current selection, like
   // a spreadsheet. Popup content (menus, dialogs, comboboxes, tooltips) is
@@ -861,6 +959,7 @@ export function DataGrid<TData>({
                 {rows.map((row) => (
                   <TableRow
                     key={row.id}
+                    data-row-id={row.id}
                     data-state={row.getIsSelected() ? 'selected' : undefined}
                     onMouseDown={
                       enableRowRangeSelect ? (e) => handleRowMouseDown(e, row) : undefined

@@ -15,4 +15,6 @@ export interface SessionUserEntity {
   roleName: string | null;
   /** Flat 'resource:action' strings */
   permissions: string[];
+  /** Industry ids this consultant is scoped to (only enforced for roleName === "consultant") */
+  industryIds: string[];
 }

@@ -5,9 +5,24 @@ import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { QueryCandidatesDto, SortOrder } from './dto/query-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
+import { AuthUser } from '../auth/auth.types';
 
 function baseQuery(overrides: Partial<QueryCandidatesDto> = {}): QueryCandidatesDto {
   return { page: 1, pageSize: 20, sortOrder: SortOrder.asc, ...overrides } as QueryCandidatesDto;
+}
+
+function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
+  return {
+    consultantId: 'me',
+    azureId: 'azure-1',
+    email: 'me@example.com',
+    fullName: 'Me',
+    roleName: 'admin',
+    isActive: true,
+    permissions: new Set(),
+    industryIds: [],
+    ...overrides,
+  };
 }
 
 describe('CandidatesService.create', () => {
@@ -98,7 +113,7 @@ describe('CandidatesService.remove (cascade soft-delete)', () => {
 
   it('cascades to placements + submissions, then deletes the candidate', async () => {
     const { prisma, service } = setup(['s1', 's2']);
-    await service.remove('c1');
+    await service.remove('c1', makeUser());
 
     expect(prisma.placement.deleteMany).toHaveBeenCalledWith({
       where: { submissionId: { in: ['s1', 's2'] } },
@@ -115,7 +130,7 @@ describe('CandidatesService.remove (cascade soft-delete)', () => {
 
   it('skips the child cascade when there are no submissions', async () => {
     const { prisma, service } = setup([]);
-    await service.remove('c1');
+    await service.remove('c1', makeUser());
 
     expect(prisma.placement.deleteMany).not.toHaveBeenCalled();
     expect(prisma.candidateSubmission.deleteMany).not.toHaveBeenCalled();
@@ -220,6 +235,7 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
         specializationIds: ['spec1'],
         consultantIds: ['cons1'],
       }),
+      makeUser(),
     );
 
     const where = findMany.mock.calls[0][0].where;
@@ -236,7 +252,10 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
 
   it('OR-matches any selected skill via JSON array_contains', async () => {
     const { findMany, service } = setup();
-    await service.findAll(baseQuery({ skills: ['CNC', 'Welding'] }));
+    await service.findAll(
+      baseQuery({ skills: ['CNC', 'Welding'] }),
+      makeUser(),
+    );
 
     const where = findMany.mock.calls[0][0].where;
     expect(where.AND).toContainEqual({
@@ -251,6 +270,7 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
         submissionStatuses: [SubmissionStatus.INTERVIEWING],
         placementStatuses: [PlacementStatus.ACTIVE],
       }),
+      makeUser(),
     );
 
     const where = findMany.mock.calls[0][0].where;
@@ -264,7 +284,10 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
 
   it('filters lastContactedAt by the given from/to range', async () => {
     const { findMany, service } = setup();
-    await service.findAll(baseQuery({ lastContactedFrom: '2026-01-01', lastContactedTo: '2026-06-30' }));
+    await service.findAll(
+      baseQuery({ lastContactedFrom: '2026-01-01', lastContactedTo: '2026-06-30' }),
+      makeUser(),
+    );
 
     const where = findMany.mock.calls[0][0].where;
     expect(where.AND).toContainEqual({
@@ -274,7 +297,10 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
 
   it('broadens quick search across scalar columns plus industry/roleType relation names', async () => {
     const { findMany, service } = setup();
-    await service.findAll(baseQuery({ q: 'Sydney' }));
+    await service.findAll(
+      baseQuery({ q: 'Sydney' }),
+      makeUser(),
+    );
 
     const where = findMany.mock.calls[0][0].where;
     const orClause = where.AND.find((c: Record<string, unknown>) => 'OR' in c);
@@ -289,7 +315,10 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
 
   it('matches location against city OR country', async () => {
     const { findMany, service } = setup();
-    await service.findAll(baseQuery({ location: 'Sydney' }));
+    await service.findAll(
+      baseQuery({ location: 'Sydney' }),
+      makeUser(),
+    );
 
     const where = findMany.mock.calls[0][0].where;
     expect(where.AND).toContainEqual({
@@ -302,15 +331,172 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
 
   it('sorts by status using Postgres enum ordinal order (no CASE expression)', async () => {
     const { findMany, service } = setup();
-    await service.findAll(baseQuery({ sortBy: 'status' as QueryCandidatesDto['sortBy'], sortOrder: SortOrder.asc }));
+    await service.findAll(
+      baseQuery({ sortBy: 'status' as QueryCandidatesDto['sortBy'], sortOrder: SortOrder.asc }),
+      makeUser(),
+    );
 
     expect(findMany.mock.calls[0][0].orderBy).toEqual({ status: SortOrder.asc });
   });
 
   it('produces an empty where when no filters are given', async () => {
     const { findMany, service } = setup();
-    await service.findAll(baseQuery());
+    await service.findAll(
+      baseQuery(),
+      makeUser(),
+    );
 
     expect(findMany.mock.calls[0][0].where).toEqual({});
+  });
+
+  it('ANDs an industry scope onto the where for a scoped consultant', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery(), makeUser({ roleName: 'consultant', industryIds: ['ind1', 'ind2'] }));
+
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toContainEqual({ industryId: { in: ['ind1', 'ind2'] } });
+  });
+
+  it('does not add an industry scope for non-consultant roles', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery(), makeUser({ roleName: 'manager' }));
+
+    expect(findMany.mock.calls[0][0].where).toEqual({});
+  });
+});
+
+describe('CandidatesService.findOne — job scope', () => {
+  function makeService(candidate: unknown) {
+    const findUnique = jest.fn().mockResolvedValue(candidate);
+    const prisma = { candidate: { findUnique } } as unknown as ExtendedPrismaClient;
+    const base = {} as unknown as PrismaService;
+    return { service: new CandidatesService(prisma, base) };
+  }
+
+  it('rejects a scoped consultant reaching an out-of-scope candidate directly', async () => {
+    const { service } = makeService({
+      id: 'c1',
+      industryId: 'finance',
+      contactHistory: [],
+      industry: null,
+      roleType: null,
+      specializations: [],
+    });
+    await expect(
+      service.findOne('c1', makeUser({ roleName: 'consultant', industryIds: ['tech'] })),
+    ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
+  });
+
+  it('rejects a scoped consultant reaching an untagged candidate', async () => {
+    const { service } = makeService({
+      id: 'c1',
+      industryId: null,
+      contactHistory: [],
+      industry: null,
+      roleType: null,
+      specializations: [],
+    });
+    await expect(
+      service.findOne('c1', makeUser({ roleName: 'consultant', industryIds: ['tech'] })),
+    ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
+  });
+
+  it('allows a scoped consultant reaching a matching-industry candidate', async () => {
+    const { service } = makeService({
+      id: 'c1',
+      industryId: 'tech',
+      contactHistory: [],
+      industry: null,
+      roleType: null,
+      specializations: [],
+    });
+    await expect(
+      service.findOne('c1', makeUser({ roleName: 'consultant', industryIds: ['tech'] })),
+    ).resolves.toMatchObject({ id: 'c1' });
+  });
+});
+
+describe('CandidatesService.create — industry-first assignment guard', () => {
+  function makeService(consultantIndustryRow: unknown = null) {
+    const create = jest.fn().mockResolvedValue({
+      id: 'c1',
+      contactHistory: [],
+      industry: null,
+      roleType: null,
+      specializations: [],
+    });
+    const consultantIndustry = { findUnique: jest.fn().mockResolvedValue(consultantIndustryRow) };
+    const prisma = { candidate: { create }, consultantIndustry } as unknown as ExtendedPrismaClient;
+    const base = {} as unknown as PrismaService;
+    return { service: new CandidatesService(prisma, base), create };
+  }
+
+  it('rejects assigning a consultant when no industry is tagged', async () => {
+    const { service } = makeService();
+    await expect(
+      service.create({ fullName: 'Jane', consultantId: 'cons-1' }),
+    ).rejects.toMatchObject({ response: { code: 'INDUSTRY_REQUIRED' } });
+  });
+
+  it("rejects assigning a consultant whose industries don't include the tagged one", async () => {
+    const { service } = makeService(null);
+    await expect(
+      service.create({ fullName: 'Jane', industryId: 'ind1', consultantId: 'cons-1' }),
+    ).rejects.toMatchObject({ response: { code: 'CONSULTANT_INDUSTRY_MISMATCH' } });
+  });
+
+  it('allows assigning a consultant whose industries match', async () => {
+    const { service, create } = makeService({ consultantId: 'cons-1', industryId: 'ind1' });
+    await service.create({ fullName: 'Jane', industryId: 'ind1', consultantId: 'cons-1' });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('CandidatesService.update — bidirectional auto-clear', () => {
+  it('clears a now-mismatched consultant when the industry changes without touching consultantId', async () => {
+    const findUnique = jest
+      .fn()
+      .mockResolvedValueOnce({
+        id: 'c1',
+        industryId: 'ind1',
+        consultantId: 'cons-1',
+        contactHistory: [],
+        industry: null,
+        roleType: null,
+        specializations: [],
+      })
+      .mockResolvedValueOnce({ consultantId: 'cons-1' })
+      .mockResolvedValueOnce({
+        id: 'c1',
+        industryId: 'ind2',
+        consultantId: null,
+        contactHistory: [],
+        industry: null,
+        roleType: null,
+        specializations: [],
+      });
+    const update = jest.fn().mockResolvedValue({
+      id: 'c1',
+      industryId: 'ind2',
+      contactHistory: [],
+      industry: null,
+      roleType: null,
+      specializations: [],
+    });
+    const consultantIndustry = { findUnique: jest.fn().mockResolvedValue(null) };
+    const prisma = {
+      candidate: { findUnique, update, findUniqueOrThrow: findUnique },
+      consultantIndustry,
+    } as unknown as ExtendedPrismaClient;
+    const base = {} as unknown as PrismaService;
+    const service = new CandidatesService(prisma, base);
+
+    const result = await service.update('c1', { industryId: 'ind2' } as never, makeUser());
+
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'c1' }, data: { consultantId: null } }),
+    );
+    expect(result.consultantId).toBeNull();
   });
 });

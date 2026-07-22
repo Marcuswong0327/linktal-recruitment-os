@@ -4,6 +4,7 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Info } from 'lucide-react';
 
 import { EnumSelect } from '@/components/EnumSelect';
+import { DataGridFacetedFilter, type FacetedFilterOption } from '@/components/DataGridFacetedFilter';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   type Consultant,
@@ -57,6 +58,17 @@ interface ConsultantColumnsOptions {
   isSelf: (user: Consultant) => boolean;
   onRoleChange: (user: Consultant, role: ConsultantRole) => void;
   onStatusChange: (user: Consultant, isActive: boolean) => void;
+  /**
+   * Present only when the caller holds `consultant_industry:read` — the
+   * whole column is omitted otherwise (matches `industries`/`industryIds`
+   * being absent from the API response entirely for a caller without that
+   * permission, not just empty).
+   */
+  industries?: {
+    options: FacetedFilterOption[];
+    /** Absent when the caller lacks `consultant_industry:update` — read-only chips instead of an editable picker. */
+    onIndustriesChange?: (user: Consultant, industryIds: string[]) => void;
+  };
 }
 
 export function getConsultantColumns({
@@ -64,6 +76,7 @@ export function getConsultantColumns({
   isSelf,
   onRoleChange,
   onStatusChange,
+  industries,
 }: ConsultantColumnsOptions): ColumnDef<Consultant>[] {
   return [
     {
@@ -161,6 +174,48 @@ export function getConsultantColumns({
     //     <span className="tabular-nums">{row.original.openJobOrders}</span>
     //   ),
     // },
+    ...(industries
+      ? [
+          {
+            id: 'industries',
+            header: 'Industries',
+            size: 200,
+            enableSorting: false,
+            cell: ({ row }: { row: { original: Consultant } }) => {
+              const user = row.original;
+              const selected = user.industryIds ?? [];
+              if (!industries.onIndustriesChange) {
+                return (
+                  <div className="flex flex-wrap gap-1">
+                    {(user.industries ?? []).length > 0 ? (
+                      (user.industries ?? []).map((name) => (
+                        <span key={name} className="text-xs text-muted-foreground">
+                          {name}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </div>
+                );
+              }
+              const disabled = pendingId === user.id;
+              return (
+                <div data-no-row-drag>
+                  <DataGridFacetedFilter
+                    title="Industries"
+                    options={industries.options}
+                    selected={selected}
+                    onChange={(ids) => industries.onIndustriesChange!(user, ids)}
+                    disabled={disabled}
+                    triggerClassName="w-fit"
+                  />
+                </div>
+              );
+            },
+          } satisfies ColumnDef<Consultant>,
+        ]
+      : []),
     {
       accessorKey: 'createdAt',
       header: 'Joined',

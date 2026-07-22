@@ -12,6 +12,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { RequestContext } from '../common/request-context';
+import {
+  assertConsultantIndustryMatch,
+  assertInJobScope,
+  clearMismatchedCandidateAssignment,
+  industryScope,
+} from '../common/industry-scope';
 import { AuthUser } from '../auth/auth.types';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
@@ -80,7 +86,7 @@ export class CandidatesService {
     private readonly base: PrismaService,
   ) {}
 
-  async findAll(query: QueryCandidatesDto) {
+  async findAll(query: QueryCandidatesDto, user: AuthUser) {
     const { page, pageSize, sortBy, sortOrder, q } = query;
 
     // Built as an AND-ed list of independent conditions rather than
@@ -96,6 +102,7 @@ export class CandidatesService {
       and.push({ specializations: { some: { specializationId: { in: query.specializationIds } } } });
     }
     if (query.consultantIds?.length) and.push({ consultantId: { in: query.consultantIds } });
+    if (user.roleName === 'consultant') and.push(industryScope(user.industryIds));
     if (query.submissionStatuses?.length) {
       and.push({ submissions: { some: { status: { in: query.submissionStatuses } } } });
     }
@@ -189,7 +196,7 @@ export class CandidatesService {
     return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user: AuthUser) {
     const candidate = await this.prisma.candidate.findUnique({
       where: { id },
       include: CANDIDATE_INCLUDE,
@@ -197,6 +204,7 @@ export class CandidatesService {
     if (!candidate) {
       throw new NotFoundException(`Candidate ${id} not found`);
     }
+    assertInJobScope(user, candidate.industryId);
     return toEntity(candidate);
   }
 
@@ -212,6 +220,11 @@ export class CandidatesService {
   }
 
   async create(dto: CreateCandidateDto) {
+    // Industry-first: a consultant can only be assigned once the candidate
+    // already has an industry tagged, and only if they hold that industry.
+    if (dto.consultantId) {
+      await assertConsultantIndustryMatch(this.prisma, dto.consultantId, dto.industryId ?? null);
+    }
     // displayId is assigned by the DB (Candidate_displayId_seq default).
     const candidate = await this.prisma.candidate.create({
       data: {
@@ -225,9 +238,18 @@ export class CandidatesService {
     return toEntity(candidate);
   }
 
-  async update(id: string, dto: UpdateCandidateDto) {
-    await this.findOne(id);
-    const candidate = await this.prisma.candidate.update({
+  async update(id: string, dto: UpdateCandidateDto, user: AuthUser) {
+    const existing = await this.findOne(id, user);
+
+    // Industry-first: only validated when a consultant is explicitly being
+    // set/changed here — an industry-only edit never blocks on this (that's
+    // what the auto-clear below is for instead of erroring).
+    if ('consultantId' in dto && dto.consultantId) {
+      const effectiveIndustryId = 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId;
+      await assertConsultantIndustryMatch(this.prisma, dto.consultantId, effectiveIndustryId);
+    }
+
+    let candidate = await this.prisma.candidate.update({
       where: { id },
       data: {
         ...this.toPrismaData(dto),
@@ -246,6 +268,17 @@ export class CandidatesService {
       },
       include: CANDIDATE_INCLUDE,
     });
+
+    // Bidirectional auto-clear: the industry changed without an explicit
+    // consultant change in the same request — silently unassign if the
+    // existing consultant no longer matches, rather than blocking the edit.
+    if ('industryId' in dto && !('consultantId' in dto)) {
+      const cleared = await clearMismatchedCandidateAssignment(this.prisma, id, dto.industryId ?? null);
+      if (cleared) {
+        candidate = await this.prisma.candidate.findUniqueOrThrow({ where: { id }, include: CANDIDATE_INCLUDE });
+      }
+    }
+
     return toEntity(candidate);
   }
 
@@ -256,8 +289,8 @@ export class CandidatesService {
    * audit extension writes outside it. A partial failure is recoverable via
    * `restore` — children are removed before the parent.
    */
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, user: AuthUser) {
+    await this.findOne(id, user);
     const submissions = await this.prisma.candidateSubmission.findMany({
       where: { candidateId: id },
       select: { id: true },
@@ -397,15 +430,15 @@ export class CandidatesService {
   }
 
   /** Appends one entry to the candidate's note timeline (never overwrites prior entries). */
-  async addNote(id: string, dto: AddCandidateNoteDto, consultantId: string) {
-    const candidate = await this.findOne(id);
+  async addNote(id: string, dto: AddCandidateNoteDto, user: AuthUser) {
+    const candidate = await this.findOne(id, user);
     const next: CandidateNoteDto[] = [
       ...this.getNotes(candidate),
       {
         id: randomUUID(),
         content: dto.content,
         timestamp: new Date().toISOString(),
-        by: consultantId,
+        by: user.consultantId,
         editedAt: null,
         editedBy: null,
       },
@@ -415,7 +448,7 @@ export class CandidatesService {
 
   /** Edits one note's content in place; restricted to its author or an admin. */
   async updateNote(id: string, noteId: string, dto: UpdateCandidateNoteDto, user: AuthUser) {
-    const candidate = await this.findOne(id);
+    const candidate = await this.findOne(id, user);
     const notes = this.getNotes(candidate);
     const index = this.findNoteOrThrow(notes, noteId);
     this.assertCanModifyNote(notes[index], user);
@@ -433,7 +466,7 @@ export class CandidatesService {
 
   /** Removes one note from the timeline; restricted to its author or an admin. */
   async deleteNote(id: string, noteId: string, user: AuthUser, expectedVersion?: string) {
-    const candidate = await this.findOne(id);
+    const candidate = await this.findOne(id, user);
     const notes = this.getNotes(candidate);
     const index = this.findNoteOrThrow(notes, noteId);
     this.assertCanModifyNote(notes[index], user);

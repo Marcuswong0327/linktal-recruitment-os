@@ -45,6 +45,16 @@ erDiagram
         datetime updatedAt
     }
 
+    %% Many-to-many: which industries a consultant is scoped to (a consultant
+    %% can carry several, unlike Client/Candidate's single industryId). No
+    %% id/timestamps — pure join, same shape as CandidateSpecialization.
+    %% Drives the industry-based row scoping described in the RBAC section
+    %% below, for the `consultant` role only.
+    ConsultantIndustry {
+        string consultantId PK "also FK -> Consultant"
+        string industryId PK "also FK -> Industry"
+    }
+
     %% ==================== CLIENT DOMAIN ====================
     %% Industry/Specialization/StakeholderRoleType are reference tables (a
     %% fixed row instead of free text), so values stay consistent and
@@ -332,6 +342,8 @@ erDiagram
     Consultant ||--o{ StakeholderContactHistory : "made"
     Consultant ||--o{ CandidateContactHistory : "made"
     Consultant ||--o{ CandidateSavedSearch : "owns"
+    Consultant ||--o{ ConsultantIndustry : "scoped to"
+    Industry ||--o{ ConsultantIndustry : "scopes"
 
     Industry ||--o{ Client : "categorizes"
     Specialization ||--o{ Client : "categorizes"
@@ -364,6 +376,7 @@ erDiagram
 | **Permission** | `resource` + `action` pair | cuid, unique(resource, action) |
 | **RolePermission** | Join: roles ↔ permissions | cuid, unique(roleId, permissionId) |
 | **Consultant** | Local identity + role (linked to Azure AD via `azureId`) | cuid, displayId `consultant-XXXX` |
+| **ConsultantIndustry** | Join: consultants ↔ industries they're scoped to (many-to-many — a consultant can carry several) | composite PK(consultantId, industryId) |
 
 ### Core Entities
 
@@ -424,35 +437,78 @@ Roles and permissions are created by `apps/api/prisma/seed.ts`. Access is
 on controllers → `PermissionsGuard`) for most resources — a permission like
 `candidate:read` grants read on every candidate, no row-level restriction.
 
-**Two resources are the exception**: `client` and `job_order` add a
-service-level **row-scoping** rule on top of the permission check — a caller
-with the `consultant` role only ever sees/queries their **own** book
-(`consultantId = caller`), enforced in `ClientsService.findAll` /
-`JobOrdersService.findAll` regardless of what a `consultantIds` query param
-asks for. Every other role (`manager`/`finance`/`researcher`/`admin`) sees the
-full list — this is a visibility scope, not a different permission grant.
+**`client` and `job_order` add a service-level row-scoping rule** on top of
+the permission check — a caller with the `consultant` role only ever
+sees/queries their **own** book (`consultantId = caller`), enforced in
+`ClientsService.findAll` / `JobOrdersService.findAll` regardless of what a
+`consultantIds` query param asks for. Every other role
+(`manager`/`finance`/`researcher`/`admin`) sees the full list — this is a
+visibility scope, not a different permission grant.
+
+**Industry-based row scoping (on top of the above, `consultant` role only)** —
+each consultant can be assigned one or more industries (`ConsultantIndustry`).
+For the `consultant` role specifically (every other role is unrestricted
+regardless of their own industry assignment):
+- `Client`/`Candidate` (`industryId` directly) and `Stakeholder`/`JobOrder`
+  (indirectly, via their parent `Client`) are filtered to records whose
+  industry is in the caller's assigned set — **strict, no null-passthrough**:
+  an untagged record is invisible to every consultant, including whoever it's
+  nominally assigned to. List endpoints filter silently; a direct
+  `findOne`/`update`/`remove` on an out-of-scope record gets an explicit
+  `403 OUT_OF_JOB_SCOPE` instead.
+- **Industry-first assignment guard**: a Client/Candidate/Job Order can only
+  have a consultant assigned once it already has an industry tagged, and only
+  to a consultant who holds that industry (`assertConsultantIndustryMatch` /
+  `assertConsultantIndustryMatchForJobOrder` in
+  `apps/api/src/common/industry-scope.ts`) — `400 INDUSTRY_REQUIRED` /
+  `400 CONSULTANT_INDUSTRY_MISMATCH`.
+- **Bidirectional auto-clear**: a stale mismatched `consultantId` can't
+  persist — changing a Client/Candidate's industry, or a consultant's
+  assigned industries, silently clears any now-mismatched `consultantId`
+  (cascading from a Client to its Job Orders too) rather than erroring.
+- **Submission industry guard** (applies to *every* role, not just scoped
+  consultants — a data-integrity rule, not access control): `POST
+  /candidate-submissions` rejects a candidate/job-order pair whose industries
+  don't match (`400 SUBMISSION_INDUSTRY_MISMATCH`), since a Job Order has no
+  industry of its own.
+- Consultant→industry assignment itself (`PUT /consultants/:id/industries`,
+  `consultant_industry:update`) has its own escalation rules, independent of
+  the general `consultant:update` permission: an admin can assign to anyone
+  except themselves; a manager can assign to themselves, other managers, or
+  consultants, but never to an admin account. See `rbac-roles.md` §3.
+- Claims (`roleName`, `permissions`, and now `industryIds`) are minted into
+  the access token at login/refresh — an industry reassignment takes effect
+  on the consultant's next token refresh (≤15 min), same latency already
+  accepted for role/permission changes.
 
 ### Resources & actions (seed)
 
 - **Resources:** `candidate`, `client`, `stakeholder`, `job_order`,
-  `job_research`, `submission`, `placement`, `consultant`, `role`, `permission`,
-  `industry`, `specialization`, `stakeholder_role_type`, `candidate_role_type`,
-  `saved_search`, `report`, `audit`
+  `job_research`, `submission`, `placement`, `consultant`, `consultant_industry`,
+  `role`, `permission`, `industry`, `specialization`, `stakeholder_role_type`,
+  `candidate_role_type`, `saved_search`, `report`, `audit`
 - **Actions:** `create`, `read`, `update`, `delete` (`industry`,
   `specialization`, `stakeholder_role_type`, and `candidate_role_type` are
   create+read only; `saved_search` is create+read+delete only — no `update`,
-  rename isn't supported, delete+re-save covers it — see `rbac-roles.md` §4)
+  rename isn't supported, delete+re-save covers it; `consultant_industry` is
+  **read+update only** — a full-set-replace endpoint, no separate
+  create/delete actions — see `rbac-roles.md` §4)
 
 ### Role → permission matrix (from seed)
 
 | Role | Grants |
 |------|--------|
-| **admin** | All actions on all resources |
-| **manager** | `read` on all; `create`/`update` on candidate, client, stakeholder, job_order, job_research, submission, placement, consultant; `create` on industry, specialization, stakeholder_role_type, candidate_role_type, saved_search; `create` on report |
-| **consultant** | Full CRUD on candidate, client, stakeholder, job_order, job_research, submission, placement; `create`/`read` on industry, specialization, stakeholder_role_type, candidate_role_type (needed by those fields' comboboxes); `create`/`read`/`delete` on saved_search (own candidate searches) |
+| **admin** | All actions on all resources (including `consultant_industry`) |
+| **manager** | `read` on all; `create`/`update` on candidate, client, stakeholder, job_order, job_research, submission, placement, consultant; `update` on consultant_industry; `create` on industry, specialization, stakeholder_role_type, candidate_role_type, saved_search; `create` on report |
+| **consultant** | Full CRUD on candidate, client, stakeholder, job_order, job_research, submission, placement; `create`/`read` on industry, specialization, stakeholder_role_type, candidate_role_type (needed by those fields' comboboxes); `create`/`read`/`delete` on saved_search (own candidate searches); **no** access to consultant or consultant_industry |
 | **finance** | `read` on placement, client, job_order; `create`/`read` on report |
 | **researcher** | `create`/`read`/`update` on client, stakeholder, job_research, candidate; `create`/`read` on industry, specialization, stakeholder_role_type, candidate_role_type; `create`/`read`/`delete` on saved_search; `read` on job_order, submission, placement |
 | **viewer** | `read` on candidate, client, stakeholder, job_order, job_research, submission, placement |
+
+> `consultant_industry` is fully dynamic like every other resource — the
+> Roles admin UI (`apps/web/src/features/roles/PermissionPicker.tsx`) builds
+> its matrix from whatever's seeded, so granting e.g. `researcher` read
+> access to it later needs no code change, just a Roles-page edit.
 
 > New users are provisioned just-in-time on first login with the **viewer** role
 > (`RbacService`). An imported consultant matched by email is backfilled with the
@@ -475,6 +531,7 @@ full list — this is a visibility scope, not a different permission grant.
 12. **Industry / CandidateRoleType → Candidate** — same reference-table pattern; Industry is the same shared catalog Client uses, CandidateRoleType is its own (employment type, not Stakeholder's functional classification).
 13. **Candidate ↔ Specialization** (via `CandidateSpecialization`) — many-to-many; unlike Client's single `specializationId`, a candidate can carry several.
 14. **Consultant → CandidateSavedSearch** — a consultant's own saved candidate searches; owner-scoped, never shared across consultants.
+15. **Consultant ↔ Industry** (via `ConsultantIndustry`) — many-to-many; which industries a consultant is scoped to (see the RBAC section above). Written as individual top-level `create`/`delete` calls rather than a nested relation write on `Consultant` — unlike `CandidateSpecialization`, this makes it land in `AUDITED_MODELS` and actually get diffed by the audit extension (a nested write's relation keys are explicitly excluded from the generic diff).
 
 ### Denormalized `lastContactedAt`
 
@@ -515,7 +572,7 @@ single generic mechanism rather than bespoke tracking per entity.
 Extension that intercepts every write (`$allOperations`) for the models
 listed in `AUDITED_MODELS` — `Client`, `Stakeholder`, `ClientJobResearch`,
 `Candidate`, `JobOrder`, `CandidateSubmission`, `Placement`, `Interview`,
-`Consultant`, `Role`, `Permission`. For each write it inserts one `AuditLog` row recording:
+`Consultant`, `Role`, `Permission`, `ConsultantIndustry`. For each write it inserts one `AuditLog` row recording:
 who (`actorId`, from the request's `RequestContext`, `null` = system/import),
 when (`createdAt`), which record (`entityType` + `entityId`), what changed
 (`changes`: `{ field: { from, to } }` for updates, the full row for creates),

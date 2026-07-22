@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Download } from 'lucide-react';
 import { toast } from 'sonner';
-import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
@@ -12,9 +12,9 @@ import { LogContactSheet, type LogContactValues } from '@/components/LogContactS
 import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
 import {
   getGetStakeholdersQueryKey,
+  getStakeholders,
   updateStakeholder as updateStakeholderRequest,
   useAddStakeholderContactHistory,
-  useGetStakeholders,
 } from '@/lib/api/generated/stakeholders/stakeholders';
 import {
   getGetStakeholderRoleTypesQueryKey,
@@ -32,11 +32,15 @@ import { getStakeholderColumns } from './columns';
 import { exportStakeholdersToExcel } from './exportToExcel';
 import type { EnrichedStakeholder } from './schema';
 
-const PAGE_SIZE = 20;
+// This workspace shows every stakeholder across the selected companies at
+// once rather than paginating — see "Stakeholder Enrichment Workspace loads
+// all results" in docs/manual-vs-automated-workflows.md. 100 is the backend's
+// max page size (QueryStakeholdersDto.pageSize), so this is the fewest
+// requests the draining loop below can make per page.
+const PAGE_SIZE = 100;
 
 export function StakeholderWorkspace({ clientIds }: { clientIds: string[] }) {
   const queryClient = useQueryClient();
-  const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
   const [roleTypeIds, setRoleTypeIds] = React.useState<string[] | undefined>();
   // Default: most-recently-contacted first — the whole point of this
@@ -51,12 +55,60 @@ export function StakeholderWorkspace({ clientIds }: { clientIds: string[] }) {
   const [pendingRowId, setPendingRowId] = React.useState<string | null>(null);
   const [loggingContactFor, setLoggingContactFor] = React.useState<EnrichedStakeholder | null>(null);
 
-  const { data, isLoading, isFetching, isError, error } = useGetStakeholders(
-    { clientIds, page, pageSize: PAGE_SIZE, q: search, roleTypeIds, sortBy, sortOrder },
-    { query: { placeholderData: keepPreviousData } },
+  const {
+    data,
+    isLoading,
+    isFetching,
+    isFetchingNextPage,
+    fetchNextPage,
+    isError,
+    error,
+  } = useInfiniteQuery({
+    queryKey: [
+      ...getGetStakeholdersQueryKey(),
+      'infinite',
+      { clientIds, pageSize: PAGE_SIZE, q: search, roleTypeIds, sortBy, sortOrder },
+    ],
+    queryFn: ({ pageParam, signal }) =>
+      getStakeholders(
+        { clientIds, page: pageParam, pageSize: PAGE_SIZE, q: search, roleTypeIds, sortBy, sortOrder },
+        { signal },
+      ),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.status !== 200) return undefined;
+      const { page, pageCount } = lastPage.data;
+      return page < pageCount ? page + 1 : undefined;
+    },
+    placeholderData: keepPreviousData,
+  });
+
+  const pages = data?.pages ?? [];
+  const lastPage = pages.length > 0 ? pages[pages.length - 1] : undefined;
+  const lastPageOk = lastPage?.status === 200 ? lastPage.data : undefined;
+  // "Show all at once" rather than real pagination: as soon as a page
+  // resolves and there's another one, immediately fetch it too instead of
+  // waiting for the user to scroll the sentinel row into view. In practice
+  // selections are small (a consultant's own companies, or an occasional
+  // admin batch) so this is usually a single request; it stays correct even
+  // if a selection produces more than one page of stakeholders.
+  React.useEffect(() => {
+    if (lastPageOk && lastPageOk.page < lastPageOk.pageCount && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [lastPageOk, isFetchingNextPage, fetchNextPage]);
+
+  // Deduped by id as a safety net, same reasoning as CompaniesTable's
+  // equivalent join — a sort-order-affecting mutation between an
+  // already-drained page and a refetch of it could otherwise land the same
+  // row twice.
+  const stakeholders = React.useMemo(
+    () =>
+      Array.from(
+        new Map(pages.flatMap((p) => (p.status === 200 ? p.data.data.map((s) => [s.id, s] as const) : []))).values(),
+      ),
+    [pages],
   );
-  const result = data?.status === 200 ? data.data : undefined;
-  const stakeholders = result?.data ?? [];
 
   const { data: roleTypeData } = useGetStakeholderRoleTypes();
   const roleTypeRows = roleTypeData?.status === 200 ? roleTypeData.data : [];
@@ -157,7 +209,6 @@ export function StakeholderWorkspace({ clientIds }: { clientIds: string[] }) {
     setRoleTypeIds(roleTypeFilter);
     setSortBy(sortField);
     setSortOrder(sort?.desc ? GetStakeholdersSortOrder.desc : GetStakeholdersSortOrder.asc);
-    setPage(1);
   }
 
   function handleExport() {
@@ -217,12 +268,14 @@ export function StakeholderWorkspace({ clientIds }: { clientIds: string[] }) {
           </Button>
         }
         server={{
-          total: result?.total ?? 0,
-          page,
+          total: lastPageOk?.total ?? 0,
+          page: Math.max(pages.length, 1),
           pageSize: PAGE_SIZE,
-          pageCount: result?.pageCount ?? 1,
-          onPageChange: setPage,
+          pageCount: lastPageOk?.pageCount ?? 1,
+          onPageChange: () => fetchNextPage(),
           onQueryChange: handleQueryChange,
+          infiniteScroll: true,
+          isFetchingNextPage,
         }}
       />
 

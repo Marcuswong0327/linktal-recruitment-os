@@ -53,8 +53,8 @@ export class JobOrdersController {
   @RequirePermission('job_order', 'read')
   @ApiOperation({ operationId: 'getJobOrder', summary: 'Get job order by ID' })
   @ApiResponse({ status: 200, description: 'Job order found', type: JobOrderEntity })
-  findOne(@Param('id') id: string) {
-    return this.jobOrders.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.jobOrders.findOne(id, user);
   }
 
   @Get(':id/pipeline-timeline')
@@ -80,8 +80,8 @@ export class JobOrdersController {
   @RequirePermission('job_order', 'update')
   @ApiOperation({ operationId: 'updateJobOrder', summary: 'Update a job order' })
   @ApiResponse({ status: 200, description: 'Job order updated', type: JobOrderEntity })
-  update(@Param('id') id: string, @Body() dto: UpdateJobOrderDto) {
-    return this.jobOrders.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateJobOrderDto, @CurrentUser() user: AuthUser) {
+    return this.jobOrders.update(id, dto, user);
   }
 
   @Delete(':id')
@@ -89,7 +89,7 @@ export class JobOrdersController {
   @RequirePermission('job_order', 'delete')
   @ApiOperation({ operationId: 'deleteJobOrder', summary: 'Delete a job order' })
   @ApiResponse({ status: 204, description: 'Job order deleted' })
-  remove(@Param('id') id: string) {
-    return this.jobOrders.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.jobOrders.remove(id, user);
   }
 }

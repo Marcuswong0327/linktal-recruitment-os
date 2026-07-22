@@ -49,8 +49,8 @@ export class CandidatesController {
     summary: 'List candidates (paginated, filterable, sortable)',
   })
   @ApiResponse({ status: 200, description: 'Paginated candidates', type: PaginatedCandidatesEntity })
-  findAll(@Query() query: QueryCandidatesDto) {
-    return this.candidates.findAll(query);
+  findAll(@Query() query: QueryCandidatesDto, @CurrentUser() user: AuthUser) {
+    return this.candidates.findAll(query, user);
   }
 
   // Static routes ('saved-searches', 'by-display-id/:displayId') must come
@@ -93,8 +93,8 @@ export class CandidatesController {
   @RequirePermission('candidate', 'read')
   @ApiOperation({ operationId: 'getCandidate', summary: 'Get candidate by ID' })
   @ApiResponse({ status: 200, description: 'Candidate found', type: CandidateEntity })
-  findOne(@Param('id') id: string) {
-    return this.candidates.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.candidates.findOne(id, user);
   }
 
   @Get(':id/pipeline-timeline')
@@ -120,8 +120,8 @@ export class CandidatesController {
   @RequirePermission('candidate', 'update')
   @ApiOperation({ operationId: 'updateCandidate', summary: 'Update a candidate' })
   @ApiResponse({ status: 200, description: 'Candidate updated', type: CandidateEntity })
-  update(@Param('id') id: string, @Body() dto: UpdateCandidateDto) {
-    return this.candidates.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateCandidateDto, @CurrentUser() user: AuthUser) {
+    return this.candidates.update(id, dto, user);
   }
 
   @Post(':id/notes')
@@ -129,7 +129,7 @@ export class CandidatesController {
   @ApiOperation({ operationId: 'addCandidateNote', summary: "Append a note to a candidate's timeline" })
   @ApiResponse({ status: 201, description: 'Candidate updated', type: CandidateEntity })
   addNote(@Param('id') id: string, @Body() dto: AddCandidateNoteDto, @CurrentUser() user: AuthUser) {
-    return this.candidates.addNote(id, dto, user.consultantId);
+    return this.candidates.addNote(id, dto, user);
   }
 
   @Patch(':id/notes/:noteId')
@@ -169,8 +169,8 @@ export class CandidatesController {
   @RequirePermission('candidate', 'delete')
   @ApiOperation({ operationId: 'deleteCandidate', summary: 'Soft-delete a candidate (recoverable)' })
   @ApiResponse({ status: 204, description: 'Candidate soft-deleted' })
-  remove(@Param('id') id: string) {
-    return this.candidates.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.candidates.remove(id, user);
   }
 
   @Post(':id/restore')

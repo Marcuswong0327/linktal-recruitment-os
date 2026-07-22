@@ -40,6 +40,8 @@ interface DataGridFacetedFilterProps {
    * the toolbar's full pill with title + selected-count.
    */
   compact?: boolean;
+  /** Disables the trigger — e.g. while a row's own mutation is in flight, or the caller lacks edit permission. */
+  disabled?: boolean;
 }
 
 export function DataGridFacetedFilter({
@@ -50,6 +52,7 @@ export function DataGridFacetedFilter({
   single = false,
   triggerClassName,
   compact = false,
+  disabled = false,
 }: DataGridFacetedFilterProps) {
   const selectedSet = new Set(selected);
 
@@ -77,6 +80,7 @@ export function DataGridFacetedFilter({
             aria-label={compact ? `Filter ${title}` : undefined}
             title={compact ? `Filter ${title}` : undefined}
             onClick={(e) => e.stopPropagation()}
+            disabled={disabled}
             className={cn(
               compact
                 ? 'text-muted-foreground hover:text-foreground'

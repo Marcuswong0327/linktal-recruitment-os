@@ -3,6 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { ChevronDown, Plus, Rocket, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
@@ -76,6 +77,12 @@ export function JobOrdersTable({
   canDelete?: boolean;
 }) {
   const router = useRouter();
+  const { data: session } = useSession();
+  // Every row is already scoped to this consultant's own job orders (see
+  // JobOrdersService.findAll) and the field is redacted server-side too —
+  // the column/filter would just repeat their own name (or nothing) on
+  // every row. Same reasoning as Companies' `isConsultant` treatment.
+  const isConsultant = session?.user?.roleName === 'consultant';
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
@@ -103,12 +110,33 @@ export function JobOrdersTable({
     [clients],
   );
 
+  // pageSize is capped at 100 server-side (query-consultants.dto.ts) — this
+  // is a single unpaginated fetch, so if consultant headcount ever exceeds
+  // 100, the overflow silently won't appear here, including as options in
+  // the single-row and bulk "Set consultant" pickers below.
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
   const consultantName = React.useCallback(
     (id: string | null) => (id ? (consultants.find((c) => c.id === id)?.fullName ?? 'Unknown') : '—'),
     [consultants],
   );
+
+  // Industry-first, for bulk assignment too: a Job Order has no industry of
+  // its own, only via its Client — same reasoning as Companies'
+  // bulkAssignableConsultants. Only offer consultants who hold *every*
+  // distinct industry represented across the selected job orders' clients;
+  // any selected job order whose client is untagged makes bulk assignment
+  // impossible outright.
+  const bulkAssignableConsultants = React.useMemo(() => {
+    const selectedClientIndustryIds = selectedJobOrders.map(
+      (j) => clients.find((c) => c.id === j.clientId)?.industryId ?? null,
+    );
+    if (selectedClientIndustryIds.some((id) => !id)) return [];
+    const distinctIndustryIds = Array.from(new Set(selectedClientIndustryIds as string[]));
+    return consultants.filter(
+      (c) => c.industryIds === undefined || distinctIndustryIds.every((id) => c.industryIds!.includes(id)),
+    );
+  }, [consultants, clients, selectedJobOrders]);
 
   // For the Candidates column's multi-select picker.
   const { data: candidatesData } = useGetCandidates({ pageSize: 100 });
@@ -126,14 +154,18 @@ export function JobOrdersTable({
       { columnId: 'status', title: 'Status', options: statusOptions, inHeader: true },
       { columnId: 'quality', title: 'Quality', options: qualityOptions, inHeader: true },
       { columnId: 'priorityLevel', title: 'Priority', options: priorityOptions, inHeader: true },
-      {
-        columnId: 'consultantId',
-        title: 'Consultant',
-        options: consultantFilterOptions,
-        inHeader: true,
-      },
+      ...(isConsultant
+        ? []
+        : [
+            {
+              columnId: 'consultantId',
+              title: 'Consultant',
+              options: consultantFilterOptions,
+              inHeader: true,
+            },
+          ]),
     ],
-    [consultantFilterOptions],
+    [consultantFilterOptions, isConsultant],
   );
 
   const result = data?.status === 200 ? data.data : undefined;
@@ -189,8 +221,8 @@ export function JobOrdersTable({
   }
 
   const columns = React.useMemo(
-    () => getJobOrderColumns({ clientName, consultantName, candidates }),
-    [clientName, consultantName, candidates],
+    () => getJobOrderColumns({ clientName, consultantName, candidates, hideConsultantColumn: isConsultant }),
+    [clientName, consultantName, candidates, isConsultant],
   );
 
   if (isError) {
@@ -325,7 +357,7 @@ export function JobOrdersTable({
                 anchorRef={bulkActionsTriggerRef}
                 open={consultantPickerOpen}
                 onOpenChange={setConsultantPickerOpen}
-                consultants={consultants}
+                consultants={bulkAssignableConsultants}
                 onAssign={(id) =>
                   // Generated type omits null (API accepts it to clear the FK) —
                   // cast around the gap rather than sending '' which Prisma would

@@ -29,4 +29,13 @@ export class ConsultantEntity implements Omit<Consultant, 'passwordHash'> {
   @ApiProperty() updatedAt!: Date;
   @ApiPropertyOptional({ type: RoleSummaryEntity, nullable: true })
   role?: RoleSummaryEntity | null;
+  /**
+   * Assigned industries — present only when the caller holds
+   * `consultant_industry:read` (omitted entirely otherwise, not just empty).
+   * Same names/ids pairing as Candidate's `specializations`/`specializationIds`.
+   */
+  @ApiPropertyOptional({ type: [String] })
+  industries?: string[];
+  @ApiPropertyOptional({ type: [String], description: 'Industry IDs backing `industries`' })
+  industryIds?: string[];
 }

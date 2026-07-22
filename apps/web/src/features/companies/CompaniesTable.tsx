@@ -193,9 +193,30 @@ export function CompaniesTable({
 
   // Client-side join: the API returns consultantId only, so pull the full
   // consultant list once to resolve names for the table and edit form.
+  // pageSize is capped at 100 server-side (query-consultants.dto.ts) — this
+  // is a single unpaginated fetch, so if consultant headcount ever exceeds
+  // 100, the overflow silently won't appear here, including as options in
+  // the single-row and bulk "Set consultant" pickers below.
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
   const { labelFor: consultantLabelFor } = useConsultantLookup(consultants);
+
+  // Industry-first, for bulk assignment too: applying one consultant across a
+  // multi-industry selection would otherwise partial-fail row by row with no
+  // explanation (each PATCH is validated independently server-side — see
+  // assertConsultantIndustryMatch). Only offer consultants who hold *every*
+  // distinct industry represented in the current selection; any untagged
+  // company in the selection makes bulk assignment impossible outright (same
+  // "industry required first" rule as a single row).
+  const bulkAssignableConsultants = React.useMemo(() => {
+    if (selectedCompanies.some((c) => !c.industryId)) return [];
+    const selectedIndustryIds = Array.from(
+      new Set(selectedCompanies.map((c) => c.industryId).filter((id): id is string => id != null)),
+    );
+    return consultants.filter(
+      (c) => c.industryIds === undefined || selectedIndustryIds.every((id) => c.industryIds!.includes(id)),
+    );
+  }, [consultants, selectedCompanies]);
   // Also drives the Industry/Specialization filter pickers below.
   const { data: industryData } = useGetIndustries();
   const industries: IndustryEntity[] = industryData?.status === 200 ? industryData.data : [];
@@ -559,7 +580,7 @@ export function CompaniesTable({
                 anchorRef={bulkActionsTriggerRef}
                 open={consultantPickerOpen}
                 onOpenChange={setConsultantPickerOpen}
-                consultants={consultants}
+                consultants={bulkAssignableConsultants}
                 onAssign={(id) =>
                   // Generated type omits null (API accepts it to clear the FK) —
                   // cast around the gap rather than sending '' which Prisma would

@@ -30,6 +30,7 @@ import type {
   ErrorResponse,
   GetConsultantsParams,
   PaginatedConsultantsEntity,
+  SetConsultantIndustriesDto,
   UpdateConsultantDto,
   UpdateMeDto
 } from '../types';
@@ -955,4 +956,104 @@ export const useDeleteConsultant = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getDeleteConsultantMutationOptions(options), queryClient);
+    }
+    export type setConsultantIndustriesResponse200 = {
+  data: ConsultantEntity
+  status: 200
+}
+
+export type setConsultantIndustriesResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type setConsultantIndustriesResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type setConsultantIndustriesResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type setConsultantIndustriesResponseSuccess = (setConsultantIndustriesResponse200) & {
+  headers: Headers;
+};
+export type setConsultantIndustriesResponseError = (setConsultantIndustriesResponse400 | setConsultantIndustriesResponse404 | setConsultantIndustriesResponse500) & {
+  headers: Headers;
+};
+
+export type setConsultantIndustriesResponse = (setConsultantIndustriesResponseSuccess | setConsultantIndustriesResponseError)
+
+export const getSetConsultantIndustriesUrl = (id: string,) => {
+
+
+
+
+  return `/consultants/${id}/industries`
+}
+
+/**
+ * @summary Replace a consultant's assigned industries (admin/manager only; self/peer-manager escalation rules enforced in the service)
+ */
+export const setConsultantIndustries = async (id: string,
+    setConsultantIndustriesDto: SetConsultantIndustriesDto, options?: RequestInit): Promise<setConsultantIndustriesResponse> => {
+
+  return customFetch<setConsultantIndustriesResponse>(getSetConsultantIndustriesUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setConsultantIndustriesDto)
+  }
+);}
+
+
+
+
+
+export const getSetConsultantIndustriesMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setConsultantIndustries>>, TError,{id: string;data: SetConsultantIndustriesDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setConsultantIndustries>>, TError,{id: string;data: SetConsultantIndustriesDto}, TContext> => {
+
+const mutationKey = ['setConsultantIndustries'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setConsultantIndustries>>, {id: string;data: SetConsultantIndustriesDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setConsultantIndustries(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetConsultantIndustriesMutationResult = NonNullable<Awaited<ReturnType<typeof setConsultantIndustries>>>
+    export type SetConsultantIndustriesMutationBody = SetConsultantIndustriesDto
+    export type SetConsultantIndustriesMutationError = ErrorResponse
+
+    /**
+ * @summary Replace a consultant's assigned industries (admin/manager only; self/peer-manager escalation rules enforced in the service)
+ */
+export const useSetConsultantIndustries = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setConsultantIndustries>>, TError,{id: string;data: SetConsultantIndustriesDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof setConsultantIndustries>>,
+        TError,
+        {id: string;data: SetConsultantIndustriesDto},
+        TContext
+      > => {
+      return useMutation(getSetConsultantIndustriesMutationOptions(options), queryClient);
     }

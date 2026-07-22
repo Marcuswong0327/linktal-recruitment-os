@@ -15,6 +15,7 @@ function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
     roleName: 'admin',
     isActive: true,
     permissions: new Set(),
+    industryIds: [],
     ...overrides,
   };
 }
@@ -76,7 +77,7 @@ describe('ClientsService.remove (cascade soft-delete)', () => {
       {} as unknown as PrismaService,
     );
 
-    await service.remove('cl1');
+    await service.remove('cl1', makeUser());
 
     expect(prisma.placement.deleteMany).toHaveBeenCalledWith({
       where: { submissionId: { in: ['s1'] } },
@@ -150,10 +151,16 @@ describe('ClientsService.update', () => {
 // clear the assignment entirely — orphaning it would (combined with the
 // consultant-only scoping in `findAll`) drop it out of anyone's book.
 describe('ClientsService.update — consultant cannot unassign', () => {
-  function makeService(existing: unknown = { id: 'cl1', stakeholders: [] }) {
+  function makeService(existing: unknown = { id: 'cl1', industryId: 'ind1', stakeholders: [] }) {
     const findUnique = jest.fn().mockResolvedValue(existing);
     const update = jest.fn().mockResolvedValue({ id: 'cl1', stakeholders: [] });
-    const prisma = { client: { findUnique, update } } as unknown as ExtendedPrismaClient;
+    // The industry-first assignment guard needs somewhere to check a
+    // candidate consultantId against — matches ind1 for cons-2 so tests
+    // reassigning to that consultant aren't blocked by it.
+    const consultantIndustry = {
+      findUnique: jest.fn().mockResolvedValue({ consultantId: 'cons-2', industryId: 'ind1' }),
+    };
+    const prisma = { client: { findUnique, update }, consultantIndustry } as unknown as ExtendedPrismaClient;
     const base = {} as unknown as PrismaService;
     return { service: new ClientsService(prisma, base), update };
   }
@@ -164,7 +171,7 @@ describe('ClientsService.update — consultant cannot unassign', () => {
       service.update(
         'cl1',
         { consultantId: null } as unknown as UpdateClientDto,
-        makeUser({ roleName: 'consultant' }),
+        makeUser({ roleName: 'consultant', industryIds: ['ind1'] }),
       ),
     ).rejects.toThrow('Consultants cannot unassign a company from a consultant.');
   });
@@ -175,24 +182,24 @@ describe('ClientsService.update — consultant cannot unassign', () => {
       service.update(
         'cl1',
         { consultantId: '' } as unknown as UpdateClientDto,
-        makeUser({ roleName: 'consultant' }),
+        makeUser({ roleName: 'consultant', industryIds: ['ind1'] }),
       ),
     ).rejects.toThrow('Consultants cannot unassign a company from a consultant.');
   });
 
   it('allows a consultant reassigning to a different consultant', async () => {
-    const { service, update } = makeService();
+    const { service, update } = makeService({ id: 'cl1', industryId: 'ind1', stakeholders: [] });
     await service.update(
       'cl1',
       { consultantId: 'cons-2' },
-      makeUser({ roleName: 'consultant' }),
+      makeUser({ roleName: 'consultant', industryIds: ['ind1'] }),
     );
     expect(update).toHaveBeenCalledTimes(1);
   });
 
   it('allows a consultant updating other fields without touching consultantId', async () => {
     const { service, update } = makeService();
-    await service.update('cl1', { companyName: 'Acme 2' }, makeUser({ roleName: 'consultant' }));
+    await service.update('cl1', { companyName: 'Acme 2' }, makeUser({ roleName: 'consultant', industryIds: ['ind1'] }));
     expect(update).toHaveBeenCalledTimes(1);
   });
 
@@ -290,5 +297,221 @@ describe('ClientsService.findAll — consultant role scoping', () => {
     const { service, findMany } = makeService();
     await service.findAll({ ...baseQuery }, makeUser({ roleName: 'manager', consultantId: 'mgr-1' }));
     expect(findMany.mock.calls[0][0].where).not.toHaveProperty('consultantId');
+  });
+
+  it("AND's the industry scope with the free-text search instead of clobbering it", async () => {
+    const { service, findMany } = makeService();
+    await service.findAll(
+      { ...baseQuery, q: 'acme' },
+      makeUser({ roleName: 'consultant', consultantId: 'cons-me', industryIds: ['ind1', 'ind2'] }),
+    );
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toEqual([
+      { OR: expect.any(Array) }, // the q search
+      { industryId: { in: ['ind1', 'ind2'] } },
+    ]);
+  });
+
+  it('does not add an industry scope for non-consultant roles', async () => {
+    const { service, findMany } = makeService();
+    await service.findAll({ ...baseQuery, q: 'acme' }, makeUser({ roleName: 'admin' }));
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toEqual([{ OR: expect.any(Array) }]);
+  });
+});
+
+describe('ClientsService.findOne — job scope', () => {
+  function makeService(client: unknown) {
+    const findUnique = jest.fn().mockResolvedValue(client);
+    const prisma = { client: { findUnique } } as unknown as ExtendedPrismaClient;
+    const base = {} as unknown as PrismaService;
+    return { service: new ClientsService(prisma, base) };
+  }
+
+  it('rejects a scoped consultant reaching an out-of-scope client directly', async () => {
+    const { service } = makeService({ id: 'cl1', industryId: 'finance', stakeholders: [] });
+    await expect(
+      service.findOne('cl1', makeUser({ roleName: 'consultant', industryIds: ['tech'] })),
+    ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
+  });
+
+  it('rejects a scoped consultant reaching an untagged client', async () => {
+    const { service } = makeService({ id: 'cl1', industryId: null, stakeholders: [] });
+    await expect(
+      service.findOne('cl1', makeUser({ roleName: 'consultant', industryIds: ['tech'] })),
+    ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
+  });
+
+  it('allows a scoped consultant reaching a matching-industry client', async () => {
+    const { service } = makeService({ id: 'cl1', industryId: 'tech', stakeholders: [] });
+    await expect(
+      service.findOne('cl1', makeUser({ roleName: 'consultant', industryIds: ['tech'] })),
+    ).resolves.toMatchObject({ id: 'cl1' });
+  });
+
+  it('never restricts non-consultant roles, regardless of industry', async () => {
+    const { service } = makeService({ id: 'cl1', industryId: 'finance', stakeholders: [] });
+    await expect(
+      service.findOne('cl1', makeUser({ roleName: 'admin' })),
+    ).resolves.toMatchObject({ id: 'cl1' });
+  });
+});
+
+describe('ClientsService.create — industry-first assignment guard', () => {
+  function makeService(consultantIndustryRow: unknown = null) {
+    const create = jest.fn().mockResolvedValue({ id: 'cl1', stakeholders: [] });
+    const consultantIndustry = { findUnique: jest.fn().mockResolvedValue(consultantIndustryRow) };
+    const prisma = { client: { create }, consultantIndustry } as unknown as ExtendedPrismaClient;
+    const base = {} as unknown as PrismaService;
+    return { service: new ClientsService(prisma, base), create };
+  }
+
+  it('allows creating with no consultant assigned at all, tagged or not', async () => {
+    const { service, create } = makeService();
+    await service.create({ companyName: 'Acme' });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects assigning a consultant when no industry is tagged', async () => {
+    const { service } = makeService();
+    await expect(
+      service.create({ companyName: 'Acme', consultantId: 'cons-1' }),
+    ).rejects.toMatchObject({ response: { code: 'INDUSTRY_REQUIRED' } });
+  });
+
+  it("rejects assigning a consultant whose industries don't include the tagged one", async () => {
+    const { service } = makeService(null); // no matching ConsultantIndustry row
+    await expect(
+      service.create({ companyName: 'Acme', industryId: 'ind1', consultantId: 'cons-1' }),
+    ).rejects.toMatchObject({ response: { code: 'CONSULTANT_INDUSTRY_MISMATCH' } });
+  });
+
+  it('allows assigning a consultant whose industries match', async () => {
+    const { service, create } = makeService({ consultantId: 'cons-1', industryId: 'ind1' });
+    await service.create({ companyName: 'Acme', industryId: 'ind1', consultantId: 'cons-1' });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ClientsService.update — bidirectional auto-clear', () => {
+  it('clears a now-mismatched consultant when the industry changes without touching consultantId', async () => {
+    const findUnique = jest
+      .fn()
+      // findOne (existing, before the update)
+      .mockResolvedValueOnce({ id: 'cl1', industryId: 'ind1', consultantId: 'cons-1', stakeholders: [] })
+      // clearMismatchedClientAssignment's own lookup of the client's current consultantId
+      .mockResolvedValueOnce({ consultantId: 'cons-1' })
+      // final re-fetch for the response
+      .mockResolvedValueOnce({ id: 'cl1', industryId: 'ind2', consultantId: null, stakeholders: [] });
+    const update = jest.fn().mockResolvedValue({ id: 'cl1', industryId: 'ind2', stakeholders: [] });
+    const consultantIndustry = { findUnique: jest.fn().mockResolvedValue(null) }; // cons-1 doesn't have ind2
+    const jobOrder = { findMany: jest.fn().mockResolvedValue([]) };
+    const prisma = {
+      client: { findUnique, update, findUniqueOrThrow: findUnique },
+      consultantIndustry,
+      jobOrder,
+    } as unknown as ExtendedPrismaClient;
+    const base = {} as unknown as PrismaService;
+    const service = new ClientsService(prisma, base);
+
+    const result = await service.update(
+      'cl1',
+      { industryId: 'ind2' } as unknown as UpdateClientDto,
+      makeUser({ roleName: 'admin' }),
+    );
+
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'cl1' }, data: { industryId: 'ind2' } }),
+    );
+    // The mismatched consultant got auto-cleared as a second, separate write.
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'cl1' }, data: { consultantId: null } }),
+    );
+    expect(update).toHaveBeenCalledTimes(2);
+    expect(result.consultantId).toBeNull();
+  });
+
+  it('does not touch the consultant when the industry change still matches them', async () => {
+    const findUnique = jest
+      .fn()
+      .mockResolvedValueOnce({ id: 'cl1', industryId: 'ind1', consultantId: 'cons-1', stakeholders: [] })
+      .mockResolvedValueOnce({ consultantId: 'cons-1' });
+    const update = jest.fn().mockResolvedValue({ id: 'cl1', industryId: 'ind2', stakeholders: [] });
+    const consultantIndustry = {
+      findUnique: jest.fn().mockResolvedValue({ consultantId: 'cons-1', industryId: 'ind2' }),
+    };
+    const jobOrder = { findMany: jest.fn().mockResolvedValue([]) };
+    const prisma = {
+      client: { findUnique, update },
+      consultantIndustry,
+      jobOrder,
+    } as unknown as ExtendedPrismaClient;
+    const base = {} as unknown as PrismaService;
+    const service = new ClientsService(prisma, base);
+
+    await service.update(
+      'cl1',
+      { industryId: 'ind2' } as unknown as UpdateClientDto,
+      makeUser({ roleName: 'admin' }),
+    );
+
+    // Still matches — only the one industryId write, no consultant clear.
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ClientsService — consultantId redaction for the consultant role', () => {
+  const row = { id: 'cl1', consultantId: 'cons-1', industryId: 'ind1', stakeholders: [] };
+
+  it('redacts consultantId to null in findAll for the consultant role', async () => {
+    const findMany = jest.fn().mockResolvedValue([row]);
+    const count = jest.fn().mockResolvedValue(1);
+    const prisma = { client: { findMany, count } } as unknown as ExtendedPrismaClient;
+    const service = new ClientsService(prisma, {} as unknown as PrismaService);
+
+    const result = await service.findAll(
+      {
+        page: 1,
+        pageSize: 20,
+        sortOrder: SortOrder.asc,
+        status: ClientStatusFilter.ALL,
+        quality: ClientQualityFilter.ALL,
+      },
+      makeUser({ roleName: 'consultant', consultantId: 'cons-1', industryIds: ['ind1'] }),
+    );
+
+    expect(result.data[0].consultantId).toBeNull();
+  });
+
+  it('does not redact consultantId for non-consultant roles', async () => {
+    const findMany = jest.fn().mockResolvedValue([row]);
+    const count = jest.fn().mockResolvedValue(1);
+    const prisma = { client: { findMany, count } } as unknown as ExtendedPrismaClient;
+    const service = new ClientsService(prisma, {} as unknown as PrismaService);
+
+    const result = await service.findAll(
+      {
+        page: 1,
+        pageSize: 20,
+        sortOrder: SortOrder.asc,
+        status: ClientStatusFilter.ALL,
+        quality: ClientQualityFilter.ALL,
+      },
+      makeUser({ roleName: 'admin' }),
+    );
+
+    expect(result.data[0].consultantId).toBe('cons-1');
+  });
+
+  it('redacts consultantId to null in findOne for the consultant role', async () => {
+    const findUnique = jest.fn().mockResolvedValue(row);
+    const prisma = { client: { findUnique } } as unknown as ExtendedPrismaClient;
+    const service = new ClientsService(prisma, {} as unknown as PrismaService);
+
+    const result = await service.findOne(
+      'cl1',
+      makeUser({ roleName: 'consultant', consultantId: 'cons-1', industryIds: ['ind1'] }),
+    );
+    expect(result.consultantId).toBeNull();
   });
 });

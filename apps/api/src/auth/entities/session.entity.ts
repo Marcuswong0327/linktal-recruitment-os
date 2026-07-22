@@ -7,6 +7,8 @@ export class SessionUserEntity {
   @ApiProperty({ type: String, nullable: true }) roleName!: string | null;
   @ApiProperty({ type: [String], description: "Flat 'resource:action' strings" })
   permissions!: string[];
+  @ApiProperty({ type: [String], description: 'Industry ids this consultant is scoped to (only enforced for roleName === "consultant")' })
+  industryIds!: string[];
 }
 
 export class LoginResponseEntity {

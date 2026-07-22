@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
@@ -66,8 +66,38 @@ export class SubmissionsService {
    * on CandidateSubmission). So re-submitting the same candidate to the same
    * job order after a removal restores the dead row (fresh status, cleared
    * deletedAt) instead of colliding with the constraint.
+   *
+   * Industry guard: a candidate's own industry tag must match the job
+   * order's client's industry (a Job Order has none of its own). Blocks the
+   * mismatch at the source — the pairing that would otherwise let a scoped
+   * consultant's candidate silently end up on a job order outside their
+   * industry — rather than allowing it and special-casing visibility around
+   * it later. Applies to every role, not just scoped consultants: this is a
+   * data-integrity rule about whether the pairing makes sense, not access
+   * control.
    */
   async create(dto: CreateSubmissionDto) {
+    const [candidate, jobOrder] = await Promise.all([
+      this.prisma.candidate.findUnique({ where: { id: dto.candidateId }, select: { industryId: true } }),
+      this.prisma.jobOrder.findUnique({
+        where: { id: dto.jobOrderId },
+        select: { client: { select: { industryId: true } } },
+      }),
+    ]);
+    if (!candidate) {
+      throw new NotFoundException(`Candidate ${dto.candidateId} not found`);
+    }
+    if (!jobOrder) {
+      throw new NotFoundException(`Job order ${dto.jobOrderId} not found`);
+    }
+    const jobOrderIndustryId = jobOrder.client?.industryId ?? null;
+    if (!candidate.industryId || !jobOrderIndustryId || candidate.industryId !== jobOrderIndustryId) {
+      throw new BadRequestException({
+        code: 'SUBMISSION_INDUSTRY_MISMATCH',
+        message: "This candidate's industry does not match this job order.",
+      });
+    }
+
     const existing = await this.base.candidateSubmission.findUnique({
       where: { candidateId_jobOrderId: { candidateId: dto.candidateId, jobOrderId: dto.jobOrderId } },
     });

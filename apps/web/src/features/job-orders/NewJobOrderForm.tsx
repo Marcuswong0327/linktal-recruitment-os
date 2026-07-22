@@ -48,6 +48,15 @@ export function NewJobOrderForm() {
 
   const [jobTitle, setJobTitle] = React.useState('');
   const [clientId, setClientId] = React.useState('');
+  // Industry-first: a Job Order has no industry of its own, only via its
+  // Client — no client picked yet (or one with no industry tagged) means no
+  // consultant can be assigned at all (enforced server-side too).
+  const selectedClientIndustryId = clients.find((c) => c.id === clientId)?.industryId ?? null;
+  const availableConsultants = !selectedClientIndustryId
+    ? []
+    : consultants.filter(
+        (c) => c.industryIds === undefined || c.industryIds.includes(selectedClientIndustryId),
+      );
   const [consultantId, setConsultantId] = React.useState('');
   const [department, setDepartment] = React.useState('');
   const [city, setCity] = React.useState('');
@@ -158,12 +167,21 @@ export function NewJobOrderForm() {
                 <FormField label="Client" htmlFor="clientId" required>
                   <ClientCombobox id="clientId" value={clientId} onValueChange={setClientId} clients={clients} />
                 </FormField>
-                <FormField label="Consultant" htmlFor="consultantId">
+                <FormField
+                  label="Consultant"
+                  htmlFor="consultantId"
+                  description={
+                    !selectedClientIndustryId
+                      ? 'Tag the client with an industry before assigning a consultant'
+                      : undefined
+                  }
+                >
                   <ConsultantCombobox
                     id="consultantId"
                     value={consultantId}
                     onValueChange={setConsultantId}
-                    consultants={consultants}
+                    consultants={availableConsultants}
+                    disabled={!selectedClientIndustryId}
                   />
                 </FormField>
                 <FormField label="Department" htmlFor="department">

@@ -202,6 +202,19 @@ function JobOrderEditForm({
   // fetch above; no separate job-order-level tracking.
   const client = clients.find((c) => c.id === jobOrder.clientId);
 
+  // Industry-first: a Job Order has no industry of its own, only via its
+  // (possibly just-changed) Client — reacts to the live `clientId` selection,
+  // not the original `jobOrder.clientId`, so switching Client immediately
+  // updates which consultants are assignable. No industry tagged yet means
+  // no consultant can be assigned at all (enforced server-side too, in
+  // JobOrdersService — see INDUSTRY_REQUIRED).
+  const selectedClientIndustryId = clients.find((c) => c.id === clientId)?.industryId ?? null;
+  const availableConsultants = !selectedClientIndustryId
+    ? []
+    : consultants.filter(
+        (c) => c.industryIds === undefined || c.industryIds.includes(selectedClientIndustryId),
+      );
+
   const { data: pipelineData, isLoading: pipelineLoading } = useGetJobOrderPipelineTimeline(jobOrder.id);
   const pipelineEvents = pipelineData?.status === 200 ? pipelineData.data : undefined;
 
@@ -305,12 +318,21 @@ function JobOrderEditForm({
                 <FormField label="Client" htmlFor="clientId">
                   <ClientCombobox id="clientId" value={clientId} onValueChange={setClientId} clients={clients} />
                 </FormField>
-                <FormField label="Consultant" htmlFor="consultantId">
+                <FormField
+                  label="Consultant"
+                  htmlFor="consultantId"
+                  description={
+                    !selectedClientIndustryId
+                      ? 'Tag the client with an industry before assigning a consultant'
+                      : undefined
+                  }
+                >
                   <ConsultantCombobox
                     id="consultantId"
                     value={consultantId}
                     onValueChange={setConsultantId}
-                    consultants={consultants}
+                    consultants={availableConsultants}
+                    disabled={!selectedClientIndustryId}
                   />
                 </FormField>
                 <FormField label="Department" htmlFor="department">

@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -15,6 +16,7 @@ import { CreateConsultantDto } from './dto/create-consultant.dto';
 import { UpdateConsultantDto } from './dto/update-consultant.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { QueryConsultantsDto } from './dto/query-consultants.dto';
+import { SetConsultantIndustriesDto } from './dto/set-consultant-industries.dto';
 import { ConsultantEntity } from './entities/consultant.entity';
 import { PaginatedConsultantsEntity } from './entities/paginated-consultants.entity';
 import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
@@ -37,38 +39,38 @@ export class ConsultantsController {
     summary: 'List consultants (paginated, filterable, sortable) — admin/manager only',
   })
   @ApiResponse({ status: 200, description: 'Paginated consultants', type: PaginatedConsultantsEntity })
-  findAll(@Query() query: QueryConsultantsDto) {
-    return this.consultants.findAll(query);
+  findAll(@Query() query: QueryConsultantsDto, @CurrentUser() user: AuthUser) {
+    return this.consultants.findAll(query, user);
   }
 
   @Get('me')
   @ApiOperation({ operationId: 'getMe', summary: 'Get my own consultant profile (any authenticated user)' })
   @ApiResponse({ status: 200, description: 'Current consultant', type: ConsultantEntity })
   getMe(@CurrentUser() user: AuthUser) {
-    return this.consultants.findOne(user.consultantId);
+    return this.consultants.findOne(user.consultantId, user);
   }
 
   @Patch('me')
   @ApiOperation({ operationId: 'updateMe', summary: 'Update my own name (cannot change role or active status)' })
   @ApiResponse({ status: 200, description: 'Profile updated', type: ConsultantEntity })
   updateMe(@Body() dto: UpdateMeDto, @CurrentUser() user: AuthUser) {
-    return this.consultants.updateOwnProfile(user.consultantId, dto.fullName);
+    return this.consultants.updateOwnProfile(user.consultantId, dto.fullName, user);
   }
 
   @Get('by-display-id/:displayId')
   @RequirePermission('consultant', 'read')
   @ApiOperation({ operationId: 'getConsultantByDisplayId', summary: 'Get consultant by display ID (consultant-XXXX)' })
   @ApiResponse({ status: 200, description: 'Consultant found', type: ConsultantEntity })
-  findByDisplayId(@Param('displayId') displayId: string) {
-    return this.consultants.findByDisplayId(displayId);
+  findByDisplayId(@Param('displayId') displayId: string, @CurrentUser() user: AuthUser) {
+    return this.consultants.findByDisplayId(displayId, user);
   }
 
   @Get(':id')
   @RequirePermission('consultant', 'read')
   @ApiOperation({ operationId: 'getConsultant', summary: 'Get consultant by ID' })
   @ApiResponse({ status: 200, description: 'Consultant found', type: ConsultantEntity })
-  findOne(@Param('id') id: string) {
-    return this.consultants.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.consultants.findOne(id, user);
   }
 
   @Post()
@@ -101,5 +103,20 @@ export class ConsultantsController {
   @ApiResponse({ status: 204, description: 'Consultant deactivated' })
   remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.consultants.remove(id, user);
+  }
+
+  @Put(':id/industries')
+  @RequirePermission('consultant_industry', 'update')
+  @ApiOperation({
+    operationId: 'setConsultantIndustries',
+    summary: "Replace a consultant's assigned industries (admin/manager only; self/peer-manager escalation rules enforced in the service)",
+  })
+  @ApiResponse({ status: 200, description: 'Industries updated', type: ConsultantEntity })
+  setIndustries(
+    @Param('id') id: string,
+    @Body() dto: SetConsultantIndustriesDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.consultants.setIndustries(id, dto.industryIds, user);
   }
 }

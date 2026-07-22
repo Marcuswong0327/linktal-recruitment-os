@@ -79,6 +79,7 @@ export class AuthController {
         fullName: user.fullName,
         roleName: user.roleName,
         permissions: Array.from(user.permissions),
+        industryIds: user.industryIds,
       },
     };
   }
@@ -97,6 +98,7 @@ export class AuthController {
         fullName: user.fullName,
         roleName: user.roleName,
         permissions: Array.from(user.permissions),
+        industryIds: user.industryIds,
       },
     };
   }
@@ -109,6 +111,7 @@ export class AuthController {
       name: user.fullName,
       roleName: user.roleName,
       permissions: Array.from(user.permissions),
+      industryIds: user.industryIds,
     };
   }
 }

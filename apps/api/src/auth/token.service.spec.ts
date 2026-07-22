@@ -21,6 +21,7 @@ describe('TokenService', () => {
       name: 'A B',
       roleName: 'consultant',
       permissions: ['candidate:read', 'client:read'],
+      industryIds: ['ind1', 'ind2'],
     });
 
     const claims = await service.verifyAccessToken(token);
@@ -30,6 +31,7 @@ describe('TokenService', () => {
       name: 'A B',
       roleName: 'consultant',
       permissions: ['candidate:read', 'client:read'],
+      industryIds: ['ind1', 'ind2'],
     });
     expect(expiresAt).toBeGreaterThan(Date.now());
   });
@@ -69,7 +71,7 @@ describe('TokenService', () => {
     const refreshToken = await service.signRefreshToken('consultant-1');
     await expect(service.verifyAccessToken(refreshToken)).rejects.toThrow(UnauthorizedException);
 
-    const access = await service.signAccessToken({ sub: 'x', roleName: null, permissions: [] });
+    const access = await service.signAccessToken({ sub: 'x', roleName: null, permissions: [], industryIds: [] });
     await expect(service.verifyRefreshToken(access.token)).rejects.toThrow(UnauthorizedException);
   });
 });
