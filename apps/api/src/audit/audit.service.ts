@@ -7,15 +7,16 @@ import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
 // read, and which fields to join (displayId first, then a name). Bulk entries
 // and types not listed here just show their raw id.
 const ENTITY_LABEL: Record<string, { delegate: string; fields: string[] }> = {
-  Candidate: { delegate: 'candidate', fields: ['displayId', 'fullName'] },
+  Candidate: { delegate: 'candidate', fields: ['displayId', 'firstName', 'lastName'] },
   Client: { delegate: 'client', fields: ['displayId', 'companyName'] },
-  Stakeholder: { delegate: 'stakeholder', fields: ['displayId', 'fullName'] },
+  Stakeholder: { delegate: 'stakeholder', fields: ['displayId', 'firstName'] },
   JobOrder: { delegate: 'jobOrder', fields: ['displayId', 'jobTitle'] },
   ClientJobResearch: { delegate: 'clientJobResearch', fields: ['jobTitle'] },
   Placement: { delegate: 'placement', fields: ['displayId'] },
   Consultant: { delegate: 'consultant', fields: ['displayId', 'fullName'] },
   Role: { delegate: 'role', fields: ['name'] },
   Permission: { delegate: 'permission', fields: ['resource', 'action'] },
+  Tob: { delegate: 'tob', fields: ['fileName'] },
 };
 
 type LabelDelegate = {
