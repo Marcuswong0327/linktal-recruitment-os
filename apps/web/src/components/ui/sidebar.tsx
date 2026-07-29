@@ -234,6 +234,13 @@ function Sidebar({
 
 function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<typeof Button>) {
   const { state, toggleSidebar } = useSidebar();
+  // Defaults to the Windows/Linux label until mounted (avoids an SSR/client
+  // hydration mismatch), then flips to ⌘ on Mac — mirrors the command
+  // palette's own platform detection.
+  const [isMac, setIsMac] = React.useState(false);
+  React.useEffect(() => {
+    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform ?? navigator.userAgent));
+  }, []);
 
   return (
     <Tooltip>
@@ -258,6 +265,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
       />
       <TooltipContent side="bottom" align="center">
         {state === 'expanded' ? 'Collapse sidebar' : 'Expand sidebar'}
+        <span className="font-mono text-[10px] opacity-70">{isMac ? '⌘B' : 'Ctrl B'}</span>
       </TooltipContent>
     </Tooltip>
   );
