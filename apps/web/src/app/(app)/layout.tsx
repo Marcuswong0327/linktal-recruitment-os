@@ -20,6 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             user={{
               name: session?.user?.name ?? 'Unknown',
               email: session?.user?.email ?? '',
+              roleName: session?.user?.roleName,
               avatar: session?.user?.image ?? undefined,
             }}
             permissions={permissions}
