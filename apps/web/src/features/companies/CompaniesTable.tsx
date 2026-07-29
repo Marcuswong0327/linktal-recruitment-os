@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Combobox } from '@base-ui/react/combobox';
 import { ChevronDown, Download, Plus, Trash2 } from 'lucide-react';
 import { useSession } from 'next-auth/react';
@@ -118,6 +118,7 @@ export function CompaniesTable({
   canDelete?: boolean;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   // Consultants only ever see their own book of companies (enforced
   // server-side in ClientsService.findAll) — the "filter by consultant"
@@ -145,6 +146,16 @@ export function CompaniesTable({
   const [consultantPickerOpen, setConsultantPickerOpen] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
+
+  // Opened via the global command palette's "Add a Company" action
+  // (`/companies?new=1`) — strip the param immediately so refresh/back
+  // doesn't reopen the sheet.
+  React.useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setCreating(true);
+      router.replace('/companies');
+    }
+  }, [searchParams, router]);
 
   // Companies load a page at a time but accumulate — no Prev/Next controls,
   // the grid fetches the next page itself as the user scrolls near the
