@@ -1,6 +1,7 @@
 import { auth } from '@/auth';
 import { AppSidebar } from '@/components/app-shell/AppSidebar';
 import { CommandPaletteProvider, CommandPaletteTrigger } from '@/components/app-shell/GlobalCommandPalette';
+import { NotificationsToggle } from '@/components/app-shell/NotificationsToggle';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
@@ -32,6 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
               <SidebarTrigger className="-ml-1" />
               <CommandPaletteTrigger className="ml-auto" />
+              <NotificationsToggle />
             </header>
             {/* bg-muted: --card and --background are both pure white in light
                 mode, so cards need a tinted canvas to separate from. */}
