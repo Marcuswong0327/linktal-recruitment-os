@@ -2,35 +2,11 @@ import { Briefcase, Globe, MapPin, Tag, User } from 'lucide-react';
 import { auth } from '@/auth';
 import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
 import { CommandPaletteHintBanner } from '@/features/dashboard/CommandPaletteHintBanner';
+import { Eyebrow, ProfileField } from '@/components/ProfileField';
+import { mockProfile } from '@/config/mock-profile';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{children}</p>;
-}
-
-// Mock data — Consultant has no country/industry/specialization/city fields
-// yet (only name, email, role, displayId). Swap for real data once a
-// consultant profile model exists.
-const mockProfile = {
-  country: 'Australia',
-  industry: 'Manufacturing',
-  specialization: '(Food)',
-  city: 'Sydney NSW',
-};
-
-function ProfileField({ icon: Icon, label, value }: { icon: typeof Globe; label: string; value: string }) {
-  return (
-    <div className="flex flex-1 items-center gap-2.5">
-      <Icon className="size-4 shrink-0 text-muted-foreground/60" />
-      <div className="flex flex-col">
-        <Eyebrow>{label}</Eyebrow>
-        <p className="text-sm font-medium text-foreground">{value}</p>
-      </div>
-    </div>
-  );
-}
 
 export default async function DashboardPage() {
   const session = await auth();
