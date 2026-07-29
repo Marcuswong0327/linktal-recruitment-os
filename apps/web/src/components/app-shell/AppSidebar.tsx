@@ -32,7 +32,7 @@ export function AppSidebar({
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <Link
-          href="/"
+          href="/dashboard"
           className="flex items-center gap-2 px-2 py-1.5 font-semibold group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center"
         >
           <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs">
