@@ -80,7 +80,7 @@ export function ProfileCard({
         </Badge>
       )}
 
-      <CardHeader className="flex-row items-center gap-4">
+      <CardHeader className="flex items-center gap-4">
         <Avatar size="lg">
           <AvatarImage src={avatar} alt={name} />
           <AvatarFallback>{initials(name)}</AvatarFallback>

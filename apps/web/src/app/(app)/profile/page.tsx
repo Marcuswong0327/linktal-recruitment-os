@@ -1,4 +1,3 @@
-import { User } from 'lucide-react';
 import { auth } from '@/auth';
 import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
 import { ProfileCard } from '@/features/profile/ProfileCard';
@@ -9,7 +8,7 @@ export default async function ProfilePage() {
 
   return (
     <PageLayout>
-      <PageHeader icon={User} title="Profile" description="Your user account details." />
+      <PageHeader title="Profile" description="Your user account details." />
 
       <ProfileCard
         avatar={user?.image ?? undefined}

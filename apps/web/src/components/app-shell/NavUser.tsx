@@ -1,7 +1,18 @@
 'use client';
 
+import * as React from 'react';
 import Link from 'next/link';
 import { ChevronsUpDown, LogOut, User } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -31,6 +42,8 @@ function initials(name: string) {
 }
 
 export function NavUser({ user }: { user: SidebarUser }) {
+  const [confirmingSignOut, setConfirmingSignOut] = React.useState(false);
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -71,13 +84,26 @@ export function NavUser({ user }: { user: SidebarUser }) {
               Profile
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={() => signOut()}>
+            <DropdownMenuItem variant="destructive" onClick={() => setConfirmingSignOut(true)}>
               <LogOut />
-              Log out
+              Sign out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
+
+      <AlertDialog open={confirmingSignOut} onOpenChange={setConfirmingSignOut}>
+        <AlertDialogContent>
+          <AlertDialogHeader icon={LogOut} iconVariant="destructive">
+            <AlertDialogTitle>Sign out</AlertDialogTitle>
+            <AlertDialogDescription>You'll need to sign in again to access your account.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => signOut()}>Sign out</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SidebarMenu>
   );
 }

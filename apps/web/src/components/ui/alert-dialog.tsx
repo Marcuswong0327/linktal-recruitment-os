@@ -38,7 +38,7 @@ function AlertDialogContent({ className, ...props }: AlertDialogPrimitive.Popup.
       <AlertDialogPrimitive.Popup
         data-slot="alert-dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-popover p-6 text-popover-foreground shadow-xl ring-1 ring-foreground/5 duration-150 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 dark:ring-foreground/10",
+          "fixed top-1/2 left-1/2 z-50 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-[min(var(--radius-4xl),24px)] bg-popover p-6 text-popover-foreground shadow-xl ring-1 ring-foreground/5 duration-150 data-ending-style:scale-95 data-ending-style:opacity-0 data-starting-style:scale-95 data-starting-style:opacity-0 dark:ring-foreground/10",
           className
         )}
         {...props}
@@ -47,13 +47,45 @@ function AlertDialogContent({ className, ...props }: AlertDialogPrimitive.Popup.
   )
 }
 
-function AlertDialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+function AlertDialogHeader({
+  className,
+  icon: Icon,
+  iconVariant = "default",
+  children,
+  ...props
+}: React.ComponentProps<"div"> & {
+  /** Optional icon shown in a colored circle beside the title/description. */
+  icon?: React.ElementType
+  iconVariant?: "default" | "destructive"
+}) {
+  if (!Icon) {
+    return (
+      <div
+        data-slot="alert-dialog-header"
+        className={cn("flex flex-col gap-1.5", className)}
+        {...props}
+      >
+        {children}
+      </div>
+    )
+  }
+
   return (
     <div
       data-slot="alert-dialog-header"
-      className={cn("flex flex-col gap-1.5", className)}
+      className={cn("flex flex-row items-start gap-3", className)}
       {...props}
-    />
+    >
+      <span
+        className={cn(
+          "flex size-10 shrink-0 items-center justify-center rounded-full",
+          iconVariant === "destructive" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"
+        )}
+      >
+        <Icon className="size-5" />
+      </span>
+      <div className="flex flex-col gap-1 pt-1">{children}</div>
+    </div>
   )
 }
 
@@ -71,7 +103,7 @@ function AlertDialogTitle({ className, ...props }: AlertDialogPrimitive.Title.Pr
   return (
     <AlertDialogPrimitive.Title
       data-slot="alert-dialog-title"
-      className={cn("text-base font-medium text-foreground", className)}
+      className={cn("font-heading text-base font-medium text-foreground", className)}
       {...props}
     />
   )
@@ -108,7 +140,7 @@ function AlertDialogCancel({ className, ...props }: AlertDialogPrimitive.Close.P
   return (
     <AlertDialogPrimitive.Close
       data-slot="alert-dialog-cancel"
-      className={cn(buttonVariants({ variant: "outline", size: "lg" }), className)}
+      className={cn(buttonVariants({ variant: "ghost", size: "lg" }), className)}
       {...props}
     />
   )

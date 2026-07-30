@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { hasPermission } from '@/config/nav';
 import { pageCommands, actionCommands } from '@/config/commands';
+import { useIsMac } from '@/hooks/use-is-mac';
 import {
   Command,
   CommandDialog,
@@ -115,11 +116,9 @@ export function CommandPaletteProvider({
                 <Kbd>↑</Kbd>
                 <Kbd>↓</Kbd> Navigate
               </span>
+              <span className="h-3 w-px bg-border" />
               <span className="flex items-center gap-1">
                 <Kbd>↵</Kbd> Select
-              </span>
-              <span className="flex items-center gap-1">
-                <Kbd>esc</Kbd> Close
               </span>
             </span>
           </div>
@@ -136,12 +135,7 @@ export function CommandPaletteProvider({
  */
 export function CommandPaletteTrigger({ size = 'sm', className }: { size?: 'sm' | 'lg'; className?: string }) {
   const { openPalette } = useCommandPalette();
-  // Defaults to the Windows/Linux label until mounted (avoids an SSR/client
-  // hydration mismatch), then flips to ⌘ on Mac.
-  const [isMac, setIsMac] = React.useState(false);
-  React.useEffect(() => {
-    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform ?? navigator.userAgent));
-  }, []);
+  const isMac = useIsMac();
 
   if (size === 'lg') {
     return (
