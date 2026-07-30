@@ -6,6 +6,7 @@ import { useRender } from '@base-ui/react/use-render';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMac } from '@/hooks/use-is-mac';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -234,13 +235,7 @@ function Sidebar({
 
 function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<typeof Button>) {
   const { state, toggleSidebar } = useSidebar();
-  // Defaults to the Windows/Linux label until mounted (avoids an SSR/client
-  // hydration mismatch), then flips to ⌘ on Mac — mirrors the command
-  // palette's own platform detection.
-  const [isMac, setIsMac] = React.useState(false);
-  React.useEffect(() => {
-    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform ?? navigator.userAgent));
-  }, []);
+  const isMac = useIsMac();
 
   return (
     <Tooltip>

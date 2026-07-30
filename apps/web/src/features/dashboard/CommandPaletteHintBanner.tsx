@@ -1,18 +1,11 @@
 'use client';
 
-import * as React from 'react';
 import { Command } from 'lucide-react';
 import { Kbd } from '@/components/ui/kbd';
+import { useIsMac } from '@/hooks/use-is-mac';
 
 export function CommandPaletteHintBanner() {
-  // Defaults to the Windows/Linux label until mounted (avoids an SSR/client
-  // hydration mismatch), then flips to ⌘ on Mac — same convention as the
-  // command palette trigger itself.
-  const [isMac, setIsMac] = React.useState(false);
-  React.useEffect(() => {
-    setIsMac(/Mac|iPod|iPhone|iPad/.test(navigator.platform ?? navigator.userAgent));
-  }, []);
-
+  const isMac = useIsMac();
   const modifier = isMac ? '⌘' : 'Ctrl';
 
   return (
