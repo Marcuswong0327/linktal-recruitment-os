@@ -116,11 +116,9 @@ export function CommandPaletteProvider({
                 <Kbd>↑</Kbd>
                 <Kbd>↓</Kbd> Navigate
               </span>
+              <span className="h-3 w-px bg-border" />
               <span className="flex items-center gap-1">
                 <Kbd>↵</Kbd> Select
-              </span>
-              <span className="flex items-center gap-1">
-                <Kbd>esc</Kbd> Close
               </span>
             </span>
           </div>
