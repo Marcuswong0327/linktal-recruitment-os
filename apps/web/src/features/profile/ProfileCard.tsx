@@ -1,16 +1,31 @@
 'use client';
 
 import * as React from 'react';
-import { Briefcase, Globe, MapPin, Tag } from 'lucide-react';
+import { Briefcase, Globe, MapPin, Tag, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
-import { getGetMeQueryKey, useGetMe, useUpdateMe } from '@/lib/api/generated/consultants/consultants';
+import {
+  getGetMeQueryKey,
+  useGetMe,
+  useUpdateMe,
+} from '@/lib/api/generated/consultants/consultants';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Eyebrow, ProfileField } from '@/components/ProfileField';
 import { mockProfile } from '@/config/mock-profile';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 
 function initials(name: string) {
   return name
@@ -61,6 +76,9 @@ export function ProfileCard({
     },
   });
 
+  const isDirty = nameDraft.trim() !== '' && nameDraft.trim() !== name;
+  const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty);
+
   function saveName() {
     const trimmed = nameDraft.trim();
     if (!trimmed || trimmed === name) {
@@ -71,80 +89,109 @@ export function ProfileCard({
   }
 
   return (
-    <Card className="relative max-w-3xl">
-      {roleName ? (
-        <Badge className="absolute top-5 right-5 capitalize">{roleName}</Badge>
-      ) : (
-        <Badge variant="muted" className="absolute top-5 right-5">
-          No role assigned
-        </Badge>
-      )}
+    <>
+      <Card className="relative max-w-3xl">
+        {roleName ? (
+          <Badge className="absolute top-5 right-5 capitalize">{roleName}</Badge>
+        ) : (
+          <Badge variant="muted" className="absolute top-5 right-5">
+            No role assigned
+          </Badge>
+        )}
 
-      <CardHeader className="flex items-center gap-4">
-        <Avatar size="lg">
-          <AvatarImage src={avatar} alt={name} />
-          <AvatarFallback>{initials(name)}</AvatarFallback>
-        </Avatar>
-        <div className="flex flex-1 flex-col gap-1 pr-24">
-          <input
-            value={nameDraft}
-            onChange={(e) => setNameDraft(e.target.value)}
-            onBlur={saveName}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') e.currentTarget.blur();
-              if (e.key === 'Escape') {
-                setNameDraft(name);
-                e.currentTarget.blur();
-              }
-            }}
-            disabled={updateMe.isPending}
-            aria-label="Your name"
-            className="-mx-1.5 rounded-md border border-transparent bg-transparent px-1.5 py-0.5 font-heading text-base font-semibold text-foreground outline-none transition-colors hover:border-border focus:border-primary focus:bg-input/50 focus:ring-3 focus:ring-primary/25 disabled:opacity-50"
-          />
-          <p className="text-sm text-muted-foreground">{email}</p>
-        </div>
-      </CardHeader>
-
-      <Separator />
-
-      <CardContent className="flex flex-wrap items-center gap-6">
-        <ProfileField icon={Globe} label="Country" value={mockProfile.country} />
-        <Separator orientation="vertical" />
-        <ProfileField icon={Briefcase} label="Industry" value={mockProfile.industry} />
-        <Separator orientation="vertical" />
-        <ProfileField icon={Tag} label="Specialization" value={mockProfile.specialization} />
-        <Separator orientation="vertical" />
-        <ProfileField icon={MapPin} label="City" value={mockProfile.city} />
-      </CardContent>
-
-      <Separator />
-
-      <CardContent className="flex flex-wrap items-center gap-6 text-center">
-        <div className="flex flex-1 flex-col">
-          <Eyebrow>Consultant ID</Eyebrow>
-          <p className="mt-1 font-mono text-sm text-foreground">{consultant?.displayId ?? '—'}</p>
-        </div>
-        <Separator orientation="vertical" />
-        <div className="flex flex-1 flex-col">
-          <Eyebrow>Status</Eyebrow>
-          <div className="mt-1">
-            {consultant ? (
-              <Badge variant={consultant.isActive ? 'success' : 'muted'}>
-                {consultant.isActive ? 'Active' : 'Inactive'}
-              </Badge>
-            ) : (
-              <span className="text-sm text-muted-foreground">—</span>
-            )}
+        <CardHeader className="flex items-center gap-4">
+          <Avatar size="lg">
+            <AvatarImage src={avatar} alt={name} />
+            <AvatarFallback>{initials(name)}</AvatarFallback>
+          </Avatar>
+          <div className="flex flex-1 flex-col gap-1 pr-24">
+            <div className="flex items-center gap-2">
+              <input
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    saveName();
+                    e.currentTarget.blur();
+                  }
+                  if (e.key === 'Escape') {
+                    setNameDraft(name);
+                    e.currentTarget.blur();
+                  }
+                }}
+                disabled={updateMe.isPending}
+                aria-label="Your name"
+                className={`-mx-1.5 rounded-md border bg-transparent px-1.5 py-0.5 font-heading text-base font-semibold text-foreground outline-none transition-colors hover:border-border focus:border-primary focus:bg-input/50 focus:ring-3 focus:ring-primary/25 disabled:opacity-50 ${
+                  isDirty ? 'border-warning/50 bg-warning/5' : 'border-transparent'
+                }`}
+              />
+              {isDirty && (
+                <Badge variant="warning" title="Press Enter to save, Escape to discard">
+                  <TriangleAlert />
+                  Unsaved
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">{email}</p>
           </div>
-        </div>
-        <Separator orientation="vertical" />
-        <div className="flex flex-1 flex-col">
-          <Eyebrow>Member Since</Eyebrow>
-          <p className="mt-1 text-sm text-foreground">
-            {consultant ? new Date(consultant.createdAt).toLocaleDateString() : '—'}
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+        </CardHeader>
+
+        <Separator />
+
+        <CardContent className="flex flex-wrap items-center gap-6">
+          <ProfileField icon={Globe} label="Country" value={mockProfile.country} />
+          <Separator orientation="vertical" />
+          <ProfileField icon={Briefcase} label="Industry" value={mockProfile.industry} />
+          <Separator orientation="vertical" />
+          <ProfileField icon={Tag} label="Specialization" value={mockProfile.specialization} />
+          <Separator orientation="vertical" />
+          <ProfileField icon={MapPin} label="City" value={mockProfile.city} />
+        </CardContent>
+
+        <Separator />
+
+        <CardContent className="flex flex-wrap items-center gap-6 text-center">
+          <div className="flex flex-1 flex-col">
+            <Eyebrow>Consultant ID</Eyebrow>
+            <p className="mt-1 font-mono text-sm text-foreground">{consultant?.displayId ?? '—'}</p>
+          </div>
+          <Separator orientation="vertical" />
+          <div className="flex flex-1 flex-col">
+            <Eyebrow>Status</Eyebrow>
+            <div className="mt-1">
+              {consultant ? (
+                <Badge variant={consultant.isActive ? 'success' : 'muted'}>
+                  {consultant.isActive ? 'Active' : 'Inactive'}
+                </Badge>
+              ) : (
+                <span className="text-sm text-muted-foreground">—</span>
+              )}
+            </div>
+          </div>
+          <Separator orientation="vertical" />
+          <div className="flex flex-1 flex-col">
+            <Eyebrow>Member Since</Eyebrow>
+            <p className="mt-1 text-sm text-foreground">
+              {consultant ? new Date(consultant.createdAt).toLocaleDateString() : '—'}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={promptOpen} onOpenChange={(open) => !open && cancelLeave()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsaved changes</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have an unsaved name change. Leaving now will discard it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmLeave}>Leave without saving</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
