@@ -63,13 +63,7 @@ import {
 } from '@/lib/api/generated/specializations/specializations';
 import type { ConsultantEntity, UpdateClientDto } from '@/lib/api/generated/types';
 import { qualityOptions, qualityVariant, statusOptions, statusVariant, tobOptions } from './columns';
-import {
-  type ClientQuality,
-  type ClientStatus,
-  type Company,
-  clientQualityLabels,
-  clientStatusLabels,
-} from './schema';
+import { type ClientQuality, type ClientStatus, type Company, clientQualityLabels, clientStatusLabels } from './schema';
 
 const textareaClass =
   'min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30';
@@ -89,9 +83,7 @@ function noteVersion(note: { editedAt: string | null; timestamp: string }) {
 }
 
 function isConflictError(err: unknown): boolean {
-  return (
-    typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === 409
-  );
+  return typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === 409;
 }
 
 function initials(name: string) {
@@ -162,9 +154,7 @@ export function CompanyDetail({ id, canEdit = true }: { id: string; canEdit?: bo
       <PageLayout>
         <div className="flex flex-col gap-2">
           <h1 className="font-heading text-xl font-semibold">Company not found</h1>
-          <p className="text-sm text-muted-foreground">
-            {error?.message ?? `No company with ID ${id}.`}
-          </p>
+          <p className="text-sm text-muted-foreground">{error?.message ?? `No company with ID ${id}.`}</p>
         </div>
         <div>
           <Button variant="outline" nativeButton={false} render={<Link href="/companies" />}>
@@ -177,9 +167,7 @@ export function CompanyDetail({ id, canEdit = true }: { id: string; canEdit?: bo
   }
 
   // key: remount the form when a different company loads so local state resets.
-  return (
-    <CompanyEditForm key={company.id} company={company} consultants={consultants} canEdit={canEdit} />
-  );
+  return <CompanyEditForm key={company.id} company={company} consultants={consultants} canEdit={canEdit} />;
 }
 
 /** Empty strings/inputs become `null` (not omitted) so a cleared field actually saves as cleared. */
@@ -383,12 +371,7 @@ function CompanyEditForm({
     },
   });
 
-  function startEditingNote(note: {
-    id: string;
-    content: string;
-    editedAt: string | null;
-    timestamp: string;
-  }) {
+  function startEditingNote(note: { id: string; content: string; editedAt: string | null; timestamp: string }) {
     setEditingNoteId(note.id);
     setEditDraft(note.content);
     setEditingNoteVersion(noteVersion(note));
@@ -459,15 +442,9 @@ function CompanyEditForm({
             </span>
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-3">
-                <h1 className="font-heading text-2xl font-semibold tracking-tight">
-                  {company.companyName}
-                </h1>
-                <Badge variant={statusVariant[company.status]}>
-                  {clientStatusLabels[company.status]}
-                </Badge>
-                <Badge variant={qualityVariant[company.quality]}>
-                  {clientQualityLabels[company.quality]} quality
-                </Badge>
+                <h1 className="font-heading text-2xl font-semibold tracking-tight">{company.companyName}</h1>
+                <Badge variant={statusVariant[company.status]}>{clientStatusLabels[company.status]}</Badge>
+                <Badge variant={qualityVariant[company.quality]}>{clientQualityLabels[company.quality]} quality</Badge>
               </div>
               <span className="font-mono text-xs text-muted-foreground">{company.displayId}</span>
             </div>
@@ -479,12 +456,7 @@ function CompanyEditForm({
               ) : isDirty && !updateClient.isPending ? (
                 <span className="text-xs text-muted-foreground">Unsaved changes</span>
               ) : null}
-              <Button
-                type="submit"
-                form="company-form"
-                size="lg"
-                disabled={updateClient.isPending || !isDirty}
-              >
+              <Button type="submit" form="company-form" size="lg" disabled={updateClient.isPending || !isDirty}>
                 {updateClient.isPending ? (
                   'Saving…'
                 ) : (
@@ -529,11 +501,7 @@ function CompanyEditForm({
                     disabled={!canEdit}
                   />
                 </FormField>
-                <FormField
-                  label="Industry"
-                  htmlFor="industry"
-                  description="The company's primary industry or sector."
-                >
+                <FormField label="Industry" htmlFor="industry" description="The company's primary industry or sector.">
                   <CreatableCombobox
                     id="industry"
                     value={industryId}
@@ -558,12 +526,7 @@ function CompanyEditForm({
                   />
                 </FormField>
                 <FormField label="City" htmlFor="city">
-                  <Input
-                    id="city"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    disabled={!canEdit}
-                  />
+                  <Input id="city" value={city} onChange={(e) => setCity(e.target.value)} disabled={!canEdit} />
                 </FormField>
                 <FormField label="Country" htmlFor="country">
                   <Input
@@ -801,10 +764,7 @@ function CompanyEditForm({
                             {note.editedAt ? (
                               <>
                                 {' '}
-                                · edited by{' '}
-                                {note.editedBy
-                                  ? consultantLabelFor(note.editedBy)
-                                  : 'Imported'} ·{' '}
+                                · edited by {note.editedBy ? consultantLabelFor(note.editedBy) : 'Imported'} ·{' '}
                                 {noteDateFormatter.format(new Date(note.editedAt))}
                               </>
                             ) : null}
@@ -851,15 +811,12 @@ function CompanyEditForm({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Stay</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmLeave}>Leave without saving</AlertDialogAction>
+            <AlertDialogAction onClick={confirmLeave}>Discard Changes</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog
-        open={deletingNoteId !== null}
-        onOpenChange={(open) => !open && setDeletingNoteId(null)}
-      >
+      <AlertDialog open={deletingNoteId !== null} onOpenChange={(open) => !open && setDeletingNoteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete note</AlertDialogTitle>
