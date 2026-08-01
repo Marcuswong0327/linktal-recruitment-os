@@ -180,7 +180,7 @@ export function ProfileCard({
 
       <AlertDialog open={promptOpen} onOpenChange={(open) => !open && cancelLeave()}>
         <AlertDialogContent>
-          <AlertDialogHeader>
+          <AlertDialogHeader icon={TriangleAlert} iconVariant="warning">
             <AlertDialogTitle>Unsaved changes</AlertDialogTitle>
             <AlertDialogDescription>
               You have an unsaved name change. Leaving now will discard it.
@@ -188,7 +188,7 @@ export function ProfileCard({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Stay</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmLeave}>Leave without saving</AlertDialogAction>
+            <AlertDialogAction onClick={confirmLeave}>Discard Changes</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
