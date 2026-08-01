@@ -37,6 +37,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
         } as React.CSSProperties
       }
       toastOptions={{
+        // Kept in sync with the `toast-countdown` animation's duration in globals.css.
+        duration: 4000,
         classNames: {
           toast: "cn-toast",
         },

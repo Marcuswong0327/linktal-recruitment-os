@@ -56,7 +56,7 @@ function AlertDialogHeader({
 }: React.ComponentProps<"div"> & {
   /** Optional icon shown in a colored circle beside the title/description. */
   icon?: React.ElementType
-  iconVariant?: "default" | "destructive"
+  iconVariant?: "default" | "destructive" | "warning"
 }) {
   if (!Icon) {
     return (
@@ -79,7 +79,11 @@ function AlertDialogHeader({
       <span
         className={cn(
           "flex size-10 shrink-0 items-center justify-center rounded-full",
-          iconVariant === "destructive" ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"
+          iconVariant === "destructive"
+            ? "bg-destructive/10 text-destructive"
+            : iconVariant === "warning"
+              ? "bg-warning/15 text-warning"
+              : "bg-primary/10 text-primary"
         )}
       >
         <Icon className="size-5" />

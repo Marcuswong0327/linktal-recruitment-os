@@ -159,3 +159,64 @@ body {
   }
 }
 
+/* Countdown bar showing time left before a sonner toast auto-dismisses.
+   Duration is hardcoded to match the `duration` passed to <Toaster />'s
+   toastOptions in sonner.tsx — sonner doesn't expose the remaining time
+   as a CSS var, so the two have to be kept in sync by hand. */
+@keyframes toast-countdown {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+[data-sonner-toaster] .cn-toast {
+  position: relative;
+  overflow: hidden;
+}
+
+[data-sonner-toaster] .cn-toast::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--foreground);
+  opacity: 0.3;
+  transform-origin: left;
+  animation: toast-countdown 4s linear forwards;
+}
+
+[data-sonner-toaster] .cn-toast[data-expanded='true']::after {
+  animation-play-state: paused;
+}
+
+[data-sonner-toaster] .cn-toast[data-type='success']::after {
+  background: var(--success);
+  opacity: 0.6;
+}
+
+[data-sonner-toaster] .cn-toast[data-type='info']::after {
+  background: var(--info);
+  opacity: 0.6;
+}
+
+[data-sonner-toaster] .cn-toast[data-type='warning']::after {
+  background: var(--warning);
+  opacity: 0.6;
+}
+
+[data-sonner-toaster] .cn-toast[data-type='error']::after {
+  background: var(--destructive);
+  opacity: 0.6;
+}
+
+[data-sonner-toaster] .cn-toast[data-type='loading']::after,
+[data-sonner-toaster] .cn-toast[data-removed='true']::after,
+[data-sonner-toaster] .cn-toast[data-swipe-out='true']::after {
+  animation: none;
+  opacity: 0;
+}
+
