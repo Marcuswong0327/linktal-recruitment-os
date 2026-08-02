@@ -20,7 +20,11 @@
     "inspect:excel": "ts-node scripts/inspect-excel.ts",
     "import:excel": "ts-node scripts/import-excel.ts",
     "import:placements": "ts-node scripts/import-placements.ts",
-    "import:industries": "ts-node scripts/import-industries.ts"
+    "import:industries": "ts-node scripts/import-industries.ts",
+    "import:locations": "ts-node scripts/import-locations.ts",
+    "import:taxonomy": "ts-node scripts/import-taxonomy.ts",
+    "import:users": "ts-node scripts/import-users.ts",
+    "backfill:ancestors": "ts-node scripts/backfill-ancestors.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

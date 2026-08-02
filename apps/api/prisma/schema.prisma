@@ -38,11 +38,15 @@ enum ClientQuality {
   HIGH
 }
 
+// HOT was dropped (never used in the source data) and UNS ("unsuitable")
+// added, matching the sheet's actual four values. UNS sits last on purpose —
+// same declaration-order-is-sort-order trick as ClientQuality — since it's a
+// dead end rather than a warmer stage than PLACED.
 enum CandidateStatus {
   COLD
   WARM
-  HOT
   PLACED
+  UNS
 }
 
 enum JobOrderStatus {
@@ -86,8 +90,13 @@ enum InterviewOutcome {
   CANCELLED
 }
 
+// Four rungs, all sourced from GeoNames (see the Location model) — no rung is
+// hand-invented. Linktal's own desk labels ("Brisbane GC QLD", "Klang Valley",
+// "East Malaysia") are NOT levels here: they're *groupings* of real nodes,
+// expressed as several rows in the relevant join table.
 enum LocationLevel {
   COUNTRY
+  STATE
   CITY
   SUBURB
 }
@@ -132,33 +141,79 @@ model RolePermission {
 // ============================================================================
 
 model Consultant {
-  id                  String                      @id @default(cuid())
-  displayId           String                      @unique @default(dbgenerated("('consultant-'::text || lpad((nextval('\"Consultant_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: consultant-####
-  azureId             String?                     @unique // Azure AD object id (oid claim)
-  passwordHash        String? // bcrypt hash; set when the consultant has email+password auth enabled
-  email               String                      @unique
-  fullName            String
-  costTo              String? // P&L bucket this consultant's cost rolls up to, e.g. "Group P&L"
-  reportsToId         String? // Self-relation: this consultant's manager. Nullable — root-level users (e.g. the top manager) have none.
-  reportsTo           Consultant?                 @relation("ConsultantHierarchy", fields: [reportsToId], references: [id], onDelete: SetNull)
-  directReports       Consultant[]                @relation("ConsultantHierarchy")
-  roleId              String?
-  role                Role?                       @relation(fields: [roleId], references: [id])
-  isActive            Boolean                     @default(true)
-  createdAt           DateTime                    @default(now())
-  updatedAt           DateTime                    @updatedAt
+  id           String  @id @default(cuid())
+  displayId    String  @unique @default(dbgenerated("('consultant-'::text || lpad((nextval('\"Consultant_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: consultant-####
+  azureId      String? @unique // Azure AD object id (oid claim)
+  passwordHash String? // bcrypt hash; set when the consultant has email+password auth enabled
+  email        String  @unique
+  fullName     String
+
+  // Seniority ("Consultant (Senior)", "Researcher (Intern)", "Support (Finance)")
+  // is carried as a JobTitle rather than its own column/enum — it's the same
+  // kind of fact as a Stakeholder's title, just for a Linktal employee, so it
+  // shares the catalog instead of duplicating one.
+  jobTitleId String?
+  jobTitle   JobTitle? @relation(fields: [jobTitleId], references: [id], onDelete: SetNull)
+  salary     Float? // Monthly cost of this consultant, from the User List sheet.
+  costTo     String? // P&L bucket this consultant's cost rolls up to, e.g. "Group P&L"
+
+  reportsToId   String? // Self-relation: this consultant's manager. Nullable — root-level users (e.g. the top manager) have none.
+  reportsTo     Consultant?  @relation("ConsultantHierarchy", fields: [reportsToId], references: [id], onDelete: SetNull)
+  directReports Consultant[] @relation("ConsultantHierarchy")
+
+  roleId    String?
+  role      Role?    @relation(fields: [roleId], references: [id])
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   clients             Client[]
   jobOrders           JobOrder[]
   candidates          Candidate[]
   stakeholderContacts StakeholderContactHistory[]
   candidateContacts   CandidateContactHistory[]
-  industries          ConsultantIndustry[]
-  locations           ConsultantLocation[]
   tobsRepresented     Tob[]
   jobResearch         ClientJobResearch[]
 
+  // The two arms of the visibility scope — see the "SCOPING" note below.
+  industries      ConsultantIndustry[]
+  specializations ConsultantSpecialization[]
+  locations       ConsultantLocation[]
+
   @@index([reportsToId])
+  @@index([jobTitleId])
 }
+
+// ============================================================================
+// SCOPING (how a `consultant`-role user's visible rows are decided)
+// ============================================================================
+//
+//   visible  =  (industry match AND specialization match)  OR  (location match)
+//
+// Two arms, OR-ed. Each arm is a two-tier hierarchy where a grant covers the
+// granted node *plus every descendant*:
+//
+//   Industry ▸ Specialization ▸ (sub-specialization)      <- ConsultantIndustry / ConsultantSpecialization
+//   Country  ▸ State ▸ City ▸ Suburb                      <- ConsultantLocation
+//
+// Wildcard rule, applied per parent: if a consultant lists specific children
+// under a parent they hold, the grant narrows to those children; if they list
+// none, the whole parent is granted. So "Australia / [Sydney]" grants CITY
+// Sydney, while "Australia / []" grants COUNTRY Australia. Wildcards are
+// materialised into concrete grant rows at assignment/import time rather than
+// stored as an "unrestricted" flag, so every grant stays auditable — and so
+// that zero rows unambiguously means "not configured", never "sees everything".
+//
+// Null handling differs by tier on purpose: Client/Candidate.industryId is
+// REQUIRED, so the industry tier never has to decide what an untagged row
+// means. Specialization is nullable, and an unspecialised row matches any
+// grant on its industry (otherwise the ~72% of candidates with no
+// specialization would vanish the moment that arm is switched on).
+//
+// Specialization filtering ships stored-but-inactive: the consultant-side
+// vocabulary is coarse ("Food") while the record-side is fine ("Food Meat"),
+// and the parent tier added to Specialization is what reconciles them. It's
+// enabled once the catalog backfill lands.
 
 // Many-to-many: which industries a consultant is scoped to (they can carry
 // several, unlike Client/Candidate's single industryId). Explicit join model
@@ -175,13 +230,26 @@ model ConsultantIndustry {
   @@index([industryId])
 }
 
-// Many-to-many: which Location nodes a consultant is scoped to — at ANY
-// level (country, city, or suburb), same pattern as StakeholderLocation.
-// Matches the KeyNote diagram's "Consultant with default Country Focus,
-// Industry Focus, and City Focus" — this covers the Country/City half (and
-// suburb, for finer-grained assignment); Industry scoping stays on the
-// separate ConsultantIndustry join. Same explicit-join reasoning as
-// ConsultantIndustry re: audit-diffing individual create/delete calls.
+// Narrows the industry arm: a consultant holding Manufacturing plus
+// specializations [Food, Packaging] sees only those branches of Manufacturing,
+// while one holding Manufacturing with no specialization rows sees all of it.
+// Grants are usually made at a parent Specialization ("Food"), which covers
+// every child ("Food Meat", "Food Bakery", ...).
+model ConsultantSpecialization {
+  consultantId     String
+  consultant       Consultant     @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+  specializationId String
+  specialization   Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+
+  @@id([consultantId, specializationId])
+  @@index([specializationId])
+}
+
+// Many-to-many: which Location nodes a consultant is scoped to — at ANY level
+// (country, state, city, or suburb), same pattern as StakeholderLocation and
+// ClientLocation. This is where a Linktal desk label is expanded into real
+// nodes: "Brisbane GC QLD" becomes two CITY rows (Brisbane, Gold Coast),
+// "East Malaysia" becomes two STATE rows (Sabah, Sarawak).
 model ConsultantLocation {
   consultantId String
   consultant   Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
@@ -193,78 +261,115 @@ model ConsultantLocation {
 }
 
 // ============================================================================
-// SHARED REFERENCE TABLES (Location, JobTitle — used across Client/
-// Candidate/Stakeholder/JobOrder domains)
+// SHARED REFERENCE TABLES (Location, JobTitle, role types)
 // ============================================================================
 
-// A single hierarchical geography tree instead of separate Country/City/
-// Suburb tables. Australia -> Sydney NSW -> Silverwater 2128 is a 3-node
-// chain (parentId self-relation); `level` says which rung a given row sits
-// on and `postcode` is only ever set on a SUBURB row. Client/Candidate/
-// JobOrder each point to their single most-specific known node (a candidate
-// with only a city on file points at the CITY row; one with a suburb points
-// at the SUBURB row, whose parent chain still resolves back to city and
-// country). Stakeholder coverage (`StakeholderLocation`) can reference a node
-// at ANY level, so "covers all of Australia" is one row instead of needing
-// every city/suburb underneath it individually — matching a candidate against
-// a stakeholder's coverage is then just walking the candidate's location up
-// its parent chain and checking for a hit, regardless of which level either
-// side specified.
+// A single hierarchical geography tree, bulk-loaded from GeoNames — countries,
+// admin1 (states/regions), cities5000, and postal places for suburbs. Nothing
+// in this table is hand-typed: `location:create` is admin-only (unlike
+// Industry/JobTitle, which are combobox-growable), because the scope resolver
+// reads this tree and a drifted node silently changes who can see what.
+//
+// Australia -> New South Wales -> Sydney -> Silverwater 2128 is a 4-node chain
+// (parentId self-relation); `level` says which rung a row sits on and
+// `postcode` is only ever set at SUBURB level.
+//
+// Candidate/JobOrder/ClientJobResearch each point at their single most-specific
+// known node — a candidate known only to city level points at the CITY row, one
+// with a suburb points at the SUBURB row, whose parent chain still resolves back
+// up to city, state and country. Client, Stakeholder and Consultant instead
+// carry *sets* of nodes at mixed granularity (ClientLocation /
+// StakeholderLocation / ConsultantLocation), so "covers all of Malaysia" is one
+// COUNTRY row rather than every city underneath it. Matching one side against
+// the other is then just walking the specific node up its parent chain and
+// checking for a hit, whichever level either side happened to specify.
 model Location {
-  id        String        @id @default(cuid())
-  name      String // "Australia" / "Sydney NSW" / "Silverwater 2128"
-  level     LocationLevel
-  postcode  String? // only meaningful at SUBURB level
-  parentId  String?
-  parent    Location?     @relation("LocationTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children  Location[]    @relation("LocationTree")
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id          String        @id @default(cuid())
+  name        String // "Australia" / "New South Wales" / "Sydney" / "Silverwater"
+  level       LocationLevel
+  postcode    String? // only meaningful at SUBURB level
+  geonameId   Int?          @unique // GeoNames id — makes the bulk load idempotent and re-runnable
+  parentId    String?
+  // Self plus every ancestor, root-last: Silverwater -> [silverwater, sydney,
+  // nsw, australia]. Denormalized so "is this record inside a granted node"
+  // is one indexed `hasSome` against the consultant's grant list, rather than
+  // a recursive CTE per query or a 1,500-element IN clause from expanding a
+  // COUNTRY grant downward. Maintained by the loader (this tree is
+  // bulk-written and admin-only, so it changes rarely).
+  ancestorIds String[]
+  parent      Location?     @relation("LocationTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    Location[]    @relation("LocationTree")
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
-  clients           Client[]
   candidates        Candidate[]
   jobOrders         JobOrder[]
   clientJobResearch ClientJobResearch[]
+  clients           ClientLocation[]
   stakeholders      StakeholderLocation[]
   consultants       ConsultantLocation[]
 
   @@unique([parentId, name])
   @@index([level])
   @@index([parentId])
+  @@index([ancestorIds], type: Gin)
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Location_name_trgm_idx")
 }
 
-// Consolidated from what were two separate tables (CandidateRoleType,
-// StakeholderRoleType), then renamed from RoleType — not a coarse category,
-// the actual job title itself. Growable/combobox-editable exactly like
-// Industry/Specialization: pick an existing title or type a new one (broad,
-// like "Electrician", or as specific as "R&D Lab Technician and
-// compounder"), and it becomes a reusable row others can share. This is why
-// the separate free-text jobTitle fields on Stakeholder/ClientJobResearch/
-// JobOrder were removed — this table is the single source of the title now,
-// not a category alongside it.
+// The job title as the *company* words it — "Product Engineer", "R&D Lab
+// Technician and compounder", "Chairman". Deliberately distinct from the role
+// types below, which are how a Linktal consultant classifies that same job
+// ("Software Engineer"). Combobox-growable by anyone: it carries no scoping
+// weight, so free creation costs nothing but speeds up data entry.
 model JobTitle {
   id           String              @id @default(cuid())
   name         String              @unique
   isActive     Boolean             @default(true)
   createdAt    DateTime            @default(now())
   updatedAt    DateTime            @updatedAt
-  candidates   Candidate[]
   stakeholders Stakeholder[]
   jobResearch  ClientJobResearch[]
   jobOrders    JobOrder[]
+  consultants  Consultant[]
+}
+
+// The consultant's own classification of a *job* — "Electrician", "Fitter
+// Lead", "Production Planner", "CNC Machinist". Kept separate from
+// StakeholderRoleType because the two vocabularies never overlap: you'd never
+// tag a CFO as an Electrician, and mixing them would put trades in the
+// dropdown when classifying a finance contact. Combobox-growable (no scoping
+// weight); used for filtering candidates against job orders.
+model JobRoleType {
+  id          String              @id @default(cuid())
+  name        String              @unique
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  candidates  Candidate[]
+  jobOrders   JobOrder[]
+  jobResearch ClientJobResearch[]
+}
+
+// The consultant's classification of a *contact* — the function they sit in
+// at the client: HR, Finance, Safety, Procurement, Estimating, GM CEO. See
+// JobRoleType above for why these are two tables and not one.
+model StakeholderRoleType {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  stakeholders Stakeholder[]
 }
 
 // ============================================================================
-// CLIENT (Companies hiring)
+// INDUSTRY / SPECIALIZATION (the first arm of the visibility scope)
 // ============================================================================
 
-// Reference table for Client.industry — a fixed row instead of free text, so
-// values stay consistent and reusable. No admin management page: the company
-// form's combobox doubles as the catalog editor (pick existing or type new,
-// which creates a row here). isActive isn't surfaced anywhere yet — it's
-// forward-looking, for when hiding one from the picker without deleting it
-// (and orphaning clients that reference it) becomes a real need.
+// Reference table for Client/Candidate.industry and the consultant industry
+// grant. `industry:create` is admin+manager only — unlike JobTitle/role types,
+// this is scope-bearing, and a consultant inventing a near-duplicate industry
+// would silently move records outside their own desk.
 model Industry {
   id              String               @id @default(cuid())
   name            String               @unique
@@ -277,64 +382,110 @@ model Industry {
   specializations Specialization[]
 }
 
-// A specialization belongs to exactly one Industry (the sheet data confirms
-// this — e.g. "Engineering Parts", "Packaging - Plastic" only ever appear
-// under Manufacturing) rather than being its own flat, industry-agnostic
-// catalog. `name` is unique per-industry, not globally — the same
-// specialization name could plausibly exist under two different industries.
-// Not referenced directly by Client/Candidate/Consultant — none of them tag
-// a specific specialization anymore, since their tagged Industry already
-// implies which specializations apply (browsable via Industry.specializations),
-// the same reasoning that dropped Candidate's specialization tagging earlier.
+// A specialization belongs to exactly one Industry, and may itself sit under a
+// parent Specialization — the source data already encodes that second tier in
+// its naming ("Engineering Parts Fibre Optics" under "Engineering Parts",
+// "Food Meat" under "Food"), it just wasn't structured as a hierarchy. The
+// parent tier is what makes the scope arm work: consultants grant coarse
+// categories ("Food"), while clients and candidates tag specific leaves ("Food
+// Bakery"), and a grant covers the node plus all descendants — identical
+// resolution to the Location tree, so both arms share one helper.
+//
+// `name` is unique per-industry rather than globally: the same specialization
+// name could plausibly exist under two different industries. Admin+manager
+// create only, same scope-bearing reasoning as Industry.
 model Specialization {
-  id         String   @id @default(cuid())
-  name       String
-  industryId String
-  industry   Industry @relation(fields: [industryId], references: [id], onDelete: Restrict)
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String           @id @default(cuid())
+  name        String
+  industryId  String
+  industry    Industry         @relation(fields: [industryId], references: [id], onDelete: Restrict)
+  parentId    String? // null = a top-level category directly under its Industry
+  parent      Specialization?  @relation("SpecializationTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children    Specialization[] @relation("SpecializationTree")
+  // Self plus every ancestor — same purpose and shape as Location.ancestorIds,
+  // so both arms of the scope resolver share one code path.
+  ancestorIds String[]
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  clients     Client[]
+  candidates  CandidateSpecialization[]
+  consultants ConsultantSpecialization[]
 
   @@unique([industryId, name])
   @@index([industryId])
+  @@index([parentId])
+  @@index([ancestorIds], type: Gin)
 }
 
+// ============================================================================
+// CLIENT (Companies hiring)
+// ============================================================================
+
 model Client {
-  id                   String              @id @default(cuid())
-  displayId            String              @unique @default(dbgenerated("('Client-'::text || lpad((nextval('\"Client_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Client-####
-  companyName          String
-  industryId           String
-  industry             Industry            @relation(fields: [industryId], references: [id], onDelete: Restrict)
-  locationId           String // Where this client SEEKS candidates from (its hiring market), not its own company address — points at the most specific known Location node (country, city, or suburb level).
-  location             Location            @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  addresses            Json? // "Address(es)" — the client's own physical office address(es), distinct from locationId above. Array of strings; barely used in source data (0/1645).
+  id          String @id @default(cuid())
+  displayId   String @unique @default(dbgenerated("('Client-'::text || lpad((nextval('\"Client_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Client-####
+  companyName String
+
+  // Required — the industry arm of the scope resolver relies on this never
+  // being null (see the SCOPING note above). Specialization is the optional
+  // narrowing within it.
+  industryId       String
+  industry         Industry        @relation(fields: [industryId], references: [id], onDelete: Restrict)
+  specializationId String?
+  specialization   Specialization? @relation(fields: [specializationId], references: [id], onDelete: SetNull)
+
+  // Where this client SEEKS candidates from (its hiring market), not its own
+  // office address — a *set* of nodes at any level, since the source data is
+  // routinely multi-valued ("Sydney NSW; Melbourne VIC; Brisbane GC QLD").
+  // At least one node (country level at minimum) is required, enforced in the
+  // service layer rather than by the schema, which can't express "non-empty
+  // relation".
+  locations ClientLocation[]
+
+  addresses            Json? // "Address(es)" — the client's own physical office address(es), distinct from `locations` above. Array of strings.
   suburbsAndPostcodes  Json? // "Suburb & Postcode (es)" — the client's own office suburb/postcode(s), same distinction as addresses. Array of strings.
   website              String?
-  seekJobMarketUrl     String? // "Seek/Job Street Job Market URL" — barely used in the source data (2/1645 rows) but a real sheet column.
+  seekJobMarketUrl     String? // "Seek/Job Street Job Market URL"
   linkedinJobMarketUrl String? // "Linkedin Job Market URL"
   generalDescription   String? // "General Description"
-  status               ClientStatus        @default(COLD)
-  quality              ClientQuality       @default(MEDIUM)
-  lastContactedAt      DateTime? // Denormalized: max(StakeholderContactHistory.contactedAt) across this client's stakeholders. Lets the list sort by it without a cross-table aggregate on every page load; source of truth stays StakeholderContactHistory.
-  lastContactedById    String? // Logical ref to Consultant.id (no FK) — denormalized, mirrors lastContactedAt: which consultant made that most recent stakeholder contact.
-  consultantId         String?
-  consultant           Consultant?         @relation(fields: [consultantId], references: [id])
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
-  deletedAt            DateTime? // Soft delete: null = live
-  deletedById          String? // Logical ref to Consultant.id (no FK)
-  stakeholders         Stakeholder[]
-  jobResearch          ClientJobResearch[]
-  jobOrders            JobOrder[]
-  tobs                 Tob[] // Terms of Business — one-to-many: a client can have multiple TOB records over time (pricing/guarantee/payment terms live per-TOB, not on Client)
+
+  status            ClientStatus  @default(COLD)
+  quality           ClientQuality @default(MEDIUM)
+  lastContactedAt   DateTime? // Denormalized: max(StakeholderContactHistory.contactedAt) across this client's stakeholders. Lets the list sort by it without a cross-table aggregate on every page load; source of truth stays StakeholderContactHistory.
+  lastContactedById String? // Logical ref to Consultant.id (no FK) — denormalized, mirrors lastContactedAt.
+  consultantId      String?
+  consultant        Consultant?   @relation(fields: [consultantId], references: [id])
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  deletedAt         DateTime? // Soft delete: null = live
+  deletedById       String? // Logical ref to Consultant.id (no FK)
+
+  stakeholders Stakeholder[]
+  jobResearch  ClientJobResearch[]
+  jobOrders    JobOrder[]
+  tobs         Tob[] // Terms of Business — one-to-many: a client can have multiple TOB records over time
 
   @@index([status])
   @@index([consultantId])
   @@index([deletedAt])
   @@index([industryId])
-  @@index([locationId])
+  @@index([specializationId])
   @@index([lastContactedAt])
   @@index([quality])
+}
+
+// Many-to-many: a client's hiring market, at mixed granularity — see the
+// Location model's comment for how matching works.
+model ClientLocation {
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([clientId, locationId])
+  @@index([locationId])
 }
 
 // ============================================================================
@@ -343,28 +494,37 @@ model Client {
 
 // A client can carry several TOB records over time (a signed document, a
 // supplier agreement, an email-confirmed arrangement, ...) — pricing,
-// guarantee period, and payment term now live per-record here rather than as
-// flat fields on Client, since two TOBs for the same client can disagree on
-// terms (e.g. a renegotiated rate).
+// guarantee period and payment term live per-record here rather than as flat
+// fields on Client, since two TOBs for the same client can disagree on terms.
+//
+// Everything but `clientId` is optional: only ~6-24% of the historical records
+// carry commercial detail at all.
 model Tob {
-  id                      String     @id @default(cuid())
-  fileName                String
-  fileType                String // e.g. "TOB Document", "Email Communication"
-  clientId                String
-  client                  Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  sourceFileLink          String // e.g. SharePoint URL
-  clientTobRepresentative String // Contact name (+ details) on the client side who signed/agreed
-  linktalRepresentativeId String
-  linktalRepresentative   Consultant @relation(fields: [linktalRepresentativeId], references: [id])
-  pricing                 Float // Fee percentage agreed in this TOB
-  guaranteePeriod         Int // Guarantee period in days for placements under this TOB
-  paymentTerm             String // e.g. "30 days from invoice"
-  invoiceContactName      String
-  invoiceContactEmail     String
-  createdAt               DateTime   @default(now())
-  updatedAt               DateTime   @updatedAt
-  deletedAt               DateTime? // Soft delete: null = live
-  deletedById             String? // Logical ref to Consultant.id (no FK)
+  id        String @id @default(cuid())
+  displayId String @unique @default(dbgenerated("('TOB-'::text || lpad((nextval('\"Tob_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: TOB-####
+  clientId  String
+  client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  fileName                String?
+  fileType                String? // e.g. "TOB Document", "Email Communication"
+  sourceFileLink          String? // e.g. SharePoint URL
+  clientTobRepresentative String? // Contact name (+ details) on the client side who signed/agreed
+  linktalRepresentativeId String?
+  linktalRepresentative   Consultant? @relation(fields: [linktalRepresentativeId], references: [id], onDelete: SetNull)
+
+  // Free text, not a number: real values include "13%-(80k below)15%-18%"
+  // alongside plain percentages, and the source workbook's own convention note
+  // says pricing schedules are text.
+  pricing         String?
+  guaranteePeriod Int? // Days. Numeric so it stays computable, even though the sheet writes "6 Months".
+  paymentTerm     String? // e.g. "30 days from invoice"
+
+  invoiceContactName  String?
+  invoiceContactEmail String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  deletedAt           DateTime? // Soft delete: null = live
+  deletedById         String? // Logical ref to Consultant.id (no FK)
 
   @@index([clientId])
   @@index([linktalRepresentativeId])
@@ -376,37 +536,52 @@ model Tob {
 // ============================================================================
 
 model Stakeholder {
-  id                String                      @id @default(cuid())
-  displayId         String                      @unique @default(dbgenerated("('Stake-'::text || lpad((nextval('\"Stakeholder_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Stake-####
-  clientId          String
-  client            Client                      @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  coverage          StakeholderLocation[] // Which Location nodes (any level — country, city, or suburb) this stakeholder covers. Replaces the old free-text "locationsCoverage" so it can actually be matched against a Candidate's/Client's single locationId.
-  firstName         String
-  jobTitleId        String // Renamed from roleTypeId; the free-text `jobTitle` field this used to sit alongside is gone — JobTitle (formerly RoleType) is now the single source, specific or broad, growable via combobox.
-  jobTitle          JobTitle                    @relation(fields: [jobTitleId], references: [id], onDelete: Restrict)
-  linkedinUrl       String?
-  email             String
-  mobile            String?
-  lastContactedAt   DateTime? // Denormalized: max(StakeholderContactHistory.contactedAt) for this stakeholder. Prisma's relation-aggregate `orderBy` only supports `_count` (not `_max`) on to-many relations, so — same reasoning as Client.lastContactedAt — sorting needs a real column, not a live join, even though this is only one hop away.
+  id        String @id @default(cuid())
+  displayId String @unique @default(dbgenerated("('Stake-'::text || lpad((nextval('\"Stakeholder_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Stake-####
+  clientId  String
+  client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  // Which Location nodes this stakeholder covers — matched against a
+  // candidate's/client's own location on the stakeholder's OWN coverage,
+  // independent of where the parent client sits (a Brisbane client's national
+  // account manager can cover Sydney).
+  coverage StakeholderLocation[]
+
+  firstName String?
+  lastName  String?
+
+  // The company's words for the role vs. the consultant's classification of it
+  // — both kept, deliberately (see JobTitle / StakeholderRoleType).
+  jobTitleId            String?
+  jobTitle              JobTitle?            @relation(fields: [jobTitleId], references: [id], onDelete: SetNull)
+  stakeholderRoleTypeId String?
+  stakeholderRoleType   StakeholderRoleType? @relation(fields: [stakeholderRoleTypeId], references: [id], onDelete: SetNull)
+
+  linkedinUrl String?
+  email       String?
+  mobile      String?
+
+  lastContactedAt   DateTime? // Denormalized: max(StakeholderContactHistory.contactedAt) for this stakeholder. Prisma's relation-aggregate `orderBy` only supports `_count` (not `_max`) on to-many relations, so sorting needs a real column, not a live join.
   lastContactedById String? // Logical ref to Consultant.id (no FK) — denormalized, mirrors lastContactedAt.
-  isAccurate        Boolean? // Whether this stakeholder's details have been verified accurate — sparse/manual flag, nullable rather than defaulted since "not yet checked" isn't the same as "confirmed accurate."
+  isAccurate        Boolean? // Whether this stakeholder's details have been verified — nullable rather than defaulted, since "not yet checked" isn't "confirmed accurate".
   inaccurateReason  String? // Free text explaining what's wrong, when isAccurate is false.
-  createdAt         DateTime                    @default(now())
-  updatedAt         DateTime                    @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
   deletedAt         DateTime? // Soft delete: null = live
   deletedById       String? // Logical ref to Consultant.id (no FK)
-  contactHistory    StakeholderContactHistory[]
+
+  contactHistory StakeholderContactHistory[]
 
   @@index([clientId])
   @@index([deletedAt])
   @@index([jobTitleId])
+  @@index([stakeholderRoleTypeId])
   @@index([lastContactedAt])
 }
 
-// Many-to-many: a stakeholder can cover several Location nodes, at mixed
-// granularity (e.g. one row for "Australia" as a whole, another for a
-// specific suburb elsewhere) — see the Location model's comment for how
-// matching against a candidate's single locationId works.
+// Many-to-many: a stakeholder can cover several Location nodes at mixed
+// granularity (one row for "Malaysia" as a whole, another for a specific city
+// elsewhere) — see the Location model's comment for how matching works.
 model StakeholderLocation {
   stakeholderId String
   stakeholder   Stakeholder @relation(fields: [stakeholderId], references: [id], onDelete: Cascade)
@@ -419,13 +594,15 @@ model StakeholderLocation {
 
 model StakeholderContactHistory {
   id            String      @id @default(cuid())
+  displayId     String      @unique @default(dbgenerated("('CN-'::text || lpad((nextval('\"StakeholderContactHistory_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: CN-####
   stakeholderId String
   stakeholder   Stakeholder @relation(fields: [stakeholderId], references: [id], onDelete: Cascade)
-  contactType   String // Channel: email, call, meeting, linkedin
-  category      String // "Detailed Brief Notes" or "Outreach Campaign History" — matches the sheet's own type column, distinct from contactType (channel)
-  contactedById String // Consultant who made this specific contact — distinct from Client.consultantId (the account owner); any consultant can log a contact.
-  contactedBy   Consultant  @relation(fields: [contactedById], references: [id], onDelete: Restrict)
-  notes         String
+
+  contactType   String? // Channel: email, call, meeting, linkedin
+  category      String? // "Detailed Brief Notes" or "Outreach Campaign History" — the sheet's own type column, distinct from contactType (channel)
+  contactedById String? // Consultant who made this specific contact — distinct from Client.consultantId (the account owner); any consultant can log a contact.
+  contactedBy   Consultant? @relation(fields: [contactedById], references: [id], onDelete: SetNull)
+  notes         String?
   contactedAt   DateTime    @default(now())
   createdAt     DateTime    @default(now())
 
@@ -434,39 +611,50 @@ model StakeholderContactHistory {
 }
 
 // ============================================================================
-// CLIENT JOB RESEARCH (Job openings research)
+// CLIENT JOB RESEARCH (Job openings found in the market)
 // ============================================================================
 
+// Public job-ad research (Seek/LinkedIn), deliberately separate from JobOrder:
+// this is what's advertised in the market, not a brief Linktal has been given.
 model ClientJobResearch {
-  id                 String       @id @default(cuid())
-  clientId           String
-  client             Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  consultantId       String // Who conducted this research — mostly a researcher-role consultant, but not schema-restricted to that role (an RBAC/permission concern, not a data-model one).
-  consultant         Consultant   @relation(fields: [consultantId], references: [id])
-  locationId         String // Points at the most specific known Location node — replaces the sheet's separate "City Advertised"/"Suburbs" columns.
-  location           Location     @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  jobTitleId         String // Renamed from roleTypeId; the separate free-text jobTitle field this used to sit alongside is gone — JobTitle (formerly RoleType) is now the single source.
-  jobTitle           JobTitle     @relation(fields: [jobTitleId], references: [id], onDelete: Restrict)
-  status             ClientStatus // Snapshot of the client's status at the time this research was logged, not a live reference (the client's actual current status may have since changed).
-  seekUrl            String
-  permanentUrl       String? // Optional — not every ad has one.
-  postedDate         DateTime // When the job ad was posted (distinct from researchedAt, when the consultant logged it).
-  contactEmailFromAd String? // Optional — rarely present on the ad itself.
-  salaryRange        String? // Optional — free-text salary info copied from the ad itself (e.g. "salary + super + FMCV + bonus scheme"); often omitted from ads.
-  isContacted        Boolean      @default(false)
-  researchedAt       DateTime     @default(now())
-  lastContactedAt    DateTime? // Optional.
-  lastContactedById  String? // Optional. Logical ref to Consultant.id (no FK).
+  id        String @id @default(cuid())
+  displayId String @unique @default(dbgenerated("('JR-'::text || lpad((nextval('\"ClientJobResearch_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: JR-####
+  clientId  String
+  client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  consultantId String? // Who conducted this research — usually a researcher-role consultant, but not schema-restricted to that role (an RBAC concern, not a data-model one).
+  consultant   Consultant? @relation(fields: [consultantId], references: [id], onDelete: SetNull)
+
+  locationId String? // The most specific known Location node — replaces the sheet's separate "City Advertised"/"Suburbs" columns.
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  jobTitleId    String? // "Job Title in market" — the advertiser's own words.
+  jobTitle      JobTitle?    @relation(fields: [jobTitleId], references: [id], onDelete: SetNull)
+  jobRoleTypeId String? // The consultant's classification of that ad.
+  jobRoleType   JobRoleType? @relation(fields: [jobRoleTypeId], references: [id], onDelete: SetNull)
+
+  status             ClientStatus? // Snapshot of the client's status when this research was logged, not a live reference.
+  seekUrl            String?
+  permanentUrl       String?
+  postedDate         DateTime? // When the ad was posted (distinct from researchedAt, when the consultant logged it).
+  contactEmailFromAd String?
+  salaryRange        String? // Free text copied off the ad (e.g. "salary + super + FMCV + bonus scheme").
+  isContacted        Boolean       @default(false)
+  researchedAt       DateTime      @default(now())
+  lastContactedAt    DateTime?
+  lastContactedById  String? // Logical ref to Consultant.id (no FK).
   notes              String?
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
   deletedAt          DateTime? // Soft delete: null = live
   deletedById        String? // Logical ref to Consultant.id (no FK)
-  jobOrder           JobOrder?
+
+  jobOrder JobOrder?
 
   @@index([clientId])
   @@index([consultantId])
   @@index([jobTitleId])
+  @@index([jobRoleTypeId])
   @@index([locationId])
   @@index([deletedAt])
 }
@@ -476,37 +664,50 @@ model ClientJobResearch {
 // ============================================================================
 
 model Candidate {
-  id                String                    @id @default(cuid())
-  displayId         String                    @unique @default(dbgenerated("('CDD-'::text || lpad((nextval('\"Candidate_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: CDD-####
-  firstName         String
-  lastName          String
-  email             String
-  mobile            String
-  locationId        String // Points at the most specific known Location node (country, city, or suburb level) — replaces the old free-text country/city fields.
-  location          Location                  @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  industryId        String
-  industry          Industry                  @relation(fields: [industryId], references: [id], onDelete: Restrict)
-  jobTitleId        String // Renamed from roleTypeId (the RoleType model is now JobTitle) — this candidate's own occupation, distinct from currentRole below (their specific title at their CURRENT employer, a separate temporal fact).
-  jobTitle          JobTitle                  @relation(fields: [jobTitleId], references: [id], onDelete: Restrict)
-  currentRole       String? // Renamed from currentPosition. Free text on purpose — see jobTitleId comment above.
-  currentCompany    String?
-  linkedinUrl       String?
-  seekTalentUrl     String? // "SeekTalent URL"
-  rawResumeUrl      String? // "Raw Resume File" — the original, as-submitted resume.
-  editedResumeUrl   String? // "Linktal Edited File" — Linktal's own reformatted version. Replaces the old single generic `resumeUrl`.
-  workHistory       Json? // JSONB: [{company, role, startDate, endDate}] — consolidated timeline covering all previous companies/roles/periods (replaces the sheet's separate "Previous Company 1/2", "Previous Role 1/2" ... columns)
-  status            CandidateStatus           @default(COLD)
-  notes             Json? // JSONB: [{id, content, timestamp, by, editedAt, editedBy}] — internal note timeline, newest last; edit/delete restricted to the note's author (or an admin). Mirrors Client.notes.
-  consultantId      String? // Owning consultant — same shape as Client.consultantId, distinct from CandidateContactHistory.contactedById (who actually made a given contact).
-  consultant        Consultant?               @relation(fields: [consultantId], references: [id])
-  lastContactedAt   DateTime? // Denormalized: max(CandidateContactHistory.contactedAt). Same reasoning as Client/Stakeholder.lastContactedAt — sorting needs a real column, not a live aggregate join.
+  id        String  @id @default(cuid())
+  displayId String  @unique @default(dbgenerated("('CDD-'::text || lpad((nextval('\"Candidate_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: CDD-####
+  firstName String?
+  lastName  String?
+  email     String?
+  mobile    String?
+
+  // Required, both of them — the two coarse tiers the scope resolver can't
+  // work without (see the SCOPING note). Everything finer is optional.
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  industryId String
+  industry   Industry @relation(fields: [industryId], references: [id], onDelete: Restrict)
+
+  specializations CandidateSpecialization[]
+
+  // The consultant's classification of what this person does. There's no
+  // company-assigned JobTitle here — a candidate's equivalent is `currentRole`,
+  // their actual title at their current employer.
+  jobRoleTypeId String?
+  jobRoleType   JobRoleType? @relation(fields: [jobRoleTypeId], references: [id], onDelete: SetNull)
+
+  currentRole     String? // "Lastest Role" — free text on purpose, it's the employer's title.
+  currentCompany  String?
+  linkedinUrl     String?
+  seekTalentUrl   String?
+  rawResumeUrl    String? // "Raw Resume File" — the original, as-submitted resume.
+  editedResumeUrl String? // "Linktal Edited File" — Linktal's own reformatted version.
+  workHistory     Json? // JSONB: [{company, role, period}] — consolidated timeline replacing the sheet's separate "Previous Company 1/2", "Previous Role 1/2" columns. `period` is free text ("2020 - 2021 (1 year)"); the source never stores parseable dates.
+
+  status CandidateStatus @default(COLD)
+  notes  Json? // JSONB: [{id, content, timestamp, by, editedAt, editedBy}] — internal note timeline, newest last; edit/delete restricted to the note's author (or an admin).
+
+  consultantId      String? // Owning consultant — distinct from CandidateContactHistory.contactedById (who actually made a given contact).
+  consultant        Consultant? @relation(fields: [consultantId], references: [id])
+  lastContactedAt   DateTime? // Denormalized: max(CandidateContactHistory.contactedAt).
   lastContactedById String? // Logical ref to Consultant.id (no FK) — denormalized, mirrors lastContactedAt.
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
   deletedAt         DateTime? // Soft delete: null = live
   deletedById       String? // Logical ref to Consultant.id (no FK)
-  contactHistory    CandidateContactHistory[]
-  submissions       CandidateSubmission[]
+
+  contactHistory CandidateContactHistory[]
+  submissions    CandidateSubmission[]
 
   @@index([status])
   @@index([email])
@@ -514,12 +715,11 @@ model Candidate {
   @@index([consultantId])
   @@index([lastContactedAt])
   @@index([industryId])
-  @@index([jobTitleId])
+  @@index([jobRoleTypeId])
   @@index([locationId])
-  // Trigram indexes back the quick-search's ILIKE/`contains` filters — turns
-  // a substring scan on these columns into an index scan instead of a
-  // sequential one, which is what keeps search fast as the candidate pool
-  // grows (see 20260719021500_candidate_search_trigram_indexes).
+  // Trigram indexes back the quick-search's ILIKE/`contains` filters — turns a
+  // substring scan on these columns into an index scan instead of a sequential
+  // one, which is what keeps search fast as the candidate pool grows.
   @@index([firstName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_firstName_trgm_idx")
   @@index([lastName(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_lastName_trgm_idx")
   @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_email_trgm_idx")
@@ -529,73 +729,99 @@ model Candidate {
   @@index([displayId(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_displayId_trgm_idx")
 }
 
-// Mirrors StakeholderContactHistory's category/channel split. Formerly kept
-// separate from a standalone CandidateScreeningHistory model, but the actual
-// source sheet never had one — screening notes and outreach notes both live
-// here, distinguished only by `category` ("Detailed Screening Notes" vs
-// "Outreach Campaign History"), with the screening content itself captured
-// in `conversationSummary`. CandidateScreeningHistory was removed as
-// redundant once that became clear.
+// Many-to-many: a candidate can carry several specializations, unlike Client's
+// single specializationId. Explicit join model, same audit-diffing reasoning as
+// ConsultantIndustry.
+model CandidateSpecialization {
+  candidateId      String
+  candidate        Candidate      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  specializationId String
+  specialization   Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+
+  @@id([candidateId, specializationId])
+  @@index([specializationId])
+}
+
+// Screening notes and outreach notes both live here, distinguished by
+// `category` ("Detailed Screening Notes" vs "Outreach Campaign History") — the
+// source sheet never had a separate screening table, which is why the old
+// CandidateScreeningHistory model was dropped as redundant.
 model CandidateContactHistory {
-  id                    String          @id @default(cuid())
-  candidateId           String
-  candidate             Candidate       @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  contactType           String // Channel: email, call, meeting, linkedin
-  category              String // "Detailed Screening Notes" or "Outreach Campaign History" — matches the sheet's own type column, distinct from contactType (channel). Same pattern as StakeholderContactHistory.category.
-  contactedById         String // Consultant who made this specific contact — distinct from Candidate.consultantId (the owning consultant); any consultant can log a contact.
-  contactedBy           Consultant      @relation(fields: [contactedById], references: [id], onDelete: Restrict)
-  contactedAt           DateTime        @default(now())
-  outreachCampaignNotes String? // Filled when category is "Outreach Campaign History"; optional.
-  conversationSummary   String? // Filled when category is "Detailed Screening Notes" — the actual screening call content; optional.
+  id          String    @id @default(cuid())
+  displayId   String    @unique @default(dbgenerated("('CDN-'::text || lpad((nextval('\"CandidateContactHistory_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: CDN-####
+  candidateId String
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  contactType   String? // Channel: email, call, meeting, linkedin
+  category      String? // "Detailed Screening Notes" or "Outreach Campaign History"
+  contactedById String? // Consultant who made this specific contact — distinct from Candidate.consultantId (the owner).
+  contactedBy   Consultant? @relation(fields: [contactedById], references: [id], onDelete: SetNull)
+  contactedAt   DateTime    @default(now())
+
+  outreachCampaignNotes String? // Filled when category is "Outreach Campaign History".
+  conversationSummary   String? // Filled when category is "Detailed Screening Notes" — the actual screening call content.
   status                CandidateStatus @default(WARM) // Snapshot of the candidate's status at the time of this contact, not a live reference.
-  suburb                String? // Optional.
-  currentSalary         Float? // Optional — a single actual figure, not a range.
-  expectedSalaryMin     Float? // Optional — candidates usually state expectations as a range (e.g. "80-90k"), unlike currentSalary.
-  expectedSalaryMax     Float? // Optional.
-  createdAt             DateTime        @default(now())
+  suburb                String?
+
+  // Free text, not numbers: the source records these as "35 per hour", "more
+  // 53-55", "above 47". Storing them numerically would drop ~740 populated
+  // values on import. Same reasoning as Tob.pricing.
+  currentSalary  String?
+  expectedSalary String?
+  createdAt      DateTime @default(now())
 
   @@index([candidateId])
   @@index([contactedById])
 }
 
 // ============================================================================
-// JOB ORDER (Open positions)
+// JOB ORDER (Open positions Linktal has been briefed on)
 // ============================================================================
 
 model JobOrder {
-  id             String                @id @default(cuid())
-  displayId      String                @unique @default(dbgenerated("('JO-'::text || lpad((nextval('\"JobOrder_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: JO-####
-  clientId       String
-  client         Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  consultantId   String
-  consultant     Consultant            @relation(fields: [consultantId], references: [id])
-  jobTitleId     String // Resolves the earlier open question of whether to add a parallel roleTypeId alongside jobTitle — instead this goes straight to JobTitle (formerly RoleType) as the sole source, same as Stakeholder/ClientJobResearch.
-  jobTitle       JobTitle              @relation(fields: [jobTitleId], references: [id], onDelete: Restrict)
-  locationId     String // Points at the most specific known Location node — city required at minimum, suburb-level optional (a CITY-level node here means "no suburb known yet"). Replaces the old free-text city/suburb fields.
-  location       Location              @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  jobResearchId  String?               @unique // Optional link back to the ClientJobResearch row this job order originated from, if any.
-  jobResearch    ClientJobResearch?    @relation(fields: [jobResearchId], references: [id], onDelete: SetNull)
+  id        String @id @default(cuid())
+  displayId String @unique @default(dbgenerated("('JO-'::text || lpad((nextval('\"JobOrder_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: JO-####
+  clientId  String
+  client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  consultantId String?
+  consultant   Consultant? @relation(fields: [consultantId], references: [id])
+
+  // Both, same split as Stakeholder: the client's brief vs. the consultant's
+  // classification. The sheet has a single "Role" column, imported into both.
+  jobTitleId    String?
+  jobTitle      JobTitle?    @relation(fields: [jobTitleId], references: [id], onDelete: SetNull)
+  jobRoleTypeId String?
+  jobRoleType   JobRoleType? @relation(fields: [jobRoleTypeId], references: [id], onDelete: SetNull)
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  jobResearchId String?            @unique // Optional link back to the ClientJobResearch row this job order originated from, if any.
+  jobResearch   ClientJobResearch? @relation(fields: [jobResearchId], references: [id], onDelete: SetNull)
+
   salaryMin      Float?
   salaryMax      Float?
-  salaryCurrency String?               @default("AUD")
-  estimatedValue Float? // "Value" on the sheet — a forecast/estimate of this job order's worth, entered before anyone's placed. Distinct from Placement.feeValue, which is the actual fee calculated after a successful placement.
-  openings       Int                   @default(1)
-  filledCount    Int                   @default(0)
-  description    String?
-  requirements   String?
-  notes          String? // "Briefing Notes" — internal recruiter notes specific to this job order, distinct from description/requirements (which read as public-facing job-ad copy).
-  status         JobOrderStatus        @default(ACTIVE)
-  quality        JobOrderQuality       @default(MEDIUM)
-  priorityLevel  Int?                  @default(2) // 1=High, 2=Medium, 3=Low
-  isReplacement  Boolean               @default(false) // This job order was opened to replace a placement that fell through within the guarantee period. Flag only — no linking back to the failed placement (per the confirmed "treat as new job" decision).
-  isCollaborated Boolean               @default(false) // Two or more consultants worked this job order together (split-desk). Flag only, no multi-owner linking.
-  receivedAt     DateTime              @default(now())
-  closedAt       DateTime?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
-  deletedAt      DateTime? // Soft delete: null = live
-  deletedById    String? // Logical ref to Consultant.id (no FK)
-  submissions    CandidateSubmission[]
+  salaryCurrency String? @default("AUD")
+  estimatedValue Float? // "Value" on the sheet — a forecast entered before anyone's placed. Distinct from Placement.feeValue, the actual fee after a successful placement.
+
+  openings     Int     @default(1)
+  filledCount  Int     @default(0)
+  description  String?
+  requirements String?
+  notes        String? // "Briefing Notes" — internal recruiter notes, distinct from description/requirements (public-facing job-ad copy).
+
+  status        JobOrderStatus  @default(ACTIVE)
+  quality       JobOrderQuality @default(MEDIUM)
+  priorityLevel Int?            @default(2) // 1=High, 2=Medium, 3=Low
+  receivedAt    DateTime        @default(now())
+  closedAt      DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  deletedAt     DateTime? // Soft delete: null = live
+  deletedById   String? // Logical ref to Consultant.id (no FK)
+
+  submissions CandidateSubmission[]
 
   @@index([clientId])
   @@index([consultantId])
@@ -604,6 +830,7 @@ model JobOrder {
   @@index([deletedAt])
   @@index([locationId])
   @@index([jobTitleId])
+  @@index([jobRoleTypeId])
 }
 
 // ============================================================================
@@ -612,6 +839,7 @@ model JobOrder {
 
 model CandidateSubmission {
   id          String           @id @default(cuid())
+  displayId   String           @unique @default(dbgenerated("('SUB-'::text || lpad((nextval('\"CandidateSubmission_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: SUB-####
   candidateId String
   candidate   Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   jobOrderId  String
@@ -626,8 +854,8 @@ model CandidateSubmission {
   placement   Placement?
   interviews  Interview[]
 
-  // NOTE: unique is not partial (Fix 2 skipped) — a soft-deleted row still
-  // holds (candidateId, jobOrderId). Re-submit must restore the dead row.
+  // NOTE: unique is not partial — a soft-deleted row still holds
+  // (candidateId, jobOrderId). Re-submit must restore the dead row.
   @@unique([candidateId, jobOrderId])
   @@index([candidateId])
   @@index([jobOrderId])
@@ -642,12 +870,13 @@ model CandidateSubmission {
 // One CandidateSubmission can carry several rounds ("1st Interview", "Final
 // Interview", ...) — roundLabel is free text rather than a fixed enum, since
 // agencies don't all use the same round-naming convention and this shouldn't
-// need a migration to add "2nd Interview" or "Panel Interview" etc.
+// need a migration to add "Panel Interview".
 model Interview {
   id            String              @id @default(cuid())
+  displayId     String              @unique @default(dbgenerated("('INT-'::text || lpad((nextval('\"Interview_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: INT-####
   submissionId  String
   submission    CandidateSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  roundLabel    String // e.g. "1st Interview", "Final Interview"
+  roundLabel    String
   interviewDate DateTime
   outcome       InterviewOutcome    @default(SCHEDULED)
   notes         String?
@@ -665,16 +894,17 @@ model Interview {
 // PLACEMENT (Successful placements)
 // ============================================================================
 
-// Fee Calculation (see CLAUDE.md's confirmed decisions):
+// Fee Calculation:
 //   Base Salary * (1 + Super%) = Total Package
 //   Total Package * Fee% = Placement Fee (feeType PERCENTAGE) — or a flat feeValue (feeType FLAT)
-//   guaranteeEndDate = startDate + <guarantee period> — guaranteePeriod used to live on Client, but
-//   now lives per-Tob (a client can have several). Which Tob applies to a given placement (most
-//   recent? the one active when the job order was raised?) is still an open service-layer decision,
-//   not yet resolved by this schema.
+//
+// guaranteeEndDate is entered MANUALLY, not derived. It used to be computed
+// from Client.guaranteePeriod, but guarantee terms now live per-Tob and a
+// client can hold several disagreeing ones — picking the applicable TOB
+// automatically would be guesswork, so the consultant sets the date.
 model Placement {
   id               String              @id @default(cuid())
-  displayId        String?             @unique // Format: "PLC-XXXX"
+  displayId        String              @unique @default(dbgenerated("('PLC-'::text || lpad((nextval('\"Placement_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: PLC-####
   submissionId     String              @unique
   submission       CandidateSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   baseSalary       Float?
@@ -684,7 +914,7 @@ model Placement {
   feePercentage    Float?
   feeValue         Float? // Auto (PERCENTAGE): totalPackage * feePercentage / 100. Entered directly when feeType = FLAT.
   startDate        DateTime?
-  guaranteeEndDate DateTime? // Auto-calculated: startDate + guarantee period from the relevant Tob (see model-level comment above)
+  guaranteeEndDate DateTime? // Manual — see the model comment above.
   accountsNotified Boolean             @default(false)
   status           PlacementStatus     @default(ACTIVE)
   notes            String?

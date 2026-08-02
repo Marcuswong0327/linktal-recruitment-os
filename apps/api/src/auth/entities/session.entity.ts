@@ -9,6 +9,18 @@ export class SessionUserEntity {
   permissions!: string[];
   @ApiProperty({ type: [String], description: 'Industry ids this consultant is scoped to (only enforced for roleName === "consultant")' })
   industryIds!: string[];
+  @ApiProperty({
+    type: [String],
+    description:
+      'Specialization ids granted to this consultant. Narrows the industry arm; empty means the whole industry.',
+  })
+  specializationIds!: string[];
+  @ApiProperty({
+    type: [String],
+    description:
+      'Location ids granted to this consultant. Each covers that node and every descendant.',
+  })
+  locationIds!: string[];
 }
 
 export class LoginResponseEntity {

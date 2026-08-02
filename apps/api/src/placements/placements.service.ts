@@ -6,8 +6,6 @@ import { CreatePlacementDto } from './dto/create-placement.dto';
 import { UpdatePlacementDto } from './dto/update-placement.dto';
 import { QueryPlacementsDto } from './dto/query-placements.dto';
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
 /**
  * Fee Calculation (CLAUDE.md's confirmed decisions):
  *   Base Salary * (1 + Super%) = Total Package
@@ -90,9 +88,10 @@ export class PlacementsService {
       feePercentage: dto.feePercentage,
       feeValue: dto.feeValue,
     });
-    const guaranteeEndDate = dto.startDate
-      ? new Date(new Date(dto.startDate).getTime() + submission.jobOrder.client.guaranteePeriod * MS_PER_DAY)
-      : null;
+    // guaranteeEndDate is entered by the consultant, not derived: guarantee
+    // terms live per-Tob now and a client can hold several that disagree, so
+    // picking the applicable one automatically would be guesswork.
+    const guaranteeEndDate = dto.guaranteeEndDate ? new Date(dto.guaranteeEndDate) : null;
 
     const placement = await this.prisma.placement.create({
       data: {
@@ -164,16 +163,9 @@ export class PlacementsService {
       feeValue: dto.feeValue ?? current.feeValue ?? undefined,
     });
 
-    let guaranteeEndDate = current.guaranteeEndDate;
-    if (dto.startDate) {
-      const submission = await this.prisma.candidateSubmission.findUnique({
-        where: { id: current.submissionId },
-        include: { jobOrder: { include: { client: true } } },
-      });
-      guaranteeEndDate = new Date(
-        new Date(dto.startDate).getTime() + (submission?.jobOrder.client.guaranteePeriod ?? 90) * MS_PER_DAY,
-      );
-    }
+    const guaranteeEndDate = dto.guaranteeEndDate
+      ? new Date(dto.guaranteeEndDate)
+      : current.guaranteeEndDate;
 
     return this.prisma.placement.update({
       where: { id },

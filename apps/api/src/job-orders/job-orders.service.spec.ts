@@ -13,6 +13,8 @@ function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
     isActive: true,
     permissions: new Set(),
     industryIds: [],
+    specializationIds: [],
+    locationIds: [],
     ...overrides,
   };
 }

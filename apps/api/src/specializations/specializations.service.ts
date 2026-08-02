@@ -15,16 +15,21 @@ export class SpecializationsService {
   }
 
   /**
-   * Upsert on `name` — the company form's combobox calls this for "Add
-   * <name>", and two people typing the same new value at once (or someone
-   * re-adding a name that's already there) should both land on one row
-   * instead of racing a unique-constraint error.
+   * Upsert on (industry, name) — `name` is unique *per industry*, not
+   * globally, since the same specialization name can plausibly exist under two
+   * industries. Two people typing the same new value at once (or re-adding an
+   * existing one) both land on the same row instead of racing the unique
+   * constraint.
+   *
+   * `parentId` is optional: passing one files this under a category ("Food"),
+   * omitting it creates a top-level category. `ancestorIds` is maintained by
+   * the backfill (scripts/backfill-ancestors.ts) rather than written here.
    */
   create(dto: CreateSpecializationDto) {
     const name = dto.name.trim();
     return this.prisma.specialization.upsert({
-      where: { name },
-      create: { name },
+      where: { industryId_name: { industryId: dto.industryId, name } },
+      create: { name, industryId: dto.industryId, parentId: dto.parentId ?? null },
       update: {},
     });
   }

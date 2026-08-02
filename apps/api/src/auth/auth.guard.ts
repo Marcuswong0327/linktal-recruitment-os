@@ -55,6 +55,8 @@ export class AuthGuard implements CanActivate {
       isActive: true, // guaranteed by RbacService.assertActive at mint time
       permissions: new Set(claims.permissions),
       industryIds: claims.industryIds,
+      specializationIds: claims.specializationIds,
+      locationIds: claims.locationIds,
     };
     // Attribute any writes made while handling this request to the caller.
     RequestContext.setActor(request.user.consultantId);

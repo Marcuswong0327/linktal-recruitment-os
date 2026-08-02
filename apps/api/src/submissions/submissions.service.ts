@@ -7,22 +7,34 @@ import { CreateSubmissionDto } from './dto/create-submission.dto';
 import { UpdateSubmissionDto } from './dto/update-submission.dto';
 import { QuerySubmissionsDto } from './dto/query-submissions.dto';
 
+// Candidate names are firstName/lastName now, and a job order's title is a
+// JobTitle relation rather than a scalar — both are flattened back to plain
+// strings in `toEntity` so the API shape is unchanged.
 const SUBMISSION_INCLUDE = {
-  candidate: { select: { fullName: true } },
-  jobOrder: { select: { jobTitle: true } },
+  candidate: { select: { firstName: true, lastName: true } },
+  jobOrder: { select: { displayId: true, jobTitle: { select: { name: true } } } },
 } satisfies Prisma.CandidateSubmissionInclude;
 
 type SubmissionWithRelations = {
-  candidate: { fullName: string } | null;
-  jobOrder: { jobTitle: string } | null;
+  candidate: { firstName: string | null; lastName: string | null } | null;
+  jobOrder: { displayId: string; jobTitle: { name: string } | null } | null;
 };
+
+/** Joins the name parts, tolerating a candidate with only one (or neither) on file. */
+function fullName(person: { firstName: string | null; lastName: string | null } | null): string | null {
+  if (!person) return null;
+  const joined = [person.firstName, person.lastName].filter(Boolean).join(' ');
+  return joined || null;
+}
 
 function toEntity<T extends SubmissionWithRelations>(submission: T) {
   const { candidate, jobOrder, ...rest } = submission;
   return {
     ...rest,
-    candidateName: candidate?.fullName ?? null,
-    jobOrderTitle: jobOrder?.jobTitle ?? null,
+    candidateName: fullName(candidate),
+    // Falls back to the job order's displayId when it has no title tagged —
+    // jobTitleId is optional now, and an empty pipeline cell reads as a bug.
+    jobOrderTitle: jobOrder?.jobTitle?.name ?? jobOrder?.displayId ?? null,
   };
 }
 
@@ -90,8 +102,9 @@ export class SubmissionsService {
     if (!jobOrder) {
       throw new NotFoundException(`Job order ${dto.jobOrderId} not found`);
     }
-    const jobOrderIndustryId = jobOrder.client?.industryId ?? null;
-    if (!candidate.industryId || !jobOrderIndustryId || candidate.industryId !== jobOrderIndustryId) {
+    // industryId is required on Client and Candidate now, so this is a plain
+    // equality check — there's no untagged case left to guard against.
+    if (candidate.industryId !== jobOrder.client.industryId) {
       throw new BadRequestException({
         code: 'SUBMISSION_INDUSTRY_MISMATCH',
         message: "This candidate's industry does not match this job order.",

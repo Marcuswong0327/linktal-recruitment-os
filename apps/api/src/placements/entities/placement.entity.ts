@@ -3,7 +3,7 @@ import { Placement, PlacementFeeType, PlacementStatus } from '@prisma/client';
 
 /** OpenAPI response shape for a Placement. */
 export class PlacementEntity implements Omit<Placement, 'deletedAt' | 'deletedById'> {
-  @ApiProperty({ type: String, nullable: true, example: 'PLC-0001' }) displayId!: string | null;
+  @ApiProperty({ type: String, example: 'PLC-0001' }) displayId!: string;
   @ApiProperty() id!: string;
   @ApiProperty() submissionId!: string;
   @ApiProperty({ type: Number, nullable: true }) baseSalary!: number | null;

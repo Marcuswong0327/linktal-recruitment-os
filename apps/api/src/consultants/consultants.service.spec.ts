@@ -12,6 +12,8 @@ const actor = (roleName: string | null): AuthUser => ({
   isActive: true,
   permissions: new Set<string>(),
   industryIds: [],
+  specializationIds: [],
+  locationIds: [],
 });
 
 function makePrisma() {

@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { PrismaService } from '../prisma/prisma.service';
-import { assertInJobScope, industryScopeViaClient } from '../common/industry-scope';
+import { assertInScope, isScoped, stakeholderScope } from '../common/scope';
 import { AuthUser } from '../auth/auth.types';
 import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
 import { UpdateStakeholderDto } from './dto/update-stakeholder.dto';
@@ -21,33 +21,60 @@ import { classifyJobTitle } from './role-type-classifier';
 // "latest contact" detail (type/notes/who) isn't sorted or filtered on, so
 // it's resolved live via the top-1 contact history row instead of also
 // being denormalized — display-only, cheap per row.
+// jobTitle (the company's words) and stakeholderRoleType (the consultant's
+// classification) are both relations now — resolved to plain strings in
+// `toEntity`, since StakeholderEntity documents them as `string | null` rather
+// than the nested objects Prisma would otherwise return.
+//
+// `coverage` is the stakeholder's own territory set, matched independently of
+// where their client sits — see common/scope.ts.
 const STAKEHOLDER_INCLUDE = {
-  // industryId is fetched alongside companyName purely for the job-scope
-  // check below (Stakeholder has no industry of its own) — stripped back out
-  // in `toEntity`, never part of the API response.
+  // industryId is fetched alongside companyName purely for the job-scope check
+  // below (Stakeholder has no industry of its own) — stripped back out in
+  // `toEntity`, never part of the API response.
   client: { select: { companyName: true, industryId: true } },
-  roleType: { select: { name: true } },
+  jobTitle: { select: { name: true } },
+  stakeholderRoleType: { select: { name: true } },
+  coverage: { select: { locationId: true, location: { select: { name: true, ancestorIds: true } } } },
   contactHistory: {
     orderBy: { contactedAt: 'desc' },
     take: 1,
-    select: { contactType: true, notes: true, contactedBy: { select: { fullName: true } } },
+    select: {
+      contactType: true,
+      category: true,
+      notes: true,
+      contactedBy: { select: { fullName: true } },
+    },
   },
 } satisfies Prisma.StakeholderInclude;
 
 type StakeholderWithRelations = {
   client: { companyName: string; industryId: string | null } | null;
-  roleType: { name: string } | null;
-  contactHistory: { contactType: string; notes: string | null; contactedBy: { fullName: string } | null }[];
+  jobTitle: { name: string } | null;
+  stakeholderRoleType: { name: string } | null;
+  coverage: { locationId: string; location: { name: string; ancestorIds: string[] } }[];
+  contactHistory: {
+    contactType: string | null;
+    category: string | null;
+    notes: string | null;
+    contactedBy: { fullName: string } | null;
+  }[];
 };
 
 function toEntity<T extends StakeholderWithRelations>(stakeholder: T) {
-  const { client, roleType, contactHistory, ...rest } = stakeholder;
+  const { client, jobTitle, stakeholderRoleType, coverage, contactHistory, ...rest } = stakeholder;
   const latest = contactHistory[0];
   return {
     ...rest,
     companyName: client?.companyName ?? null,
-    roleType: roleType?.name ?? null,
+    jobTitle: jobTitle?.name ?? null,
+    roleType: stakeholderRoleType?.name ?? null,
+    // Ids alongside names: the names are display-only, the ids are what an
+    // editable multi-select needs to preselect and diff against.
+    coverage: coverage.map((c) => c.location.name),
+    coverageLocationIds: coverage.map((c) => c.locationId),
     lastContactType: latest?.contactType ?? null,
+    lastContactCategory: latest?.category ?? null,
     lastContactNotes: latest?.notes ?? null,
     lastContactedBy: latest?.contactedBy?.fullName ?? null,
   };
@@ -78,6 +105,17 @@ export class StakeholdersService {
     return roleType.id;
   }
 
+  /** Resolves the free-text title the caller typed to a JobTitle row, creating it if new. */
+  private async resolveJobTitleId(name: string): Promise<string> {
+    const row = await this.base.jobTitle.upsert({
+      where: { name },
+      create: { name },
+      update: {},
+      select: { id: true },
+    });
+    return row.id;
+  }
+
   async findAll(query: QueryStakeholdersDto, user: AuthUser) {
     const { page, pageSize, sortBy, sortOrder, q } = query;
 
@@ -92,15 +130,16 @@ export class StakeholdersService {
     }
 
     if (query.jobTitle) {
-      where.jobTitle = { contains: query.jobTitle, mode: Prisma.QueryMode.insensitive };
+      // jobTitle is a relation now — filter on the joined name.
+      where.jobTitle = { name: { contains: query.jobTitle, mode: Prisma.QueryMode.insensitive } };
     }
 
     if (query.roleTypeIds && query.roleTypeIds.length > 0) {
-      where.roleTypeId = { in: query.roleTypeIds };
+      where.stakeholderRoleTypeId = { in: query.roleTypeIds };
     }
 
-    if (query.isDecisionMaker != null) {
-      where.isDecisionMaker = query.isDecisionMaker;
+    if (query.jobTitleIds && query.jobTitleIds.length > 0) {
+      where.jobTitleId = { in: query.jobTitleIds };
     }
 
     // Built as an AND-ed list rather than a second top-level `where.OR` —
@@ -111,7 +150,8 @@ export class StakeholdersService {
     if (q) {
       and.push({
         OR: [
-          { fullName: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { firstName: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { lastName: { contains: q, mode: Prisma.QueryMode.insensitive } },
           { email: { contains: q, mode: Prisma.QueryMode.insensitive } },
           { displayId: { contains: q, mode: Prisma.QueryMode.insensitive } },
           { mobile: { contains: q, mode: Prisma.QueryMode.insensitive } },
@@ -119,8 +159,8 @@ export class StakeholdersService {
       });
     }
 
-    if (user.roleName === 'consultant') {
-      and.push(industryScopeViaClient(user.industryIds));
+    if (isScoped(user)) {
+      and.push(stakeholderScope(user));
     }
 
     if (and.length > 0) {
@@ -162,7 +202,11 @@ export class StakeholdersService {
     if (!stakeholder) {
       throw new NotFoundException(`Stakeholder ${id} not found`);
     }
-    assertInJobScope(user, stakeholder.client?.industryId ?? null);
+    // Matched on the stakeholder's OWN coverage, not the client's location.
+    assertInScope(user, {
+      industryId: stakeholder.client?.industryId ?? null,
+      locationAncestorIds: stakeholder.coverage.flatMap((c) => c.location.ancestorIds),
+    });
     return toEntity(stakeholder);
   }
 
@@ -178,9 +222,15 @@ export class StakeholdersService {
   }
 
   async create(dto: CreateStakeholderDto) {
-    const data: Prisma.StakeholderUncheckedCreateInput = { ...dto };
-    if (data.roleTypeId === undefined) {
-      data.roleTypeId = await this.classifyRoleTypeId(data.jobTitle);
+    const { jobTitle, coverageLocationIds, roleTypeId, ...scalars } = dto;
+    const data: Prisma.StakeholderUncheckedCreateInput = { ...scalars };
+    if (jobTitle !== undefined && jobTitle !== null) {
+      data.jobTitleId = await this.resolveJobTitleId(jobTitle);
+    }
+    // An explicit role type always wins; otherwise derive one from the title.
+    data.stakeholderRoleTypeId = roleTypeId ?? (await this.classifyRoleTypeId(jobTitle));
+    if (coverageLocationIds !== undefined) {
+      data.coverage = { create: coverageLocationIds.map((locationId) => ({ locationId })) };
     }
     // displayId is assigned by the DB (Stakeholder_displayId_seq default).
     const stakeholder = await this.prisma.stakeholder.create({
@@ -192,11 +242,25 @@ export class StakeholdersService {
 
   async update(id: string, dto: UpdateStakeholderDto, user: AuthUser) {
     await this.findOne(id, user);
-    const data: Prisma.StakeholderUncheckedUpdateInput = { ...dto };
-    // Re-classify only when jobTitle is actually changing and the caller
-    // didn't also explicitly set roleTypeId in the same request.
-    if (data.roleTypeId === undefined && dto.jobTitle !== undefined) {
-      data.roleTypeId = await this.classifyRoleTypeId(dto.jobTitle);
+    const { jobTitle, coverageLocationIds, roleTypeId, ...scalars } = dto;
+    const data: Prisma.StakeholderUncheckedUpdateInput = { ...scalars };
+    if (jobTitle !== undefined && jobTitle !== null) {
+      data.jobTitleId = await this.resolveJobTitleId(jobTitle);
+    }
+    // Re-classify only when the title is actually changing and the caller
+    // didn't also set the role type explicitly in the same request.
+    if (roleTypeId !== undefined) {
+      data.stakeholderRoleTypeId = roleTypeId;
+    } else if (jobTitle !== undefined) {
+      data.stakeholderRoleTypeId = await this.classifyRoleTypeId(jobTitle);
+    }
+    // Coverage is a to-many join, not a scalar — full list replace is simplest
+    // and correct; a stakeholder's coverage list is short.
+    if (coverageLocationIds !== undefined) {
+      data.coverage = {
+        deleteMany: {},
+        create: coverageLocationIds.map((locationId) => ({ locationId })),
+      };
     }
     const stakeholder = await this.prisma.stakeholder.update({
       where: { id },
@@ -234,6 +298,7 @@ export class StakeholdersService {
       data: {
         stakeholderId: id,
         contactType: dto.contactType,
+        category: dto.category,
         notes: dto.notes,
         contactedAt,
         contactedById: consultantId,

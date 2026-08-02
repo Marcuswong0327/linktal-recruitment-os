@@ -91,9 +91,10 @@ export class QueryStakeholdersDto {
   @IsString({ each: true })
   roleTypeIds?: string[];
 
-  @ApiPropertyOptional({ description: 'Filter by decision-maker flag' })
+  @ApiPropertyOptional({ description: 'Filter by JobTitle id(s)', type: [String] })
   @IsOptional()
-  @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value))
-  @IsBoolean()
-  isDecisionMaker?: boolean;
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @IsArray()
+  @IsString({ each: true })
+  jobTitleIds?: string[];
 }

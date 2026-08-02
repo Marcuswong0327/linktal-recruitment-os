@@ -23,6 +23,22 @@ export class ConsultantEntity implements Omit<Consultant, 'passwordHash'> {
   @ApiProperty({ type: String, nullable: true }) azureId!: string | null;
   @ApiProperty({ example: 'jane@linktal.com' }) email!: string;
   @ApiProperty({ example: 'Jane Doe' }) fullName!: string;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Seniority is carried as a JobTitle ("Consultant (Senior)"), not its own enum.',
+  })
+  jobTitleId!: string | null;
+  @ApiProperty({ type: Number, nullable: true, description: 'Monthly cost of this consultant.' })
+  salary!: number | null;
+  @ApiProperty({ type: String, nullable: true, description: "P&L bucket this consultant's cost rolls up to." })
+  costTo!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "This consultant's manager — powers the org chart. Null at the top of the tree.",
+  })
+  reportsToId!: string | null;
   @ApiProperty({ type: String, nullable: true }) roleId!: string | null;
   @ApiProperty({ example: true }) isActive!: boolean;
   @ApiProperty() createdAt!: Date;

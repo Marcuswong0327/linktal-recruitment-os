@@ -38,10 +38,18 @@ export class CreatePlacementDto {
   @Min(0)
   feeValue?: number;
 
-  @ApiPropertyOptional({ description: "Candidate's start date = invoice date. guaranteeEndDate auto-calculates from this + the client's guarantee period." })
+  @ApiPropertyOptional({ description: "Candidate's start date = invoice date." })
   @IsOptional()
   @IsDateString()
   startDate?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'End of the guarantee period. Entered manually — guarantee terms live per-TOB and a client can hold several that disagree, so it is not derived from startDate.',
+  })
+  @IsOptional()
+  @IsDateString()
+  guaranteeEndDate?: string;
 
   @ApiPropertyOptional({ description: 'Whether accounts/finance has been notified of this placement', default: false })
   @IsOptional()

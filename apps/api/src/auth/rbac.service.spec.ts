@@ -17,6 +17,8 @@ function consultant(overrides: Partial<Record<string, unknown>> = {}) {
     isActive: true,
     role,
     industries: [],
+    specializations: [],
+    locations: [],
     ...overrides,
   };
 }
@@ -91,7 +93,7 @@ describe('RbacService', () => {
         consultant: {
           findUnique: jest.fn().mockResolvedValue(null),
           create: jest.fn().mockImplementation(({ data }) =>
-            Promise.resolve({ ...data, id: 'new1', role: viewerRole, industries: [] }),
+            Promise.resolve({ ...data, id: 'new1', role: viewerRole, industries: [], specializations: [], locations: [] }),
           ),
         },
         role: { findUnique: jest.fn().mockResolvedValue(viewerRole) },
@@ -179,6 +181,8 @@ describe('RbacService', () => {
         isActive: true,
         role: viewerRole,
         industries: [],
+        specializations: [],
+        locations: [],
       };
       const prisma = {
         consultant: {

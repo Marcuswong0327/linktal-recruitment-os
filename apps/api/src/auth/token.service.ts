@@ -60,6 +60,8 @@ export class TokenService {
       roleName: claims.roleName,
       permissions: claims.permissions,
       industryIds: claims.industryIds,
+      specializationIds: claims.specializationIds,
+      locationIds: claims.locationIds,
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject(claims.sub)
@@ -89,6 +91,10 @@ export class TokenService {
         roleName: typeof payload.roleName === 'string' ? payload.roleName : null,
         permissions: Array.isArray(payload.permissions) ? (payload.permissions as string[]) : [],
         industryIds: Array.isArray(payload.industryIds) ? (payload.industryIds as string[]) : [],
+        specializationIds: Array.isArray(payload.specializationIds)
+          ? (payload.specializationIds as string[])
+          : [],
+        locationIds: Array.isArray(payload.locationIds) ? (payload.locationIds as string[]) : [],
       };
     } catch {
       throw new UnauthorizedException({

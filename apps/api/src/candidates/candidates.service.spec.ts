@@ -21,6 +21,8 @@ function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
     isActive: true,
     permissions: new Set(),
     industryIds: [],
+    specializationIds: [],
+    locationIds: [],
     ...overrides,
   };
 }
@@ -231,6 +233,8 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
       baseQuery({
         statuses: [CandidateStatus.WARM, CandidateStatus.HOT],
         industryIds: ['ind1'],
+        specializationIds: [],
+        locationIds: [],
         roleTypeIds: ['role1'],
         specializationIds: ['spec1'],
         consultantIds: ['cons1'],

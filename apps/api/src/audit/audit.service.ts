@@ -9,9 +9,11 @@ import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
 const ENTITY_LABEL: Record<string, { delegate: string; fields: string[] }> = {
   Candidate: { delegate: 'candidate', fields: ['displayId', 'firstName', 'lastName'] },
   Client: { delegate: 'client', fields: ['displayId', 'companyName'] },
-  Stakeholder: { delegate: 'stakeholder', fields: ['displayId', 'firstName'] },
-  JobOrder: { delegate: 'jobOrder', fields: ['displayId', 'jobTitle'] },
-  ClientJobResearch: { delegate: 'clientJobResearch', fields: ['jobTitle'] },
+  Stakeholder: { delegate: 'stakeholder', fields: ['displayId', 'firstName', 'lastName'] },
+  // jobTitle is a relation now, not a scalar — selecting it here would return
+  // an object rather than a label, so these fall back to their displayId.
+  JobOrder: { delegate: 'jobOrder', fields: ['displayId'] },
+  ClientJobResearch: { delegate: 'clientJobResearch', fields: ['displayId'] },
   Placement: { delegate: 'placement', fields: ['displayId'] },
   Consultant: { delegate: 'consultant', fields: ['displayId', 'fullName'] },
   Role: { delegate: 'role', fields: ['name'] },
@@ -142,12 +144,21 @@ export class AuditService {
         })
       : [];
     const [candidates, jobOrders] = await Promise.all([
-      this.prisma.candidate.findMany({ where: { id: { in: candidateIds } }, select: { id: true, fullName: true } }),
-      this.prisma.jobOrder.findMany({ where: { id: { in: jobOrderIds } }, select: { id: true, jobTitle: true } }),
+      this.prisma.candidate.findMany({
+        where: { id: { in: candidateIds } },
+        select: { id: true, firstName: true, lastName: true },
+      }),
+      // jobTitle is a JobTitle relation now — include it to get the name back.
+      this.prisma.jobOrder.findMany({
+        where: { id: { in: jobOrderIds } },
+        select: { id: true, displayId: true, jobTitle: { select: { name: true } } },
+      }),
     ]);
     const actorNameById = new Map(actors.map((a) => [a.id, a.fullName]));
-    const candidateNameById = new Map(candidates.map((c) => [c.id, c.fullName]));
-    const jobOrderTitleById = new Map(jobOrders.map((j) => [j.id, j.jobTitle]));
+    const candidateNameById = new Map(
+      candidates.map((c) => [c.id, [c.firstName, c.lastName].filter(Boolean).join(' ') || c.id]),
+    );
+    const jobOrderTitleById = new Map(jobOrders.map((j) => [j.id, j.jobTitle?.name ?? j.displayId]));
 
     const events = logs.map((log) => {
       const submission = submissionById.get(log.entityId);

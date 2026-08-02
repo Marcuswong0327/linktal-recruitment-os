@@ -10,7 +10,7 @@ import { Prisma } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { AuthUser } from '../auth/auth.types';
-import { clearMismatchedConsultantAssignments } from '../common/industry-scope';
+import { clearMismatchedConsultantAssignments } from '../common/scope';
 import { CreateConsultantDto } from './dto/create-consultant.dto';
 import { UpdateConsultantDto } from './dto/update-consultant.dto';
 import { QueryConsultantsDto } from './dto/query-consultants.dto';

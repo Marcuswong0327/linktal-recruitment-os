@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsArray,
   IsBoolean,
   IsEmail,
   IsOptional,
@@ -40,13 +41,14 @@ export class CreateStakeholderDto {
   @MaxLength(30)
   mobile?: string;
 
-  @ApiPropertyOptional({ description: 'Whether this contact is a decision maker', default: false })
+  @ApiPropertyOptional({
+    description:
+      'Location ids this stakeholder covers. Matched against a consultant\'s scope on its own, independent of where the client sits.',
+    type: [String],
+  })
   @IsOptional()
-  @IsBoolean()
-  isDecisionMaker?: boolean;
+  @IsArray()
+  @IsString({ each: true })
+  coverageLocationIds?: string[];
 
-  @ApiPropertyOptional({ description: 'Notes' })
-  @IsOptional()
-  @IsString()
-  notes?: string;
 }
