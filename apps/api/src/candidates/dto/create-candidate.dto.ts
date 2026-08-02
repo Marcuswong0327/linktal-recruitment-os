@@ -4,18 +4,20 @@ import {
   IsArray,
   IsEmail,
   IsEnum,
-  IsInt,
   IsOptional,
   IsString,
   IsUrl,
   MaxLength,
-  Min,
-  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { CandidateStatus } from '@prisma/client';
 
-/** One entry in a candidate's work history (stored as JSONB). */
+/**
+ * One entry in a candidate's work history (stored as JSONB).
+ *
+ * `period` is a single free-text field rather than start/end dates: the source
+ * records it as "2020 - 2021 (1 year)" and never stores anything parseable.
+ */
 export class WorkHistoryItemDto {
   @ApiPropertyOptional({ example: 'Acme Corp' })
   @IsOptional()
@@ -27,35 +29,24 @@ export class WorkHistoryItemDto {
   @IsString()
   role?: string;
 
-  @ApiPropertyOptional({ description: 'ISO date or free text', example: '2019-01' })
+  @ApiPropertyOptional({ description: 'Free text', example: '2020 - 2021 (1 year)' })
   @IsOptional()
   @IsString()
-  startDate?: string;
-
-  @ApiPropertyOptional({ description: 'ISO date or free text; omit if current', example: '2023-06' })
-  @IsOptional()
-  @IsString()
-  endDate?: string;
+  period?: string;
 }
 
 export class CreateCandidateDto {
-  @ApiProperty({ description: 'Full name', example: 'John Smith' })
-  @IsString()
-  @MinLength(2)
-  @MaxLength(120)
-  fullName!: string;
-
-  @ApiPropertyOptional({ description: 'Given name', example: 'John' })
+  @ApiPropertyOptional({ description: 'First name', example: 'John' })
   @IsOptional()
   @IsString()
   @MaxLength(60)
-  givenName?: string;
+  firstName?: string;
 
-  @ApiPropertyOptional({ description: 'Family name', example: 'Smith' })
+  @ApiPropertyOptional({ description: 'Last name', example: 'Smith' })
   @IsOptional()
   @IsString()
   @MaxLength(60)
-  familyName?: string;
+  lastName?: string;
 
   @ApiPropertyOptional({ description: 'Email address', example: 'john@example.com' })
   @IsOptional()
@@ -68,56 +59,56 @@ export class CreateCandidateDto {
   @MaxLength(30)
   mobile?: string;
 
-  @ApiPropertyOptional({ description: 'Country', example: 'Australia' })
-  @IsOptional()
+  // Required, both of them — the two tiers the scope resolver can't work
+  // without (see the SCOPING note in schema.prisma). Everything finer is
+  // optional.
+  @ApiProperty({
+    description: 'Most specific known Location node (see /locations) — city if no suburb is known, and so on',
+  })
   @IsString()
-  country?: string;
+  locationId!: string;
 
-  @ApiPropertyOptional({ description: 'City', example: 'Brisbane' })
-  @IsOptional()
+  @ApiProperty({ description: 'Industry ID (see /industries)' })
   @IsString()
-  city?: string;
+  industryId!: string;
 
-  @ApiPropertyOptional({ description: 'Industry ID (see /industries)' })
+  @ApiPropertyOptional({ description: 'Job role type ID (see /job-role-types)' })
   @IsOptional()
   @IsString()
-  industryId?: string;
+  jobRoleTypeId?: string;
 
-  @ApiPropertyOptional({ description: 'Role type ID (see /candidate-role-types)' })
+  @ApiPropertyOptional({
+    description: "Title at their current employer, in the employer's own words",
+    example: 'Production Manager',
+  })
   @IsOptional()
   @IsString()
-  roleTypeId?: string;
-
-  @ApiPropertyOptional({ description: 'Current position', example: 'Production Manager' })
-  @IsOptional()
-  @IsString()
-  currentPosition?: string;
+  currentRole?: string;
 
   @ApiPropertyOptional({ description: 'Current company', example: 'Acme Corp' })
   @IsOptional()
   @IsString()
   currentCompany?: string;
 
-  @ApiPropertyOptional({ description: 'Years of experience', example: 5 })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  yearsExperience?: number;
-
-  @ApiPropertyOptional({ description: 'Salary expectation', example: '150K' })
-  @IsOptional()
-  @IsString()
-  salaryExpectation?: string;
-
   @ApiPropertyOptional({ description: 'LinkedIn URL', example: 'https://linkedin.com/in/johnsmith' })
   @IsOptional()
   @IsUrl()
   linkedinUrl?: string;
 
-  @ApiPropertyOptional({ description: 'Resume URL' })
+  @ApiPropertyOptional({ description: 'Seek Talent Search profile URL' })
   @IsOptional()
   @IsUrl()
-  resumeUrl?: string;
+  seekTalentUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Raw resume file URL — the original, as submitted' })
+  @IsOptional()
+  @IsUrl()
+  rawResumeUrl?: string;
+
+  @ApiPropertyOptional({ description: "Edited resume file URL — Linktal's own reformatted version" })
+  @IsOptional()
+  @IsUrl()
+  editedResumeUrl?: string;
 
   @ApiPropertyOptional({ description: 'Work history entries', type: WorkHistoryItemDto, isArray: true })
   @IsOptional()
@@ -131,12 +122,6 @@ export class CreateCandidateDto {
   @IsArray()
   @IsString({ each: true })
   specializationIds?: string[];
-
-  @ApiPropertyOptional({ description: 'Free-entry skill tags', type: String, isArray: true, example: ['CNC', 'Welding'] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  skills?: string[];
 
   @ApiPropertyOptional({ description: 'Status; defaults to COLD when omitted', enum: CandidateStatus, example: 'COLD' })
   @IsOptional()

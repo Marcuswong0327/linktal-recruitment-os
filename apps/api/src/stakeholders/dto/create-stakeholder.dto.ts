@@ -5,8 +5,8 @@ import {
   IsEmail,
   IsOptional,
   IsString,
+  IsUrl,
   MaxLength,
-  MinLength,
 } from 'class-validator';
 
 export class CreateStakeholderDto {
@@ -14,21 +14,39 @@ export class CreateStakeholderDto {
   @IsString()
   clientId!: string;
 
-  @ApiProperty({ description: 'Full name', example: 'Jane Doe' })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(120)
-  fullName!: string;
-
-  @ApiPropertyOptional({ description: 'Job title', example: 'Head of Talent' })
+  @ApiPropertyOptional({ description: 'First name', example: 'Jane' })
   @IsOptional()
   @IsString()
-  jobTitle?: string;
+  @MaxLength(60)
+  firstName?: string;
 
-  @ApiPropertyOptional({ description: 'Role type ID (see /stakeholder-role-types)' })
+  @ApiPropertyOptional({ description: 'Last name', example: 'Doe' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  lastName?: string;
+
+  // The company's words for the role vs. the consultant's classification of
+  // it — both kept, deliberately (see JobTitle / StakeholderRoleType in
+  // schema.prisma). Both are catalog ids: a title new to the catalog is
+  // created through /job-titles first, not invented here on the way past.
+  // When `roleTypeId` is omitted, one is derived from the title by keyword.
+  @ApiPropertyOptional({ description: "Job title ID (see /job-titles) — the company's own words for the role" })
+  @IsOptional()
+  @IsString()
+  jobTitleId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Role type ID (see /stakeholder-role-types) — takes precedence over the title-derived classification',
+  })
   @IsOptional()
   @IsString()
   roleTypeId?: string;
+
+  @ApiPropertyOptional({ description: 'LinkedIn profile URL' })
+  @IsOptional()
+  @IsUrl()
+  linkedinUrl?: string;
 
   @ApiPropertyOptional({ description: 'Email address', example: 'jane@acme.com' })
   @IsOptional()
@@ -43,7 +61,7 @@ export class CreateStakeholderDto {
 
   @ApiPropertyOptional({
     description:
-      'Location ids this stakeholder covers. Matched against a consultant\'s scope on its own, independent of where the client sits.',
+      "Location ids this stakeholder covers. Matched against a consultant's scope on its own, independent of where the client sits.",
     type: [String],
   })
   @IsOptional()
@@ -51,4 +69,17 @@ export class CreateStakeholderDto {
   @IsString({ each: true })
   coverageLocationIds?: string[];
 
+  @ApiPropertyOptional({
+    description:
+      "Whether these details have been verified. Omit for 'not yet checked' — which isn't the same as false.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  isAccurate?: boolean;
+
+  @ApiPropertyOptional({ description: 'What is wrong with the details, when isAccurate is false' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  inaccurateReason?: string;
 }

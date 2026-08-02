@@ -1,20 +1,19 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 /**
- * Columns the list may be sorted by. Deliberately narrow: ID, numeric fields,
- * date fields, and `quality` (a native Postgres enum, which sorts by
- * declaration order — LOW < MEDIUM < HIGH — rather than alphabetically, so
- * it's meaningfully ordinal unlike `status`). Free-text/non-ordinal
- * categorical columns (companyName, industry, country, city, status,
- * tobSigned) are exposed as filters instead, since sorting by them only
- * yields arbitrary alphabetical groupings.
+ * Columns the list may be sorted by. Deliberately narrow: ID, date fields,
+ * and `quality` (a native Postgres enum, which sorts by declaration order —
+ * LOW < MEDIUM < HIGH — rather than alphabetically, so it's meaningfully
+ * ordinal unlike `status`). Free-text/non-ordinal categorical columns
+ * (companyName, industry, location, status) are exposed as filters instead,
+ * since sorting by them only yields arbitrary alphabetical groupings. The
+ * old fee/guarantee columns are gone: those terms live per-Tob now, and a
+ * client can hold several that disagree.
  */
 export enum ClientSortField {
   displayId = 'displayId',
-  feePercentage = 'feePercentage',
-  guaranteePeriod = 'guaranteePeriod',
   createdAt = 'createdAt',
   lastContactedAt = 'lastContactedAt',
   quality = 'quality',
@@ -102,15 +101,24 @@ export class QueryClientsDto {
   @IsString()
   specialization?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by country (contains, case-insensitive)' })
+  @ApiPropertyOptional({
+    description:
+      'Filter by location name (contains, case-insensitive) — matches any node in the client\'s market set.',
+  })
   @IsOptional()
   @IsString()
-  country?: string;
+  location?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by city (contains, case-insensitive)' })
+  @ApiPropertyOptional({
+    description:
+      "Filter by Location id(s). Selecting a country or state matches every client whose market sits beneath it, via the ancestor path.",
+    type: [String],
+  })
   @IsOptional()
-  @IsString()
-  city?: string;
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @IsArray()
+  @IsString({ each: true })
+  locationIds?: string[];
 
   @ApiPropertyOptional({ description: 'Filter by owning consultant ID (exact match)' })
   @IsOptional()
@@ -126,9 +134,12 @@ export class QueryClientsDto {
   @IsEnum(ClientQualityFilter)
   quality: ClientQualityFilter = ClientQualityFilter.ALL;
 
-  @ApiPropertyOptional({ description: 'Filter by Terms of Business signed' })
+  @ApiPropertyOptional({
+    description:
+      'Filter by whether the client has any Terms of Business on file. Replaces the old `tobSigned` flag — TOBs are their own one-to-many table now (see /tobs).',
+  })
   @IsOptional()
   @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value))
   @IsBoolean()
-  tobSigned?: boolean;
+  hasTob?: boolean;
 }

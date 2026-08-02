@@ -17,6 +17,8 @@ import { UpdateConsultantDto } from './dto/update-consultant.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { QueryConsultantsDto } from './dto/query-consultants.dto';
 import { SetConsultantIndustriesDto } from './dto/set-consultant-industries.dto';
+import { SetConsultantSpecializationsDto } from './dto/set-consultant-specializations.dto';
+import { SetConsultantLocationsDto } from './dto/set-consultant-locations.dto';
 import { ConsultantEntity } from './entities/consultant.entity';
 import { PaginatedConsultantsEntity } from './entities/paginated-consultants.entity';
 import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
@@ -118,5 +120,37 @@ export class ConsultantsController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.consultants.setIndustries(id, dto.industryIds, user);
+  }
+
+  @Put(':id/specializations')
+  @RequirePermission('consultant_specialization', 'update')
+  @ApiOperation({
+    operationId: 'setConsultantSpecializations',
+    summary:
+      "Replace a consultant's assigned specializations, narrowing their industry arm (admin/manager only; same escalation rules as industries)",
+  })
+  @ApiResponse({ status: 200, description: 'Specializations updated', type: ConsultantEntity })
+  setSpecializations(
+    @Param('id') id: string,
+    @Body() dto: SetConsultantSpecializationsDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.consultants.setSpecializations(id, dto.specializationIds, user);
+  }
+
+  @Put(':id/locations')
+  @RequirePermission('consultant_location', 'update')
+  @ApiOperation({
+    operationId: 'setConsultantLocations',
+    summary:
+      "Replace a consultant's assigned locations — their patch (admin/manager only; same escalation rules as industries)",
+  })
+  @ApiResponse({ status: 200, description: 'Locations updated', type: ConsultantEntity })
+  setLocations(
+    @Param('id') id: string,
+    @Body() dto: SetConsultantLocationsDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.consultants.setLocations(id, dto.locationIds, user);
   }
 }

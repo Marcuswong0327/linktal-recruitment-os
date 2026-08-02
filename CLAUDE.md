@@ -148,9 +148,15 @@ visible  =  (industry match AND specialization match)  OR  (location match)
 `consultant` role only; admin/manager/finance/researcher are unrestricted.
 Wildcards are materialised into concrete grant rows (never an "unrestricted"
 flag), so zero rows means *not configured*, never *sees everything*.
-Stakeholders match on **their own coverage**, independent of where their client
-sits. Specialization filtering ships stored-but-inactive pending the catalog
-backfill, so the effective rule today is `industry OR location`.
+**An assigned record is always visible to its owner**, regardless of grants —
+every scope OR-s in `consultantId = me`, above the no-grants short-circuit.
+Stakeholder is the exception, having no `consultantId`. Stakeholders instead
+match on **their own coverage**, independent of where their client sits — and a
+`Client` is reachable through such a stakeholder in turn, its fourth arm. So
+`clientScope` is
+`consultantId = me OR industry OR locations OR stakeholders.some(coverage)`.
+Specialization filtering ships stored-but-inactive pending the catalog backfill,
+so the effective rule today is `industry OR location`.
 
 Full rules: `docs/rbac-roles.md` §3.
 

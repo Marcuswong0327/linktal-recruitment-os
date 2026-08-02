@@ -162,18 +162,73 @@ re-granting the consultants who were assigned "All".
 
 **What's scoped, and how each entity resolves:**
 
-| Entity | Industry arm | Location arm |
-|---|---|---|
-| `Client` | own `industryId` / `specializationId` | own `ClientLocation` set |
-| `Candidate` | own `industryId` / `CandidateSpecialization` | own `locationId` |
-| `JobOrder` | via parent `Client` | own `locationId` |
-| `ClientJobResearch` | via parent `Client` | own `locationId` |
-| `Stakeholder` | via parent `Client` | **own `StakeholderLocation` coverage** |
+| Entity | Industry arm | Location arm | Ownership arm |
+|---|---|---|---|
+| `Client` | own `industryId` / `specializationId` | own `ClientLocation` set, **or any live stakeholder's own coverage** | `consultantId` |
+| `Candidate` | own `industryId` / `CandidateSpecialization` | own `locationId` | `consultantId` |
+| `JobOrder` | via parent `Client` | own `locationId` | `consultantId` |
+| `ClientJobResearch` | via parent `Client` | own `locationId` | `consultantId` |
+| `Stakeholder` | via parent `Client` | **own `StakeholderLocation` coverage** | — (no `consultantId`) |
 
 Stakeholders are the one asymmetry, and it's deliberate: a contact is matched on
 the territory *they* cover, independent of where their employer sits. A Brisbane
 client's national account manager whose coverage includes Sydney is reachable by
 a Sydney-scoped consultant.
+
+**Ownership overrides everything else**, on every entity that carries a
+`consultantId` — Client, Candidate, JobOrder and ClientJobResearch. A record
+assigned to a consultant is always theirs to see, whatever their grants say. An
+assignment is a deliberate admin act on one specific row — not a wildcard — so
+honouring it doesn't reopen the "zero grants means everything" hole the rest of
+this section is careful about. Two consequences:
+
+- It sits **above** the no-grants short-circuit: a consultant with no
+  industry/location grants at all still sees what's been handed to them, rather
+  than being locked out of their own work. Everything *outside* their
+  assignments still resolves to nothing until they're configured.
+- Retagging a record's industry no longer strips it from the owner's view. It
+  still triggers the auto-clear below if the new industry doesn't match them —
+  but until that clears the assignment, the record stays visible to whoever
+  holds it. No one is left owning something they can't open.
+
+`Stakeholder` is the one entity with no ownership arm, because it has no
+`consultantId`: contacts belong to a client, not to a recruiter.
+
+**Clients carry one further arm**, so `clientScope` is a four-way OR:
+
+```
+Client visible  =  consultantId = me                      <- assignment always wins
+                OR industry match
+                OR own ClientLocation match
+                OR stakeholders.some(own coverage match)  <- Client only
+```
+
+Because `findAll` already restricts consultants to their own book for Clients
+and Job Orders (§ own-book scoping above), the practical effect on those two is
+that the **list is simply their whole book**; the other arms decide what they
+can reach when opening a record that *isn't* assigned to them. Candidates have
+no own-book rule, so there the ownership arm genuinely widens the list — an
+assigned candidate shows up even when out of patch.
+
+That last Client arm is the counterpart to the stakeholder asymmetry: a company
+is visible when one of its contacts covers the consultant's patch, even if the
+company's own market doesn't.
+
+Without it the two rules disagree and leave a dangling reference: the Brisbane
+account manager above is reachable, but the company they work for 403s. That's a
+broken link rather than a privacy boundary — you can already see the contact and
+their contact history.
+
+The arm excludes soft-deleted stakeholders explicitly (`deletedAt: null`): the
+extended client's soft-delete rewrite intercepts top-level calls, not a nested
+relation filter, so a removed contact would otherwise keep granting access to
+their employer. The test is `some` — *is there **any** live contact covering my
+patch* — so deleting one of several covering contacts changes nothing; access
+lapses only when the last one goes (and even then, not for the owner).
+
+Note this arm is **not** inherited by `JobOrder` or `ClientJobResearch`, which
+reach their parent Client for the *industry* arm only — their location arm stays
+their own `locationId`.
 
 **Null handling differs by tier, on purpose:**
 
@@ -241,13 +296,27 @@ escalation rule, so managers can use them:
   **consultants** — but **never to an admin account** (`403 FORBIDDEN`). A
   deliberate carve-out from the general escalation guard elsewhere.
 - Every id in the request must exist and be active (`400 INVALID_*` /
-  `400 INACTIVE_*`).
+  `400 INACTIVE_*`). `location` is the exception on the second half: the
+  geography tree is bulk-loaded from GeoNames and has no `isActive` column, so
+  only existence is checked.
 - Full-set-replace: one `PUT` replaces the whole assignment, not separate
-  add/remove endpoints. Written as individual join-row create/delete calls (not
-  a nested write) so each change is actually audited.
+  add/remove endpoints. Diffed down to the minimum add/remove set (an id already
+  granted isn't churned) and written as individual join-row create/delete calls,
+  never a nested write, so each change is actually audited. Removals run first.
+  Duplicate ids in the request are collapsed.
 - `GET /consultants` / `GET /consultants/:id` only include the grant fields when
   the caller holds the matching `:read` permission — omitted entirely otherwise
   (not just empty), same convention as every other permission-gated field here.
+  The three permissions are independent, so a caller can see one arm and not
+  another.
+- **`/locations` takes already-materialised node ids**, at any level. Expanding a
+  wildcard or a desk label into concrete nodes is the caller's job — `All
+  Malaysia` arrives as one COUNTRY id, `Brisbane GC QLD` as two CITY ids. That's
+  what keeps every grant individually auditable and zero rows unambiguous.
+- **Only the industry arm cascades.** Removing an industry runs the auto-clear
+  above, since assignment is industry-first and a dropped grant can strand
+  records assigned to that consultant. Nothing is assigned by specialization or
+  location, so removing those strands nothing and triggers no cascade.
 
 ### Consultant field redaction on Clients & Job Orders (`consultant` role only)
 `consultantId` is nulled out in the API response (not the raw DB value —
@@ -348,9 +417,20 @@ runs on the base client with batch transactions).
   typing a new one is `create` (upsert-by-name, so a duplicate returns the
   existing row rather than erroring). None of them carries scoping weight, which
   is exactly why free creation is safe here and not on `location`/`industry`/
-  `specialization`. Stakeholders are auto-classified into
-  `stakeholder_role_type` from their job title by keyword match, with the field
-  left independently editable to correct a bad guess.
+  `specialization`.
+
+  Growing a catalog is its **own** call, though. `POST /stakeholders` and
+  `POST /job-orders` take `jobTitleId`/`jobRoleTypeId` and never create a
+  catalog row on the way past — the combobox calls `POST /job-titles` first and
+  submits the id it gets back. That keeps `job_title:create` an actual
+  permission check rather than something any writer inherits for free, and stops
+  a typo in a job-order payload from silently seeding the catalog.
+
+  Stakeholders are still auto-classified into `stakeholder_role_type` when the
+  caller doesn't set one: the service reads the chosen `JobTitle`'s name and
+  keyword-matches it, leaving the field independently editable to correct a bad
+  guess. Job orders have no equivalent — the two role-type vocabularies don't
+  overlap, so there's no classifier for the trades side.
 - **`tob`** is Terms of Business — full CRUD for admin/manager/consultant, read
   for finance (they need the commercial terms), no access for researchers.
 - There is **no `user` resource.** The app's identity table is **`Consultant`**;
@@ -404,6 +484,8 @@ runs on the base client with batch transactions).
 | `POST /consultants` | `consultant:create` | admin, manager (no privileged roles for managers) |
 | `PATCH/DELETE /consultants/:id` | `consultant:update` / `:delete` | **admin only** (service guard) |
 | `PUT /consultants/:id/industries` | `consultant_industry:update` | admin (anyone but self), manager (self/other-manager/consultant, never admin) — see §3 |
+| `PUT /consultants/:id/specializations` | `consultant_specialization:update` | same escalation rules as industries |
+| `PUT /consultants/:id/locations` | `consultant_location:update` | same escalation rules as industries |
 | `PUT /consultants/:id/specializations` | `consultant_specialization:update` | same rule as industries — see §3 |
 | `PUT /consultants/:id/locations` | `consultant_location:update` | same rule as industries — see §3 |
 | `GET /consultants/hierarchy` | `consultant:read` | admin, manager — org chart / "my team" (see §3) |

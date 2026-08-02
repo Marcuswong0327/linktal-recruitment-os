@@ -58,8 +58,8 @@ export class StakeholdersController {
   @RequirePermission('stakeholder', 'create')
   @ApiOperation({ operationId: 'createStakeholder', summary: 'Create a new stakeholder' })
   @ApiResponse({ status: 201, description: 'Stakeholder created', type: StakeholderEntity })
-  create(@Body() dto: CreateStakeholderDto) {
-    return this.stakeholders.create(dto);
+  create(@Body() dto: CreateStakeholderDto, @CurrentUser() user: AuthUser) {
+    return this.stakeholders.create(dto, user);
   }
 
   @Patch(':id')

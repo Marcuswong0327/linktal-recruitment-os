@@ -15,7 +15,12 @@ export class PlacementEntity implements Omit<Placement, 'deletedAt' | 'deletedBy
   @ApiProperty({ type: Number, nullable: true, description: 'Auto (PERCENTAGE): totalPackage * feePercentage / 100' })
   feeValue!: number | null;
   @ApiProperty({ type: Date, nullable: true }) startDate!: Date | null;
-  @ApiProperty({ type: Date, nullable: true, description: 'Auto: startDate + client.guaranteePeriod' })
+  @ApiProperty({
+    type: Date,
+    nullable: true,
+    description:
+      'End of the guarantee period. Entered manually — guarantee terms live per-TOB and a client can hold several that disagree, so it is not derived from startDate.',
+  })
   guaranteeEndDate!: Date | null;
   @ApiProperty() accountsNotified!: boolean;
   @ApiProperty({ enum: PlacementStatus }) status!: PlacementStatus;

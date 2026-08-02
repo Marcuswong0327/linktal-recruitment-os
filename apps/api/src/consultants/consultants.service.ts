@@ -16,14 +16,20 @@ import { UpdateConsultantDto } from './dto/update-consultant.dto';
 import { QueryConsultantsDto } from './dto/query-consultants.dto';
 
 /**
- * Every read embeds the resolved role so the directory can show it, plus the
- * consultant's assigned industries (resolved to names/ids and stripped back
- * out in `toEntity` unless the caller holds `consultant_industry:read` — the
- * DB join is cheap enough to always fetch and just not expose).
+ * Every read embeds the resolved role so the directory can show it, plus all
+ * three arms of the consultant's assigned scope (resolved to names/ids and
+ * stripped back out in `toEntity` unless the caller holds the matching
+ * `*:read` — the DB joins are cheap enough to always fetch and just not
+ * expose). Each arm is gated independently, because the three permissions are
+ * independent resources.
  */
 const withRole = {
   role: { select: { id: true, name: true } },
   industries: { select: { industryId: true, industry: { select: { name: true } } } },
+  specializations: {
+    select: { specializationId: true, specialization: { select: { name: true } } },
+  },
+  locations: { select: { locationId: true, location: { select: { name: true } } } },
 } as const;
 // Never return the bcrypt hash — these queries feed API responses directly.
 const omitSecrets = { passwordHash: true } as const;
@@ -33,21 +39,43 @@ const ADMIN_ROLE = 'admin';
 const PRIVILEGED_ROLES = [ADMIN_ROLE, 'manager'];
 
 const CONSULTANT_INDUSTRY_READ = 'consultant_industry:read';
+const CONSULTANT_SPECIALIZATION_READ = 'consultant_specialization:read';
+const CONSULTANT_LOCATION_READ = 'consultant_location:read';
 
-type ConsultantWithIndustries = {
+type ConsultantWithScope = {
   industries: { industryId: string; industry: { name: string } }[];
+  specializations: { specializationId: string; specialization: { name: string } }[];
+  locations: { locationId: string; location: { name: string } }[];
 } & Record<string, unknown>;
 
-/** Strips the raw `industries` join rows into `industries`/`industryIds`, or drops them entirely without the read permission. */
-function toEntity<T extends ConsultantWithIndustries>(consultant: T, actor: AuthUser) {
-  const { industries: industryRows, ...rest } = consultant;
-  if (!actor.permissions.has(CONSULTANT_INDUSTRY_READ)) {
-    return rest;
-  }
+/**
+ * Strips the raw join rows into parallel name/id arrays per arm, dropping any
+ * arm the caller can't read entirely (not just emptying it — an empty list
+ * would read as "no grants", which is a materially different statement about a
+ * consultant than "you can't see this").
+ */
+function toEntity<T extends ConsultantWithScope>(consultant: T, actor: AuthUser) {
+  const { industries, specializations, locations, ...rest } = consultant;
   return {
     ...rest,
-    industries: industryRows.map((ci) => ci.industry.name),
-    industryIds: industryRows.map((ci) => ci.industryId),
+    ...(actor.permissions.has(CONSULTANT_INDUSTRY_READ)
+      ? {
+          industries: industries.map((ci) => ci.industry.name),
+          industryIds: industries.map((ci) => ci.industryId),
+        }
+      : {}),
+    ...(actor.permissions.has(CONSULTANT_SPECIALIZATION_READ)
+      ? {
+          specializations: specializations.map((cs) => cs.specialization.name),
+          specializationIds: specializations.map((cs) => cs.specializationId),
+        }
+      : {}),
+    ...(actor.permissions.has(CONSULTANT_LOCATION_READ)
+      ? {
+          locations: locations.map((cl) => cl.location.name),
+          locationIds: locations.map((cl) => cl.locationId),
+        }
+      : {}),
   };
 }
 
@@ -272,6 +300,144 @@ export class ConsultantsService {
    *    but never to an admin account.
    */
   async setIndustries(id: string, industryIds: string[], actor: AuthUser) {
+    await this.assertCanAssignScope(id, actor, 'industries');
+
+    const uniqueIds = Array.from(new Set(industryIds));
+    if (uniqueIds.length > 0) {
+      const industries = await this.prisma.industry.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true, isActive: true },
+      });
+      this.assertScopeIdsValid(uniqueIds, industries, 'industry');
+    }
+
+    const current = await this.prisma.consultantIndustry.findMany({
+      where: { consultantId: id },
+      select: { industryId: true },
+    });
+
+    const { toRemove } = await this.applyScopeDiff(
+      current.map((c) => c.industryId),
+      uniqueIds,
+      {
+        remove: (industryId) =>
+          this.prisma.consultantIndustry.delete({
+            where: { consultantId_industryId: { consultantId: id, industryId } },
+          }),
+        add: (industryId) =>
+          this.prisma.consultantIndustry.create({ data: { consultantId: id, industryId } }),
+      },
+    );
+
+    // Industries are the only arm that cascades: assignment is industry-first
+    // (see the guards in common/scope.ts), so dropping one can strand records
+    // assigned to this consultant. Specializations and locations carry no
+    // assignment rule, so removing them strands nothing.
+    if (toRemove.length > 0) {
+      await clearMismatchedConsultantAssignments(this.prisma, id, toRemove);
+    }
+
+    return this.findOne(id, actor);
+  }
+
+  /**
+   * Narrows the industry arm — see the SCOPING note in schema.prisma. Grants
+   * are usually made at a parent Specialization ("Food"), which covers every
+   * child ("Food Meat", "Food Bakery", ...) through `ancestorIds`, so this
+   * list stays short and coarse.
+   *
+   * Same escalation rules and full-set-replace shape as `setIndustries`; no
+   * assignment cascade, since nothing is assigned by specialization.
+   */
+  async setSpecializations(id: string, specializationIds: string[], actor: AuthUser) {
+    await this.assertCanAssignScope(id, actor, 'specializations');
+
+    const uniqueIds = Array.from(new Set(specializationIds));
+    if (uniqueIds.length > 0) {
+      const specializations = await this.prisma.specialization.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true, isActive: true },
+      });
+      this.assertScopeIdsValid(uniqueIds, specializations, 'specialization');
+    }
+
+    const current = await this.prisma.consultantSpecialization.findMany({
+      where: { consultantId: id },
+      select: { specializationId: true },
+    });
+
+    await this.applyScopeDiff(
+      current.map((c) => c.specializationId),
+      uniqueIds,
+      {
+        remove: (specializationId) =>
+          this.prisma.consultantSpecialization.delete({
+            where: { consultantId_specializationId: { consultantId: id, specializationId } },
+          }),
+        add: (specializationId) =>
+          this.prisma.consultantSpecialization.create({
+            data: { consultantId: id, specializationId },
+          }),
+      },
+    );
+
+    return this.findOne(id, actor);
+  }
+
+  /**
+   * The location arm. Takes **already-materialised** node ids at any level —
+   * a desk label like "Brisbane GC QLD" arrives as two CITY ids, "All
+   * Malaysia" as one COUNTRY id. Expanding a wildcard into concrete nodes is
+   * the caller's job (the assignment form's, or the importer's), which is what
+   * keeps every grant individually auditable and makes zero rows mean *not
+   * configured* rather than *everything*.
+   *
+   * Location has no `isActive` column — it's a bulk-loaded GeoNames tree, not
+   * a curated catalog — so only existence is checked.
+   */
+  async setLocations(id: string, locationIds: string[], actor: AuthUser) {
+    await this.assertCanAssignScope(id, actor, 'locations');
+
+    const uniqueIds = Array.from(new Set(locationIds));
+    if (uniqueIds.length > 0) {
+      const locations = await this.prisma.location.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true },
+      });
+      this.assertScopeIdsValid(uniqueIds, locations, 'location');
+    }
+
+    const current = await this.prisma.consultantLocation.findMany({
+      where: { consultantId: id },
+      select: { locationId: true },
+    });
+
+    await this.applyScopeDiff(
+      current.map((c) => c.locationId),
+      uniqueIds,
+      {
+        remove: (locationId) =>
+          this.prisma.consultantLocation.delete({
+            where: { consultantId_locationId: { consultantId: id, locationId } },
+          }),
+        add: (locationId) =>
+          this.prisma.consultantLocation.create({ data: { consultantId: id, locationId } }),
+      },
+    );
+
+    return this.findOne(id, actor);
+  }
+
+  /**
+   * The escalation rules shared by all three scope-assignment endpoints:
+   *  - An admin can assign to anyone except themselves.
+   *  - A manager can assign to themselves, other managers, or consultants,
+   *    but never to an admin account.
+   *
+   * The permission itself (`consultant_*:update`) is checked by the
+   * controller's @RequirePermission, so "not admin" here always means manager.
+   */
+  private async assertCanAssignScope(id: string, actor: AuthUser, noun: string): Promise<void> {
     const target = await this.prisma.consultant.findUnique({
       where: { id },
       select: { id: true, role: { select: { name: true } } },
@@ -280,71 +446,71 @@ export class ConsultantsService {
       throw new NotFoundException(`Consultant ${id} not found`);
     }
 
-    const isSelf = id === actor.consultantId;
-    const actorIsAdmin = this.isAdmin(actor);
-
-    if (actorIsAdmin && isSelf) {
+    if (this.isAdmin(actor) && id === actor.consultantId) {
       throw new BadRequestException({
         code: 'CANNOT_MODIFY_SELF',
-        message: 'Admins cannot assign industries to their own account.',
+        message: `Admins cannot assign ${noun} to their own account.`,
       });
     }
-    if (!actorIsAdmin && target.role?.name === ADMIN_ROLE) {
+    if (!this.isAdmin(actor) && target.role?.name === ADMIN_ROLE) {
       throw new ForbiddenException({
         code: 'FORBIDDEN',
-        message: 'Managers cannot assign industries to admin accounts.',
+        message: `Managers cannot assign ${noun} to admin accounts.`,
       });
     }
+  }
 
-    const uniqueIds = Array.from(new Set(industryIds));
-    if (uniqueIds.length > 0) {
-      const industries = await this.prisma.industry.findMany({
-        where: { id: { in: uniqueIds } },
-        select: { id: true, isActive: true },
-      });
-      const found = new Map(industries.map((i) => [i.id, i.isActive]));
-      const missing = uniqueIds.filter((iid) => !found.has(iid));
-      if (missing.length > 0) {
-        throw new BadRequestException({
-          code: 'INVALID_INDUSTRY',
-          message: `Unknown industry id(s): ${missing.join(', ')}`,
-        });
-      }
-      const inactive = uniqueIds.filter((iid) => found.get(iid) === false);
-      if (inactive.length > 0) {
-        throw new BadRequestException({
-          code: 'INACTIVE_INDUSTRY',
-          message: `Inactive industry id(s): ${inactive.join(', ')}`,
-        });
-      }
-    }
+  /**
+   * Rejects ids that don't exist, or that name a retired catalog row. Rows
+   * without an `isActive` column (Location) are treated as active.
+   */
+  private assertScopeIdsValid(
+    uniqueIds: string[],
+    rows: { id: string; isActive?: boolean }[],
+    noun: 'industry' | 'specialization' | 'location',
+  ): void {
+    const found = new Map(rows.map((r) => [r.id, r.isActive ?? true]));
 
-    const current = await this.prisma.consultantIndustry.findMany({
-      where: { consultantId: id },
-      select: { industryId: true },
-    });
-    const currentIds = new Set(current.map((c) => c.industryId));
-    const nextIds = new Set(uniqueIds);
-    const toAdd = uniqueIds.filter((iid) => !currentIds.has(iid));
-    const toRemove = [...currentIds].filter((iid) => !nextIds.has(iid));
-
-    // Individual top-level create/delete calls (never a nested relation write
-    // on Consultant) so the generic audit extension actually sees and diffs
-    // each row — see AUDITED_MODELS in prisma.extensions.ts.
-    for (const industryId of toRemove) {
-      await this.prisma.consultantIndustry.delete({
-        where: { consultantId_industryId: { consultantId: id, industryId } },
+    const missing = uniqueIds.filter((v) => !found.has(v));
+    if (missing.length > 0) {
+      throw new BadRequestException({
+        code: `INVALID_${noun.toUpperCase()}`,
+        message: `Unknown ${noun} id(s): ${missing.join(', ')}`,
       });
     }
-    for (const industryId of toAdd) {
-      await this.prisma.consultantIndustry.create({ data: { consultantId: id, industryId } });
+    const inactive = uniqueIds.filter((v) => found.get(v) === false);
+    if (inactive.length > 0) {
+      throw new BadRequestException({
+        code: `INACTIVE_${noun.toUpperCase()}`,
+        message: `Inactive ${noun} id(s): ${inactive.join(', ')}`,
+      });
     }
+  }
 
-    if (toRemove.length > 0) {
-      await clearMismatchedConsultantAssignments(this.prisma, id, toRemove);
+  /**
+   * Turns a full-set replace into the minimum add/remove set, and applies it
+   * as individual top-level create/delete calls — never a nested relation
+   * write on Consultant — so the generic audit extension actually sees and
+   * diffs each grant row (see AUDITED_MODELS in prisma.extensions.ts).
+   * Removals run first so a swap can't transiently violate anything.
+   */
+  private async applyScopeDiff(
+    currentIds: string[],
+    nextIds: string[],
+    ops: { remove: (id: string) => Promise<unknown>; add: (id: string) => Promise<unknown> },
+  ): Promise<{ toAdd: string[]; toRemove: string[] }> {
+    const current = new Set(currentIds);
+    const next = new Set(nextIds);
+    const toAdd = nextIds.filter((v) => !current.has(v));
+    const toRemove = currentIds.filter((v) => !next.has(v));
+
+    for (const value of toRemove) {
+      await ops.remove(value);
     }
-
-    return this.findOne(id, actor);
+    for (const value of toAdd) {
+      await ops.add(value);
+    }
+    return { toAdd, toRemove };
   }
 
   /** Active admins other than `excludeId`. Used for last-admin protection. */

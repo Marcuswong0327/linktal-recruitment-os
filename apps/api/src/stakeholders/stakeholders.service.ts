@@ -105,15 +105,19 @@ export class StakeholdersService {
     return roleType.id;
   }
 
-  /** Resolves the free-text title the caller typed to a JobTitle row, creating it if new. */
-  private async resolveJobTitleId(name: string): Promise<string> {
-    const row = await this.base.jobTitle.upsert({
-      where: { name },
-      create: { name },
-      update: {},
-      select: { id: true },
+  /**
+   * The catalog title's text, for the keyword classifier above — job titles
+   * arrive as ids, but classification reads words ("Finance Director" ->
+   * Finance). Returns null for an unset or unknown id, which the classifier
+   * treats as "Other".
+   */
+  private async jobTitleName(jobTitleId: string | null | undefined): Promise<string | null> {
+    if (!jobTitleId) return null;
+    const row = await this.base.jobTitle.findUnique({
+      where: { id: jobTitleId },
+      select: { name: true },
     });
-    return row.id;
+    return row?.name ?? null;
   }
 
   async findAll(query: QueryStakeholdersDto, user: AuthUser) {
@@ -221,14 +225,54 @@ export class StakeholdersService {
     return toEntity(stakeholder);
   }
 
-  async create(dto: CreateStakeholderDto) {
-    const { jobTitle, coverageLocationIds, roleTypeId, ...scalars } = dto;
-    const data: Prisma.StakeholderUncheckedCreateInput = { ...scalars };
-    if (jobTitle !== undefined && jobTitle !== null) {
-      data.jobTitleId = await this.resolveJobTitleId(jobTitle);
+  /**
+   * Would the record this write produces still be visible to its author?
+   *
+   * Both of `stakeholderScope`'s arms, checked together: the parent client's
+   * industry, and the contact's own coverage. Checking only the client would
+   * reject the very case the coverage asymmetry exists for — a Sydney
+   * consultant logging a Sydney-covering contact at a Brisbane company in an
+   * industry they don't hold. That contact is legitimately theirs.
+   *
+   * Without this, create had no scope check at all: a consultant could attach a
+   * contact to any company in the system, and the row would vanish from their
+   * own list the moment it was written.
+   *
+   * The DTO carries bare location ids, but matching needs their `ancestorIds`
+   * (a grant covers the granted node plus every descendant), hence the second
+   * read.
+   */
+  private async assertResultInScope(
+    clientId: string,
+    coverageLocationIds: string[] | undefined,
+    user: AuthUser,
+  ): Promise<void> {
+    if (!isScoped(user)) return;
+    const [client, locations] = await Promise.all([
+      this.prisma.client.findUnique({ where: { id: clientId }, select: { industryId: true } }),
+      coverageLocationIds?.length
+        ? this.prisma.location.findMany({
+            where: { id: { in: coverageLocationIds } },
+            select: { ancestorIds: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    if (!client) {
+      throw new NotFoundException(`Client ${clientId} not found`);
     }
+    assertInScope(user, {
+      industryId: client.industryId,
+      locationAncestorIds: locations.flatMap((l) => l.ancestorIds),
+    });
+  }
+
+  async create(dto: CreateStakeholderDto, user: AuthUser) {
+    await this.assertResultInScope(dto.clientId, dto.coverageLocationIds, user);
+    const { coverageLocationIds, roleTypeId, ...scalars } = dto;
+    const data: Prisma.StakeholderUncheckedCreateInput = { ...scalars };
     // An explicit role type always wins; otherwise derive one from the title.
-    data.stakeholderRoleTypeId = roleTypeId ?? (await this.classifyRoleTypeId(jobTitle));
+    data.stakeholderRoleTypeId =
+      roleTypeId ?? (await this.classifyRoleTypeId(await this.jobTitleName(dto.jobTitleId)));
     if (coverageLocationIds !== undefined) {
       data.coverage = { create: coverageLocationIds.map((locationId) => ({ locationId })) };
     }
@@ -241,18 +285,32 @@ export class StakeholdersService {
   }
 
   async update(id: string, dto: UpdateStakeholderDto, user: AuthUser) {
-    await this.findOne(id, user);
-    const { jobTitle, coverageLocationIds, roleTypeId, ...scalars } = dto;
-    const data: Prisma.StakeholderUncheckedUpdateInput = { ...scalars };
-    if (jobTitle !== undefined && jobTitle !== null) {
-      data.jobTitleId = await this.resolveJobTitleId(jobTitle);
+    const existing = await this.findOne(id, user);
+
+    // Re-parenting only. A coverage-only edit is deliberately *not* re-checked:
+    // correcting a contact's territory is honest note-keeping, and if the
+    // correction happens to move them out of the author's patch, that's the
+    // scope rule working rather than an error — the record stays fully visible
+    // to admins, managers and whoever does cover the new patch. Moving the
+    // contact onto a *company* the author can't see is a different act: it
+    // writes into someone else's book, so the destination is checked with
+    // whichever coverage the row will end up carrying.
+    if (dto.clientId !== undefined) {
+      await this.assertResultInScope(
+        dto.clientId,
+        dto.coverageLocationIds ?? existing.coverageLocationIds,
+        user,
+      );
     }
+
+    const { coverageLocationIds, roleTypeId, ...scalars } = dto;
+    const data: Prisma.StakeholderUncheckedUpdateInput = { ...scalars };
     // Re-classify only when the title is actually changing and the caller
     // didn't also set the role type explicitly in the same request.
     if (roleTypeId !== undefined) {
       data.stakeholderRoleTypeId = roleTypeId;
-    } else if (jobTitle !== undefined) {
-      data.stakeholderRoleTypeId = await this.classifyRoleTypeId(jobTitle);
+    } else if (dto.jobTitleId !== undefined) {
+      data.stakeholderRoleTypeId = await this.classifyRoleTypeId(await this.jobTitleName(dto.jobTitleId));
     }
     // Coverage is a to-many join, not a scalar — full list replace is simplest
     // and correct; a stakeholder's coverage list is short.

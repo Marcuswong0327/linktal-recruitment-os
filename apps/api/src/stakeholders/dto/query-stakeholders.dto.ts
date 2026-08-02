@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 /**
  * Columns the list may be sorted by. Deliberately narrow: ID, name, creation
@@ -8,13 +8,14 @@ import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } fro
  * Stakeholder.lastContactedAt in schema.prisma; Prisma's relation-aggregate
  * `orderBy` only supports `_count`, not `_max`, on to-many relations, so a
  * live join can't sort by "latest contact" directly). Categorical /
- * free-text columns (jobTitle, email, isDecisionMaker) are exposed as
+ * free-text columns (jobTitle, roleType, coverage, email) are exposed as
  * filters instead, since sorting by them only yields arbitrary alphabetical
  * groupings.
  */
 export enum StakeholderSortField {
   displayId = 'displayId',
-  fullName = 'fullName',
+  firstName = 'firstName',
+  lastName = 'lastName',
   createdAt = 'createdAt',
   lastContactedAt = 'lastContactedAt',
 }
@@ -54,7 +55,7 @@ export class QueryStakeholdersDto {
   sortOrder: SortOrder = SortOrder.asc;
 
   @ApiPropertyOptional({
-    description: 'Free-text search across fullName, email, displayId and mobile',
+    description: 'Free-text search across firstName, lastName, email, displayId and mobile',
   })
   @IsOptional()
   @IsString()

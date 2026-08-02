@@ -27,7 +27,19 @@ function makePrisma() {
     },
     role: { findUnique: jest.fn() },
     industry: { findMany: jest.fn().mockResolvedValue([]) },
+    specialization: { findMany: jest.fn().mockResolvedValue([]) },
+    location: { findMany: jest.fn().mockResolvedValue([]) },
     consultantIndustry: {
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn().mockResolvedValue({}),
+      delete: jest.fn().mockResolvedValue({}),
+    },
+    consultantSpecialization: {
+      findMany: jest.fn().mockResolvedValue([]),
+      create: jest.fn().mockResolvedValue({}),
+      delete: jest.fn().mockResolvedValue({}),
+    },
+    consultantLocation: {
       findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn().mockResolvedValue({}),
       delete: jest.fn().mockResolvedValue({}),
@@ -441,6 +453,160 @@ describe('ConsultantsService', () => {
       expect(prisma.consultantIndustry.create).not.toHaveBeenCalled();
       expect(prisma.consultantIndustry.delete).not.toHaveBeenCalled();
       expect(prisma.client.updateMany).not.toHaveBeenCalled();
+    });
+  });
+  // The other two arms of the scope. They share setIndustries' escalation
+  // rules and full-set-replace shape (assertCanAssignScope / applyScopeDiff),
+  // so these cover what actually differs per arm rather than re-testing the
+  // guard three times.
+  describe('setSpecializations', () => {
+    function makeTarget(roleName = 'consultant', overrides: Record<string, unknown> = {}) {
+      return { id: 'co1', role: { name: roleName }, industries: [], ...overrides };
+    }
+
+    it('replaces the whole set, removing before adding', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.specialization.findMany.mockResolvedValue([
+        { id: 'spec2', isActive: true },
+        { id: 'spec3', isActive: true },
+      ]);
+      prisma.consultantSpecialization.findMany.mockResolvedValue([
+        { specializationId: 'spec1' },
+        { specializationId: 'spec2' },
+      ]);
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await service.setSpecializations('co1', ['spec2', 'spec3'], actor('admin'));
+
+      // spec1 dropped, spec3 added, spec2 left alone rather than churned
+      expect(prisma.consultantSpecialization.delete).toHaveBeenCalledTimes(1);
+      expect(prisma.consultantSpecialization.delete).toHaveBeenCalledWith({
+        where: { consultantId_specializationId: { consultantId: 'co1', specializationId: 'spec1' } },
+      });
+      expect(prisma.consultantSpecialization.create).toHaveBeenCalledTimes(1);
+      expect(prisma.consultantSpecialization.create).toHaveBeenCalledWith({
+        data: { consultantId: 'co1', specializationId: 'spec3' },
+      });
+    });
+
+    it('rejects unknown specialization ids', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.specialization.findMany.mockResolvedValue([]);
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await expect(
+        service.setSpecializations('co1', ['bogus'], actor('admin')),
+      ).rejects.toMatchObject({ response: { code: 'INVALID_SPECIALIZATION' } });
+      expect(prisma.consultantSpecialization.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects retired specializations', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.specialization.findMany.mockResolvedValue([{ id: 'spec1', isActive: false }]);
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await expect(
+        service.setSpecializations('co1', ['spec1'], actor('admin')),
+      ).rejects.toMatchObject({ response: { code: 'INACTIVE_SPECIALIZATION' } });
+    });
+
+    it('applies the same escalation rules as industries', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget('admin'));
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await expect(
+        service.setSpecializations('co1', ['spec1'], actor('manager')),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    // Only the industry arm drives assignment, so narrowing specializations
+    // must not strand anyone's assigned records.
+    it('does not cascade to assigned records when grants are removed', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.consultantSpecialization.findMany.mockResolvedValue([{ specializationId: 'spec1' }]);
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await service.setSpecializations('co1', [], actor('admin'));
+
+      expect(prisma.consultantSpecialization.delete).toHaveBeenCalledTimes(1);
+      expect(prisma.client.updateMany).not.toHaveBeenCalled();
+      expect(prisma.candidate.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setLocations', () => {
+    function makeTarget(roleName = 'consultant', overrides: Record<string, unknown> = {}) {
+      return { id: 'co1', role: { name: roleName }, industries: [], ...overrides };
+    }
+
+    // Grants are materialised concrete nodes at mixed levels — "All Malaysia"
+    // is one COUNTRY id, "Brisbane GC QLD" two CITY ids — and each is written
+    // as its own audited row.
+    it('writes one grant row per node, at whatever level it sits', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.location.findMany.mockResolvedValue([{ id: 'brisbane' }, { id: 'goldcoast' }]);
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await service.setLocations('co1', ['brisbane', 'goldcoast'], actor('admin'));
+
+      expect(prisma.consultantLocation.create).toHaveBeenCalledTimes(2);
+      expect(prisma.consultantLocation.create).toHaveBeenCalledWith({
+        data: { consultantId: 'co1', locationId: 'brisbane' },
+      });
+    });
+
+    it('rejects unknown location ids', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.location.findMany.mockResolvedValue([]);
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await expect(
+        service.setLocations('co1', ['nowhere'], actor('admin')),
+      ).rejects.toMatchObject({ response: { code: 'INVALID_LOCATION' } });
+      expect(prisma.consultantLocation.create).not.toHaveBeenCalled();
+    });
+
+    // Location is a bulk-loaded GeoNames tree with no isActive column, so
+    // existence is the only check — the rows come back without the field.
+    it('accepts location rows that carry no isActive column', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.location.findMany.mockResolvedValue([{ id: 'nsw' }]);
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await service.setLocations('co1', ['nsw'], actor('admin'));
+      expect(prisma.consultantLocation.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('de-duplicates a repeated id instead of writing it twice', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.location.findMany.mockResolvedValue([{ id: 'nsw' }]);
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await service.setLocations('co1', ['nsw', 'nsw'], actor('admin'));
+      expect(prisma.consultantLocation.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears every grant when given an empty list', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.consultantLocation.findMany.mockResolvedValue([{ locationId: 'nsw' }]);
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await service.setLocations('co1', [], actor('admin'));
+
+      expect(prisma.consultantLocation.delete).toHaveBeenCalledWith({
+        where: { consultantId_locationId: { consultantId: 'co1', locationId: 'nsw' } },
+      });
+      expect(prisma.location.findMany).not.toHaveBeenCalled();
     });
   });
 });

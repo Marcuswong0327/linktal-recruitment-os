@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { JobOrder, JobOrderQuality, JobOrderStatus, SubmissionStatus } from '@prisma/client';
+import { JobOrder, JobOrderQuality, JobOrderStatus, LocationLevel, SubmissionStatus } from '@prisma/client';
 
 /**
  * One candidate submitted to a job order, for the Job Orders sheet's
@@ -28,28 +28,70 @@ export class JobOrderPipelineCandidateEntity {
  * keeping the generated frontend types honest to the database (the source of
  * truth). Nullable columns use `@ApiProperty({ nullable: true })` with an
  * explicit `type`, because Prisma always returns the column, just as `null`.
+ *
+ * `jobTitle`/`jobRoleType`/`location` aren't part of the raw `JobOrder` model
+ * (only the FK ids are) — they're the FKs' resolved names, added here so
+ * callers get plain strings instead of joining against /job-titles,
+ * /job-role-types or /locations themselves. Same reasoning as
+ * CandidateEntity.industry.
  */
 export class JobOrderEntity implements Omit<JobOrder, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'JO-0001' }) displayId!: string;
   @ApiProperty() clientId!: string;
   @ApiProperty({ type: String, nullable: true }) consultantId!: string | null;
-  @ApiProperty({ example: 'Production Manager' }) jobTitle!: string;
-  @ApiProperty({ type: String, nullable: true }) department!: string | null;
-  @ApiProperty({ type: String, nullable: true }) city!: string | null;
-  @ApiProperty({ type: String, nullable: true }) suburb!: string | null;
+  @ApiProperty({ type: String, nullable: true }) jobTitleId!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: 'Production Manager',
+    description: "Resolved job title — the client's own words for the role",
+  })
+  jobTitle!: string | null;
+  @ApiProperty({ type: String, nullable: true }) jobRoleTypeId!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Resolved role type name — the consultant's classification of the same job",
+  })
+  jobRoleType!: string | null;
+  @ApiProperty({ type: String, nullable: true }) locationId!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Resolved location name' })
+  location!: string | null;
+  @ApiProperty({
+    enum: LocationLevel,
+    nullable: true,
+    description: 'Which rung of the geography tree `location` sits on',
+  })
+  locationLevel!: LocationLevel | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'The ClientJobResearch row this job order originated from, if any',
+  })
+  jobResearchId!: string | null;
   @ApiProperty({ type: Number, nullable: true }) salaryMin!: number | null;
   @ApiProperty({ type: Number, nullable: true }) salaryMax!: number | null;
   @ApiProperty({ type: String, nullable: true, example: 'AUD' }) salaryCurrency!: string | null;
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description: 'Forecast value, entered before anyone is placed — distinct from a Placement fee',
+  })
+  estimatedValue!: number | null;
   @ApiProperty({ example: 1 }) openings!: number;
   @ApiProperty({ example: 0 }) filledCount!: number;
   @ApiProperty({ type: String, nullable: true }) description!: string | null;
   @ApiProperty({ type: String, nullable: true }) requirements!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Briefing notes — internal, distinct from the public-facing description/requirements copy',
+  })
+  notes!: string | null;
   @ApiProperty({ enum: JobOrderStatus }) status!: JobOrderStatus;
   @ApiProperty({ enum: JobOrderQuality }) quality!: JobOrderQuality;
   @ApiProperty({ type: Number, nullable: true, description: '1=High, 2=Medium, 3=Low' }) priorityLevel!: number | null;
-  @ApiProperty() isReplacement!: boolean;
-  @ApiProperty() isCollaborated!: boolean;
   @ApiProperty() receivedAt!: Date;
   @ApiProperty({ type: Date, nullable: true }) closedAt!: Date | null;
   @ApiProperty() createdAt!: Date;

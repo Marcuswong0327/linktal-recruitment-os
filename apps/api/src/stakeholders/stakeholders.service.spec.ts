@@ -1,3 +1,4 @@
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { StakeholdersService } from './stakeholders.service';
 import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
 import { QueryStakeholdersDto, SortOrder } from './dto/query-stakeholders.dto';
@@ -25,100 +26,318 @@ function baseQuery(overrides: Partial<QueryStakeholdersDto> = {}): QueryStakehol
   return { page: 1, pageSize: 20, sortOrder: SortOrder.asc, ...overrides } as QueryStakeholdersDto;
 }
 
+/** The relation keys STAKEHOLDER_INCLUDE pulls in — `toEntity` destructures all of them. */
+function withRelations(row: Record<string, unknown> = {}) {
+  return {
+    client: null,
+    jobTitle: null,
+    stakeholderRoleType: null,
+    coverage: [],
+    contactHistory: [],
+    ...row,
+  };
+}
+
+/**
+ * Base client stub: the StakeholderRoleType catalog upsert, plus the JobTitle
+ * *read* the keyword classifier needs (titles arrive as ids, classification
+ * reads words). Nothing here creates a JobTitle — that goes through
+ * /job-titles.
+ */
+function makeBase(roleTypeId = 'rt1', roleTypeName = 'HR', jobTitleName: string | null = 'Head of HR') {
+  const roleTypeUpsert = jest.fn().mockResolvedValue({ id: roleTypeId, name: roleTypeName });
+  const jobTitleFindUnique = jest
+    .fn()
+    .mockResolvedValue(jobTitleName === null ? null : { name: jobTitleName });
+  return {
+    base: {
+      stakeholderRoleType: { upsert: roleTypeUpsert },
+      jobTitle: { findUnique: jobTitleFindUnique },
+    } as unknown as PrismaService,
+    roleTypeUpsert,
+    jobTitleFindUnique,
+  };
+}
+
 describe('StakeholdersService.create', () => {
   it('creates without setting displayId (DB sequence owns it), auto-classifies roleType from jobTitle, and returns the row', async () => {
-    const created = {
-      id: 's1',
-      displayId: 'Stake-0133',
-      fullName: 'Jane Doe',
-      client: { companyName: 'Acme Corp' },
-      roleType: { name: 'HR' },
-      contactHistory: [],
-    };
-    const create = jest.fn().mockResolvedValue(created);
-    const upsert = jest.fn().mockResolvedValue({ id: 'rt1', name: 'HR' });
+    const create = jest.fn().mockResolvedValue(
+      withRelations({
+        id: 's1',
+        displayId: 'Stake-0133',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        client: { companyName: 'Acme Corp', industryId: 'ind1' },
+        jobTitle: { name: 'Head of HR' },
+        stakeholderRoleType: { name: 'HR' },
+      }),
+    );
     const prisma = { stakeholder: { create } } as unknown as ExtendedPrismaClient;
-    const base = { stakeholderRoleType: { upsert } } as unknown as PrismaService;
+    const { base, roleTypeUpsert } = makeBase();
     const service = new StakeholdersService(prisma, base);
 
     const dto: CreateStakeholderDto = {
       clientId: 'cl1',
-      fullName: 'Jane Doe',
-      jobTitle: 'Head of HR',
+      firstName: 'Jane',
+      lastName: 'Doe',
+      jobTitleId: 'jt-1',
     };
-    const result = await service.create(dto);
+    const result = await service.create(dto, makeUser());
 
-    expect(upsert).toHaveBeenCalledWith({
+    expect(roleTypeUpsert).toHaveBeenCalledWith({
       where: { name: 'HR' },
       create: { name: 'HR' },
       update: {},
     });
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0].data).not.toHaveProperty('displayId');
-    expect(create.mock.calls[0][0].data.roleTypeId).toBe('rt1');
+    expect(create.mock.calls[0][0].data.stakeholderRoleTypeId).toBe('rt1');
     expect(result).toEqual({
       id: 's1',
       displayId: 'Stake-0133',
-      fullName: 'Jane Doe',
+      firstName: 'Jane',
+      lastName: 'Doe',
       companyName: 'Acme Corp',
+      jobTitle: 'Head of HR',
       roleType: 'HR',
+      coverage: [],
+      coverageLocationIds: [],
       lastContactType: null,
+      lastContactCategory: null,
       lastContactNotes: null,
       lastContactedBy: null,
     });
   });
 
-  it('leaves roleTypeId untouched when the caller explicitly sets it', async () => {
-    const created = {
-      id: 's1',
-      displayId: 'Stake-0133',
-      fullName: 'Jane Doe',
-      client: { companyName: 'Acme Corp' },
-      roleType: { name: 'Finance' },
-      contactHistory: [],
-    };
-    const create = jest.fn().mockResolvedValue(created);
-    const upsert = jest.fn();
+  // The catalog is read, never grown here — a title new to the catalog is
+  // created through /job-titles first.
+  it('passes the jobTitleId through and only reads the catalog to classify', async () => {
+    const create = jest.fn().mockResolvedValue(withRelations({ id: 's1' }));
     const prisma = { stakeholder: { create } } as unknown as ExtendedPrismaClient;
-    const base = { stakeholderRoleType: { upsert } } as unknown as PrismaService;
+    const { base, jobTitleFindUnique } = makeBase('rt1', 'HR', 'Head of Talent');
     const service = new StakeholdersService(prisma, base);
 
-    const dto: CreateStakeholderDto = {
-      clientId: 'cl1',
-      fullName: 'Jane Doe',
-      jobTitle: 'Head of HR',
-      roleTypeId: 'rt-finance',
-    };
-    await service.create(dto);
+    await service.create({ clientId: 'cl1', jobTitleId: 'jt-1' }, makeUser());
 
-    expect(upsert).not.toHaveBeenCalled();
-    expect(create.mock.calls[0][0].data.roleTypeId).toBe('rt-finance');
+    expect(jobTitleFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'jt-1' } }),
+    );
+    expect(create.mock.calls[0][0].data.jobTitleId).toBe('jt-1');
+    expect(create.mock.calls[0][0].data).not.toHaveProperty('jobTitle');
+  });
+
+  // Classification reads the catalog row's words, so an unset title (or one
+  // whose row has vanished) falls back to "Other" rather than throwing.
+  it('classifies an unset job title as Other', async () => {
+    const create = jest.fn().mockResolvedValue(withRelations({ id: 's1' }));
+    const prisma = { stakeholder: { create } } as unknown as ExtendedPrismaClient;
+    const { base, roleTypeUpsert, jobTitleFindUnique } = makeBase('rt-other', 'Other');
+    const service = new StakeholdersService(prisma, base);
+
+    await service.create({ clientId: 'cl1' }, makeUser());
+
+    expect(jobTitleFindUnique).not.toHaveBeenCalled();
+    expect(roleTypeUpsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { name: 'Other' } }),
+    );
+    expect(create.mock.calls[0][0].data.stakeholderRoleTypeId).toBe('rt-other');
+  });
+
+  it('leaves the role type untouched when the caller explicitly sets it', async () => {
+    const create = jest.fn().mockResolvedValue(withRelations({ id: 's1' }));
+    const prisma = { stakeholder: { create } } as unknown as ExtendedPrismaClient;
+    const { base, roleTypeUpsert } = makeBase();
+    const service = new StakeholdersService(prisma, base);
+
+    await service.create({ clientId: 'cl1', jobTitleId: 'jt-1', roleTypeId: 'rt-finance' }, makeUser());
+
+    expect(roleTypeUpsert).not.toHaveBeenCalled();
+    expect(create.mock.calls[0][0].data.stakeholderRoleTypeId).toBe('rt-finance');
+  });
+
+  it('nests coverageLocationIds as a create on the join relation', async () => {
+    const create = jest.fn().mockResolvedValue(withRelations({ id: 's1' }));
+    const prisma = { stakeholder: { create } } as unknown as ExtendedPrismaClient;
+    const service = new StakeholdersService(prisma, makeBase().base);
+
+    await service.create({ clientId: 'cl1', coverageLocationIds: ['syd', 'mel'] }, makeUser());
+
+    expect(create.mock.calls[0][0].data.coverage).toEqual({
+      create: [{ locationId: 'syd' }, { locationId: 'mel' }],
+    });
   });
 });
 
-describe('StakeholdersService.findAll — industry scope via parent Client', () => {
+// A scoped consultant must not be able to attach a contact to a company they
+// can't reach — the row would be written into someone else's book and vanish
+// from the author's own list. Both of stakeholderScope's arms count, so the
+// check can't just ask "is the client in my patch?".
+describe('StakeholdersService.create — destination scope', () => {
+  function setup(industryId: string | null, locationRows: { ancestorIds: string[] }[] = []) {
+    const create = jest.fn().mockResolvedValue(withRelations({ id: 's1' }));
+    const clientFindUnique = jest
+      .fn()
+      .mockResolvedValue(industryId === null ? null : { industryId });
+    const locationFindMany = jest.fn().mockResolvedValue(locationRows);
+    const prisma = {
+      stakeholder: { create },
+      client: { findUnique: clientFindUnique },
+      location: { findMany: locationFindMany },
+    } as unknown as ExtendedPrismaClient;
+    return {
+      service: new StakeholdersService(prisma, makeBase().base),
+      create,
+      clientFindUnique,
+      locationFindMany,
+    };
+  }
+
+  const scoped = (overrides: Partial<AuthUser> = {}) =>
+    makeUser({ roleName: 'consultant', industryIds: ['ind1'], ...overrides });
+
+  it('rejects a company outside the patch when no coverage rescues it', async () => {
+    const { service, create } = setup('other');
+    await expect(service.create({ clientId: 'cl1' }, scoped())).rejects.toThrow(ForbiddenException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('allows it when the client industry matches', async () => {
+    const { service, create } = setup('ind1');
+    await service.create({ clientId: 'cl1' }, scoped());
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  // The asymmetry, on the write path: the contact's own coverage carries them
+  // in even though their employer's industry is not the consultant's.
+  it("allows an out-of-industry company when the contact's own coverage is in patch", async () => {
+    const { service, create, locationFindMany } = setup('other', [
+      { ancestorIds: ['syd', 'nsw', 'au'] },
+    ]);
+    await service.create(
+      { clientId: 'cl1', coverageLocationIds: ['syd'] },
+      scoped({ locationIds: ['nsw'] }),
+    );
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(locationFindMany).toHaveBeenCalledWith({
+      where: { id: { in: ['syd'] } },
+      select: { ancestorIds: true },
+    });
+  });
+
+  it('404s on a client that does not exist', async () => {
+    const { service } = setup(null);
+    await expect(service.create({ clientId: 'nope' }, scoped())).rejects.toThrow(NotFoundException);
+  });
+
+  it('runs no extra queries for an unscoped role', async () => {
+    const { service, clientFindUnique, locationFindMany } = setup('other');
+    await service.create({ clientId: 'cl1' }, makeUser({ roleName: 'manager' }));
+    expect(clientFindUnique).not.toHaveBeenCalled();
+    expect(locationFindMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('StakeholdersService.update — re-parenting', () => {
+  function setup(existingCoverageIds: string[] = []) {
+    const findUnique = jest.fn().mockResolvedValue(
+      withRelations({
+        id: 's1',
+        client: { companyName: 'Acme', industryId: 'ind1' },
+        coverage: existingCoverageIds.map((locationId) => ({
+          locationId,
+          location: { name: locationId, ancestorIds: [locationId] },
+        })),
+      }),
+    );
+    const update = jest.fn().mockResolvedValue(withRelations({ id: 's1' }));
+    const clientFindUnique = jest.fn().mockResolvedValue({ industryId: 'other' });
+    const locationFindMany = jest.fn().mockResolvedValue([]);
+    const prisma = {
+      stakeholder: { findUnique, update },
+      client: { findUnique: clientFindUnique },
+      location: { findMany: locationFindMany },
+    } as unknown as ExtendedPrismaClient;
+    return {
+      service: new StakeholdersService(prisma, makeBase().base),
+      update,
+      clientFindUnique,
+      locationFindMany,
+    };
+  }
+
+  it('checks the destination company when clientId changes', async () => {
+    const { service, update } = setup();
+    await expect(
+      service.update('s1', { clientId: 'cl2' }, makeUser({ roleName: 'consultant', industryIds: ['ind1'] })),
+    ).rejects.toThrow(ForbiddenException);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  // Falls back to the coverage already on the row, so a bare re-parent is
+  // judged on what the record will actually look like afterwards.
+  it('reuses the existing coverage when the re-parent does not restate it', async () => {
+    const { service, locationFindMany } = setup(['syd']);
+    await service
+      .update('s1', { clientId: 'cl2' }, makeUser({ roleName: 'consultant', industryIds: ['ind1'] }))
+      .catch(() => undefined);
+    expect(locationFindMany).toHaveBeenCalledWith({
+      where: { id: { in: ['syd'] } },
+      select: { ancestorIds: true },
+    });
+  });
+
+  // Deliberate: correcting a contact's territory is note-keeping, even when the
+  // correction moves them out of the author's own patch.
+  it('does not re-check a coverage-only edit', async () => {
+    const { service, clientFindUnique, update } = setup(['syd']);
+    await service.update(
+      's1',
+      { coverageLocationIds: ['bne'] },
+      makeUser({ roleName: 'consultant', industryIds: ['ind1'] }),
+    );
+    expect(clientFindUnique).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+});
+
+// visible = (industry via parent Client) OR (the stakeholder's OWN coverage).
+// The second arm is the deliberate asymmetry: a Brisbane client's national
+// account manager covering Sydney is reachable by a Sydney-scoped consultant.
+describe('StakeholdersService.findAll — scope', () => {
   function setup() {
     const findMany = jest.fn().mockResolvedValue([]);
     const count = jest.fn().mockResolvedValue(0);
     const prisma = { stakeholder: { findMany, count } } as unknown as ExtendedPrismaClient;
-    const service = new StakeholdersService(prisma, {} as unknown as PrismaService);
+    const service = new StakeholdersService(prisma, makeBase().base);
     return { findMany, service };
   }
 
-  it("ANDs the industry scope (via the parent Client) with the free-text search instead of clobbering it", async () => {
+  it("ANDs the scope with the free-text search instead of clobbering it", async () => {
     const { findMany, service } = setup();
     await service.findAll(
       baseQuery({ q: 'jane' }),
-      makeUser({ roleName: 'consultant', industryIds: ['ind1'] }),
+      makeUser({ roleName: 'consultant', industryIds: ['ind1'], locationIds: ['nsw'] }),
     );
     const where = findMany.mock.calls[0][0].where;
     expect(where.AND).toEqual([
       { OR: expect.any(Array) },
-      { client: { industryId: { in: ['ind1'] } } },
+      {
+        OR: [
+          { client: { industryId: { in: ['ind1'] } } },
+          { coverage: { some: { location: { ancestorIds: { hasSome: ['nsw'] } } } } },
+        ],
+      },
     ]);
   });
 
-  it('does not add an industry scope for non-consultant roles', async () => {
+  // Zero grants means "not configured", never "sees everything".
+  it('matches nothing for a consultant with no grants at all', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery(), makeUser({ roleName: 'consultant' }));
+    expect(findMany.mock.calls[0][0].where.AND).toContainEqual({ id: { in: [] } });
+  });
+
+  it('does not scope non-consultant roles', async () => {
     const { findMany, service } = setup();
     await service.findAll(baseQuery(), makeUser({ roleName: 'manager' }));
     expect(findMany.mock.calls[0][0].where).toEqual({});
@@ -129,52 +348,50 @@ describe('StakeholdersService.findOne — job scope', () => {
   function makeService(stakeholder: unknown) {
     const findUnique = jest.fn().mockResolvedValue(stakeholder);
     const prisma = { stakeholder: { findUnique } } as unknown as ExtendedPrismaClient;
-    return { service: new StakeholdersService(prisma, {} as unknown as PrismaService) };
+    return { service: new StakeholdersService(prisma, makeBase().base) };
   }
 
-  it("rejects a scoped consultant reaching a stakeholder whose parent Client is out of scope", async () => {
-    const { service } = makeService({
-      id: 's1',
-      client: { companyName: 'Acme', industryId: 'finance' },
-      roleType: null,
-      contactHistory: [],
-    });
+  it('rejects a scoped consultant when neither arm matches', async () => {
+    const { service } = makeService(
+      withRelations({
+        id: 's1',
+        client: { companyName: 'Acme', industryId: 'finance' },
+        coverage: [{ locationId: 'perth', location: { name: 'Perth', ancestorIds: ['perth', 'wa', 'au'] } }],
+      }),
+    );
     await expect(
-      service.findOne('s1', makeUser({ roleName: 'consultant', industryIds: ['tech'] })),
+      service.findOne('s1', makeUser({ roleName: 'consultant', industryIds: ['tech'], locationIds: ['nsw'] })),
     ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
   });
 
-  it('rejects a scoped consultant reaching a stakeholder whose parent Client is untagged', async () => {
-    const { service } = makeService({
-      id: 's1',
-      client: { companyName: 'Acme', industryId: null },
-      roleType: null,
-      contactHistory: [],
-    });
-    await expect(
-      service.findOne('s1', makeUser({ roleName: 'consultant', industryIds: ['tech'] })),
-    ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
-  });
-
-  it('allows a scoped consultant reaching a stakeholder whose parent Client matches', async () => {
-    const { service } = makeService({
-      id: 's1',
-      client: { companyName: 'Acme', industryId: 'tech' },
-      roleType: null,
-      contactHistory: [],
-    });
+  it("allows a scoped consultant on the parent Client's industry alone", async () => {
+    const { service } = makeService(
+      withRelations({ id: 's1', client: { companyName: 'Acme', industryId: 'tech' } }),
+    );
     await expect(
       service.findOne('s1', makeUser({ roleName: 'consultant', industryIds: ['tech'] })),
     ).resolves.toMatchObject({ id: 's1' });
   });
 
+  // The asymmetry, pinned down: the client sits in Brisbane and its industry
+  // is out of scope, but this contact's own coverage reaches into NSW.
+  it("allows a scoped consultant on the stakeholder's own coverage, not the client's location", async () => {
+    const { service } = makeService(
+      withRelations({
+        id: 's1',
+        client: { companyName: 'Acme', industryId: 'finance' },
+        coverage: [{ locationId: 'sydney', location: { name: 'Sydney', ancestorIds: ['sydney', 'nsw', 'au'] } }],
+      }),
+    );
+    await expect(
+      service.findOne('s1', makeUser({ roleName: 'consultant', industryIds: ['tech'], locationIds: ['nsw'] })),
+    ).resolves.toMatchObject({ id: 's1' });
+  });
+
   it('never restricts non-consultant roles', async () => {
-    const { service } = makeService({
-      id: 's1',
-      client: { companyName: 'Acme', industryId: 'finance' },
-      roleType: null,
-      contactHistory: [],
-    });
+    const { service } = makeService(
+      withRelations({ id: 's1', client: { companyName: 'Acme', industryId: 'finance' } }),
+    );
     await expect(
       service.findOne('s1', makeUser({ roleName: 'admin' })),
     ).resolves.toMatchObject({ id: 's1' });

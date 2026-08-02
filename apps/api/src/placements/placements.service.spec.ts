@@ -65,7 +65,23 @@ describe('PlacementsService.create — fee calculation', () => {
     expect(result.feeValue).toBe(12000);
   });
 
-  it('calculates guaranteeEndDate as startDate + client.guaranteePeriod', async () => {
+  // guaranteeEndDate is entered by the consultant, never derived: guarantee
+  // terms live per-Tob and a client can hold several that disagree, so
+  // picking the applicable one automatically would be guesswork.
+  it('takes guaranteeEndDate from the caller, not from startDate', async () => {
+    const prisma = buildPrismaMock();
+    const service = new PlacementsService(prisma);
+
+    const result = await service.create({
+      submissionId: 'sub1',
+      startDate: '2026-02-01T00:00:00.000Z',
+      guaranteeEndDate: '2026-05-02T00:00:00.000Z',
+    });
+
+    expect(result.guaranteeEndDate).toEqual(new Date('2026-05-02T00:00:00.000Z'));
+  });
+
+  it('leaves guaranteeEndDate null when the caller omits it, even with a startDate', async () => {
     const prisma = buildPrismaMock();
     const service = new PlacementsService(prisma);
 
@@ -74,7 +90,7 @@ describe('PlacementsService.create — fee calculation', () => {
       startDate: '2026-02-01T00:00:00.000Z',
     });
 
-    expect(result.guaranteeEndDate).toEqual(new Date('2026-05-02T00:00:00.000Z'));
+    expect(result.guaranteeEndDate).toBeNull();
   });
 
   it('rejects a second placement for the same submission', async () => {

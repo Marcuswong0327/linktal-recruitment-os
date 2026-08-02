@@ -6,7 +6,7 @@ import { JobOrderQuality, JobOrderStatus } from '@prisma/client';
 /**
  * Columns the list may be sorted by. Deliberately narrow: ID, numeric counts,
  * salary bounds, and dates — the things with a meaningful order. Categorical /
- * free-text columns (jobTitle, department, city, suburb, status, priorityLevel,
+ * free-text columns (jobTitle, jobRoleType, location, status, priorityLevel,
  * quality) are exposed as filters instead, since sorting by them only yields
  * arbitrary alphabetical groupings.
  */
@@ -92,20 +92,38 @@ export class QueryJobOrdersDto {
   @IsString({ each: true })
   consultantIds?: string[];
 
-  @ApiPropertyOptional({ description: 'Filter by city (contains, case-insensitive)' })
+  @ApiPropertyOptional({ description: 'Filter by job title ID(s) (see /job-titles)', type: [String] })
   @IsOptional()
-  @IsString()
-  city?: string;
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  jobTitleIds?: string[];
 
-  @ApiPropertyOptional({ description: 'Filter by suburb (contains, case-insensitive)' })
+  @ApiPropertyOptional({ description: 'Filter by job role type ID(s) (see /job-role-types)', type: [String] })
   @IsOptional()
-  @IsString()
-  suburb?: string;
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  jobRoleTypeIds?: string[];
 
-  @ApiPropertyOptional({ description: 'Filter by department (contains, case-insensitive)' })
+  @ApiPropertyOptional({
+    description:
+      "Filter by location name (contains, case-insensitive) — matches the job order's own node only. Use locationIds to match descendants too.",
+  })
   @IsOptional()
   @IsString()
-  department?: string;
+  location?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Filter by Location id(s). Selecting a country or state matches every job order beneath it, via the ancestor path.',
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @IsArray()
+  @IsString({ each: true })
+  locationIds?: string[];
 
   @ApiPropertyOptional({ description: 'Filter by priority level(s) (1=High, 2=Medium, 3=Low). Omit for all.', type: [Number] })
   @IsOptional()

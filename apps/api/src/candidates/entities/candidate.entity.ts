@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Candidate, CandidateStatus, Prisma } from '@prisma/client';
+import { Candidate, CandidateStatus, LocationLevel, Prisma } from '@prisma/client';
 import { CandidateNoteDto } from '../dto/candidate-note.dto';
 
 /**
@@ -16,60 +16,70 @@ import { CandidateNoteDto } from '../dto/candidate-note.dto';
  * `type: object` instead of the real scalar type.
  *
  * `notes` is excluded from the `Omit` below and typed as `CandidateNoteDto[]`
- * ourselves — same reasoning as `ClientEntity.notes`: Prisma's `Json` maps to
- * `JsonValue`, which has no room for a concrete shape.
+ * ourselves, because Prisma's `Json` maps to `JsonValue`, which has no room for
+ * a concrete shape.
  *
  * `lastContact*` fields aren't part of the raw `Candidate` model — they're
  * resolved from the most recent `CandidateContactHistory` row (see
- * CandidatesService), added here so exports get readable columns without the
- * caller joining contact history + consultants themselves. `lastContactedAt`
- * is the exception: it's a real denormalized column (needed for sorting), the
- * other three are resolved live from that latest row since they're
- * display-only.
+ * CandidatesService). `lastContactedAt`/`lastContactedById` are the exception:
+ * real denormalized columns (needed for sorting); the rest are resolved live
+ * from that latest row since they're display-only.
  *
- * `industry`/`roleType`/`specializations` aren't part of the raw `Candidate`
- * model either (only `industryId`/`roleTypeId` are, and specializations is a
- * many-to-many relation with no scalar column at all) — same reasoning as
+ * `industry`/`jobRoleType`/`location`/`specializations` aren't part of the raw
+ * model either (only the FK ids are, and specializations is a many-to-many
+ * relation with no scalar column at all) — same reasoning as
  * StakeholderEntity.roleType: the resolved name(s) are added here so callers
- * get plain strings instead of joining against /industries,
- * /candidate-role-types or /specializations themselves.
+ * get plain strings instead of joining against /industries, /job-role-types,
+ * /locations or /specializations themselves.
  */
 export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedById' | 'notes'> {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'CDD-0001' }) displayId!: string;
-  @ApiProperty({ example: 'John Smith' }) fullName!: string;
-  @ApiProperty({ type: String, nullable: true }) givenName!: string | null;
-  @ApiProperty({ type: String, nullable: true }) familyName!: string | null;
+  @ApiProperty({ type: String, nullable: true, example: 'John' }) firstName!: string | null;
+  @ApiProperty({ type: String, nullable: true, example: 'Smith' }) lastName!: string | null;
   @ApiProperty({ type: String, nullable: true }) email!: string | null;
   @ApiProperty({ type: String, nullable: true }) mobile!: string | null;
-  @ApiProperty({ type: String, nullable: true }) country!: string | null;
-  @ApiProperty({ type: String, nullable: true }) city!: string | null;
-  @ApiProperty({ type: String, nullable: true }) industryId!: string | null;
+  @ApiProperty({ description: 'Most specific known Location node — required, the scope resolver relies on it' })
+  locationId!: string;
+  @ApiProperty({ type: String, nullable: true, description: 'Resolved location name' })
+  location!: string | null;
+  @ApiProperty({
+    enum: LocationLevel,
+    nullable: true,
+    description: 'Which rung of the geography tree `location` sits on — a candidate known only to city level has no suburb',
+  })
+  locationLevel!: LocationLevel | null;
+  @ApiProperty({ description: 'Required — the industry arm of the scope resolver relies on it' })
+  industryId!: string;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved industry name' })
   industry!: string | null;
-  @ApiProperty({ type: String, nullable: true }) roleTypeId!: string | null;
-  @ApiProperty({ type: String, nullable: true, description: 'Resolved role type name' })
-  roleType!: string | null;
-  @ApiProperty({ type: String, nullable: true }) currentPosition!: string | null;
+  @ApiProperty({ type: String, nullable: true }) jobRoleTypeId!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Resolved role type name — the consultant's classification of what this person does",
+  })
+  jobRoleType!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: "Title at their current employer, in the employer's own words",
+  })
+  currentRole!: string | null;
   @ApiProperty({ type: String, nullable: true }) currentCompany!: string | null;
-  @ApiProperty({ type: Number, nullable: true }) yearsExperience!: number | null;
-  @ApiProperty({ type: String, nullable: true }) salaryExpectation!: string | null;
   @ApiProperty({ type: String, nullable: true }) linkedinUrl!: string | null;
-  @ApiProperty({ type: String, nullable: true }) resumeUrl!: string | null;
+  @ApiProperty({ type: String, nullable: true }) seekTalentUrl!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'The original, as-submitted resume' })
+  rawResumeUrl!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: "Linktal's own reformatted version of the resume" })
+  editedResumeUrl!: string | null;
   @ApiProperty({
     type: 'array',
     items: { type: 'object' },
     nullable: true,
-    description: '[{ company, role, startDate, endDate }]',
+    description: '[{ company, role, period }] — `period` is free text, the source never stores parseable dates',
   })
   workHistory!: Prisma.JsonValue;
-  @ApiProperty({
-    type: 'array',
-    items: { type: 'string' },
-    nullable: true,
-    description: 'Free-entry skill tags',
-  })
-  skills!: Prisma.JsonValue;
   @ApiProperty({
     type: 'array',
     items: { type: 'string' },
@@ -91,9 +101,21 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
     description: "Latest contactedAt across this candidate's contact history; null if never contacted",
   })
   lastContactedAt!: Date | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Consultant who made the most recent contact' })
+  lastContactedById!: string | null;
   @ApiProperty({ type: String, nullable: true, description: 'Contact method of the most recent contact (email, call, meeting, linkedin)' })
   lastContactType!: string | null;
-  @ApiProperty({ type: String, nullable: true, description: 'Notes from the most recent contact' })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Category of the most recent contact — distinct from lastContactType, which is the channel',
+  })
+  lastContactCategory!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Notes from the most recent contact — its screening summary, or its outreach notes when that is what was logged',
+  })
   lastContactNotes!: string | null;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved name of the consultant who made the most recent contact' })
   lastContactedBy!: string | null;

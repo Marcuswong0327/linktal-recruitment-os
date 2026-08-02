@@ -79,26 +79,85 @@ const MATCH_NOTHING: Prisma.ClientWhereInput = { id: { in: [] } };
 // FK vs. join table), and spelling them out reads better than a mapping layer
 // that has to encode the same five cases anyway.
 
+/**
+ * **The ownership arm, shared by every entity that carries a `consultantId`.**
+ *
+ * A record assigned to this consultant is always theirs to see, whatever their
+ * grants say. An assignment is a deliberate admin act on one specific row, not
+ * a wildcard, so honouring it doesn't reopen the "zero grants means everything"
+ * hole the rest of this file is careful about — which is why each scope below
+ * returns it *above* the `hasNoGrants` short-circuit rather than folding it
+ * into the OR. Two failures it prevents: being handed an account and still
+ * getting a 403 on it, and watching one vanish the moment its industry is
+ * retagged.
+ *
+ * `MATCH_NOTHING` therefore survives only for a caller with no grants *and* no
+ * assignments — the genuinely unconfigured case.
+ *
+ * Stakeholder is the one entity with no ownership arm, because it has no
+ * `consultantId`: contacts belong to a client, not to a recruiter.
+ */
+function ownedBy(user: AuthUser): { consultantId: string } {
+  return { consultantId: user.consultantId };
+}
+
+/**
+ * Clients carry one more arm than the rest: a company is also reachable
+ * through a *contact* who covers the consultant's patch, even when the
+ * company's own market sits outside it — the counterpart to the Stakeholder
+ * asymmetry below. Without it the two rules disagree: a Sydney-scoped
+ * consultant could open a Brisbane client's national account manager but got a
+ * 403 on the company that person works for, which is a dangling reference
+ * rather than a privacy boundary.
+ *
+ * Soft-deleted stakeholders are excluded explicitly, because the extended
+ * client's soft-delete rewrite intercepts top-level calls, not a nested
+ * relation filter, so a removed contact would otherwise keep granting access.
+ * The test is "does *any* live contact cover my patch", so deleting one of
+ * several changes nothing — access lapses only with the last one.
+ */
 export function clientScope(user: AuthUser): Prisma.ClientWhereInput {
-  if (hasNoGrants(user)) return MATCH_NOTHING;
+  const owned = ownedBy(user);
+  if (hasNoGrants(user)) return owned;
   return {
     OR: [
+      owned,
       industryArm(user, false),
       { locations: { some: locationIsUnder(user.locationIds) } },
+      { stakeholders: { some: { deletedAt: null, coverage: { some: locationIsUnder(user.locationIds) } } } },
     ],
   };
 }
 
+/**
+ * A TOB carries no scope fields of its own — no industry, no location, no
+ * `consultantId`. It's a commercial document belonging to a company, so it's
+ * visible exactly when that company is, all four of `clientScope`'s arms
+ * included. Delegating rather than restating them also means the
+ * stakeholder-coverage arm can't drift out of sync here later.
+ *
+ * Soft-deleted clients need no explicit exclusion (unlike the nested
+ * stakeholder filter in `clientScope`): `ClientsService.remove` soft-deletes a
+ * client's TOBs alongside it, so the extended client's top-level rewrite has
+ * already dropped them before this relation filter is reached.
+ */
+export function tobScope(user: AuthUser): Prisma.TobWhereInput {
+  return { client: clientScope(user) };
+}
+
 export function candidateScope(user: AuthUser): Prisma.CandidateWhereInput {
-  if (hasNoGrants(user)) return MATCH_NOTHING as Prisma.CandidateWhereInput;
+  const owned = ownedBy(user);
+  if (hasNoGrants(user)) return owned;
   const industry = industryArm(user, false) as Prisma.CandidateWhereInput;
-  return { OR: [industry, locationIsUnder(user.locationIds)] };
+  return { OR: [owned, industry, locationIsUnder(user.locationIds)] };
 }
 
 export function jobOrderScope(user: AuthUser): Prisma.JobOrderWhereInput {
-  if (hasNoGrants(user)) return MATCH_NOTHING as Prisma.JobOrderWhereInput;
+  const owned = ownedBy(user);
+  if (hasNoGrants(user)) return owned;
   return {
     OR: [
+      owned,
       industryArm(user, true) as Prisma.JobOrderWhereInput,
       locationIsUnder(user.locationIds),
     ],
@@ -106,9 +165,11 @@ export function jobOrderScope(user: AuthUser): Prisma.JobOrderWhereInput {
 }
 
 export function jobResearchScope(user: AuthUser): Prisma.ClientJobResearchWhereInput {
-  if (hasNoGrants(user)) return MATCH_NOTHING as Prisma.ClientJobResearchWhereInput;
+  const owned = ownedBy(user);
+  if (hasNoGrants(user)) return owned;
   return {
     OR: [
+      owned,
       industryArm(user, true) as Prisma.ClientJobResearchWhereInput,
       locationIsUnder(user.locationIds),
     ],
@@ -147,9 +208,14 @@ export function stakeholderScope(user: AuthUser): Prisma.StakeholderWhereInput {
  */
 export function assertInScope(
   user: AuthUser,
-  record: { industryId?: string | null; locationAncestorIds?: string[] },
+  record: { industryId?: string | null; locationAncestorIds?: string[]; consultantId?: string | null },
 ): void {
   if (!isScoped(user)) return;
+
+  // Ownership wins outright — the single-record half of the `ownedBy` arm
+  // above. Stakeholder is the one caller that omits it (no `consultantId`) and
+  // falls straight through to the arms below.
+  if (record.consultantId != null && record.consultantId === user.consultantId) return;
 
   const industryMatch =
     record.industryId != null && user.industryIds.includes(record.industryId);

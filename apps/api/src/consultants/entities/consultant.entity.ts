@@ -46,12 +46,32 @@ export class ConsultantEntity implements Omit<Consultant, 'passwordHash'> {
   @ApiPropertyOptional({ type: RoleSummaryEntity, nullable: true })
   role?: RoleSummaryEntity | null;
   /**
-   * Assigned industries — present only when the caller holds
-   * `consultant_industry:read` (omitted entirely otherwise, not just empty).
-   * Same names/ids pairing as Candidate's `specializations`/`specializationIds`.
+   * The three arms of this consultant's visibility scope. Each is present only
+   * when the caller holds the matching `consultant_*:read` — omitted entirely
+   * otherwise, not just emptied, since an empty list would read as "no grants",
+   * a materially different statement than "you can't see this". The three
+   * permissions are independent, so a caller can hold one arm and not another.
+   *
+   * Names and ids come as parallel arrays, same pairing as Candidate's
+   * `specializations`/`specializationIds`: the names are display-only, the ids
+   * are what an editable multi-select binds to.
    */
   @ApiPropertyOptional({ type: [String] })
   industries?: string[];
   @ApiPropertyOptional({ type: [String], description: 'Industry IDs backing `industries`' })
   industryIds?: string[];
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Assigned specializations, narrowing the industry arm. A grant covers the node plus every child.',
+  })
+  specializations?: string[];
+  @ApiPropertyOptional({ type: [String], description: 'Specialization IDs backing `specializations`' })
+  specializationIds?: string[];
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Assigned locations — this consultant's patch, at any level. A grant covers the node plus every descendant.",
+  })
+  locations?: string[];
+  @ApiPropertyOptional({ type: [String], description: 'Location IDs backing `locations`' })
+  locationIds?: string[];
 }
