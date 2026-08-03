@@ -31,6 +31,7 @@ import type {
   GetConsultantsParams,
   PaginatedConsultantsEntity,
   SetConsultantIndustriesDto,
+  SetConsultantSpecializationsDto,
   UpdateConsultantDto,
   UpdateMeDto
 } from '../types';
@@ -1056,4 +1057,104 @@ export const useSetConsultantIndustries = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getSetConsultantIndustriesMutationOptions(options), queryClient);
+    }
+    export type setConsultantSpecializationsResponse200 = {
+  data: ConsultantEntity
+  status: 200
+}
+
+export type setConsultantSpecializationsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type setConsultantSpecializationsResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type setConsultantSpecializationsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type setConsultantSpecializationsResponseSuccess = (setConsultantSpecializationsResponse200) & {
+  headers: Headers;
+};
+export type setConsultantSpecializationsResponseError = (setConsultantSpecializationsResponse400 | setConsultantSpecializationsResponse404 | setConsultantSpecializationsResponse500) & {
+  headers: Headers;
+};
+
+export type setConsultantSpecializationsResponse = (setConsultantSpecializationsResponseSuccess | setConsultantSpecializationsResponseError)
+
+export const getSetConsultantSpecializationsUrl = (id: string,) => {
+
+
+
+
+  return `/consultants/${id}/specializations`
+}
+
+/**
+ * @summary Replace a consultant's assigned specializations, narrowing their industry arm (admin/manager only; same escalation rules as industries)
+ */
+export const setConsultantSpecializations = async (id: string,
+    setConsultantSpecializationsDto: SetConsultantSpecializationsDto, options?: RequestInit): Promise<setConsultantSpecializationsResponse> => {
+
+  return customFetch<setConsultantSpecializationsResponse>(getSetConsultantSpecializationsUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setConsultantSpecializationsDto)
+  }
+);}
+
+
+
+
+
+export const getSetConsultantSpecializationsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setConsultantSpecializations>>, TError,{id: string;data: SetConsultantSpecializationsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setConsultantSpecializations>>, TError,{id: string;data: SetConsultantSpecializationsDto}, TContext> => {
+
+const mutationKey = ['setConsultantSpecializations'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setConsultantSpecializations>>, {id: string;data: SetConsultantSpecializationsDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setConsultantSpecializations(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetConsultantSpecializationsMutationResult = NonNullable<Awaited<ReturnType<typeof setConsultantSpecializations>>>
+    export type SetConsultantSpecializationsMutationBody = SetConsultantSpecializationsDto
+    export type SetConsultantSpecializationsMutationError = ErrorResponse
+
+    /**
+ * @summary Replace a consultant's assigned specializations, narrowing their industry arm (admin/manager only; same escalation rules as industries)
+ */
+export const useSetConsultantSpecializations = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setConsultantSpecializations>>, TError,{id: string;data: SetConsultantSpecializationsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof setConsultantSpecializations>>,
+        TError,
+        {id: string;data: SetConsultantSpecializationsDto},
+        TContext
+      > => {
+      return useMutation(getSetConsultantSpecializationsMutationOptions(options), queryClient);
     }
