@@ -66,10 +66,10 @@ import {
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import { useGetJobOrders } from '@/lib/api/generated/job-orders/job-orders';
 import {
-  getGetCandidateRoleTypesQueryKey,
-  useCreateCandidateRoleType,
-  useGetCandidateRoleTypes,
-} from '@/lib/api/generated/candidate-role-types/candidate-role-types';
+  getGetJobRoleTypesQueryKey,
+  useCreateJobRoleType,
+  useGetJobRoleTypes,
+} from '@/lib/api/generated/job-role-types/job-role-types';
 import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@/lib/api/generated/industries/industries';
 import {
   getGetSpecializationsQueryKey,
@@ -212,7 +212,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
   const { data: industryData } = useGetIndustries();
   const industries = industryData?.status === 200 ? industryData.data : [];
-  const { data: roleTypeData } = useGetCandidateRoleTypes();
+  const { data: roleTypeData } = useGetJobRoleTypes();
   const roleTypes = roleTypeData?.status === 200 ? roleTypeData.data : [];
   const { data: specializationData } = useGetSpecializations();
   const specializations = specializationData?.status === 200 ? specializationData.data : [];
@@ -224,9 +224,9 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
       onError: (err) => toast.error(err.message || 'Failed to add industry'),
     },
   });
-  const createRoleType = useCreateCandidateRoleType({
+  const createRoleType = useCreateJobRoleType({
     mutation: {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetCandidateRoleTypesQueryKey() }),
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetJobRoleTypesQueryKey() }),
       onError: (err) => toast.error(err.message || 'Failed to add role type'),
     },
   });
