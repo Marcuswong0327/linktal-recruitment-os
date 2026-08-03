@@ -280,10 +280,8 @@
               "type": "string",
               "enum": [
                 "displayId",
-                "fullName",
-                "familyName",
-                "givenName",
-                "yearsExperience",
+                "firstName",
+                "lastName",
                 "lastContactedAt",
                 "status"
               ]
@@ -306,7 +304,7 @@
             "name": "q",
             "required": false,
             "in": "query",
-            "description": "Free-text search across fullName, email, displayId, mobile, city, country, currentPosition, currentCompany, and industry/role type name",
+            "description": "Free-text search across firstName, lastName, email, displayId, mobile, currentRole, currentCompany, and location/industry/job role type name",
             "schema": {
               "type": "string"
             }
@@ -323,8 +321,8 @@
                 "enum": [
                   "COLD",
                   "WARM",
-                  "HOT",
-                  "PLACED"
+                  "PLACED",
+                  "UNS"
                 ]
               }
             }
@@ -342,10 +340,10 @@
             }
           },
           {
-            "name": "roleTypeIds",
+            "name": "jobRoleTypeIds",
             "required": false,
             "in": "query",
-            "description": "Filter by role type ID(s) (see /candidate-role-types)",
+            "description": "Filter by job role type ID(s) (see /job-role-types)",
             "schema": {
               "type": "array",
               "items": {
@@ -358,18 +356,6 @@
             "required": false,
             "in": "query",
             "description": "Filter by specialization ID(s) (see /specializations)",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          {
-            "name": "skills",
-            "required": false,
-            "in": "query",
-            "description": "Filter by skill tag(s) (exact match against the free-entry skills list)",
             "schema": {
               "type": "array",
               "items": {
@@ -428,7 +414,7 @@
             "name": "location",
             "required": false,
             "in": "query",
-            "description": "Filter by location — matches city OR country (contains, case-insensitive)",
+            "description": "Filter by location name (contains, case-insensitive) — matches the candidate's own node only. Use locationIds to match descendants too.",
             "schema": {
               "type": "string"
             }
@@ -443,32 +429,12 @@
             }
           },
           {
-            "name": "currentPosition",
+            "name": "currentRole",
             "required": false,
             "in": "query",
-            "description": "Filter by current position (contains, case-insensitive)",
+            "description": "Filter by current role (contains, case-insensitive)",
             "schema": {
               "type": "string"
-            }
-          },
-          {
-            "name": "yearsExperienceMin",
-            "required": false,
-            "in": "query",
-            "description": "Minimum years of experience (inclusive)",
-            "schema": {
-              "minimum": 0,
-              "type": "number"
-            }
-          },
-          {
-            "name": "yearsExperienceMax",
-            "required": false,
-            "in": "query",
-            "description": "Maximum years of experience (inclusive)",
-            "schema": {
-              "minimum": 0,
-              "type": "number"
             }
           },
           {
@@ -487,6 +453,18 @@
             "description": "Only candidates last contacted on/before this date (ISO 8601)",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Location id(s). Selecting a country or state matches every candidate beneath it, via the ancestor path.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           }
         ],
@@ -583,170 +561,6 @@
           }
         ],
         "summary": "Create a new candidate",
-        "tags": [
-          "Candidates"
-        ]
-      }
-    },
-    "/candidates/saved-searches": {
-      "get": {
-        "operationId": "getCandidateSavedSearches",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Saved searches",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/CandidateSavedSearchEntity"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "List the caller's saved candidate searches",
-        "tags": [
-          "Candidates"
-        ]
-      },
-      "post": {
-        "operationId": "createCandidateSavedSearch",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateCandidateSavedSearchDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Saved search created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CandidateSavedSearchEntity"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Save the current candidate search/filter state",
-        "tags": [
-          "Candidates"
-        ]
-      }
-    },
-    "/candidates/saved-searches/{id}": {
-      "delete": {
-        "operationId": "deleteCandidateSavedSearch",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Saved search deleted"
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Delete one of the caller's saved searches",
         "tags": [
           "Candidates"
         ]
@@ -1713,8 +1527,6 @@
               "type": "string",
               "enum": [
                 "displayId",
-                "feePercentage",
-                "guaranteePeriod",
                 "createdAt",
                 "lastContactedAt",
                 "quality"
@@ -1778,21 +1590,24 @@
             }
           },
           {
-            "name": "country",
+            "name": "location",
             "required": false,
             "in": "query",
-            "description": "Filter by country (contains, case-insensitive)",
+            "description": "Filter by location name (contains, case-insensitive) — matches any node in the client's market set.",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "city",
+            "name": "locationIds",
             "required": false,
             "in": "query",
-            "description": "Filter by city (contains, case-insensitive)",
+            "description": "Filter by Location id(s). Selecting a country or state matches every client whose market sits beneath it, via the ancestor path.",
             "schema": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -1821,10 +1636,10 @@
             }
           },
           {
-            "name": "tobSigned",
+            "name": "hasTob",
             "required": false,
             "in": "query",
-            "description": "Filter by Terms of Business signed",
+            "description": "Filter by whether the client has any Terms of Business on file. Replaces the old `tobSigned` flag — TOBs are their own one-to-many table now (see /tobs).",
             "schema": {
               "type": "boolean"
             }
@@ -2191,247 +2006,6 @@
         ]
       }
     },
-    "/clients/{id}/notes": {
-      "post": {
-        "operationId": "addClientNote",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddClientNoteDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Client updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientEntity"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Append a note to a client's timeline",
-        "tags": [
-          "Clients"
-        ]
-      }
-    },
-    "/clients/{id}/notes/{noteId}": {
-      "patch": {
-        "operationId": "updateClientNote",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "noteId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateClientNoteDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Client updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientEntity"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Edit one note in a client's timeline (author or admin only)",
-        "tags": [
-          "Clients"
-        ]
-      },
-      "delete": {
-        "operationId": "deleteClientNote",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "noteId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "expectedVersion",
-            "required": false,
-            "in": "query",
-            "description": "Optimistic concurrency check: the note's own `editedAt ?? timestamp` as last seen by the caller. If it no longer matches, the note was changed by someone else in the meantime and the request is rejected with 409.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Client updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ClientEntity"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Remove one note from a client's timeline (author or admin only)",
-        "tags": [
-          "Clients"
-        ]
-      }
-    },
     "/clients/{id}/restore": {
       "post": {
         "operationId": "restoreClient",
@@ -2593,7 +2167,8 @@
               "type": "string",
               "enum": [
                 "displayId",
-                "fullName",
+                "firstName",
+                "lastName",
                 "createdAt",
                 "lastContactedAt"
               ]
@@ -2616,7 +2191,7 @@
             "name": "q",
             "required": false,
             "in": "query",
-            "description": "Free-text search across fullName, email, displayId and mobile",
+            "description": "Free-text search across firstName, lastName, email, displayId and mobile",
             "schema": {
               "type": "string"
             }
@@ -2664,12 +2239,15 @@
             }
           },
           {
-            "name": "isDecisionMaker",
+            "name": "jobTitleIds",
             "required": false,
             "in": "query",
-            "description": "Filter by decision-maker flag",
+            "description": "Filter by JobTitle id(s)",
             "schema": {
-              "type": "boolean"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           }
         ],
@@ -3110,6 +2688,587 @@
         ]
       }
     },
+    "/tobs": {
+      "get": {
+        "operationId": "getTobs",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (1-based)",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Items per page",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to most recently created.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "displayId",
+                "fileName",
+                "createdAt",
+                "guaranteePeriod"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across displayId, fileName, clientTobRepresentative, invoiceContactName and invoiceContactEmail",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by client ID (exact match) — the client detail page’s TOB tab",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by multiple client IDs at once",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "linktalRepresentativeId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the Linktal consultant who signed",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated TOBs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedTobsEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List Terms of Business (paginated, filterable, sortable)",
+        "tags": [
+          "TOBs"
+        ]
+      },
+      "post": {
+        "operationId": "createTob",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "TOB created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TobEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "File a new Terms of Business against a client",
+        "tags": [
+          "TOBs"
+        ]
+      }
+    },
+    "/tobs/by-display-id/{displayId}": {
+      "get": {
+        "operationId": "getTobByDisplayId",
+        "parameters": [
+          {
+            "name": "displayId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "TOB found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TobEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a TOB by display ID (TOB-XXXX)",
+        "tags": [
+          "TOBs"
+        ]
+      }
+    },
+    "/tobs/{id}": {
+      "get": {
+        "operationId": "getTob",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "TOB found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TobEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a TOB by ID",
+        "tags": [
+          "TOBs"
+        ]
+      },
+      "patch": {
+        "operationId": "updateTob",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "TOB updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TobEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a TOB",
+        "tags": [
+          "TOBs"
+        ]
+      },
+      "delete": {
+        "operationId": "deleteTob",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "TOB soft-deleted"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soft-delete a TOB (recoverable)",
+        "tags": [
+          "TOBs"
+        ]
+      }
+    },
+    "/tobs/{id}/restore": {
+      "post": {
+        "operationId": "restoreTob",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "TOB restored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TobEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Restore a soft-deleted TOB",
+        "tags": [
+          "TOBs"
+        ]
+      }
+    },
+    "/tobs/{id}/purge": {
+      "delete": {
+        "operationId": "purgeTob",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "TOB permanently deleted"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Permanently erase a TOB (admin only)",
+        "tags": [
+          "TOBs"
+        ]
+      }
+    },
     "/job-orders": {
       "get": {
         "operationId": "getJobOrders",
@@ -3235,30 +3394,48 @@
             }
           },
           {
-            "name": "city",
+            "name": "jobTitleIds",
             "required": false,
             "in": "query",
-            "description": "Filter by city (contains, case-insensitive)",
+            "description": "Filter by job title ID(s) (see /job-titles)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobRoleTypeIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by job role type ID(s) (see /job-role-types)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "location",
+            "required": false,
+            "in": "query",
+            "description": "Filter by location name (contains, case-insensitive) — matches the job order's own node only. Use locationIds to match descendants too.",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "suburb",
+            "name": "locationIds",
             "required": false,
             "in": "query",
-            "description": "Filter by suburb (contains, case-insensitive)",
+            "description": "Filter by Location id(s). Selecting a country or state matches every job order beneath it, via the ancestor path.",
             "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "department",
-            "required": false,
-            "in": "query",
-            "description": "Filter by department (contains, case-insensitive)",
-            "schema": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -3724,6 +3901,747 @@
         ]
       }
     },
+    "/job-research": {
+      "get": {
+        "operationId": "getJobResearch",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (1-based)",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Items per page",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to most recently researched.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "displayId",
+                "researchedAt",
+                "postedDate",
+                "lastContactedAt",
+                "createdAt"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across jobTitle, displayId, notes and contactEmailFromAd",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by client ID (exact match)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by multiple client IDs at once",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "consultantIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the consultant who conducted the research. Ignored for the consultant role, which is scoped to its own patch instead.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobTitleIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by JobTitle id(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobRoleTypeIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by JobRoleType id(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Location id(s). A node matches itself plus everything beneath it, so selecting a state returns every ad in its cities.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "location",
+            "required": false,
+            "in": "query",
+            "description": "Filter by location name (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the client-status snapshot taken when the ad was logged (one or more)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "TRADED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "isContacted",
+            "required": false,
+            "in": "query",
+            "description": "Filter by whether the advertiser has been approached yet",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "hasJobOrder",
+            "required": false,
+            "in": "query",
+            "description": "Filter by whether the research has since been converted into a Job Order — the research funnel’s conversion column",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated job research",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedJobResearchEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List market research rows (paginated, filterable, sortable)",
+        "tags": [
+          "Job Research"
+        ]
+      },
+      "post": {
+        "operationId": "createJobResearch",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateJobResearchDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Research row created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResearchEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Log a job ad found in the market",
+        "tags": [
+          "Job Research"
+        ]
+      }
+    },
+    "/job-research/by-display-id/{displayId}": {
+      "get": {
+        "operationId": "getJobResearchByDisplayId",
+        "parameters": [
+          {
+            "name": "displayId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Research row found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResearchEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a research row by display ID (JR-XXXX)",
+        "tags": [
+          "Job Research"
+        ]
+      }
+    },
+    "/job-research/{id}": {
+      "get": {
+        "operationId": "getJobResearchById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Research row found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResearchEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a research row by ID",
+        "tags": [
+          "Job Research"
+        ]
+      },
+      "patch": {
+        "operationId": "updateJobResearch",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateJobResearchDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Research row updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResearchEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a research row",
+        "tags": [
+          "Job Research"
+        ]
+      },
+      "delete": {
+        "operationId": "deleteJobResearch",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Research row soft-deleted"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soft-delete a research row (recoverable)",
+        "tags": [
+          "Job Research"
+        ]
+      }
+    },
+    "/job-research/{id}/mark-contacted": {
+      "post": {
+        "operationId": "markJobResearchContacted",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkContactedDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Research row updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResearchEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Record that the advertiser has been approached — the calling consultant is recorded automatically",
+        "tags": [
+          "Job Research"
+        ]
+      }
+    },
+    "/job-research/{id}/restore": {
+      "post": {
+        "operationId": "restoreJobResearch",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Research row restored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobResearchEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Restore a soft-deleted research row",
+        "tags": [
+          "Job Research"
+        ]
+      }
+    },
+    "/job-research/{id}/purge": {
+      "delete": {
+        "operationId": "purgeJobResearch",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Research row permanently deleted"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Permanently erase a research row (admin only)",
+        "tags": [
+          "Job Research"
+        ]
+      }
+    },
     "/consultants": {
       "get": {
         "operationId": "getConsultants",
@@ -3910,6 +4828,66 @@
           }
         ],
         "summary": "Create a new consultant",
+        "tags": [
+          "Consultants"
+        ]
+      }
+    },
+    "/consultants/hierarchy": {
+      "get": {
+        "operationId": "getConsultantHierarchy",
+        "parameters": [
+          {
+            "name": "rootId",
+            "required": false,
+            "in": "query",
+            "description": "Return only this consultant and everyone beneath them (\"my team\"). Omit for the whole chart, rooted at everyone with no manager.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Flat list, depth-ordered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ConsultantNodeEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Org chart, or one person’s team. Presentation only — reporting lines are never a permission boundary (see docs/rbac-roles.md §3).",
         "tags": [
           "Consultants"
         ]
@@ -4351,6 +5329,158 @@
           }
         ],
         "summary": "Replace a consultant's assigned industries (admin/manager only; self/peer-manager escalation rules enforced in the service)",
+        "tags": [
+          "Consultants"
+        ]
+      }
+    },
+    "/consultants/{id}/specializations": {
+      "put": {
+        "operationId": "setConsultantSpecializations",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetConsultantSpecializationsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Specializations updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultantEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace a consultant's assigned specializations, narrowing their industry arm (admin/manager only; same escalation rules as industries)",
+        "tags": [
+          "Consultants"
+        ]
+      }
+    },
+    "/consultants/{id}/locations": {
+      "put": {
+        "operationId": "setConsultantLocations",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetConsultantLocationsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Locations updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsultantEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace a consultant's assigned locations — their patch (admin/manager only; same escalation rules as industries)",
         "tags": [
           "Consultants"
         ]
@@ -4983,10 +6113,512 @@
         ]
       }
     },
+    "/locations": {
+      "get": {
+        "operationId": "getLocations",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Filter by name (contains, case-insensitive). Backed by a trigram index, so a substring search stays an index scan.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "level",
+            "required": false,
+            "in": "query",
+            "description": "Only nodes on this rung of the tree",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "COUNTRY",
+                "STATE",
+                "CITY",
+                "SUBURB"
+              ]
+            }
+          },
+          {
+            "name": "parentId",
+            "required": false,
+            "in": "query",
+            "description": "Only this node's direct children — what a cascading picker asks for after each step (pick a country, list its states).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "underId",
+            "required": false,
+            "in": "query",
+            "description": "Only nodes at or beneath this one, at any depth — resolved through the ancestor path, so one country id matches every node under it.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "required": false,
+            "in": "query",
+            "description": "Maximum rows to return. The tree is ~2k nodes today and grows, so reads are always capped.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching location nodes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LocationEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Search or browse the geography tree (capped; filterable by name, level, parent or subtree)",
+        "tags": [
+          "Locations"
+        ]
+      },
+      "post": {
+        "operationId": "createLocation",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLocationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Location created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add a location node (admin only — the tree is normally bulk-loaded from GeoNames)",
+        "tags": [
+          "Locations"
+        ]
+      }
+    },
+    "/locations/{id}": {
+      "get": {
+        "operationId": "getLocation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Location found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get one location node by ID",
+        "tags": [
+          "Locations"
+        ]
+      }
+    },
+    "/job-titles": {
+      "get": {
+        "operationId": "getJobTitles",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Filter by name (contains, case-insensitive) — what the combobox types into",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "required": false,
+            "in": "query",
+            "description": "Maximum rows to return. The catalog grows with use, so the picker asks for a page rather than all of it.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active job titles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobTitleEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List active job titles (searchable, capped)",
+        "tags": [
+          "Job Titles"
+        ]
+      },
+      "post": {
+        "operationId": "createJobTitle",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateJobTitleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created (or already existed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobTitleEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a job title entry, or return the existing one with that name",
+        "tags": [
+          "Job Titles"
+        ]
+      }
+    },
+    "/job-role-types": {
+      "get": {
+        "operationId": "getJobRoleTypes",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Filter by name (contains, case-insensitive) — what the combobox types into",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "required": false,
+            "in": "query",
+            "description": "Maximum rows to return. The catalog grows with use, so the picker asks for a page rather than all of it.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active job role types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobRoleTypeEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List active job role types (searchable, capped)",
+        "tags": [
+          "Job Role Types"
+        ]
+      },
+      "post": {
+        "operationId": "createJobRoleType",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateJobRoleTypeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created (or already existed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRoleTypeEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a job role type entry, or return the existing one with that name",
+        "tags": [
+          "Job Role Types"
+        ]
+      }
+    },
     "/stakeholder-role-types": {
       "get": {
         "operationId": "getStakeholderRoleTypes",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Filter by name (contains, case-insensitive) — what the combobox types into",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "required": false,
+            "in": "query",
+            "description": "Maximum rows to return. The catalog grows with use, so the picker asks for a page rather than all of it.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Active stakeholder role types",
@@ -5027,7 +6659,7 @@
             "bearer": []
           }
         ],
-        "summary": "List active stakeholder role types",
+        "summary": "List active stakeholder role types (searchable, capped)",
         "tags": [
           "Stakeholder Role Types"
         ]
@@ -5047,7 +6679,7 @@
         },
         "responses": {
           "201": {
-            "description": "Role type created (or already existed)",
+            "description": "Created (or already existed)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5082,7 +6714,7 @@
             "bearer": []
           }
         ],
-        "summary": "Create a stakeholder role type, or return the existing one with that name",
+        "summary": "Create a stakeholder role type entry, or return the existing one with that name",
         "tags": [
           "Stakeholder Role Types"
         ]
@@ -6041,111 +7673,6 @@
           "Placements"
         ]
       }
-    },
-    "/candidate-role-types": {
-      "get": {
-        "operationId": "getCandidateRoleTypes",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "Active candidate role types",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/CandidateRoleTypeEntity"
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "List active candidate role types",
-        "tags": [
-          "Candidate Role Types"
-        ]
-      },
-      "post": {
-        "operationId": "createCandidateRoleType",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateCandidateRoleTypeDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Role type created (or already existed)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CandidateRoleTypeEntity"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Create a candidate role type, or return the existing one with that name",
-        "tags": [
-          "Candidate Role Types"
-        ]
-      }
     }
   },
   "info": {
@@ -6206,6 +7733,20 @@
             "items": {
               "type": "string"
             }
+          },
+          "specializationIds": {
+            "description": "Specialization ids granted to this consultant. Narrows the industry arm; empty means the whole industry.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "locationIds": {
+            "description": "Location ids granted to this consultant. Each covers that node and every descendant.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -6214,7 +7755,9 @@
           "fullName",
           "roleName",
           "permissions",
-          "industryIds"
+          "industryIds",
+          "specializationIds",
+          "locationIds"
         ]
       },
       "LoginResponseEntity": {
@@ -6359,17 +7902,15 @@
             "type": "string",
             "example": "CDD-0001"
           },
-          "fullName": {
+          "firstName": {
             "type": "string",
-            "example": "John Smith"
+            "nullable": true,
+            "example": "John"
           },
-          "givenName": {
+          "lastName": {
             "type": "string",
-            "nullable": true
-          },
-          "familyName": {
-            "type": "string",
-            "nullable": true
+            "nullable": true,
+            "example": "Smith"
           },
           "email": {
             "type": "string",
@@ -6379,45 +7920,50 @@
             "type": "string",
             "nullable": true
           },
-          "country": {
+          "locationId": {
             "type": "string",
-            "nullable": true
+            "description": "Most specific known Location node — required, the scope resolver relies on it"
           },
-          "city": {
+          "location": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "description": "Resolved location name"
+          },
+          "locationLevel": {
+            "type": "string",
+            "enum": [
+              "COUNTRY",
+              "STATE",
+              "CITY",
+              "SUBURB"
+            ],
+            "nullable": true,
+            "description": "Which rung of the geography tree `location` sits on — a candidate known only to city level has no suburb"
           },
           "industryId": {
             "type": "string",
-            "nullable": true
+            "description": "Required — the industry arm of the scope resolver relies on it"
           },
           "industry": {
             "type": "string",
             "nullable": true,
             "description": "Resolved industry name"
           },
-          "roleTypeId": {
+          "jobRoleTypeId": {
             "type": "string",
             "nullable": true
           },
-          "roleType": {
+          "jobRoleType": {
             "type": "string",
             "nullable": true,
-            "description": "Resolved role type name"
+            "description": "Resolved role type name — the consultant's classification of what this person does"
           },
-          "currentPosition": {
+          "currentRole": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "description": "Title at their current employer, in the employer's own words"
           },
           "currentCompany": {
-            "type": "string",
-            "nullable": true
-          },
-          "yearsExperience": {
-            "type": "number",
-            "nullable": true
-          },
-          "salaryExpectation": {
             "type": "string",
             "nullable": true
           },
@@ -6425,9 +7971,19 @@
             "type": "string",
             "nullable": true
           },
-          "resumeUrl": {
+          "seekTalentUrl": {
             "type": "string",
             "nullable": true
+          },
+          "rawResumeUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "The original, as-submitted resume"
+          },
+          "editedResumeUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Linktal's own reformatted version of the resume"
           },
           "workHistory": {
             "type": "array",
@@ -6435,15 +7991,7 @@
               "type": "object"
             },
             "nullable": true,
-            "description": "[{ company, role, startDate, endDate }]"
-          },
-          "skills": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "nullable": true,
-            "description": "Free-entry skill tags"
+            "description": "[{ company, role, period }] — `period` is free text, the source never stores parseable dates"
           },
           "specializations": {
             "type": "array",
@@ -6464,8 +8012,8 @@
             "enum": [
               "COLD",
               "WARM",
-              "HOT",
-              "PLACED"
+              "PLACED",
+              "UNS"
             ]
           },
           "notes": {
@@ -6485,15 +8033,25 @@
             "nullable": true,
             "description": "Latest contactedAt across this candidate's contact history; null if never contacted"
           },
+          "lastContactedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant who made the most recent contact"
+          },
           "lastContactType": {
             "type": "string",
             "nullable": true,
             "description": "Contact method of the most recent contact (email, call, meeting, linkedin)"
           },
+          "lastContactCategory": {
+            "type": "string",
+            "nullable": true,
+            "description": "Category of the most recent contact — distinct from lastContactType, which is the channel"
+          },
           "lastContactNotes": {
             "type": "string",
             "nullable": true,
-            "description": "Notes from the most recent contact"
+            "description": "Notes from the most recent contact — its screening summary, or its outreach notes when that is what was logged"
           },
           "lastContactedBy": {
             "type": "string",
@@ -6512,32 +8070,33 @@
         "required": [
           "id",
           "displayId",
-          "fullName",
-          "givenName",
-          "familyName",
+          "firstName",
+          "lastName",
           "email",
           "mobile",
-          "country",
-          "city",
+          "locationId",
+          "location",
+          "locationLevel",
           "industryId",
           "industry",
-          "roleTypeId",
-          "roleType",
-          "currentPosition",
+          "jobRoleTypeId",
+          "jobRoleType",
+          "currentRole",
           "currentCompany",
-          "yearsExperience",
-          "salaryExpectation",
           "linkedinUrl",
-          "resumeUrl",
+          "seekTalentUrl",
+          "rawResumeUrl",
+          "editedResumeUrl",
           "workHistory",
-          "skills",
           "specializations",
           "specializationIds",
           "status",
           "notes",
           "consultantId",
           "lastContactedAt",
+          "lastContactedById",
           "lastContactType",
+          "lastContactCategory",
           "lastContactNotes",
           "lastContactedBy",
           "createdAt",
@@ -6580,66 +8139,6 @@
           "page",
           "pageSize",
           "pageCount"
-        ]
-      },
-      "CandidateSavedSearchEntity": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "consultantId": {
-            "type": "string"
-          },
-          "filters": {
-            "type": "object"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "updatedAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "consultantId",
-          "filters",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
-      "CreateCandidateSavedSearchDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Display name for this saved search",
-            "example": "IT contractors in Sydney"
-          },
-          "filters": {
-            "type": "object",
-            "description": "Serialized filter state (same shape as the GET /candidates query params)",
-            "example": {
-              "industryIds": [
-                "abc123"
-              ],
-              "statuses": [
-                "WARM"
-              ],
-              "q": "Sydney"
-            }
-          }
-        },
-        "required": [
-          "name",
-          "filters"
         ]
       },
       "PipelineTimelineEventEntity": {
@@ -6722,34 +8221,24 @@
             "type": "string",
             "example": "Production Manager"
           },
-          "startDate": {
+          "period": {
             "type": "string",
-            "description": "ISO date or free text",
-            "example": "2019-01"
-          },
-          "endDate": {
-            "type": "string",
-            "description": "ISO date or free text; omit if current",
-            "example": "2023-06"
+            "description": "Free text",
+            "example": "2020 - 2021 (1 year)"
           }
         }
       },
       "CreateCandidateDto": {
         "type": "object",
         "properties": {
-          "fullName": {
+          "firstName": {
             "type": "string",
-            "description": "Full name",
-            "example": "John Smith"
-          },
-          "givenName": {
-            "type": "string",
-            "description": "Given name",
+            "description": "First name",
             "example": "John"
           },
-          "familyName": {
+          "lastName": {
             "type": "string",
-            "description": "Family name",
+            "description": "Last name",
             "example": "Smith"
           },
           "email": {
@@ -6762,27 +8251,21 @@
             "description": "Mobile number",
             "example": "+61 412 345 678"
           },
-          "country": {
+          "locationId": {
             "type": "string",
-            "description": "Country",
-            "example": "Australia"
-          },
-          "city": {
-            "type": "string",
-            "description": "City",
-            "example": "Brisbane"
+            "description": "Most specific known Location node (see /locations) — city if no suburb is known, and so on"
           },
           "industryId": {
             "type": "string",
             "description": "Industry ID (see /industries)"
           },
-          "roleTypeId": {
+          "jobRoleTypeId": {
             "type": "string",
-            "description": "Role type ID (see /candidate-role-types)"
+            "description": "Job role type ID (see /job-role-types)"
           },
-          "currentPosition": {
+          "currentRole": {
             "type": "string",
-            "description": "Current position",
+            "description": "Title at their current employer, in the employer's own words",
             "example": "Production Manager"
           },
           "currentCompany": {
@@ -6790,24 +8273,22 @@
             "description": "Current company",
             "example": "Acme Corp"
           },
-          "yearsExperience": {
-            "type": "number",
-            "description": "Years of experience",
-            "example": 5
-          },
-          "salaryExpectation": {
-            "type": "string",
-            "description": "Salary expectation",
-            "example": "150K"
-          },
           "linkedinUrl": {
             "type": "string",
             "description": "LinkedIn URL",
             "example": "https://linkedin.com/in/johnsmith"
           },
-          "resumeUrl": {
+          "seekTalentUrl": {
             "type": "string",
-            "description": "Resume URL"
+            "description": "Seek Talent Search profile URL"
+          },
+          "rawResumeUrl": {
+            "type": "string",
+            "description": "Raw resume file URL — the original, as submitted"
+          },
+          "editedResumeUrl": {
+            "type": "string",
+            "description": "Edited resume file URL — Linktal's own reformatted version"
           },
           "workHistory": {
             "description": "Work history entries",
@@ -6823,25 +8304,14 @@
               "type": "string"
             }
           },
-          "skills": {
-            "description": "Free-entry skill tags",
-            "example": [
-              "CNC",
-              "Welding"
-            ],
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "status": {
             "type": "string",
             "description": "Status; defaults to COLD when omitted",
             "enum": [
               "COLD",
               "WARM",
-              "HOT",
-              "PLACED"
+              "PLACED",
+              "UNS"
             ],
             "example": "COLD"
           },
@@ -6851,25 +8321,21 @@
           }
         },
         "required": [
-          "fullName"
+          "locationId",
+          "industryId"
         ]
       },
       "UpdateCandidateDto": {
         "type": "object",
         "properties": {
-          "fullName": {
+          "firstName": {
             "type": "string",
-            "description": "Full name",
-            "example": "John Smith"
-          },
-          "givenName": {
-            "type": "string",
-            "description": "Given name",
+            "description": "First name",
             "example": "John"
           },
-          "familyName": {
+          "lastName": {
             "type": "string",
-            "description": "Family name",
+            "description": "Last name",
             "example": "Smith"
           },
           "email": {
@@ -6882,27 +8348,21 @@
             "description": "Mobile number",
             "example": "+61 412 345 678"
           },
-          "country": {
+          "locationId": {
             "type": "string",
-            "description": "Country",
-            "example": "Australia"
-          },
-          "city": {
-            "type": "string",
-            "description": "City",
-            "example": "Brisbane"
+            "description": "Most specific known Location node (see /locations) — city if no suburb is known, and so on"
           },
           "industryId": {
             "type": "string",
             "description": "Industry ID (see /industries)"
           },
-          "roleTypeId": {
+          "jobRoleTypeId": {
             "type": "string",
-            "description": "Role type ID (see /candidate-role-types)"
+            "description": "Job role type ID (see /job-role-types)"
           },
-          "currentPosition": {
+          "currentRole": {
             "type": "string",
-            "description": "Current position",
+            "description": "Title at their current employer, in the employer's own words",
             "example": "Production Manager"
           },
           "currentCompany": {
@@ -6910,24 +8370,22 @@
             "description": "Current company",
             "example": "Acme Corp"
           },
-          "yearsExperience": {
-            "type": "number",
-            "description": "Years of experience",
-            "example": 5
-          },
-          "salaryExpectation": {
-            "type": "string",
-            "description": "Salary expectation",
-            "example": "150K"
-          },
           "linkedinUrl": {
             "type": "string",
             "description": "LinkedIn URL",
             "example": "https://linkedin.com/in/johnsmith"
           },
-          "resumeUrl": {
+          "seekTalentUrl": {
             "type": "string",
-            "description": "Resume URL"
+            "description": "Seek Talent Search profile URL"
+          },
+          "rawResumeUrl": {
+            "type": "string",
+            "description": "Raw resume file URL — the original, as submitted"
+          },
+          "editedResumeUrl": {
+            "type": "string",
+            "description": "Edited resume file URL — Linktal's own reformatted version"
           },
           "workHistory": {
             "description": "Work history entries",
@@ -6943,25 +8401,14 @@
               "type": "string"
             }
           },
-          "skills": {
-            "description": "Free-entry skill tags",
-            "example": [
-              "CNC",
-              "Welding"
-            ],
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
           "status": {
             "type": "string",
             "description": "Status; defaults to COLD when omitted",
             "enum": [
               "COLD",
               "WARM",
-              "HOT",
-              "PLACED"
+              "PLACED",
+              "UNS"
             ],
             "example": "COLD"
           },
@@ -7015,9 +8462,43 @@
             ],
             "example": "call"
           },
-          "notes": {
+          "category": {
             "type": "string",
-            "description": "Notes from this contact"
+            "description": "Kind of note — distinct from contactType, which is the channel",
+            "example": "Detailed Screening Notes"
+          },
+          "conversationSummary": {
+            "type": "string",
+            "description": "The screening call content"
+          },
+          "outreachCampaignNotes": {
+            "type": "string",
+            "description": "Notes for an outreach campaign entry"
+          },
+          "status": {
+            "type": "string",
+            "description": "Snapshot of the candidate's status at the time of this contact; defaults to WARM",
+            "enum": [
+              "COLD",
+              "WARM",
+              "PLACED",
+              "UNS"
+            ]
+          },
+          "suburb": {
+            "type": "string",
+            "description": "Suburb captured during this contact",
+            "example": "Silverwater"
+          },
+          "currentSalary": {
+            "type": "string",
+            "description": "Free text, not a number — the source records values like \"35 per hour\"",
+            "example": "35 per hour"
+          },
+          "expectedSalary": {
+            "type": "string",
+            "description": "Free text, same reasoning as currentSalary",
+            "example": "55-60"
           },
           "contactedAt": {
             "type": "string",
@@ -7035,21 +8516,63 @@
           "id": {
             "type": "string"
           },
+          "displayId": {
+            "type": "string",
+            "example": "CDN-0001"
+          },
           "candidateId": {
             "type": "string"
           },
           "contactType": {
             "type": "string",
-            "example": "call"
+            "nullable": true,
+            "example": "call",
+            "description": "Channel: email, call, meeting, linkedin"
+          },
+          "category": {
+            "type": "string",
+            "nullable": true,
+            "example": "Detailed Screening Notes",
+            "description": "Kind of note — distinct from contactType, which is the channel."
           },
           "contactedById": {
             "type": "string",
             "nullable": true,
             "description": "Consultant who made this contact"
           },
-          "notes": {
+          "conversationSummary": {
+            "type": "string",
+            "nullable": true,
+            "description": "The screening call content."
+          },
+          "outreachCampaignNotes": {
+            "type": "string",
+            "nullable": true,
+            "description": "Filled for outreach campaign entries."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COLD",
+              "WARM",
+              "PLACED",
+              "UNS"
+            ],
+            "description": "Snapshot of the candidate's status at the time of this contact."
+          },
+          "suburb": {
             "type": "string",
             "nullable": true
+          },
+          "currentSalary": {
+            "type": "string",
+            "nullable": true,
+            "description": "Free text, not a number — the source records values like \"35 per hour\"."
+          },
+          "expectedSalary": {
+            "type": "string",
+            "nullable": true,
+            "description": "Free text, e.g. \"55-60\"."
           },
           "contactedAt": {
             "format": "date-time",
@@ -7062,10 +8585,17 @@
         },
         "required": [
           "id",
+          "displayId",
           "candidateId",
           "contactType",
+          "category",
           "contactedById",
-          "notes",
+          "conversationSummary",
+          "outreachCampaignNotes",
+          "status",
+          "suburb",
+          "currentSalary",
+          "expectedSalary",
           "contactedAt",
           "createdAt"
         ]
@@ -7169,47 +8699,6 @@
           "pageCount"
         ]
       },
-      "ClientNoteDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable id, unique within this client’s notes (for edit/delete)"
-          },
-          "content": {
-            "type": "string",
-            "example": "Called to confirm the Terms of Business."
-          },
-          "timestamp": {
-            "type": "string",
-            "description": "ISO 8601 timestamp",
-            "example": "2026-07-16T18:58:34.123Z"
-          },
-          "by": {
-            "type": "string",
-            "nullable": true,
-            "description": "Authoring consultant ID"
-          },
-          "editedAt": {
-            "type": "string",
-            "nullable": true,
-            "description": "ISO 8601 timestamp of the last edit, null if never edited"
-          },
-          "editedBy": {
-            "type": "string",
-            "nullable": true,
-            "description": "Consultant ID who made the last edit, null if never edited (may differ from `by`, e.g. an admin editing someone else’s note)"
-          }
-        },
-        "required": [
-          "id",
-          "content",
-          "timestamp",
-          "by",
-          "editedAt",
-          "editedBy"
-        ]
-      },
       "ClientEntity": {
         "type": "object",
         "properties": {
@@ -7226,7 +8715,7 @@
           },
           "industryId": {
             "type": "string",
-            "nullable": true
+            "description": "Required — the industry arm of the scope resolver relies on it"
           },
           "industry": {
             "type": "string",
@@ -7242,30 +8731,51 @@
             "nullable": true,
             "description": "Resolved specialization name"
           },
-          "country": {
-            "type": "string",
-            "nullable": true
+          "locations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Resolved names of the Location nodes this client hires from — its market, not its office address"
           },
-          "city": {
-            "type": "string",
-            "nullable": true
+          "locationIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Location IDs backing `locations` — what an editable multi-select actually binds to"
+          },
+          "addresses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "description": "The client's own physical office address(es) — distinct from `locations`"
+          },
+          "suburbsAndPostcodes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "nullable": true,
+            "description": "The client's own office suburb/postcode(s)"
           },
           "website": {
             "type": "string",
             "nullable": true
           },
-          "tobSigned": {
-            "type": "boolean",
-            "example": false
+          "seekJobMarketUrl": {
+            "type": "string",
+            "nullable": true
           },
-          "feePercentage": {
-            "type": "number",
-            "nullable": true,
-            "example": 15
+          "linkedinJobMarketUrl": {
+            "type": "string",
+            "nullable": true
           },
-          "guaranteePeriod": {
-            "type": "number",
-            "example": 90
+          "generalDescription": {
+            "type": "string",
+            "nullable": true
           },
           "status": {
             "type": "string",
@@ -7283,23 +8793,26 @@
               "HIGH"
             ]
           },
-          "notes": {
-            "nullable": true,
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ClientNoteDto"
-            }
-          },
           "lastContactedAt": {
             "format": "date-time",
             "type": "string",
             "nullable": true,
             "description": "Latest contactedAt across this client's stakeholders; null if never contacted"
           },
+          "lastContactedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant who made the most recent contact"
+          },
           "lastContactType": {
             "type": "string",
             "nullable": true,
             "description": "Contact method of the most recent contact, across all stakeholders (email, call, meeting, linkedin)"
+          },
+          "lastContactCategory": {
+            "type": "string",
+            "nullable": true,
+            "description": "Category of the most recent contact — distinct from lastContactType, which is the channel"
           },
           "lastContactNotes": {
             "type": "string",
@@ -7332,17 +8845,20 @@
           "industry",
           "specializationId",
           "specialization",
-          "country",
-          "city",
+          "locations",
+          "locationIds",
+          "addresses",
+          "suburbsAndPostcodes",
           "website",
-          "tobSigned",
-          "feePercentage",
-          "guaranteePeriod",
+          "seekJobMarketUrl",
+          "linkedinJobMarketUrl",
+          "generalDescription",
           "status",
           "quality",
-          "notes",
           "lastContactedAt",
+          "lastContactedById",
           "lastContactType",
+          "lastContactCategory",
           "lastContactNotes",
           "lastContactedBy",
           "consultantId",
@@ -7398,42 +8914,49 @@
           },
           "industryId": {
             "type": "string",
-            "description": "Industry ID"
+            "description": "Industry ID (see /industries)"
           },
           "specializationId": {
             "type": "string",
-            "description": "Specialization ID"
+            "description": "Specialization ID (see /specializations)"
           },
-          "country": {
-            "type": "string",
-            "description": "Country",
-            "example": "Australia"
+          "locationIds": {
+            "description": "Location nodes this client hires from — its market, not its office address. At least one is required (country level at minimum); mixed granularity is fine.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
-          "city": {
-            "type": "string",
-            "description": "City",
-            "example": "Brisbane"
+          "addresses": {
+            "description": "The client's own physical office address(es) — distinct from `locationIds` above",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "suburbsAndPostcodes": {
+            "description": "The client's own office suburb/postcode(s) — same distinction as `addresses`",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "website": {
             "type": "string",
             "description": "Website URL",
             "example": "https://acme.com"
           },
-          "tobSigned": {
-            "type": "boolean",
-            "description": "Terms of Business signed",
-            "default": false
+          "seekJobMarketUrl": {
+            "type": "string",
+            "description": "Seek / Job Street job market URL"
           },
-          "feePercentage": {
-            "type": "number",
-            "description": "Fee as percentage of package (null until agreed)",
-            "example": 15
+          "linkedinJobMarketUrl": {
+            "type": "string",
+            "description": "LinkedIn job market URL"
           },
-          "guaranteePeriod": {
-            "type": "number",
-            "description": "Guarantee period in days",
-            "example": 90,
-            "default": 90
+          "generalDescription": {
+            "type": "string",
+            "description": "General description of the company"
           },
           "status": {
             "type": "string",
@@ -7461,7 +8984,9 @@
           }
         },
         "required": [
-          "companyName"
+          "companyName",
+          "industryId",
+          "locationIds"
         ]
       },
       "UpdateClientDto": {
@@ -7474,42 +8999,49 @@
           },
           "industryId": {
             "type": "string",
-            "description": "Industry ID"
+            "description": "Industry ID (see /industries)"
           },
           "specializationId": {
             "type": "string",
-            "description": "Specialization ID"
+            "description": "Specialization ID (see /specializations)"
           },
-          "country": {
-            "type": "string",
-            "description": "Country",
-            "example": "Australia"
+          "locationIds": {
+            "description": "Location nodes this client hires from — its market, not its office address. At least one is required (country level at minimum); mixed granularity is fine.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
-          "city": {
-            "type": "string",
-            "description": "City",
-            "example": "Brisbane"
+          "addresses": {
+            "description": "The client's own physical office address(es) — distinct from `locationIds` above",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "suburbsAndPostcodes": {
+            "description": "The client's own office suburb/postcode(s) — same distinction as `addresses`",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "website": {
             "type": "string",
             "description": "Website URL",
             "example": "https://acme.com"
           },
-          "tobSigned": {
-            "type": "boolean",
-            "description": "Terms of Business signed",
-            "default": false
+          "seekJobMarketUrl": {
+            "type": "string",
+            "description": "Seek / Job Street job market URL"
           },
-          "feePercentage": {
-            "type": "number",
-            "description": "Fee as percentage of package (null until agreed)",
-            "example": 15
+          "linkedinJobMarketUrl": {
+            "type": "string",
+            "description": "LinkedIn job market URL"
           },
-          "guaranteePeriod": {
-            "type": "number",
-            "description": "Guarantee period in days",
-            "example": 90,
-            "default": 90
+          "generalDescription": {
+            "type": "string",
+            "description": "General description of the company"
           },
           "status": {
             "type": "string",
@@ -7537,36 +9069,6 @@
           }
         }
       },
-      "AddClientNoteDto": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "string",
-            "description": "Note content",
-            "example": "Called to confirm the Terms of Business."
-          }
-        },
-        "required": [
-          "content"
-        ]
-      },
-      "UpdateClientNoteDto": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "string",
-            "description": "New note content",
-            "example": "Called to confirm the Terms of Business."
-          },
-          "expectedVersion": {
-            "type": "string",
-            "description": "Optimistic concurrency check: the note's own `editedAt ?? timestamp` as last seen by the caller. If it no longer matches, the note was changed by someone else in the meantime and the request is rejected with 409."
-          }
-        },
-        "required": [
-          "content"
-        ]
-      },
       "StakeholderEntity": {
         "type": "object",
         "properties": {
@@ -7585,22 +9087,37 @@
             "nullable": true,
             "description": "Resolved client company name"
           },
-          "fullName": {
+          "firstName": {
             "type": "string",
-            "example": "Jane Doe"
+            "nullable": true,
+            "example": "Jane"
           },
-          "jobTitle": {
+          "lastName": {
+            "type": "string",
+            "nullable": true,
+            "example": "Doe"
+          },
+          "jobTitleId": {
             "type": "string",
             "nullable": true
           },
-          "roleTypeId": {
+          "jobTitle": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved job title — the company's own words for the role"
+          },
+          "stakeholderRoleTypeId": {
             "type": "string",
             "nullable": true
           },
           "roleType": {
             "type": "string",
             "nullable": true,
-            "description": "Resolved role type name"
+            "description": "Resolved role type name — the consultant's classification of the role"
+          },
+          "linkedinUrl": {
+            "type": "string",
+            "nullable": true
           },
           "email": {
             "type": "string",
@@ -7610,13 +9127,19 @@
             "type": "string",
             "nullable": true
           },
-          "isDecisionMaker": {
-            "type": "boolean",
-            "example": false
+          "coverage": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Resolved names of the Location nodes this stakeholder covers — their own territory, independent of where the client sits"
           },
-          "notes": {
-            "type": "string",
-            "nullable": true
+          "coverageLocationIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Location IDs backing `coverage` — what an editable multi-select actually binds to"
           },
           "lastContactedAt": {
             "format": "date-time",
@@ -7624,10 +9147,20 @@
             "nullable": true,
             "description": "Latest contactedAt across this stakeholder's own contact history; null if never contacted"
           },
+          "lastContactedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant who made the most recent contact"
+          },
           "lastContactType": {
             "type": "string",
             "nullable": true,
             "description": "Contact method of the most recent contact (email, call, meeting, linkedin)"
+          },
+          "lastContactCategory": {
+            "type": "string",
+            "nullable": true,
+            "description": "Category of the most recent contact — distinct from lastContactType, which is the channel"
           },
           "lastContactNotes": {
             "type": "string",
@@ -7638,6 +9171,16 @@
             "type": "string",
             "nullable": true,
             "description": "Resolved name of the consultant who made the most recent contact"
+          },
+          "isAccurate": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Whether these details have been verified — null means 'not yet checked', which isn't the same as false"
+          },
+          "inaccurateReason": {
+            "type": "string",
+            "nullable": true,
+            "description": "What is wrong with the details, when isAccurate is false"
           },
           "createdAt": {
             "format": "date-time",
@@ -7653,18 +9196,25 @@
           "displayId",
           "clientId",
           "companyName",
-          "fullName",
+          "firstName",
+          "lastName",
+          "jobTitleId",
           "jobTitle",
-          "roleTypeId",
+          "stakeholderRoleTypeId",
           "roleType",
+          "linkedinUrl",
           "email",
           "mobile",
-          "isDecisionMaker",
-          "notes",
+          "coverage",
+          "coverageLocationIds",
           "lastContactedAt",
+          "lastContactedById",
           "lastContactType",
+          "lastContactCategory",
           "lastContactNotes",
           "lastContactedBy",
+          "isAccurate",
+          "inaccurateReason",
           "createdAt",
           "updatedAt"
         ]
@@ -7714,19 +9264,27 @@
             "type": "string",
             "description": "Client ID this stakeholder belongs to"
           },
-          "fullName": {
+          "firstName": {
             "type": "string",
-            "description": "Full name",
-            "example": "Jane Doe"
+            "description": "First name",
+            "example": "Jane"
           },
-          "jobTitle": {
+          "lastName": {
             "type": "string",
-            "description": "Job title",
-            "example": "Head of Talent"
+            "description": "Last name",
+            "example": "Doe"
+          },
+          "jobTitleId": {
+            "type": "string",
+            "description": "Job title ID (see /job-titles) — the company's own words for the role"
           },
           "roleTypeId": {
             "type": "string",
-            "description": "Role type ID (see /stakeholder-role-types)"
+            "description": "Role type ID (see /stakeholder-role-types) — takes precedence over the title-derived classification"
+          },
+          "linkedinUrl": {
+            "type": "string",
+            "description": "LinkedIn profile URL"
           },
           "email": {
             "type": "string",
@@ -7738,19 +9296,24 @@
             "description": "Mobile number",
             "example": "+61 412 345 678"
           },
-          "isDecisionMaker": {
-            "type": "boolean",
-            "description": "Whether this contact is a decision maker",
-            "default": false
+          "coverageLocationIds": {
+            "description": "Location ids this stakeholder covers. Matched against a consultant's scope on its own, independent of where the client sits.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
-          "notes": {
+          "isAccurate": {
+            "type": "boolean",
+            "description": "Whether these details have been verified. Omit for 'not yet checked' — which isn't the same as false."
+          },
+          "inaccurateReason": {
             "type": "string",
-            "description": "Notes"
+            "description": "What is wrong with the details, when isAccurate is false"
           }
         },
         "required": [
-          "clientId",
-          "fullName"
+          "clientId"
         ]
       },
       "UpdateStakeholderDto": {
@@ -7760,19 +9323,27 @@
             "type": "string",
             "description": "Client ID this stakeholder belongs to"
           },
-          "fullName": {
+          "firstName": {
             "type": "string",
-            "description": "Full name",
-            "example": "Jane Doe"
+            "description": "First name",
+            "example": "Jane"
           },
-          "jobTitle": {
+          "lastName": {
             "type": "string",
-            "description": "Job title",
-            "example": "Head of Talent"
+            "description": "Last name",
+            "example": "Doe"
+          },
+          "jobTitleId": {
+            "type": "string",
+            "description": "Job title ID (see /job-titles) — the company's own words for the role"
           },
           "roleTypeId": {
             "type": "string",
-            "description": "Role type ID (see /stakeholder-role-types)"
+            "description": "Role type ID (see /stakeholder-role-types) — takes precedence over the title-derived classification"
+          },
+          "linkedinUrl": {
+            "type": "string",
+            "description": "LinkedIn profile URL"
           },
           "email": {
             "type": "string",
@@ -7784,14 +9355,20 @@
             "description": "Mobile number",
             "example": "+61 412 345 678"
           },
-          "isDecisionMaker": {
-            "type": "boolean",
-            "description": "Whether this contact is a decision maker",
-            "default": false
+          "coverageLocationIds": {
+            "description": "Location ids this stakeholder covers. Matched against a consultant's scope on its own, independent of where the client sits.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
-          "notes": {
+          "isAccurate": {
+            "type": "boolean",
+            "description": "Whether these details have been verified. Omit for 'not yet checked' — which isn't the same as false."
+          },
+          "inaccurateReason": {
             "type": "string",
-            "description": "Notes"
+            "description": "What is wrong with the details, when isAccurate is false"
           }
         }
       },
@@ -7813,6 +9390,11 @@
             "type": "string",
             "description": "Notes from this contact"
           },
+          "category": {
+            "type": "string",
+            "description": "Which kind of note this is — \"Detailed Brief Notes\" or \"Outreach Campaign History\". Distinct from contactType, which is the channel.",
+            "example": "Detailed Brief Notes"
+          },
           "contactedAt": {
             "type": "string",
             "description": "When this contact happened (ISO 8601); defaults to now if omitted — set explicitly to log a past contact",
@@ -7829,12 +9411,24 @@
           "id": {
             "type": "string"
           },
+          "displayId": {
+            "type": "string",
+            "example": "CN-0001"
+          },
           "stakeholderId": {
             "type": "string"
           },
           "contactType": {
             "type": "string",
-            "example": "call"
+            "nullable": true,
+            "example": "call",
+            "description": "Channel: email, call, meeting, linkedin"
+          },
+          "category": {
+            "type": "string",
+            "nullable": true,
+            "example": "Detailed Brief Notes",
+            "description": "Kind of note — distinct from contactType, which is the channel."
           },
           "contactedById": {
             "type": "string",
@@ -7856,13 +9450,275 @@
         },
         "required": [
           "id",
+          "displayId",
           "stakeholderId",
           "contactType",
+          "category",
           "contactedById",
           "notes",
           "contactedAt",
           "createdAt"
         ]
+      },
+      "TobEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayId": {
+            "type": "string",
+            "example": "TOB-0001"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "companyName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved client company name"
+          },
+          "fileName": {
+            "type": "string",
+            "nullable": true,
+            "example": "Acme TOB 2024 signed.pdf"
+          },
+          "fileType": {
+            "type": "string",
+            "nullable": true,
+            "example": "TOB Document"
+          },
+          "sourceFileLink": {
+            "type": "string",
+            "nullable": true,
+            "description": "Where the document lives (e.g. a SharePoint URL)"
+          },
+          "clientTobRepresentative": {
+            "type": "string",
+            "nullable": true,
+            "description": "Who signed/agreed on the client side — a name, sometimes with contact details attached"
+          },
+          "linktalRepresentativeId": {
+            "type": "string",
+            "nullable": true
+          },
+          "linktalRepresentative": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved name of the consultant who signed on Linktal’s side"
+          },
+          "pricing": {
+            "type": "string",
+            "nullable": true,
+            "description": "Pricing schedule, as written. Free text — real values are tiered, not a single percentage.",
+            "example": "13%-(80k below)15%-18%"
+          },
+          "guaranteePeriod": {
+            "type": "number",
+            "nullable": true,
+            "description": "Guarantee period in days. Never used to derive Placement.guaranteeEndDate, which is entered manually — a client can hold several TOBs that disagree.",
+            "example": 180
+          },
+          "paymentTerm": {
+            "type": "string",
+            "nullable": true,
+            "example": "30 days from invoice"
+          },
+          "invoiceContactName": {
+            "type": "string",
+            "nullable": true
+          },
+          "invoiceContactEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "displayId",
+          "clientId",
+          "companyName",
+          "fileName",
+          "fileType",
+          "sourceFileLink",
+          "clientTobRepresentative",
+          "linktalRepresentativeId",
+          "linktalRepresentative",
+          "pricing",
+          "guaranteePeriod",
+          "paymentTerm",
+          "invoiceContactName",
+          "invoiceContactEmail",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "PaginatedTobsEntity": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TobEntity"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Total rows matching the filters",
+            "example": 87
+          },
+          "page": {
+            "type": "number",
+            "description": "Current page (1-based)",
+            "example": 1
+          },
+          "pageSize": {
+            "type": "number",
+            "description": "Items per page",
+            "example": 20
+          },
+          "pageCount": {
+            "type": "number",
+            "description": "Total number of pages",
+            "example": 5
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "page",
+          "pageSize",
+          "pageCount"
+        ]
+      },
+      "CreateTobDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "Client ID this agreement belongs to"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Name of the source document",
+            "example": "Acme TOB 2024 signed.pdf"
+          },
+          "fileType": {
+            "type": "string",
+            "description": "Kind of document",
+            "example": "TOB Document"
+          },
+          "sourceFileLink": {
+            "type": "string",
+            "description": "Where the document lives (e.g. a SharePoint URL)"
+          },
+          "clientTobRepresentative": {
+            "type": "string",
+            "description": "Who signed/agreed on the client side — a name, sometimes with contact details attached",
+            "example": "Jane Doe, Head of Talent"
+          },
+          "linktalRepresentativeId": {
+            "type": "string",
+            "description": "Consultant ID who signed on Linktal’s side"
+          },
+          "pricing": {
+            "type": "string",
+            "description": "Pricing schedule, as written. Free text: real values are tiered, not a single percentage.",
+            "example": "13%-(80k below)15%-18%"
+          },
+          "guaranteePeriod": {
+            "type": "number",
+            "description": "Guarantee period in **days** (the sheet writes \"6 Months\"; store 180)",
+            "minimum": 0,
+            "maximum": 3650,
+            "example": 180
+          },
+          "paymentTerm": {
+            "type": "string",
+            "description": "Payment terms",
+            "example": "30 days from invoice"
+          },
+          "invoiceContactName": {
+            "type": "string",
+            "description": "Who to invoice at the client",
+            "example": "Accounts Payable"
+          },
+          "invoiceContactEmail": {
+            "type": "string",
+            "description": "Invoice contact email",
+            "example": "ap@acme.com"
+          }
+        },
+        "required": [
+          "clientId"
+        ]
+      },
+      "UpdateTobDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "Client ID this agreement belongs to"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Name of the source document",
+            "example": "Acme TOB 2024 signed.pdf"
+          },
+          "fileType": {
+            "type": "string",
+            "description": "Kind of document",
+            "example": "TOB Document"
+          },
+          "sourceFileLink": {
+            "type": "string",
+            "description": "Where the document lives (e.g. a SharePoint URL)"
+          },
+          "clientTobRepresentative": {
+            "type": "string",
+            "description": "Who signed/agreed on the client side — a name, sometimes with contact details attached",
+            "example": "Jane Doe, Head of Talent"
+          },
+          "linktalRepresentativeId": {
+            "type": "string",
+            "description": "Consultant ID who signed on Linktal’s side"
+          },
+          "pricing": {
+            "type": "string",
+            "description": "Pricing schedule, as written. Free text: real values are tiered, not a single percentage.",
+            "example": "13%-(80k below)15%-18%"
+          },
+          "guaranteePeriod": {
+            "type": "number",
+            "description": "Guarantee period in **days** (the sheet writes \"6 Months\"; store 180)",
+            "minimum": 0,
+            "maximum": 3650,
+            "example": 180
+          },
+          "paymentTerm": {
+            "type": "string",
+            "description": "Payment terms",
+            "example": "30 days from invoice"
+          },
+          "invoiceContactName": {
+            "type": "string",
+            "description": "Who to invoice at the client",
+            "example": "Accounts Payable"
+          },
+          "invoiceContactEmail": {
+            "type": "string",
+            "description": "Invoice contact email",
+            "example": "ap@acme.com"
+          }
+        }
       },
       "JobOrderPipelineCandidateEntity": {
         "type": "object",
@@ -7938,21 +9794,49 @@
             "type": "string",
             "nullable": true
           },
+          "jobTitleId": {
+            "type": "string",
+            "nullable": true
+          },
           "jobTitle": {
             "type": "string",
-            "example": "Production Manager"
+            "nullable": true,
+            "example": "Production Manager",
+            "description": "Resolved job title — the client's own words for the role"
           },
-          "department": {
+          "jobRoleTypeId": {
             "type": "string",
             "nullable": true
           },
-          "city": {
+          "jobRoleType": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved role type name — the consultant's classification of the same job"
+          },
+          "locationId": {
             "type": "string",
             "nullable": true
           },
-          "suburb": {
+          "location": {
             "type": "string",
-            "nullable": true
+            "nullable": true,
+            "description": "Resolved location name"
+          },
+          "locationLevel": {
+            "type": "string",
+            "enum": [
+              "COUNTRY",
+              "STATE",
+              "CITY",
+              "SUBURB"
+            ],
+            "nullable": true,
+            "description": "Which rung of the geography tree `location` sits on"
+          },
+          "jobResearchId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The ClientJobResearch row this job order originated from, if any"
           },
           "salaryMin": {
             "type": "number",
@@ -7966,6 +9850,11 @@
             "type": "string",
             "nullable": true,
             "example": "AUD"
+          },
+          "estimatedValue": {
+            "type": "number",
+            "nullable": true,
+            "description": "Forecast value, entered before anyone is placed — distinct from a Placement fee"
           },
           "openings": {
             "type": "number",
@@ -7982,6 +9871,11 @@
           "requirements": {
             "type": "string",
             "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true,
+            "description": "Briefing notes — internal, distinct from the public-facing description/requirements copy"
           },
           "status": {
             "type": "string",
@@ -8004,12 +9898,6 @@
             "type": "number",
             "nullable": true,
             "description": "1=High, 2=Medium, 3=Low"
-          },
-          "isReplacement": {
-            "type": "boolean"
-          },
-          "isCollaborated": {
-            "type": "boolean"
           },
           "receivedAt": {
             "format": "date-time",
@@ -8040,22 +9928,26 @@
           "displayId",
           "clientId",
           "consultantId",
+          "jobTitleId",
           "jobTitle",
-          "department",
-          "city",
-          "suburb",
+          "jobRoleTypeId",
+          "jobRoleType",
+          "locationId",
+          "location",
+          "locationLevel",
+          "jobResearchId",
           "salaryMin",
           "salaryMax",
           "salaryCurrency",
+          "estimatedValue",
           "openings",
           "filledCount",
           "description",
           "requirements",
+          "notes",
           "status",
           "quality",
           "priorityLevel",
-          "isReplacement",
-          "isCollaborated",
           "receivedAt",
           "closedAt",
           "createdAt",
@@ -8108,29 +10000,25 @@
             "type": "string",
             "description": "Client ID this job order belongs to"
           },
-          "jobTitle": {
+          "jobTitleId": {
             "type": "string",
-            "description": "Job title",
-            "example": "Production Manager"
+            "description": "Job title ID (see /job-titles) — the client's own words for the role"
+          },
+          "jobRoleTypeId": {
+            "type": "string",
+            "description": "Job role type ID (see /job-role-types) — the consultant's classification"
           },
           "consultantId": {
             "type": "string",
             "description": "Owning consultant ID"
           },
-          "department": {
+          "locationId": {
             "type": "string",
-            "description": "Department",
-            "example": "Operations"
+            "description": "Most specific known Location node (see /locations) — replaces the old city/suburb columns"
           },
-          "city": {
+          "jobResearchId": {
             "type": "string",
-            "description": "City",
-            "example": "Brisbane"
-          },
-          "suburb": {
-            "type": "string",
-            "description": "Suburb",
-            "example": "Fortitude Valley"
+            "description": "ClientJobResearch row this job order originated from, if any (see /job-research)"
           },
           "salaryMin": {
             "type": "number",
@@ -8147,6 +10035,11 @@
             "description": "Salary currency",
             "example": "AUD",
             "default": "AUD"
+          },
+          "estimatedValue": {
+            "type": "number",
+            "description": "Forecast value of this job order, entered before anyone is placed — distinct from a Placement fee",
+            "example": 25000
           },
           "openings": {
             "type": "number",
@@ -8167,6 +10060,10 @@
           "requirements": {
             "type": "string",
             "description": "Requirements"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Briefing notes — internal, distinct from the public-facing description/requirements copy"
           },
           "status": {
             "type": "string",
@@ -8194,21 +10091,10 @@
             "description": "Priority: 1=High, 2=Medium, 3=Low",
             "example": 2,
             "default": 2
-          },
-          "isReplacement": {
-            "type": "boolean",
-            "description": "This job order was opened to replace a placement that fell through within the guarantee period; defaults to false",
-            "default": false
-          },
-          "isCollaborated": {
-            "type": "boolean",
-            "description": "Two or more consultants worked this job order together (split-desk); defaults to false",
-            "default": false
           }
         },
         "required": [
-          "clientId",
-          "jobTitle"
+          "clientId"
         ]
       },
       "UpdateJobOrderDto": {
@@ -8218,29 +10104,25 @@
             "type": "string",
             "description": "Client ID this job order belongs to"
           },
-          "jobTitle": {
+          "jobTitleId": {
             "type": "string",
-            "description": "Job title",
-            "example": "Production Manager"
+            "description": "Job title ID (see /job-titles) — the client's own words for the role"
+          },
+          "jobRoleTypeId": {
+            "type": "string",
+            "description": "Job role type ID (see /job-role-types) — the consultant's classification"
           },
           "consultantId": {
             "type": "string",
             "description": "Owning consultant ID"
           },
-          "department": {
+          "locationId": {
             "type": "string",
-            "description": "Department",
-            "example": "Operations"
+            "description": "Most specific known Location node (see /locations) — replaces the old city/suburb columns"
           },
-          "city": {
+          "jobResearchId": {
             "type": "string",
-            "description": "City",
-            "example": "Brisbane"
-          },
-          "suburb": {
-            "type": "string",
-            "description": "Suburb",
-            "example": "Fortitude Valley"
+            "description": "ClientJobResearch row this job order originated from, if any (see /job-research)"
           },
           "salaryMin": {
             "type": "number",
@@ -8257,6 +10139,11 @@
             "description": "Salary currency",
             "example": "AUD",
             "default": "AUD"
+          },
+          "estimatedValue": {
+            "type": "number",
+            "description": "Forecast value of this job order, entered before anyone is placed — distinct from a Placement fee",
+            "example": 25000
           },
           "openings": {
             "type": "number",
@@ -8277,6 +10164,10 @@
           "requirements": {
             "type": "string",
             "description": "Requirements"
+          },
+          "notes": {
+            "type": "string",
+            "description": "Briefing notes — internal, distinct from the public-facing description/requirements copy"
           },
           "status": {
             "type": "string",
@@ -8304,16 +10195,348 @@
             "description": "Priority: 1=High, 2=Medium, 3=Low",
             "example": 2,
             "default": 2
+          }
+        }
+      },
+      "JobResearchEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
           },
-          "isReplacement": {
-            "type": "boolean",
-            "description": "This job order was opened to replace a placement that fell through within the guarantee period; defaults to false",
-            "default": false
+          "displayId": {
+            "type": "string",
+            "example": "JR-0001"
           },
-          "isCollaborated": {
+          "clientId": {
+            "type": "string"
+          },
+          "companyName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved client company name"
+          },
+          "consultantId": {
+            "type": "string",
+            "nullable": true
+          },
+          "consultant": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved name of the consultant who researched this"
+          },
+          "locationId": {
+            "type": "string",
+            "nullable": true
+          },
+          "location": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved Location node name"
+          },
+          "locationLevel": {
+            "type": "string",
+            "nullable": true,
+            "description": "Rung of the location node (COUNTRY/STATE/CITY/SUBURB)"
+          },
+          "jobTitleId": {
+            "type": "string",
+            "nullable": true
+          },
+          "jobTitle": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved job title — the advertiser’s own words"
+          },
+          "jobRoleTypeId": {
+            "type": "string",
+            "nullable": true
+          },
+          "jobRoleType": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved role type — the consultant’s classification of the ad"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COLD",
+              "WARM",
+              "TRADED"
+            ],
+            "nullable": true,
+            "description": "Snapshot of the client’s status when logged — not a live reference to Client.status"
+          },
+          "seekUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "permanentUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "postedDate": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "When the ad was posted"
+          },
+          "contactEmailFromAd": {
+            "type": "string",
+            "nullable": true
+          },
+          "salaryRange": {
+            "type": "string",
+            "nullable": true,
+            "description": "Salary as written in the ad. Free text, copied verbatim."
+          },
+          "isContacted": {
             "type": "boolean",
-            "description": "Two or more consultants worked this job order together (split-desk); defaults to false",
-            "default": false
+            "description": "Whether the advertiser has been approached about this ad"
+          },
+          "researchedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "When the research was logged (distinct from postedDate)"
+          },
+          "lastContactedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true
+          },
+          "lastContactedById": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "jobOrderId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Job Order this research was converted into; null if it has not become a brief"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "displayId",
+          "clientId",
+          "companyName",
+          "consultantId",
+          "consultant",
+          "locationId",
+          "location",
+          "locationLevel",
+          "jobTitleId",
+          "jobTitle",
+          "jobRoleTypeId",
+          "jobRoleType",
+          "status",
+          "seekUrl",
+          "permanentUrl",
+          "postedDate",
+          "contactEmailFromAd",
+          "salaryRange",
+          "isContacted",
+          "researchedAt",
+          "lastContactedAt",
+          "lastContactedById",
+          "notes",
+          "jobOrderId",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "PaginatedJobResearchEntity": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobResearchEntity"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "Total rows matching the filters",
+            "example": 1240
+          },
+          "page": {
+            "type": "number",
+            "description": "Current page (1-based)",
+            "example": 1
+          },
+          "pageSize": {
+            "type": "number",
+            "description": "Items per page",
+            "example": 20
+          },
+          "pageCount": {
+            "type": "number",
+            "description": "Total number of pages",
+            "example": 62
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "page",
+          "pageSize",
+          "pageCount"
+        ]
+      },
+      "CreateJobResearchDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "Client ID the ad was placed by"
+          },
+          "consultantId": {
+            "type": "string",
+            "description": "Consultant who conducted the research. Usually a researcher, but not restricted to that role."
+          },
+          "locationId": {
+            "type": "string",
+            "description": "Most specific known Location node for the ad (see /locations) — replaces the sheet’s separate \"City Advertised\"/\"Suburbs\" columns"
+          },
+          "jobTitleId": {
+            "type": "string",
+            "description": "Job title ID (see /job-titles) — the advertiser’s own words"
+          },
+          "jobRoleTypeId": {
+            "type": "string",
+            "description": "Job role type ID (see /job-role-types) — the consultant’s classification of the ad"
+          },
+          "status": {
+            "type": "string",
+            "description": "Snapshot of the client’s status when this research was logged",
+            "enum": [
+              "COLD",
+              "WARM",
+              "TRADED"
+            ]
+          },
+          "seekUrl": {
+            "type": "string",
+            "description": "Link to the Seek listing"
+          },
+          "permanentUrl": {
+            "type": "string",
+            "description": "Permanent/archived link to the ad, if the original expires"
+          },
+          "postedDate": {
+            "type": "string",
+            "description": "When the ad was posted (ISO 8601)"
+          },
+          "contactEmailFromAd": {
+            "type": "string",
+            "description": "Contact email scraped from the ad"
+          },
+          "salaryRange": {
+            "type": "string",
+            "description": "Salary as written in the ad. Free text, copied verbatim.",
+            "example": "salary + super + FMCV + bonus scheme"
+          },
+          "isContacted": {
+            "type": "boolean",
+            "description": "Whether the advertiser has been approached about this ad. Prefer POST /job-research/:id/mark-contacted, which also records who and when; this is here for corrections."
+          },
+          "researchedAt": {
+            "type": "string",
+            "description": "When the research was logged (ISO 8601). Defaults to now."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Free-text notes on the ad"
+          }
+        },
+        "required": [
+          "clientId"
+        ]
+      },
+      "UpdateJobResearchDto": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "Client ID the ad was placed by"
+          },
+          "consultantId": {
+            "type": "string",
+            "description": "Consultant who conducted the research. Usually a researcher, but not restricted to that role."
+          },
+          "locationId": {
+            "type": "string",
+            "description": "Most specific known Location node for the ad (see /locations) — replaces the sheet’s separate \"City Advertised\"/\"Suburbs\" columns"
+          },
+          "jobTitleId": {
+            "type": "string",
+            "description": "Job title ID (see /job-titles) — the advertiser’s own words"
+          },
+          "jobRoleTypeId": {
+            "type": "string",
+            "description": "Job role type ID (see /job-role-types) — the consultant’s classification of the ad"
+          },
+          "status": {
+            "type": "string",
+            "description": "Snapshot of the client’s status when this research was logged",
+            "enum": [
+              "COLD",
+              "WARM",
+              "TRADED"
+            ]
+          },
+          "seekUrl": {
+            "type": "string",
+            "description": "Link to the Seek listing"
+          },
+          "permanentUrl": {
+            "type": "string",
+            "description": "Permanent/archived link to the ad, if the original expires"
+          },
+          "postedDate": {
+            "type": "string",
+            "description": "When the ad was posted (ISO 8601)"
+          },
+          "contactEmailFromAd": {
+            "type": "string",
+            "description": "Contact email scraped from the ad"
+          },
+          "salaryRange": {
+            "type": "string",
+            "description": "Salary as written in the ad. Free text, copied verbatim.",
+            "example": "salary + super + FMCV + bonus scheme"
+          },
+          "isContacted": {
+            "type": "boolean",
+            "description": "Whether the advertiser has been approached about this ad. Prefer POST /job-research/:id/mark-contacted, which also records who and when; this is here for corrections."
+          },
+          "researchedAt": {
+            "type": "string",
+            "description": "When the research was logged (ISO 8601). Defaults to now."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Free-text notes on the ad"
+          }
+        }
+      },
+      "MarkContactedDto": {
+        "type": "object",
+        "properties": {
+          "contactedAt": {
+            "type": "string",
+            "description": "When the contact happened (ISO 8601). Defaults to now. Who is taken from your session."
           }
         }
       },
@@ -8355,6 +10578,26 @@
             "type": "string",
             "example": "Jane Doe"
           },
+          "jobTitleId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Seniority is carried as a JobTitle (\"Consultant (Senior)\"), not its own enum."
+          },
+          "salary": {
+            "type": "number",
+            "nullable": true,
+            "description": "Monthly cost of this consultant."
+          },
+          "costTo": {
+            "type": "string",
+            "nullable": true,
+            "description": "P&L bucket this consultant's cost rolls up to."
+          },
+          "reportsToId": {
+            "type": "string",
+            "nullable": true,
+            "description": "This consultant's manager — powers the org chart. Null at the top of the tree."
+          },
           "roleId": {
             "type": "string",
             "nullable": true
@@ -8392,6 +10635,34 @@
             "items": {
               "type": "string"
             }
+          },
+          "specializations": {
+            "description": "Assigned specializations, narrowing the industry arm. A grant covers the node plus every child.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "specializationIds": {
+            "description": "Specialization IDs backing `specializations`",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "locations": {
+            "description": "Assigned locations — this consultant's patch, at any level. A grant covers the node plus every descendant.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "locationIds": {
+            "description": "Location IDs backing `locations`",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -8400,6 +10671,10 @@
           "azureId",
           "email",
           "fullName",
+          "jobTitleId",
+          "salary",
+          "costTo",
+          "reportsToId",
           "roleId",
           "isActive",
           "createdAt",
@@ -8442,6 +10717,50 @@
           "page",
           "pageSize",
           "pageCount"
+        ]
+      },
+      "ConsultantNodeEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayId": {
+            "type": "string",
+            "example": "consultant-0002"
+          },
+          "fullName": {
+            "type": "string",
+            "example": "Daniel Kee"
+          },
+          "reportsToId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Who this person reports to; null at the root of the chart"
+          },
+          "roleName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved role name"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether the account is active"
+          },
+          "depth": {
+            "type": "number",
+            "description": "Distance from the requested root — 0 for the root itself. Lets a client indent without walking parents.",
+            "example": 1
+          }
+        },
+        "required": [
+          "id",
+          "displayId",
+          "fullName",
+          "reportsToId",
+          "roleName",
+          "isActive",
+          "depth"
         ]
       },
       "UpdateMeDto": {
@@ -8533,6 +10852,36 @@
         },
         "required": [
           "industryIds"
+        ]
+      },
+      "SetConsultantSpecializationsDto": {
+        "type": "object",
+        "properties": {
+          "specializationIds": {
+            "description": "Specialization IDs (see /specializations) — replaces the whole set. Grant the coarse parent (\"Food\"); it covers every child (\"Food Bakery\", \"Food Meat\", ...).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "specializationIds"
+        ]
+      },
+      "SetConsultantLocationsDto": {
+        "type": "object",
+        "properties": {
+          "locationIds": {
+            "description": "Location IDs (see /locations) at any level — replaces the whole set. A grant covers the node plus every descendant, so \"All Malaysia\" is one COUNTRY id while a desk label like \"Brisbane GC QLD\" is two CITY ids. Wildcards must already be expanded into concrete ids by the caller.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "locationIds"
         ]
       },
       "PermissionSummaryEntity": {
@@ -8765,7 +11114,177 @@
           },
           "name": {
             "type": "string",
-            "example": "Blockchain Services"
+            "example": "Food - Bakery"
+          },
+          "industryId": {
+            "type": "string",
+            "description": "Specializations belong to exactly one Industry."
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Parent category, e.g. \"Food\" for \"Food - Bakery\". Null for a top-level category."
+          },
+          "ancestorIds": {
+            "description": "This specialization plus every ancestor. A consultant grant on any of these ids covers this row — see common/scope.ts.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "industryId",
+          "parentId",
+          "ancestorIds",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateSpecializationDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Specialization name",
+            "example": "Food - Bakery"
+          },
+          "industryId": {
+            "type": "string",
+            "description": "Industry this specialization belongs to. Names are unique per-industry, not globally."
+          },
+          "parentId": {
+            "type": "string",
+            "description": "Parent category, e.g. the id of \"Food\" when creating \"Food - Bakery\". Omit to create a top-level category."
+          }
+        },
+        "required": [
+          "name",
+          "industryId"
+        ]
+      },
+      "LocationEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "Sydney"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "COUNTRY",
+              "STATE",
+              "CITY",
+              "SUBURB"
+            ]
+          },
+          "postcode": {
+            "type": "string",
+            "nullable": true,
+            "description": "Only ever set at SUBURB level"
+          },
+          "geonameId": {
+            "type": "number",
+            "nullable": true,
+            "description": "GeoNames id — what makes the bulk load idempotent and re-runnable"
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "description": "null at COUNTRY level"
+          },
+          "ancestorIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Self plus every ancestor, root-last"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "level",
+          "postcode",
+          "geonameId",
+          "parentId",
+          "ancestorIds",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateLocationDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Node name",
+            "example": "Silverwater"
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "COUNTRY",
+              "STATE",
+              "CITY",
+              "SUBURB"
+            ],
+            "description": "Which rung this node sits on"
+          },
+          "parentId": {
+            "type": "string",
+            "description": "Parent node. Required for everything except COUNTRY, which sits at the root."
+          },
+          "postcode": {
+            "type": "string",
+            "description": "Only meaningful at SUBURB level",
+            "example": "2128"
+          },
+          "geonameId": {
+            "type": "number",
+            "description": "GeoNames id, if this node has one — keeps a later bulk load from duplicating it"
+          }
+        },
+        "required": [
+          "name",
+          "level"
+        ]
+      },
+      "JobTitleEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "Production Manager"
           },
           "isActive": {
             "type": "boolean"
@@ -8787,13 +11306,56 @@
           "updatedAt"
         ]
       },
-      "CreateSpecializationDto": {
+      "CreateJobTitleDto": {
         "type": "object",
         "properties": {
           "name": {
             "type": "string",
-            "description": "Specialization name",
-            "example": "Blockchain Services"
+            "description": "JobTitle name",
+            "example": "Production Manager"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "JobRoleTypeEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "CNC Machinist"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "isActive",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateJobRoleTypeDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "JobRoleType name",
+            "example": "CNC Machinist"
           }
         },
         "required": [
@@ -8808,7 +11370,7 @@
           },
           "name": {
             "type": "string",
-            "example": "Hiring Manager"
+            "example": "Procurement"
           },
           "isActive": {
             "type": "boolean"
@@ -8835,8 +11397,8 @@
         "properties": {
           "name": {
             "type": "string",
-            "description": "Role type name",
-            "example": "Hiring Manager"
+            "description": "StakeholderRoleType name",
+            "example": "Procurement"
           }
         },
         "required": [
@@ -8848,6 +11410,10 @@
         "properties": {
           "id": {
             "type": "string"
+          },
+          "displayId": {
+            "type": "string",
+            "example": "SUB-0001"
           },
           "candidateId": {
             "type": "string"
@@ -8893,6 +11459,7 @@
         },
         "required": [
           "id",
+          "displayId",
           "candidateId",
           "candidateName",
           "jobOrderId",
@@ -8970,6 +11537,10 @@
           "id": {
             "type": "string"
           },
+          "displayId": {
+            "type": "string",
+            "example": "INT-0001"
+          },
           "submissionId": {
             "type": "string"
           },
@@ -9006,6 +11577,7 @@
         },
         "required": [
           "id",
+          "displayId",
           "submissionId",
           "roundLabel",
           "interviewDate",
@@ -9089,7 +11661,6 @@
         "properties": {
           "displayId": {
             "type": "string",
-            "nullable": true,
             "example": "PLC-0001"
           },
           "id": {
@@ -9135,7 +11706,7 @@
             "format": "date-time",
             "type": "string",
             "nullable": true,
-            "description": "Auto: startDate + client.guaranteePeriod"
+            "description": "End of the guarantee period. Entered manually — guarantee terms live per-TOB and a client can hold several that disagree, so it is not derived from startDate."
           },
           "accountsNotified": {
             "type": "boolean"
@@ -9219,7 +11790,11 @@
           },
           "startDate": {
             "type": "string",
-            "description": "Candidate's start date = invoice date. guaranteeEndDate auto-calculates from this + the client's guarantee period."
+            "description": "Candidate's start date = invoice date."
+          },
+          "guaranteeEndDate": {
+            "type": "string",
+            "description": "End of the guarantee period. Entered manually — guarantee terms live per-TOB and a client can hold several that disagree, so it is not derived from startDate."
           },
           "accountsNotified": {
             "type": "boolean",
@@ -9270,7 +11845,11 @@
           },
           "startDate": {
             "type": "string",
-            "description": "Candidate's start date = invoice date. guaranteeEndDate auto-calculates from this + the client's guarantee period."
+            "description": "Candidate's start date = invoice date."
+          },
+          "guaranteeEndDate": {
+            "type": "string",
+            "description": "End of the guarantee period. Entered manually — guarantee terms live per-TOB and a client can hold several that disagree, so it is not derived from startDate."
           },
           "accountsNotified": {
             "type": "boolean",
@@ -9291,49 +11870,6 @@
             ]
           }
         }
-      },
-      "CandidateRoleTypeEntity": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string",
-            "example": "Permanent"
-          },
-          "isActive": {
-            "type": "boolean"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "updatedAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "isActive",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
-      "CreateCandidateRoleTypeDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Role type name",
-            "example": "Permanent"
-          }
-        },
-        "required": [
-          "name"
-        ]
       },
       "ErrorResponse": {
         "type": "object",

@@ -221,6 +221,7 @@ pnpm prisma:migrate   # Run migrations
 | File | Description |
 |------|-------------|
 | `docs/database-erd.md` | ERD, the two hierarchies, table reference |
+| `docs/workbook-import-discrepancies.md` | What the workbook importer can't resolve, and what needs deciding |
 | `docs/migrations.md` | DB migration workflow: rollout, rollback, deploy |
 | `docs/rbac-roles.md` | RBAC: permission matrix + the scoping rules (§3) |
 

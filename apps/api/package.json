@@ -18,6 +18,7 @@
     "openapi:gen": "ts-node --files scripts/generate-openapi.ts",
     "seed": "ts-node prisma/seed.ts",
     "inspect:excel": "ts-node scripts/inspect-excel.ts",
+    "import:workbook": "ts-node scripts/import-workbook.ts",
     "import:excel": "ts-node scripts/import-excel.ts",
     "import:placements": "ts-node scripts/import-placements.ts",
     "import:industries": "ts-node scripts/import-industries.ts",

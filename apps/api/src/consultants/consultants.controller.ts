@@ -10,7 +10,7 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ConsultantsService } from './consultants.service';
 import { CreateConsultantDto } from './dto/create-consultant.dto';
 import { UpdateConsultantDto } from './dto/update-consultant.dto';
@@ -20,6 +20,7 @@ import { SetConsultantIndustriesDto } from './dto/set-consultant-industries.dto'
 import { SetConsultantSpecializationsDto } from './dto/set-consultant-specializations.dto';
 import { SetConsultantLocationsDto } from './dto/set-consultant-locations.dto';
 import { ConsultantEntity } from './entities/consultant.entity';
+import { ConsultantNodeEntity } from './entities/consultant-node.entity';
 import { PaginatedConsultantsEntity } from './entities/paginated-consultants.entity';
 import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
 import { AuthUser } from '../auth/auth.types';
@@ -43,6 +44,26 @@ export class ConsultantsController {
   @ApiResponse({ status: 200, description: 'Paginated consultants', type: PaginatedConsultantsEntity })
   findAll(@Query() query: QueryConsultantsDto, @CurrentUser() user: AuthUser) {
     return this.consultants.findAll(query, user);
+  }
+
+  // Declared before `:id` — Nest matches routes in declaration order, so a
+  // literal segment registered after a param route would never be reached.
+  @Get('hierarchy')
+  @RequirePermission('consultant', 'read')
+  @ApiOperation({
+    operationId: 'getConsultantHierarchy',
+    summary:
+      'Org chart, or one person’s team. Presentation only — reporting lines are never a permission boundary (see docs/rbac-roles.md §3).',
+  })
+  @ApiQuery({
+    name: 'rootId',
+    required: false,
+    description:
+      'Return only this consultant and everyone beneath them ("my team"). Omit for the whole chart, rooted at everyone with no manager.',
+  })
+  @ApiResponse({ status: 200, description: 'Flat list, depth-ordered', type: ConsultantNodeEntity, isArray: true })
+  hierarchy(@Query('rootId') rootId?: string) {
+    return this.consultants.hierarchy(rootId);
   }
 
   @Get('me')

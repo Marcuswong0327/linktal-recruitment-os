@@ -42,6 +42,17 @@ const CONSULTANT_INDUSTRY_READ = 'consultant_industry:read';
 const CONSULTANT_SPECIALIZATION_READ = 'consultant_specialization:read';
 const CONSULTANT_LOCATION_READ = 'consultant_location:read';
 
+/** One row of the org-chart CTE — see `hierarchy`. */
+export type ConsultantNode = {
+  id: string;
+  displayId: string;
+  fullName: string;
+  reportsToId: string | null;
+  roleName: string | null;
+  isActive: boolean;
+  depth: number;
+};
+
 type ConsultantWithScope = {
   industries: { industryId: string; industry: { name: string } }[];
   specializations: { specializationId: string; specialization: { name: string } }[];
@@ -542,5 +553,59 @@ export class ConsultantsService {
       select: { name: true },
     });
     return role?.name === ADMIN_ROLE;
+  }
+
+  /**
+   * The org chart, or one person's subtree ("my team").
+   *
+   * **Presentation only — never a permission boundary.** Reporting to someone
+   * grants them nothing: row visibility is decided solely by the industry /
+   * location / ownership arms in `common/scope.ts`, and a manager already sees
+   * everything regardless of who reports to them (see `docs/rbac-roles.md` §3).
+   * Nothing in this method may be reused for access control.
+   *
+   * `depth` is the distance from the requested root, so the caller can render
+   * indentation without walking the parent chain itself.
+   */
+  async hierarchy(rootId: string | undefined): Promise<ConsultantNode[]> {
+    if (rootId) {
+      const exists = await this.prisma.consultant.findUnique({
+        where: { id: rootId },
+        select: { id: true },
+      });
+      if (!exists) {
+        throw new NotFoundException(`Consultant ${rootId} not found`);
+      }
+    }
+
+    // A recursive CTE rather than N queries or an in-memory tree walk: the
+    // depth is unbounded (nothing stops a five-deep chain) and this stays one
+    // round trip either way. `Prisma.sql` interpolation is parameterised, not
+    // string-concatenated.
+    //
+    // The `cycle` guard is not paranoia: `reportsToId` is a self-referencing FK
+    // with nothing preventing A -> B -> A, and without it a cycle would spin
+    // until the connection died. The path array is dropped from the result.
+    const rows = await this.prisma.$queryRaw<ConsultantNode[]>(Prisma.sql`
+      WITH RECURSIVE tree AS (
+        SELECT c.id, c."displayId", c."fullName", c."reportsToId", c."isActive",
+               c."roleId", 0 AS depth, ARRAY[c.id] AS path
+        FROM "Consultant" c
+        WHERE ${rootId ? Prisma.sql`c.id = ${rootId}` : Prisma.sql`c."reportsToId" IS NULL`}
+        UNION ALL
+        SELECT c.id, c."displayId", c."fullName", c."reportsToId", c."isActive",
+               c."roleId", tree.depth + 1, tree.path || c.id
+        FROM "Consultant" c
+        JOIN tree ON c."reportsToId" = tree.id
+        WHERE NOT c.id = ANY(tree.path)
+      )
+      SELECT tree.id, tree."displayId", tree."fullName", tree."reportsToId",
+             tree."isActive", tree.depth::int AS depth, r.name AS "roleName"
+      FROM tree
+      LEFT JOIN "Role" r ON r.id = tree."roleId"
+      ORDER BY tree.depth, tree."fullName"
+    `);
+
+    return rows;
   }
 }

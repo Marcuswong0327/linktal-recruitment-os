@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ConsultantsService } from './consultants.service';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { AuthUser } from '../auth/auth.types';
@@ -608,5 +608,71 @@ describe('ConsultantsService', () => {
       });
       expect(prisma.location.findMany).not.toHaveBeenCalled();
     });
+  });
+});
+
+// The org chart. Presentation only — `docs/rbac-roles.md` §3 is explicit that
+// reporting lines are not a permission boundary, so these tests pin the shape
+// of the query rather than any access behaviour.
+describe('ConsultantsService.hierarchy', () => {
+  function setup(rows: unknown[] = []) {
+    const queryRaw = jest.fn().mockResolvedValue(rows);
+    const findUnique = jest.fn().mockResolvedValue({ id: 'c1' });
+    const prisma = {
+      $queryRaw: queryRaw,
+      consultant: { findUnique },
+    } as unknown as ExtendedPrismaClient;
+    return { service: new ConsultantsService(prisma), queryRaw, findUnique };
+  }
+
+  it('roots the whole chart at everyone with no manager', async () => {
+    const { service, queryRaw, findUnique } = setup();
+    await service.hierarchy(undefined);
+
+    expect(findUnique).not.toHaveBeenCalled(); // nothing to validate
+    const sql = queryRaw.mock.calls[0][0].strings.join('');
+    expect(sql).toContain('WITH RECURSIVE');
+    expect(sql).toContain('IS NULL');
+  });
+
+  it('roots a "my team" query at the requested consultant', async () => {
+    const { service, queryRaw, findUnique } = setup();
+    await service.hierarchy('c1');
+
+    expect(findUnique).toHaveBeenCalledWith({ where: { id: 'c1' }, select: { id: true } });
+    // The id is parameterised, not interpolated into the SQL text.
+    expect(queryRaw.mock.calls[0][0].values).toContain('c1');
+  });
+
+  it('404s on an unknown root rather than returning an empty tree', async () => {
+    const { service, queryRaw } = setup();
+    (service as unknown as { prisma: { consultant: { findUnique: jest.Mock } } }).prisma.consultant.findUnique.mockResolvedValue(
+      null,
+    );
+    await expect(service.hierarchy('nope')).rejects.toThrow(NotFoundException);
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+
+  // reportsToId is a self-referencing FK with nothing stopping A -> B -> A;
+  // without the guard the CTE would spin until the connection died.
+  it('guards against a reporting cycle', async () => {
+    const { service, queryRaw } = setup();
+    await service.hierarchy(undefined);
+    const sql = queryRaw.mock.calls[0][0].strings.join('');
+    expect(sql).toContain('ARRAY[c.id]');
+    expect(sql).toContain('NOT c.id = ANY(tree.path)');
+  });
+
+  it('returns the rows depth-ordered, without the internal path column', async () => {
+    const rows = [
+      { id: 'c1', displayId: 'consultant-0001', fullName: 'Chen Yu', reportsToId: null, roleName: 'manager', isActive: true, depth: 0 },
+      { id: 'c2', displayId: 'consultant-0002', fullName: 'Daniel Kee', reportsToId: 'c1', roleName: 'consultant', isActive: true, depth: 1 },
+    ];
+    const { service, queryRaw } = setup(rows);
+    const result = await service.hierarchy(undefined);
+
+    expect(result).toEqual(rows);
+    expect(result[0]).not.toHaveProperty('path');
+    expect(queryRaw.mock.calls[0][0].strings.join('')).toContain('ORDER BY tree.depth');
   });
 });
