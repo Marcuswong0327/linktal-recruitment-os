@@ -5,12 +5,15 @@ import { Combobox } from '@base-ui/react/combobox';
 import { Check, ChevronDown, Plus } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
 const CREATE_SENTINEL = '__create__';
 
 export interface CreatableComboboxOption {
   id: string;
   name: string;
+  /** Renders the option as a colored pill (trigger + list item) instead of plain text — e.g. per-role-type coloring. Omit for the default plain look. */
+  triggerClassName?: string;
 }
 
 interface CreatableComboboxProps {
@@ -25,6 +28,15 @@ interface CreatableComboboxProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /**
+   * 'input' (default): the plain form-field look — a bordered box, used in
+   * sheets/forms. 'badge': the same trigger design as `ComboboxSelect`'s
+   * table-cell pills (Consultants' Role/Status columns) — a full-cell click
+   * overlay behind a centered, colored Badge — for use as a DataGrid cell.
+   */
+  variant?: 'input' | 'badge';
+  /** Accessible label for the trigger — required (and only used) when `variant="badge"`, same as `ComboboxSelect`'s `title`. */
+  title?: string;
 }
 
 /**
@@ -44,15 +56,23 @@ export function CreatableCombobox({
   placeholder,
   disabled,
   className,
+  variant = 'input',
+  title,
 }: CreatableComboboxProps) {
   const byId = React.useMemo(() => new Map(options.map((o) => [o.id, o])), [options]);
-  const label = byId.get(value)?.name ?? '';
+  const selected = byId.get(value);
+  const label = selected?.name ?? '';
 
   // The popup's own search text — separate from the trigger's displayed
   // value, and reset each time the popup opens so it always starts as a
   // fresh search rather than showing whatever was last typed.
   const [inputValue, setInputValue] = React.useState('');
   const [creating, setCreating] = React.useState(false);
+  // Only actually driven by the 'badge' trigger's full-cell overlay button
+  // below (mirrors ComboboxSelect) — harmless as a controlled prop either
+  // way for the plain 'input' trigger, which keeps toggling itself via its
+  // own Combobox.Trigger click.
+  const [open, setOpen] = React.useState(false);
 
   const trimmed = inputValue.trim();
   const hasExactMatch = options.some((o) => o.name.toLowerCase() === trimmed.toLowerCase());
@@ -92,32 +112,86 @@ export function CreatableCombobox({
       onValueChange={handleSelect}
       inputValue={inputValue}
       onInputValueChange={setInputValue}
-      onOpenChange={(open) => {
-        if (open) setInputValue('');
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setInputValue('');
       }}
       itemToStringValue={(item: string) => item}
       disabled={disabled || creating}
     >
-      <Combobox.Trigger
-        id={id}
-        className={cn(
-          'flex h-8 w-full items-center justify-between gap-1.5 rounded-2xl border border-transparent bg-input/50 px-3 py-2 text-sm whitespace-nowrap outline-none transition-[color,box-shadow] duration-200 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50',
-          className,
-        )}
-      >
-        <span
-          className={cn('min-w-0 flex-1 truncate text-left', !label && 'text-muted-foreground')}
+      {variant === 'badge' ? (
+        <>
+          {/* Full-cell click target — same pattern as ComboboxSelect/TagMultiSelect,
+              which need it absolute against the TableCell rather than sized via the
+              trigger's own (much smaller) box. */}
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-hidden
+            disabled={disabled}
+            onClick={() => setOpen(true)}
+            className={cn(
+              'absolute inset-0 rounded-md outline-none transition-colors hover:bg-accent/50 disabled:pointer-events-none',
+              open && 'bg-accent/50',
+            )}
+          />
+          <Combobox.Trigger
+            id={id}
+            aria-label={title ? `Change ${title.toLowerCase()}` : undefined}
+            className={cn(
+              'relative inline-flex max-w-full items-center gap-1 rounded-md border border-transparent px-1 py-0.5 text-left outline-none transition-colors hover:bg-accent/50 disabled:pointer-events-none disabled:opacity-50',
+              className,
+            )}
+          >
+            <Combobox.Value>
+              {() => (
+                <Badge className={cn('rounded-md font-normal', selected?.triggerClassName)}>
+                  {label || placeholder || 'Select…'}
+                </Badge>
+              )}
+            </Combobox.Value>
+          </Combobox.Trigger>
+        </>
+      ) : (
+        <Combobox.Trigger
+          id={id}
+          className={cn(
+            'flex h-8 w-full items-center justify-between gap-1.5 rounded-2xl border border-transparent bg-input/50 px-3 py-2 text-sm whitespace-nowrap outline-none transition-[color,box-shadow] duration-200 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50',
+            className,
+          )}
         >
-          <Combobox.Value>{() => label || placeholder || 'Select…'}</Combobox.Value>
-        </span>
-        <Combobox.Icon className="text-muted-foreground">
-          <ChevronDown className="pointer-events-none size-4 shrink-0" />
-        </Combobox.Icon>
-      </Combobox.Trigger>
+          <span
+            className={cn('min-w-0 flex-1 truncate text-left', !label && 'text-muted-foreground')}
+          >
+            <Combobox.Value>
+              {() =>
+                label && selected?.triggerClassName ? (
+                  <Badge className={cn('rounded-md font-normal', selected.triggerClassName)}>{label}</Badge>
+                ) : (
+                  label || placeholder || 'Select…'
+                )
+              }
+            </Combobox.Value>
+          </span>
+          <Combobox.Icon className="text-muted-foreground">
+            <ChevronDown className="pointer-events-none size-4 shrink-0" />
+          </Combobox.Icon>
+        </Combobox.Trigger>
+      )}
 
       <Combobox.Portal>
         <Combobox.Positioner align="start" sideOffset={4} className="isolate z-50">
-          <Combobox.Popup className="w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/5 duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 dark:ring-foreground/10">
+          <Combobox.Popup
+            className={cn(
+              // 'badge' trigger is a small pill — anchoring the popup to its
+              // width (as the 'input' trigger's popup does, matching its own
+              // wide box) would make the search box and list cramped, so it
+              // gets a fixed width instead, same as ComboboxSelect's popup.
+              variant === 'badge' ? 'w-56' : 'w-(--anchor-width)',
+              'max-w-(--available-width) origin-(--transform-origin) overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/5 duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 dark:ring-foreground/10',
+            )}
+          >
             <div className="p-1.5">
               <Combobox.Input
                 placeholder="Search or add new…"
@@ -130,7 +204,8 @@ export function CreatableCombobox({
             <Combobox.List className="max-h-64 overflow-y-auto p-1 pt-0">
               {(itemId: string) => {
                 const isCreate = itemId === CREATE_SENTINEL;
-                const itemLabel = isCreate ? trimmed : (byId.get(itemId)?.name ?? itemId);
+                const item = byId.get(itemId);
+                const itemLabel = isCreate ? trimmed : (item?.name ?? itemId);
                 return (
                   <Combobox.Item
                     key={itemId}
@@ -139,7 +214,13 @@ export function CreatableCombobox({
                   >
                     {isCreate ? <Plus className="size-3.5 shrink-0 text-muted-foreground" /> : null}
                     <span className="min-w-0 flex-1 truncate">
-                      {isCreate ? `Add "${itemLabel}"` : itemLabel}
+                      {isCreate ? (
+                        `Add "${itemLabel}"`
+                      ) : item?.triggerClassName ? (
+                        <Badge className={cn('rounded-md font-normal', item.triggerClassName)}>{itemLabel}</Badge>
+                      ) : (
+                        itemLabel
+                      )}
                     </span>
                     <Combobox.ItemIndicator className="shrink-0">
                       <Check className="size-4" />

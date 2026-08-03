@@ -3,7 +3,7 @@ import {
   Users,
   Cog,
   ScrollText,
-  Building2,
+  Contact,
   type LucideIcon,
   Mail,
   SquareCheck,
@@ -51,7 +51,7 @@ export const navGroups: NavGroup[] = [
   {
     label: 'OPERATIONS',
     items: [
-      { title: 'Companies', href: '/companies', icon: Building2 },
+      { title: 'Stakeholders', href: '/stakeholders', icon: Contact },
       { title: 'Job Orders', href: '/job-orders', icon: BookA },
       { title: 'Candidates', href: '/candidates', icon: UsersRound },
       { title: 'Submissions', href: '/submissions', icon: FileText, disabled: true },
