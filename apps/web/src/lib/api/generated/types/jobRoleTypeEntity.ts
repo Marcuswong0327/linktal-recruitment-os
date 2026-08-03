@@ -6,4 +6,10 @@
  * OpenAPI spec version: 1.0
  */
 
-export type CandidateSavedSearchEntityFilters = { [key: string]: unknown };
+export interface JobRoleTypeEntity {
+  id: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

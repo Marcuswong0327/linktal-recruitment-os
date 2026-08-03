@@ -26,7 +26,7 @@ pageSize?: number;
 sortBy?: GetStakeholdersSortBy;
 sortOrder?: GetStakeholdersSortOrder;
 /**
- * Free-text search across fullName, email, displayId and mobile
+ * Free-text search across firstName, lastName, email, displayId and mobile
  */
 q?: string;
 /**
@@ -46,7 +46,7 @@ jobTitle?: string;
  */
 roleTypeIds?: string[];
 /**
- * Filter by decision-maker flag
+ * Filter by JobTitle id(s)
  */
-isDecisionMaker?: boolean;
+jobTitleIds?: string[];
 };

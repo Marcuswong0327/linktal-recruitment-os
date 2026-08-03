@@ -29,7 +29,7 @@ pageSize?: number;
 sortBy?: GetCandidatesSortBy;
 sortOrder?: GetCandidatesSortOrder;
 /**
- * Free-text search across fullName, email, displayId, mobile, city, country, currentPosition, currentCompany, and industry/role type name
+ * Free-text search across firstName, lastName, email, displayId, mobile, currentRole, currentCompany, and location/industry/job role type name
  */
 q?: string;
 /**
@@ -41,17 +41,13 @@ statuses?: GetCandidatesStatusesItem[];
  */
 industryIds?: string[];
 /**
- * Filter by role type ID(s) (see /candidate-role-types)
+ * Filter by job role type ID(s) (see /job-role-types)
  */
-roleTypeIds?: string[];
+jobRoleTypeIds?: string[];
 /**
  * Filter by specialization ID(s) (see /specializations)
  */
 specializationIds?: string[];
-/**
- * Filter by skill tag(s) (exact match against the free-entry skills list)
- */
-skills?: string[];
 /**
  * Filter by owning consultant ID(s)
  */
@@ -65,7 +61,7 @@ submissionStatuses?: GetCandidatesSubmissionStatusesItem[];
  */
 placementStatuses?: GetCandidatesPlacementStatusesItem[];
 /**
- * Filter by location — matches city OR country (contains, case-insensitive)
+ * Filter by location name (contains, case-insensitive) — matches the candidate's own node only. Use locationIds to match descendants too.
  */
 location?: string;
 /**
@@ -73,19 +69,9 @@ location?: string;
  */
 currentCompany?: string;
 /**
- * Filter by current position (contains, case-insensitive)
+ * Filter by current role (contains, case-insensitive)
  */
-currentPosition?: string;
-/**
- * Minimum years of experience (inclusive)
- * @minimum 0
- */
-yearsExperienceMin?: number;
-/**
- * Maximum years of experience (inclusive)
- * @minimum 0
- */
-yearsExperienceMax?: number;
+currentRole?: string;
 /**
  * Only candidates last contacted on/after this date (ISO 8601)
  */
@@ -94,4 +80,8 @@ lastContactedFrom?: string;
  * Only candidates last contacted on/before this date (ISO 8601)
  */
 lastContactedTo?: string;
+/**
+ * Filter by Location id(s). Selecting a country or state matches every candidate beneath it, via the ancestor path.
+ */
+locationIds?: string[];
 };

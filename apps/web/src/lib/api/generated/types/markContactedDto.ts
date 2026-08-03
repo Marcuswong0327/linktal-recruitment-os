@@ -6,7 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 
-export interface AddClientNoteDto {
-  /** Note content */
-  content: string;
+export interface MarkContactedDto {
+  /** When the contact happened (ISO 8601). Defaults to now. Who is taken from your session. */
+  contactedAt?: string;
 }

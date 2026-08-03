@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { JobOrderEntityLocationLevel } from './jobOrderEntityLocationLevel';
 import type { JobOrderEntityQuality } from './jobOrderEntityQuality';
 import type { JobOrderEntityStatus } from './jobOrderEntityStatus';
 import type { JobOrderPipelineCandidateEntity } from './jobOrderPipelineCandidateEntity';
@@ -13,27 +14,71 @@ export interface JobOrderEntity {
   id: string;
   displayId: string;
   clientId: string;
+  /**
+     * Resolved client name — the company this role is for
+     * @nullable
+     */
+  clientName: string | null;
+  /**
+     * The client's human-readable id, for cross-referencing
+     * @nullable
+     */
+  clientDisplayId: string | null;
   /** @nullable */
   consultantId: string | null;
-  jobTitle: string;
   /** @nullable */
-  department: string | null;
+  jobTitleId: string | null;
+  /**
+     * Resolved job title — the client's own words for the role
+     * @nullable
+     */
+  jobTitle: string | null;
   /** @nullable */
-  city: string | null;
+  jobRoleTypeId: string | null;
+  /**
+     * Resolved role type name — the consultant's classification of the same job
+     * @nullable
+     */
+  jobRoleType: string | null;
   /** @nullable */
-  suburb: string | null;
+  locationId: string | null;
+  /**
+     * Resolved location name
+     * @nullable
+     */
+  location: string | null;
+  /**
+     * Which rung of the geography tree `location` sits on
+     * @nullable
+     */
+  locationLevel: JobOrderEntityLocationLevel;
+  /**
+     * The ClientJobResearch row this job order originated from, if any
+     * @nullable
+     */
+  jobResearchId: string | null;
   /** @nullable */
   salaryMin: number | null;
   /** @nullable */
   salaryMax: number | null;
   /** @nullable */
   salaryCurrency: string | null;
+  /**
+     * Forecast value, entered before anyone is placed — distinct from a Placement fee
+     * @nullable
+     */
+  estimatedValue: number | null;
   openings: number;
   filledCount: number;
   /** @nullable */
   description: string | null;
   /** @nullable */
   requirements: string | null;
+  /**
+     * Briefing notes — internal, distinct from the public-facing description/requirements copy
+     * @nullable
+     */
+  notes: string | null;
   status: JobOrderEntityStatus;
   quality: JobOrderEntityQuality;
   /**
@@ -41,8 +86,6 @@ export interface JobOrderEntity {
      * @nullable
      */
   priorityLevel: number | null;
-  isReplacement: boolean;
-  isCollaborated: boolean;
   receivedAt: string;
   /** @nullable */
   closedAt: string | null;

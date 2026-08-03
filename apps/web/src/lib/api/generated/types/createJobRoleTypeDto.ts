@@ -6,10 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 
-export interface CandidateRoleTypeEntity {
-  id: string;
+export interface CreateJobRoleTypeDto {
+  /** JobRoleType name */
   name: string;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
 }

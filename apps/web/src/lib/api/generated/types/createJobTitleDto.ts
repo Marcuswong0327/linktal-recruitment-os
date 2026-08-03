@@ -6,7 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 
-export interface CreateCandidateRoleTypeDto {
-  /** Role type name */
+export interface CreateJobTitleDto {
+  /** JobTitle name */
   name: string;
 }

@@ -9,18 +9,24 @@
 export interface UpdateStakeholderDto {
   /** Client ID this stakeholder belongs to */
   clientId?: string;
-  /** Full name */
-  fullName?: string;
-  /** Job title */
-  jobTitle?: string;
-  /** Role type ID (see /stakeholder-role-types) */
+  /** First name */
+  firstName?: string;
+  /** Last name */
+  lastName?: string;
+  /** Job title ID (see /job-titles) — the company's own words for the role */
+  jobTitleId?: string;
+  /** Role type ID (see /stakeholder-role-types) — takes precedence over the title-derived classification */
   roleTypeId?: string;
+  /** LinkedIn profile URL */
+  linkedinUrl?: string;
   /** Email address */
   email?: string;
   /** Mobile number */
   mobile?: string;
-  /** Whether this contact is a decision maker */
-  isDecisionMaker?: boolean;
-  /** Notes */
-  notes?: string;
+  /** Location ids this stakeholder covers. Matched against a consultant's scope on its own, independent of where the client sits. */
+  coverageLocationIds?: string[];
+  /** Whether these details have been verified. Omit for 'not yet checked' — which isn't the same as false. */
+  isAccurate?: boolean;
+  /** What is wrong with the details, when isAccurate is false */
+  inaccurateReason?: string;
 }

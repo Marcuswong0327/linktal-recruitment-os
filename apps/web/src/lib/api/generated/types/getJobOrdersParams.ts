@@ -48,17 +48,21 @@ clientId?: string;
  */
 consultantIds?: string[];
 /**
- * Filter by city (contains, case-insensitive)
+ * Filter by job title ID(s) (see /job-titles)
  */
-city?: string;
+jobTitleIds?: string[];
 /**
- * Filter by suburb (contains, case-insensitive)
+ * Filter by job role type ID(s) (see /job-role-types)
  */
-suburb?: string;
+jobRoleTypeIds?: string[];
 /**
- * Filter by department (contains, case-insensitive)
+ * Filter by location name (contains, case-insensitive) — matches the job order's own node only. Use locationIds to match descendants too.
  */
-department?: string;
+location?: string;
+/**
+ * Filter by Location id(s). Selecting a country or state matches every job order beneath it, via the ancestor path.
+ */
+locationIds?: string[];
 /**
  * Filter by priority level(s) (1=High, 2=Medium, 3=Low). Omit for all.
  */

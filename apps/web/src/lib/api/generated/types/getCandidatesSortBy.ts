@@ -11,10 +11,8 @@ export type GetCandidatesSortBy = typeof GetCandidatesSortBy[keyof typeof GetCan
 
 export const GetCandidatesSortBy = {
   displayId: 'displayId',
-  fullName: 'fullName',
-  familyName: 'familyName',
-  givenName: 'givenName',
-  yearsExperience: 'yearsExperience',
+  firstName: 'firstName',
+  lastName: 'lastName',
   lastContactedAt: 'lastContactedAt',
   status: 'status',
 } as const;

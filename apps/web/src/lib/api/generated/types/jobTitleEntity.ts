@@ -5,13 +5,11 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
-import type { CandidateSavedSearchEntityFilters } from './candidateSavedSearchEntityFilters';
 
-export interface CandidateSavedSearchEntity {
+export interface JobTitleEntity {
   id: string;
   name: string;
-  consultantId: string;
-  filters: CandidateSavedSearchEntityFilters;
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }

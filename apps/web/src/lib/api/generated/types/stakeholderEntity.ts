@@ -15,33 +15,54 @@ export interface StakeholderEntity {
      * @nullable
      */
   companyName: string | null;
-  fullName: string;
   /** @nullable */
+  firstName: string | null;
+  /** @nullable */
+  lastName: string | null;
+  /** @nullable */
+  jobTitleId: string | null;
+  /**
+     * Resolved job title — the company's own words for the role
+     * @nullable
+     */
   jobTitle: string | null;
   /** @nullable */
-  roleTypeId: string | null;
+  stakeholderRoleTypeId: string | null;
   /**
-     * Resolved role type name
+     * Resolved role type name — the consultant's classification of the role
      * @nullable
      */
   roleType: string | null;
   /** @nullable */
+  linkedinUrl: string | null;
+  /** @nullable */
   email: string | null;
   /** @nullable */
   mobile: string | null;
-  isDecisionMaker: boolean;
-  /** @nullable */
-  notes: string | null;
+  /** Resolved names of the Location nodes this stakeholder covers — their own territory, independent of where the client sits */
+  coverage: string[];
+  /** Location IDs backing `coverage` — what an editable multi-select actually binds to */
+  coverageLocationIds: string[];
   /**
      * Latest contactedAt across this stakeholder's own contact history; null if never contacted
      * @nullable
      */
   lastContactedAt: string | null;
   /**
+     * Consultant who made the most recent contact
+     * @nullable
+     */
+  lastContactedById: string | null;
+  /**
      * Contact method of the most recent contact (email, call, meeting, linkedin)
      * @nullable
      */
   lastContactType: string | null;
+  /**
+     * Category of the most recent contact — distinct from lastContactType, which is the channel
+     * @nullable
+     */
+  lastContactCategory: string | null;
   /**
      * Notes from the most recent contact
      * @nullable
@@ -52,6 +73,16 @@ export interface StakeholderEntity {
      * @nullable
      */
   lastContactedBy: string | null;
+  /**
+     * Whether these details have been verified — null means 'not yet checked', which isn't the same as false
+     * @nullable
+     */
+  isAccurate: boolean | null;
+  /**
+     * What is wrong with the details, when isAccurate is false
+     * @nullable
+     */
+  inaccurateReason: string | null;
   createdAt: string;
   updatedAt: string;
 }

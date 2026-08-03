@@ -8,8 +8,18 @@
 
 export interface StakeholderContactHistoryEntity {
   id: string;
+  displayId: string;
   stakeholderId: string;
-  contactType: string;
+  /**
+     * Channel: email, call, meeting, linkedin
+     * @nullable
+     */
+  contactType: string | null;
+  /**
+     * Kind of note — distinct from contactType, which is the channel.
+     * @nullable
+     */
+  category: string | null;
   /**
      * Consultant who made this contact
      * @nullable

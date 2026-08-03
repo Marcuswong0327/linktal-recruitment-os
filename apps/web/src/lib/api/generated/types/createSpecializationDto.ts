@@ -9,4 +9,8 @@
 export interface CreateSpecializationDto {
   /** Specialization name */
   name: string;
+  /** Industry this specialization belongs to. Names are unique per-industry, not globally. */
+  industryId: string;
+  /** Parent category, e.g. the id of "Food" when creating "Food - Bakery". Omit to create a top-level category. */
+  parentId?: string;
 }

@@ -44,13 +44,13 @@ industry?: string;
  */
 specialization?: string;
 /**
- * Filter by country (contains, case-insensitive)
+ * Filter by location name (contains, case-insensitive) — matches any node in the client's market set.
  */
-country?: string;
+location?: string;
 /**
- * Filter by city (contains, case-insensitive)
+ * Filter by Location id(s). Selecting a country or state matches every client whose market sits beneath it, via the ancestor path.
  */
-city?: string;
+locationIds?: string[];
 /**
  * Filter by owning consultant ID (exact match)
  */
@@ -60,7 +60,7 @@ consultantId?: string;
  */
 quality?: GetClientsQuality;
 /**
- * Filter by Terms of Business signed
+ * Filter by whether the client has any Terms of Business on file. Replaces the old `tobSigned` flag — TOBs are their own one-to-many table now (see /tobs).
  */
-tobSigned?: boolean;
+hasTob?: boolean;
 };

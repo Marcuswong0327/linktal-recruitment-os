@@ -14,13 +14,25 @@ export interface ConsultantEntity {
   azureId: string | null;
   email: string;
   fullName: string;
-  /** Seniority is carried as a JobTitle ("Consultant (Senior)"), not its own enum. @nullable */
+  /**
+     * Seniority is carried as a JobTitle ("Consultant (Senior)"), not its own enum.
+     * @nullable
+     */
   jobTitleId: string | null;
-  /** Monthly cost of this consultant. @nullable */
+  /**
+     * Monthly cost of this consultant.
+     * @nullable
+     */
   salary: number | null;
-  /** P&L bucket this consultant's cost rolls up to. @nullable */
+  /**
+     * P&L bucket this consultant's cost rolls up to.
+     * @nullable
+     */
   costTo: string | null;
-  /** This consultant's manager — powers the org chart. Null at the top of the tree. @nullable */
+  /**
+     * This consultant's manager — powers the org chart. Null at the top of the tree.
+     * @nullable
+     */
   reportsToId: string | null;
   /** @nullable */
   roleId: string | null;

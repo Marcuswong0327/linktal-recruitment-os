@@ -9,42 +9,36 @@ import type { UpdateCandidateDtoStatus } from './updateCandidateDtoStatus';
 import type { WorkHistoryItemDto } from './workHistoryItemDto';
 
 export interface UpdateCandidateDto {
-  /** Full name */
-  fullName?: string;
-  /** Given name */
-  givenName?: string;
-  /** Family name */
-  familyName?: string;
+  /** First name */
+  firstName?: string;
+  /** Last name */
+  lastName?: string;
   /** Email address */
   email?: string;
   /** Mobile number */
   mobile?: string;
-  /** Country */
-  country?: string;
-  /** City */
-  city?: string;
+  /** Most specific known Location node (see /locations) — city if no suburb is known, and so on */
+  locationId?: string;
   /** Industry ID (see /industries) */
   industryId?: string;
-  /** Role type ID (see /candidate-role-types) */
-  roleTypeId?: string;
-  /** Current position */
-  currentPosition?: string;
+  /** Job role type ID (see /job-role-types) */
+  jobRoleTypeId?: string;
+  /** Title at their current employer, in the employer's own words */
+  currentRole?: string;
   /** Current company */
   currentCompany?: string;
-  /** Years of experience */
-  yearsExperience?: number;
-  /** Salary expectation */
-  salaryExpectation?: string;
   /** LinkedIn URL */
   linkedinUrl?: string;
-  /** Resume URL */
-  resumeUrl?: string;
+  /** Seek Talent Search profile URL */
+  seekTalentUrl?: string;
+  /** Raw resume file URL — the original, as submitted */
+  rawResumeUrl?: string;
+  /** Edited resume file URL — Linktal's own reformatted version */
+  editedResumeUrl?: string;
   /** Work history entries */
   workHistory?: WorkHistoryItemDto[];
   /** Specialization IDs (see /specializations) */
   specializationIds?: string[];
-  /** Free-entry skill tags */
-  skills?: string[];
   /** Status; defaults to COLD when omitted */
   status?: UpdateCandidateDtoStatus;
   /** Owning consultant ID */

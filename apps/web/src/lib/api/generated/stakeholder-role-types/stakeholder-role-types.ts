@@ -27,6 +27,7 @@ import type {
 import type {
   CreateStakeholderRoleTypeDto,
   ErrorResponse,
+  GetStakeholderRoleTypesParams,
   StakeholderRoleTypeEntity
 } from '../types';
 
@@ -76,20 +77,27 @@ export type getStakeholderRoleTypesResponseError = (getStakeholderRoleTypesRespo
 
 export type getStakeholderRoleTypesResponse = (getStakeholderRoleTypesResponseSuccess | getStakeholderRoleTypesResponseError)
 
-export const getGetStakeholderRoleTypesUrl = () => {
+export const getGetStakeholderRoleTypesUrl = (params?: GetStakeholderRoleTypesParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/stakeholder-role-types`
+  return stringifiedParams.length > 0 ? `/stakeholder-role-types?${stringifiedParams}` : `/stakeholder-role-types`
 }
 
 /**
- * @summary List active stakeholder role types
+ * @summary List active stakeholder role types (searchable, capped)
  */
-export const getStakeholderRoleTypes = async ( options?: RequestInit): Promise<getStakeholderRoleTypesResponse> => {
+export const getStakeholderRoleTypes = async (params?: GetStakeholderRoleTypesParams, options?: RequestInit): Promise<getStakeholderRoleTypesResponse> => {
 
-  return customFetch<getStakeholderRoleTypesResponse>(getGetStakeholderRoleTypesUrl(),
+  return customFetch<getStakeholderRoleTypesResponse>(getGetStakeholderRoleTypesUrl(params),
   {
     ...options,
     method: 'GET'
@@ -102,23 +110,23 @@ export const getStakeholderRoleTypes = async ( options?: RequestInit): Promise<g
 
 
 
-export const getGetStakeholderRoleTypesQueryKey = () => {
+export const getGetStakeholderRoleTypesQueryKey = (params?: GetStakeholderRoleTypesParams,) => {
     return [
-    `/stakeholder-role-types`
+    `/stakeholder-role-types`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetStakeholderRoleTypesQueryOptions = <TData = Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetStakeholderRoleTypesQueryOptions = <TData = Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError = ErrorResponse>(params?: GetStakeholderRoleTypesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetStakeholderRoleTypesQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetStakeholderRoleTypesQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStakeholderRoleTypes>>> = ({ signal }) => getStakeholderRoleTypes({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStakeholderRoleTypes>>> = ({ signal }) => getStakeholderRoleTypes(params, { signal, ...requestOptions });
 
 
 
@@ -132,7 +140,7 @@ export type GetStakeholderRoleTypesQueryError = ErrorResponse
 
 
 export function useGetStakeholderRoleTypes<TData = Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError = ErrorResponse>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError, TData>> & Pick<
+ params: undefined |  GetStakeholderRoleTypesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getStakeholderRoleTypes>>,
           TError,
@@ -142,7 +150,7 @@ export function useGetStakeholderRoleTypes<TData = Awaited<ReturnType<typeof get
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetStakeholderRoleTypes<TData = Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError = ErrorResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError, TData>> & Pick<
+ params?: GetStakeholderRoleTypesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getStakeholderRoleTypes>>,
           TError,
@@ -152,19 +160,19 @@ export function useGetStakeholderRoleTypes<TData = Awaited<ReturnType<typeof get
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetStakeholderRoleTypes<TData = Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError = ErrorResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ params?: GetStakeholderRoleTypesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary List active stakeholder role types
+ * @summary List active stakeholder role types (searchable, capped)
  */
 
 export function useGetStakeholderRoleTypes<TData = Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError = ErrorResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ params?: GetStakeholderRoleTypesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderRoleTypes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetStakeholderRoleTypesQueryOptions(options)
+  const queryOptions = getGetStakeholderRoleTypesQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -209,7 +217,7 @@ export const getCreateStakeholderRoleTypeUrl = () => {
 }
 
 /**
- * @summary Create a stakeholder role type, or return the existing one with that name
+ * @summary Create a stakeholder role type entry, or return the existing one with that name
  */
 export const createStakeholderRoleType = async (createStakeholderRoleTypeDto: CreateStakeholderRoleTypeDto, options?: RequestInit): Promise<createStakeholderRoleTypeResponse> => {
 
@@ -258,7 +266,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateStakeholderRoleTypeMutationError = ErrorResponse
 
     /**
- * @summary Create a stakeholder role type, or return the existing one with that name
+ * @summary Create a stakeholder role type entry, or return the existing one with that name
  */
 export const useCreateStakeholderRoleType = <TError = ErrorResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createStakeholderRoleType>>, TError,{data: CreateStakeholderRoleTypeDto}, TContext>, request?: SecondParameter<typeof customFetch>}
