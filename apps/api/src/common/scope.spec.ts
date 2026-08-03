@@ -203,15 +203,32 @@ describe('the specialization narrowing', () => {
 
   // ~72% of candidates carry no specialization; without this passthrough they'd
   // all vanish the moment the arm activates.
-  it('lets an unspecialised record pass on its industry alone', () => {
+  //
+  // Candidate is spelled differently from every other entity on purpose: it
+  // holds a *set* of specializations (`CandidateSpecialization[]`) and has no
+  // `specializationId` column, so `none: {}` is its "unspecialised". Reusing
+  // the Client shape here previously produced a `where` Prisma rejects outright
+  // — see the regression test below.
+  it('lets an unspecialised candidate pass on its industry alone', () => {
     const arm = (candidateScope(makeUser({ specializationIds: ['spec1'] })).OR as Record<string, never>[])[1];
     expect(arm).toEqual({
       industryId: { in: ['ind1'] },
       OR: [
-        { specializationId: null },
-        { specialization: { ancestorIds: { hasSome: ['spec1'] } } },
+        { specializations: { none: {} } },
+        { specializations: { some: { specialization: { ancestorIds: { hasSome: ['spec1'] } } } } },
       ],
     });
+  });
+
+  // Regression: Client has a scalar `specializationId`, Candidate does not.
+  // Casting the Client arm across compiled fine and passed a mocked-Prisma
+  // test, then 500'd against the real database for every consultant holding a
+  // specialization grant — which is all of them.
+  it('never emits a scalar specializationId for Candidate', () => {
+    const emitted = JSON.stringify(candidateScope(makeUser({ specializationIds: ['spec1'] })));
+    expect(emitted).not.toContain('"specializationId"');
+    // Client, which does have the column, still uses it.
+    expect(JSON.stringify(clientScope(makeUser({ specializationIds: ['spec1'] })))).toContain('"specializationId"');
   });
 
   it('narrows through the client relation too, for the via-client entities', () => {

@@ -37,7 +37,7 @@ function locationIsUnder(locationIds: string[]) {
 /**
  * The industry arm, optionally narrowed by specialization.
  *
- * `prefix` is where the industry lives relative to the record — Client and
+ * `viaClient` is where the industry lives relative to the record — Client and
  * Candidate own theirs; Stakeholder, JobOrder and ClientJobResearch reach it
  * through their parent Client.
  */
@@ -53,6 +53,35 @@ function industryArm(user: AuthUser, viaClient: boolean): Prisma.ClientWhereInpu
     ];
   }
   return viaClient ? ({ client: own } as Prisma.ClientWhereInput) : own;
+}
+
+/**
+ * The same arm for **Candidate**, which cannot reuse the one above.
+ *
+ * Client carries a single `specializationId` FK; a Candidate carries a *set*
+ * (`CandidateSpecialization[]`) and has no such scalar column at all. Casting
+ * the Client shape across — which is what this used to do — produced a `where`
+ * Prisma rejects outright (`Unknown argument 'specializationId'`), so a
+ * consultant holding any specialization grant got a 500 from `GET /candidates`
+ * rather than a filtered list. Every consultant in the seed holds 2–4.
+ *
+ * `none: {}` is the join-table spelling of "unspecialised", matching the
+ * `specializationId: null` passthrough above: a candidate with no tags at all
+ * still qualifies on their industry.
+ */
+function candidateIndustryArm(user: AuthUser): Prisma.CandidateWhereInput {
+  const own: Prisma.CandidateWhereInput = { industryId: { in: user.industryIds } };
+  if (user.specializationIds.length > 0) {
+    own.OR = [
+      { specializations: { none: {} } },
+      {
+        specializations: {
+          some: { specialization: { ancestorIds: { hasSome: user.specializationIds } } },
+        },
+      },
+    ];
+  }
+  return own;
 }
 
 /** True when this caller is scoped at all. Everyone else sees everything. */
@@ -148,8 +177,7 @@ export function tobScope(user: AuthUser): Prisma.TobWhereInput {
 export function candidateScope(user: AuthUser): Prisma.CandidateWhereInput {
   const owned = ownedBy(user);
   if (hasNoGrants(user)) return owned;
-  const industry = industryArm(user, false) as Prisma.CandidateWhereInput;
-  return { OR: [owned, industry, locationIsUnder(user.locationIds)] };
+  return { OR: [owned, candidateIndustryArm(user), locationIsUnder(user.locationIds)] };
 }
 
 export function jobOrderScope(user: AuthUser): Prisma.JobOrderWhereInput {

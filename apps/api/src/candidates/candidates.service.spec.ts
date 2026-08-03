@@ -363,8 +363,12 @@ describe('CandidatesService.findAll — scope', () => {
     });
   });
 
-  // Stored but inactive until the catalog backfill lands — the arm is built
-  // here, so the shape is asserted now rather than after the switch flips.
+  // A Candidate holds a *set* of specializations and has no `specializationId`
+  // column, so this arm is spelled with the join — `none: {}` is its
+  // "unspecialised", the counterpart to Client's `specializationId: null`.
+  // Asserting the Client spelling here is what previously hid a live 500: a
+  // mocked Prisma delegate accepts any object, so the invalid `where` only
+  // failed against the real database.
   it('narrows the industry arm by specialization, letting unspecialised records through', async () => {
     const { findMany, service } = setup();
     await service.findAll(
@@ -377,8 +381,8 @@ describe('CandidatesService.findAll — scope', () => {
     expect(scope.OR[1]).toEqual({
       industryId: { in: ['ind1'] },
       OR: [
-        { specializationId: null },
-        { specialization: { ancestorIds: { hasSome: ['food'] } } },
+        { specializations: { none: {} } },
+        { specializations: { some: { specialization: { ancestorIds: { hasSome: ['food'] } } } } },
       ],
     });
   });
