@@ -35,6 +35,20 @@
   --chart-3: oklch(0.558 0.288 302.321);
   --chart-4: oklch(0.496 0.265 301.924);
   --chart-5: oklch(0.438 0.218 303.724);
+  /* Categorical tag palette — identity color for arbitrary catalog tags
+     (consultant industries/specializations, etc.), never status. Fixed
+     8-hue order validated for CVD separation + contrast; see the dataviz
+     skill's color-formula. Reusing success/warning/info/destructive for
+     this was the bug: those are reserved, meaning-bearing tokens, and
+     rotating tags through them made unrelated tags look like states. */
+  --tag-1: #2a78d6;
+  --tag-2: #1baf7a;
+  --tag-3: #eda100;
+  --tag-4: #008300;
+  --tag-5: #4a3aa7;
+  --tag-6: #e34948;
+  --tag-7: #e87ba4;
+  --tag-8: #eb6834;
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
@@ -72,6 +86,14 @@ body {
   --color-chart-3: var(--chart-3);
   --color-chart-2: var(--chart-2);
   --color-chart-1: var(--chart-1);
+  --color-tag-1: var(--tag-1);
+  --color-tag-2: var(--tag-2);
+  --color-tag-3: var(--tag-3);
+  --color-tag-4: var(--tag-4);
+  --color-tag-5: var(--tag-5);
+  --color-tag-6: var(--tag-6);
+  --color-tag-7: var(--tag-7);
+  --color-tag-8: var(--tag-8);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -137,6 +159,15 @@ body {
   --chart-3: oklch(0.558 0.288 302.321);
   --chart-4: oklch(0.496 0.265 301.924);
   --chart-5: oklch(0.438 0.218 303.724);
+  /* Same 8 hues, stepped for the dark surface — not a separate palette. */
+  --tag-1: #3987e5;
+  --tag-2: #199e70;
+  --tag-3: #c98500;
+  --tag-4: #008300;
+  --tag-5: #9085e9;
+  --tag-6: #e66767;
+  --tag-7: #d55181;
+  --tag-8: #d95926;
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.627 0.265 303.9);
