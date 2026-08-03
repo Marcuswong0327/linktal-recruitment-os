@@ -42,11 +42,7 @@ here, grouped by cause, rather than guessed at. See
 `docs/workbook-import-discrepancies.md` for what each category means and which
 ones need a decision.
 
-## Obsolete
+## GeoNames
 
-`scripts/import-excel.ts`, `scripts/import-placements.ts`,
-`scripts/debug-placements.ts` and `scripts/inspect-excel.ts` read three
-per-entity files (`Icarus Candidate Database.xlsx`, `Icarus Client
-Database.xlsx`, `Job Orders Portfolio.xlsx`) that predate the single-workbook
-source and no longer exist — against a schema that no longer exists either.
-Superseded by `import:workbook`; safe to delete.
+`geonames/` holds the raw dumps `import:locations` reads. See that script's
+header for which files it expects and where to download them.

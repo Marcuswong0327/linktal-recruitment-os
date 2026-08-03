@@ -164,7 +164,7 @@ export function deriveAction(
 function baseMetadata(extra?: AnyArgs) {
   const requestId = RequestContext.getRequestId();
   // Every audit row this extension writes comes from a live app request —
-  // scripts that write historical/imported data (e.g. import-excel.ts) use
+  // scripts that write historical/imported data (e.g. import-workbook.ts) use
   // the base, unextended PrismaClient and never reach this code at all, so
   // there's nothing to disambiguate here today. This just makes that
   // explicit/self-describing rather than implicit, for whenever a second
