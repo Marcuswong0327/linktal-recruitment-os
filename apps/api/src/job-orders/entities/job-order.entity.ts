@@ -39,6 +39,20 @@ export class JobOrderEntity implements Omit<JobOrder, 'deletedAt' | 'deletedById
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'JO-0001' }) displayId!: string;
   @ApiProperty() clientId!: string;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: 'Bakers Maison Australia',
+    description: 'Resolved client name — the company this role is for',
+  })
+  clientName!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    example: 'Client-0128',
+    description: "The client's human-readable id, for cross-referencing",
+  })
+  clientDisplayId!: string | null;
   @ApiProperty({ type: String, nullable: true }) consultantId!: string | null;
   @ApiProperty({ type: String, nullable: true }) jobTitleId!: string | null;
   @ApiProperty({

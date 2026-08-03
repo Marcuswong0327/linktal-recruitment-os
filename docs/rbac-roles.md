@@ -105,22 +105,26 @@ Plain-English summary:
 The permission table is resource-level; these rules depend on the *target's*
 state or the *actor*, so they live in the services.
 
-### Clients & Job Orders (own-book scoping)
-Both `GET /clients` and `GET /job-orders` add a row-level rule on top of the
-`client:read`/`job_order:read` permission check: a caller whose role is
-**`consultant`** only ever sees their **own** book — `ClientsService.findAll`
-/ `JobOrdersService.findAll` force `where.consultantId = caller.consultantId`,
-overriding whatever `consultantId`/`consultantIds` the query string asks for
-(so a crafted query param can't be used to browse someone else's clients or
-job orders). Every other role — **manager, finance, researcher, admin** —
-sees the **full list**, unfiltered. This is a visibility scope, not a
-different permission grant; `job_order:read` (etc.) is unchanged in the
-matrix above for every role.
+### Clients & Job Orders — no own-book restriction
+`GET /clients` and `GET /job-orders` used to force
+`where.consultantId = caller.consultantId` for the `consultant` role, on top of
+the scope below. Because ownership is itself one of the scope's OR arms, that
+`AND` swallowed every other arm: the effective rule collapsed to *assigned to
+me*, and a consultant with no assigned accounts saw an **empty list** no matter
+what they covered. It also disagreed with `findOne`, which never had the rule —
+a client could be opened by URL yet never appear in its owner's own list.
+
+Both now filter on the scope alone. `consultantId`/`consultantIds` from the
+query string are honoured for every role, including `consultant`: the scope is
+`AND`-ed on top, so filtering *by* someone else can only ever narrow what the
+caller was already allowed to see, never widen it.
 
 ### Visibility scoping (`consultant` role only — every other role unrestricted)
 
-A second, independent layer on top of the own-book rule above. A consultant's
-visible rows are:
+> Worked examples, diagrams and the real per-consultant numbers live in
+> [`scope-explained.md`](./scope-explained.md). This section is the spec.
+
+A consultant's visible rows are:
 
 ```
 visible  =  (industry match AND specialization match)  OR  (location match)
@@ -203,12 +207,10 @@ Client visible  =  consultantId = me                      <- assignment always w
                 OR stakeholders.some(own coverage match)  <- Client only
 ```
 
-Because `findAll` already restricts consultants to their own book for Clients
-and Job Orders (§ own-book scoping above), the practical effect on those two is
-that the **list is simply their whole book**; the other arms decide what they
-can reach when opening a record that *isn't* assigned to them. Candidates have
-no own-book rule, so there the ownership arm genuinely widens the list — an
-assigned candidate shows up even when out of patch.
+The ownership arm widens the list on every entity that has it: an assigned
+record shows up even when it's out of patch. It sits *above* the no-grants
+short-circuit for the same reason — being handed an account and then getting a
+403 on it is the failure this prevents.
 
 That last Client arm is the counterpart to the stakeholder asymmetry: a company
 is visible when one of its contacts covers the consultant's patch, even if the
@@ -240,30 +242,49 @@ their own `locationId`.
   its industry. Without that passthrough, the ~72% of candidates carrying no
   specialization would disappear the moment that arm is switched on.
 
-**Specialization filtering ships stored-but-inactive.** The grants are written
-and the resolver supports them, but the arm is not yet applied: consultant-side
-vocabulary is coarse (`Food`, `Packaging`) while record-side values are fine
-(`Food Bakery`, `Packaging - Plastic`), and the `Specialization.parentId` tier is
-what reconciles them. It's enabled once the catalog backfill lands. Until then
-the effective rule is `industry OR location`.
+**Specialization filtering is live, and it bites unevenly.** It narrows the
+industry arm whenever the consultant holds any specialization grant — every
+consultant in the seed holds 2–4. Consultant-side vocabulary is coarse (`Food`,
+`Packaging`), record-side values are fine (`Food Bakery`), and the
+`Specialization.parentId` tier reconciles them via `ancestorIds`.
 
-**List vs. single-record access.** `findAll` filters silently (same as the
-own-book scoping above). A direct `findOne`/`update`/`remove` on an out-of-scope
+How hard it bites is decided by tagging coverage, not by any deliberate setting:
+**1,643 of 1,645 clients carry a specialization, but only 205 of 3,960
+candidates do.** Untagged rows take the passthrough, so for a Manufacturing
+consultant granted `Packaging`+`Food` the arm rejects **936 of 1,335 clients**
+and **33 of 2,157 candidates**. Backfilling the missing candidate tags would
+narrow candidate lists sharply with no code change — worth deciding
+deliberately rather than discovering.
+
+**List vs. single-record access.** `findAll` filters silently. A direct `findOne`/`update`/`remove` on an out-of-scope
 record gets an explicit `403 OUT_OF_JOB_SCOPE` rather than a generic 404 — the
 caller is told *why*.
 
-**Industry-first assignment guard.** A Client/Candidate/Job Order can only be
-assigned to a consultant who holds its industry (`400
-CONSULTANT_INDUSTRY_MISMATCH`). Only checked when `consultantId` is explicitly
-part of the write — an industry-only edit is never blocked by this (see the next
-rule instead). The older `400 INDUSTRY_REQUIRED` case is gone: industry is now a
-required column, so there's no untagged state to guard against.
+**Assignment guard — assignment must agree with visibility.** A
+Client/Candidate/Job Order can only be assigned to a consultant who would reach
+it anyway: the same `industry OR location` test (`400
+CONSULTANT_SCOPE_MISMATCH`). Only checked when `consultantId` is explicitly part
+of the write — an industry- or location-only edit is never blocked by this (see
+the next rule instead).
 
-**Bidirectional auto-clear.** A stale mismatched `consultantId` can't persist.
-Changing a Client/Candidate's `industryId` (without touching `consultantId` in
-the same request) silently clears the existing assignment if it no longer
-matches, cascading to that Client's Job Orders. Symmetrically, removing an
-industry from a consultant clears every now-mismatched record assigned to them.
+It was industry-*only* until then, which broke both ways. Too strict: a
+consultant granted four cities plus an industry holding zero clients could be
+assigned nothing at all. Too loose: a Sydney client could be handed to a
+Melbourne-only consultant, who then couldn't see it. Stakeholder coverage —
+`clientScope`'s fourth arm — is deliberately excluded, because a client has no
+contacts at the moment it's created, so the guard would be unenforceable on
+`create`. Coverage grants *visibility*, not *ownership*.
+
+Locations are compared through `ancestorIds`, so a COUNTRY grant qualifies its
+holder for a CITY-tagged record exactly as it does in the scopes above.
+
+**Bidirectional auto-clear.** A stale uncovered `consultantId` can't persist.
+Changing a Client/Candidate's `industryId` **or its location(s)** (without
+touching `consultantId` in the same request) silently clears the existing
+assignment if neither arm still reaches it, cascading to that Client's Job
+Orders — each checked on its own location. Symmetrically, changing a
+consultant's own industry *or* location grants re-checks everything assigned to
+them and releases whatever no longer qualifies.
 
 **Submission industry guard** (applies to *every* role, not just scoped
 consultants): `POST /candidate-submissions` rejects a candidate/job-order pair
@@ -313,17 +334,20 @@ escalation rule, so managers can use them:
   wildcard or a desk label into concrete nodes is the caller's job — `All
   Malaysia` arrives as one COUNTRY id, `Brisbane GC QLD` as two CITY ids. That's
   what keeps every grant individually auditable and zero rows unambiguous.
-- **Only the industry arm cascades.** Removing an industry runs the auto-clear
-  above, since assignment is industry-first and a dropped grant can strand
-  records assigned to that consultant. Nothing is assigned by specialization or
-  location, so removing those strands nothing and triggers no cascade.
+- **Industry and location both cascade; specialization doesn't.** Narrowing
+  either grant arm runs the auto-clear above, since either can strand a record
+  assigned to that consultant. The re-check reads *current* grants rather than
+  acting on the removed ids — with two arms granting ownership, losing an
+  industry no longer implies a record is stranded, because the location arm may
+  still cover it. Specializations only ever narrow the industry arm and never
+  grant on their own, so removing one strands nothing and triggers no cascade.
 
 ### Consultant field redaction on Clients & Job Orders (`consultant` role only)
 `consultantId` is nulled out in the API response (not the raw DB value —
 just what's returned) on `Client` and `JobOrder` reads for the `consultant`
-role specifically, on top of the own-book row scoping above — every other
-role sees the real value. In practice this rarely reveals anything new (a
-scoped consultant's own book already only ever shows their own id), but it's
+role specifically, on top of the row scoping above — every other role sees
+the real value. It matters more than it used to: with the own-book filter
+gone, a consultant's list now includes records owned by other people, so it's
 enforced server-side rather than left to a hidden frontend column, so a
 crafted request against the raw API can't recover it either.
 `apps/api/src/common/redact-consultant-field.ts` holds the shared helper.
@@ -463,7 +487,7 @@ runs on the base client with batch transactions).
 | Endpoint | Permission | Effective access |
 |----------|-----------|------------------|
 | `GET/POST/PATCH/DELETE /candidates` | `candidate:*` | per matrix — industry-scoped for `consultant` (see §3) |
-| `GET/POST/PATCH/DELETE /clients` | `client:*` | per matrix — own-book + industry-scoped for `consultant` (see §3) |
+| `GET/POST/PATCH/DELETE /clients` | `client:*` | per matrix — industry/location-scoped for `consultant` (see §3) |
 | `GET/POST/PATCH/DELETE /stakeholders` | `stakeholder:*` | per matrix — industry-scoped for `consultant`, via parent Client (see §3) |
 | `POST /stakeholders/:id/contact-history` | `stakeholder:update` | admin, manager, consultant, researcher — `contactedById` is always the caller, never request-supplied |
 | `POST /candidates/:id/contact-history` | `candidate:update` | admin, manager, consultant, researcher — `contactedById` is always the caller, never request-supplied |
@@ -474,7 +498,7 @@ runs on the base client with batch transactions).
 | `POST/PATCH/DELETE /locations` | `location:*` | admin only — the tree is GeoNames-loaded, not hand-typed |
 | `GET/POST/PATCH/DELETE /tobs` | `tob:*` | admin, manager, consultant; finance read-only |
 | `GET/POST/PATCH/DELETE /job-research` | `job_research:*` | per matrix — scoped for `consultant` via parent Client (see §3) |
-| `GET/POST/PATCH/DELETE /job-orders` | `job_order:*` | per matrix — own-book + industry-scoped (via parent Client) for `consultant`, `consultantId` redacted in the response for that role (see §3) |
+| `GET/POST/PATCH/DELETE /job-orders` | `job_order:*` | per matrix — industry (via parent Client) / location-scoped for `consultant`, `consultantId` redacted in the response for that role (see §3) |
 | `GET /candidates/:id/pipeline-timeline` | `candidate:read` | scoped to a candidate the caller can already read, not `audit:read` |
 | `GET /job-orders/:id/pipeline-timeline` | `job_order:read` | scoped to a job order the caller can already read, not `audit:read` |
 | `GET/POST/PATCH/DELETE /candidate-submissions` | `submission:*` | per matrix — `POST` also rejects a candidate/job-order pair whose industries don't match, for every role (see §3's industry scoping) |

@@ -5,6 +5,7 @@ import { ClientQualityFilter, ClientStatusFilter, QueryClientsDto, SortOrder } f
 import { PrismaService } from '../prisma/prisma.service';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { AuthUser } from '../auth/auth.types';
+import { grantsMock } from '../common/grants.testing';
 
 function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
@@ -164,7 +165,15 @@ describe('ClientsService.update', () => {
   function makeService(existing: unknown = withRelations({ id: 'cl1', industryId: 'ind1' })) {
     const findUnique = jest.fn().mockResolvedValue(existing);
     const update = jest.fn().mockResolvedValue(withRelations({ id: 'cl1' }));
-    const prisma = { client: { findUnique, update } } as unknown as ExtendedPrismaClient;
+    // An industry or locationIds edit runs the auto-clear afterwards, which
+    // re-reads the client and walks its job orders — mocked here so these
+    // tests can stay focused on the write itself. The row has no consultant,
+    // so nothing is ever cleared.
+    const prisma = {
+      client: { findUnique, update, findUniqueOrThrow: findUnique },
+      jobOrder: { findMany: jest.fn().mockResolvedValue([]) },
+      ...grantsMock(),
+    } as unknown as ExtendedPrismaClient;
     const base = {} as unknown as PrismaService;
     return { service: new ClientsService(prisma, base), update };
   }
@@ -222,13 +231,12 @@ describe('ClientsService.update — consultant cannot unassign', () => {
   function makeService(existing: unknown = withRelations({ id: 'cl1', industryId: 'ind1' })) {
     const findUnique = jest.fn().mockResolvedValue(existing);
     const update = jest.fn().mockResolvedValue(withRelations({ id: 'cl1' }));
-    // The industry-first assignment guard needs somewhere to check a
-    // candidate consultantId against — matches ind1 for cons-2 so tests
-    // reassigning to that consultant aren't blocked by it.
-    const consultantIndustry = {
-      findUnique: jest.fn().mockResolvedValue({ consultantId: 'cons-2', industryId: 'ind1' }),
-    };
-    const prisma = { client: { findUnique, update }, consultantIndustry } as unknown as ExtendedPrismaClient;
+    // The assignment guard needs grants to check a candidate consultantId
+    // against — holds ind1, so tests reassigning to cons-2 aren't blocked by it.
+    const prisma = {
+      client: { findUnique, update },
+      ...grantsMock({ industryIds: ['ind1'] }),
+    } as unknown as ExtendedPrismaClient;
     const base = {} as unknown as PrismaService;
     return { service: new ClientsService(prisma, base), update };
   }
@@ -357,19 +365,27 @@ describe('ClientsService.findAll — consultant role scoping', () => {
     return { service: new ClientsService(prisma, base), findMany };
   }
 
-  it("forces the filter to the caller's own consultantId, even when none is passed", async () => {
+  // A consultant's client list is decided by `clientScope` alone. It used to
+  // also AND on `consultantId = me`, which swallowed every other arm and left
+  // the list empty for anyone with no assigned accounts — the whole scope
+  // function was dead code behind it.
+  it('does not force the filter to the caller, so the scope arms can apply', async () => {
     const { service, findMany } = makeService();
     await service.findAll({ ...baseQuery }, makeUser({ roleName: 'consultant', consultantId: 'cons-me' }));
-    expect(findMany.mock.calls[0][0].where.consultantId).toBe('cons-me');
+    expect(findMany.mock.calls[0][0].where).not.toHaveProperty('consultantId');
   });
 
-  it("ignores a caller-supplied consultantId and uses the caller's own id instead", async () => {
+  // Safe to honour now: the scope is AND-ed on top, so filtering *by* another
+  // consultant can only narrow what this caller could already see.
+  it('honours a caller-supplied consultantId as a filter, still under scope', async () => {
     const { service, findMany } = makeService();
     await service.findAll(
       { ...baseQuery, consultantId: 'someone-elses-id' },
-      makeUser({ roleName: 'consultant', consultantId: 'cons-me' }),
+      makeUser({ roleName: 'consultant', consultantId: 'cons-me', industryIds: ['ind1'] }),
     );
-    expect(findMany.mock.calls[0][0].where.consultantId).toBe('cons-me');
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.consultantId).toBe('someone-elses-id');
+    expect(where.AND).toContainEqual(expect.objectContaining({ OR: expect.any(Array) }));
   });
 
   it('does not restrict non-consultant roles (e.g. manager)', async () => {
@@ -596,11 +612,10 @@ describe('ClientsService.findOne — job scope', () => {
   });
 });
 
-describe('ClientsService.create — industry-first assignment guard', () => {
-  function makeService(consultantIndustryRow: unknown = null) {
+describe('ClientsService.create — assignment guard (industry OR location)', () => {
+  function makeService(grants: Parameters<typeof grantsMock>[0] = {}) {
     const create = jest.fn().mockResolvedValue(withRelations({ id: 'cl1' }));
-    const consultantIndustry = { findUnique: jest.fn().mockResolvedValue(consultantIndustryRow) };
-    const prisma = { client: { create }, consultantIndustry } as unknown as ExtendedPrismaClient;
+    const prisma = { client: { create }, ...grantsMock(grants) } as unknown as ExtendedPrismaClient;
     const base = {} as unknown as PrismaService;
     return { service: new ClientsService(prisma, base), create };
   }
@@ -611,42 +626,70 @@ describe('ClientsService.create — industry-first assignment guard', () => {
     expect(create).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects assigning a consultant whose industries don't include the tagged one", async () => {
-    const { service, create } = makeService(null); // no matching ConsultantIndustry row
+  it('rejects assigning a consultant who covers neither the industry nor the market', async () => {
+    const { service, create } = makeService(); // holds nothing
     await expect(
       service.create(makeDto({ industryId: 'ind1', consultantId: 'cons-1' })),
-    ).rejects.toMatchObject({ response: { code: 'CONSULTANT_INDUSTRY_MISMATCH' } });
+    ).rejects.toMatchObject({ response: { code: 'CONSULTANT_SCOPE_MISMATCH' } });
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('allows assigning a consultant whose industries match', async () => {
-    const { service, create } = makeService({ consultantId: 'cons-1', industryId: 'ind1' });
+  it('allows assigning a consultant whose industry matches', async () => {
+    const { service, create } = makeService({ industryIds: ['ind1'] });
     await service.create(makeDto({ industryId: 'ind1', consultantId: 'cons-1' }));
     expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  // The behaviour change: a consultant whose industry holds nothing can still
+  // be given an account in a market they cover.
+  it('allows assigning a consultant on location alone', async () => {
+    const { service, create } = makeService({ locationIds: ['au'], locationCovers: true });
+    await service.create(
+      makeDto({ industryId: 'ind1', consultantId: 'cons-1', locationIds: ['syd'] }),
+    );
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("checks the client's own markets, not just its industry", async () => {
+    const { service } = makeService({ locationIds: ['au'], locationCovers: true });
+    const prismaLocation = (service as unknown as { prisma: { location: { count: jest.Mock } } }).prisma
+      .location;
+    await service.create(
+      makeDto({ industryId: 'ind1', consultantId: 'cons-1', locationIds: ['syd', 'bne'] }),
+    );
+    expect(prismaLocation.count).toHaveBeenCalledWith({
+      where: { id: { in: ['syd', 'bne'] }, ancestorIds: { hasSome: ['au'] } },
+    });
   });
 });
 
 describe('ClientsService.update — bidirectional auto-clear', () => {
-  it('clears a now-mismatched consultant when the industry changes without touching consultantId', async () => {
+  /**
+   * `clearMismatchedClientAssignment` re-reads the client rather than taking
+   * the new industry as an argument, so the second `findUnique` returns the
+   * post-update row (industry + markets) that the coverage check runs against.
+   */
+  function makeService(grants: Parameters<typeof grantsMock>[0] = {}) {
     const findUnique = jest
       .fn()
       // findOne (existing, before the update)
       .mockResolvedValueOnce(withRelations({ id: 'cl1', industryId: 'ind1', consultantId: 'cons-1' }))
-      // clearMismatchedClientAssignment's own lookup of the client's current consultantId
-      .mockResolvedValueOnce({ consultantId: 'cons-1' })
+      // the auto-clear's own re-read of the persisted row
+      .mockResolvedValueOnce({ consultantId: 'cons-1', industryId: 'ind2', locations: [{ locationId: 'syd' }] })
       // final re-fetch for the response
       .mockResolvedValueOnce(withRelations({ id: 'cl1', industryId: 'ind2', consultantId: null }));
     const update = jest.fn().mockResolvedValue(withRelations({ id: 'cl1', industryId: 'ind2' }));
-    const consultantIndustry = { findUnique: jest.fn().mockResolvedValue(null) }; // cons-1 doesn't have ind2
-    const jobOrder = { findMany: jest.fn().mockResolvedValue([]) };
     const prisma = {
       client: { findUnique, update, findUniqueOrThrow: findUnique },
-      consultantIndustry,
-      jobOrder,
+      jobOrder: { findMany: jest.fn().mockResolvedValue([]) },
+      ...grantsMock(grants),
     } as unknown as ExtendedPrismaClient;
     const base = {} as unknown as PrismaService;
-    const service = new ClientsService(prisma, base);
+    return { service: new ClientsService(prisma, base), update };
+  }
 
+  it('clears a now-uncovered consultant when the industry changes without touching consultantId', async () => {
+    const { service, update } = makeService(); // cons-1 covers neither ind2 nor syd
     const result = await service.update(
       'cl1',
       { industryId: 'ind2' } as unknown as UpdateClientDto,
@@ -656,7 +699,7 @@ describe('ClientsService.update — bidirectional auto-clear', () => {
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'cl1' }, data: { industryId: 'ind2' } }),
     );
-    // The mismatched consultant got auto-cleared as a second, separate write.
+    // The stranded consultant got auto-cleared as a second, separate write.
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'cl1' }, data: { consultantId: null } }),
     );
@@ -664,32 +707,39 @@ describe('ClientsService.update — bidirectional auto-clear', () => {
     expect(result.consultantId).toBeNull();
   });
 
-  it('does not touch the consultant when the industry change still matches them', async () => {
-    const findUnique = jest
-      .fn()
-      .mockResolvedValueOnce(withRelations({ id: 'cl1', industryId: 'ind1', consultantId: 'cons-1' }))
-      .mockResolvedValueOnce({ consultantId: 'cons-1' });
-    const update = jest.fn().mockResolvedValue(withRelations({ id: 'cl1', industryId: 'ind2' }));
-    const consultantIndustry = {
-      findUnique: jest.fn().mockResolvedValue({ consultantId: 'cons-1', industryId: 'ind2' }),
-    };
-    const jobOrder = { findMany: jest.fn().mockResolvedValue([]) };
-    const prisma = {
-      client: { findUnique, update },
-      consultantIndustry,
-      jobOrder,
-    } as unknown as ExtendedPrismaClient;
-    const base = {} as unknown as PrismaService;
-    const service = new ClientsService(prisma, base);
-
+  it('does not touch the consultant when the new industry still covers them', async () => {
+    const { service, update } = makeService({ industryIds: ['ind2'] });
     await service.update(
       'cl1',
       { industryId: 'ind2' } as unknown as UpdateClientDto,
       makeUser({ roleName: 'admin' }),
     );
-
-    // Still matches — only the one industryId write, no consultant clear.
+    // Still covered — only the one industryId write, no consultant clear.
     expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  // Losing the industry no longer strands a record the owner's patch holds.
+  it('does not touch the consultant when only their location still covers it', async () => {
+    const { service, update } = makeService({ locationIds: ['au'], locationCovers: true });
+    await service.update(
+      'cl1',
+      { industryId: 'ind2' } as unknown as UpdateClientDto,
+      makeUser({ roleName: 'admin' }),
+    );
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  // Markets are an ownership arm now, so replacing them has to re-check too.
+  it('runs the auto-clear when only the location set changed', async () => {
+    const { service, update } = makeService();
+    await service.update(
+      'cl1',
+      { locationIds: ['syd'] } as unknown as UpdateClientDto,
+      makeUser({ roleName: 'admin' }),
+    );
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'cl1' }, data: { consultantId: null } }),
+    );
   });
 });
 

@@ -11,7 +11,7 @@ import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { RequestContext } from '../common/request-context';
 import {
-  assertConsultantIndustryMatch,
+  assertConsultantCovers,
   assertInScope,
   clearMismatchedClientAssignment,
   clientScope,
@@ -177,15 +177,11 @@ export class ClientsService {
     where.industry = containsName(query.industry);
     where.specialization = containsName(query.specialization);
 
-    if (isScoped(user)) {
-      // Consultants only ever see their own book of companies — enforced
-      // here, not just hidden in the UI, so a crafted `consultantId` query
-      // param can't be used to browse someone else's clients. Overrides
-      // whatever the caller passed; there's no "view others" mode for this
-      // role.
-      where.consultantId = user.consultantId;
-    } else if (query.consultantId !== undefined) {
+    if (query.consultantId !== undefined) {
       // '' is the frontend's "Unassigned" sentinel — maps to a null FK, not a no-op.
+      // Safe to honour for a consultant too: `clientScope` is AND-ed on below,
+      // so filtering *by* another consultant can only ever narrow what this
+      // caller was already allowed to see, never widen it.
       where.consultantId = query.consultantId === '' ? null : query.consultantId;
     }
 
@@ -306,10 +302,13 @@ export class ClientsService {
 
   async create(dto: CreateClientDto) {
     this.assertHasLocations(dto.locationIds);
-    // Industry-first: a consultant can only be assigned if they hold this
-    // company's industry.
+    // A consultant can only be assigned a company they'd reach anyway —
+    // its industry or any of its markets.
     if (dto.consultantId) {
-      await assertConsultantIndustryMatch(this.prisma, dto.consultantId, dto.industryId);
+      await assertConsultantCovers(this.prisma, dto.consultantId, {
+        industryId: dto.industryId,
+        locationIds: dto.locationIds,
+      });
     }
     // displayId is assigned by the DB (Client_displayId_seq default).
     const client = await this.prisma.client.create({
@@ -347,12 +346,14 @@ export class ClientsService {
       this.assertHasLocations(dto.locationIds);
     }
 
-    // Industry-first: only validated when a consultant is explicitly being
-    // set/changed here — an industry-only edit never blocks on this (that's
-    // what the auto-clear below is for instead of erroring).
+    // Only validated when a consultant is explicitly being set/changed here —
+    // an industry/location-only edit never blocks on this (that's what the
+    // auto-clear below is for instead of erroring).
     if ('consultantId' in dto && dto.consultantId) {
-      const effectiveIndustryId = 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId;
-      await assertConsultantIndustryMatch(this.prisma, dto.consultantId, effectiveIndustryId);
+      await assertConsultantCovers(this.prisma, dto.consultantId, {
+        industryId: 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId,
+        locationIds: dto.locationIds ?? existing.locationIds,
+      });
     }
 
     let client = await this.prisma.client.update({
@@ -374,13 +375,13 @@ export class ClientsService {
       include: CLIENT_INCLUDE,
     });
 
-    // Bidirectional auto-clear: the industry changed without an explicit
-    // consultant change in the same request — silently unassign if the
-    // existing consultant no longer matches, rather than blocking the edit.
-    // Re-fetch only if it actually cleared something, so the response
-    // reflects it — most industry edits won't touch the consultant at all.
-    if ('industryId' in dto && !('consultantId' in dto)) {
-      const cleared = await clearMismatchedClientAssignment(this.prisma, id, dto.industryId ?? null);
+    // Bidirectional auto-clear: the industry or the market list changed
+    // without an explicit consultant change in the same request — silently
+    // unassign if the existing consultant no longer reaches it, rather than
+    // blocking the edit. Re-fetch only if it actually cleared something, so
+    // the response reflects it — most such edits won't touch the consultant.
+    if (('industryId' in dto || 'locationIds' in dto) && !('consultantId' in dto)) {
+      const cleared = await clearMismatchedClientAssignment(this.prisma, id);
       if (cleared) {
         client = await this.prisma.client.findUniqueOrThrow({ where: { id }, include: CLIENT_INCLUDE });
       }

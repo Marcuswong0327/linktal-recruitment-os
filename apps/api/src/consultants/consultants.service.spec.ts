@@ -28,7 +28,9 @@ function makePrisma() {
     role: { findUnique: jest.fn() },
     industry: { findMany: jest.fn().mockResolvedValue([]) },
     specialization: { findMany: jest.fn().mockResolvedValue([]) },
-    location: { findMany: jest.fn().mockResolvedValue([]) },
+    // findMany validates the ids passed to setLocations; count is what the
+    // post-grant-change coverage re-check calls (see clearUncoveredConsultantAssignments).
+    location: { findMany: jest.fn().mockResolvedValue([]), count: jest.fn().mockResolvedValue(0) },
     consultantIndustry: {
       findMany: jest.fn().mockResolvedValue([]),
       create: jest.fn().mockResolvedValue({}),
@@ -44,9 +46,13 @@ function makePrisma() {
       create: jest.fn().mockResolvedValue({}),
       delete: jest.fn().mockResolvedValue({}),
     },
-    client: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
-    candidate: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
-    jobOrder: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    // Narrowing a grant re-checks every record this consultant owns one at a
+    // time (industry OR location can't be expressed as a single updateMany),
+    // so these are findMany + update rather than a bulk write. Empty by
+    // default: nothing is owned, so nothing is ever released.
+    client: { findMany: jest.fn().mockResolvedValue([]), update: jest.fn().mockResolvedValue({}) },
+    candidate: { findMany: jest.fn().mockResolvedValue([]), update: jest.fn().mockResolvedValue({}) },
+    jobOrder: { findMany: jest.fn().mockResolvedValue([]), update: jest.fn().mockResolvedValue({}) },
   };
 }
 
@@ -435,11 +441,11 @@ describe('ConsultantsService', () => {
       expect(prisma.consultantIndustry.create).toHaveBeenCalledWith({
         data: { consultantId: 'co1', industryId: 'ind3' },
       });
-      // A removal happened — the auto-clear cascade should run for the removed industry.
-      expect(prisma.client.updateMany).toHaveBeenCalledWith({
-        where: { consultantId: 'co1', industryId: { in: ['ind1'] } },
-        data: { consultantId: null },
-      });
+      // A removal happened — every record this consultant owns gets re-checked
+      // against their surviving grants (industry OR location), one at a time.
+      expect(prisma.client.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { consultantId: 'co1' } }),
+      );
     });
 
     it('does not touch the auto-clear cascade when nothing was removed', async () => {
@@ -452,7 +458,7 @@ describe('ConsultantsService', () => {
       await service.setIndustries('co1', ['ind1'], actor('admin'));
       expect(prisma.consultantIndustry.create).not.toHaveBeenCalled();
       expect(prisma.consultantIndustry.delete).not.toHaveBeenCalled();
-      expect(prisma.client.updateMany).not.toHaveBeenCalled();
+      expect(prisma.client.findMany).not.toHaveBeenCalled();
     });
   });
   // The other two arms of the scope. They share setIndustries' escalation
@@ -523,8 +529,9 @@ describe('ConsultantsService', () => {
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
-    // Only the industry arm drives assignment, so narrowing specializations
-    // must not strand anyone's assigned records.
+    // Specializations only ever narrow the industry arm — they never grant on
+    // their own — so narrowing them can't strand anyone's assigned records.
+    // Industries and locations both do, and both re-check (see setLocations).
     it('does not cascade to assigned records when grants are removed', async () => {
       const prisma = makePrisma();
       prisma.consultant.findUnique.mockResolvedValue(makeTarget());
@@ -534,8 +541,8 @@ describe('ConsultantsService', () => {
       await service.setSpecializations('co1', [], actor('admin'));
 
       expect(prisma.consultantSpecialization.delete).toHaveBeenCalledTimes(1);
-      expect(prisma.client.updateMany).not.toHaveBeenCalled();
-      expect(prisma.candidate.updateMany).not.toHaveBeenCalled();
+      expect(prisma.client.findMany).not.toHaveBeenCalled();
+      expect(prisma.candidate.findMany).not.toHaveBeenCalled();
     });
   });
 
@@ -607,6 +614,40 @@ describe('ConsultantsService', () => {
         where: { consultantId_locationId: { consultantId: 'co1', locationId: 'nsw' } },
       });
       expect(prisma.location.findMany).not.toHaveBeenCalled();
+    });
+
+    // Locations grant ownership now, so narrowing a patch strands records the
+    // same way dropping an industry does, and has to cascade the same way.
+    it('re-checks assigned records when a location grant is removed', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.consultantLocation.findMany.mockResolvedValue([{ locationId: 'nsw' }]);
+      prisma.client.findMany.mockResolvedValue([
+        { id: 'cl1', industryId: 'ind1', locations: [{ locationId: 'syd' }] },
+      ]);
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await service.setLocations('co1', [], actor('admin'));
+
+      expect(prisma.client.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { consultantId: 'co1' } }),
+      );
+      // No grants left at all, so the record is released.
+      expect(prisma.client.update).toHaveBeenCalledWith({
+        where: { id: 'cl1' },
+        data: { consultantId: null },
+      });
+    });
+
+    it('does not re-check when nothing was removed', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.location.findMany.mockResolvedValue([{ id: 'nsw' }]);
+      prisma.consultantLocation.findMany.mockResolvedValue([{ locationId: 'nsw' }]);
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await service.setLocations('co1', ['nsw'], actor('admin'));
+      expect(prisma.client.findMany).not.toHaveBeenCalled();
     });
   });
 });

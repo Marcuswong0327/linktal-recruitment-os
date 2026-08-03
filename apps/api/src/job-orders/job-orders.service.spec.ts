@@ -1,6 +1,7 @@
 import { JobOrdersService } from './job-orders.service';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { AuthUser } from '../auth/auth.types';
+import { grantsMock } from '../common/grants.testing';
 
 function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
@@ -171,8 +172,10 @@ describe('JobOrdersService.findAll — scope', () => {
         ],
       },
     ]);
-    // the pre-existing ownership scoping still applies too
-    expect(where.consultantId).toBe('cons-me');
+    // `jobOrderScope` is the only thing narrowing the list. It used to also
+    // AND on `consultantId = me`, which swallowed the industry and location
+    // arms entirely — a consultant saw their own book and nothing else.
+    expect(where).not.toHaveProperty('consultantId');
   });
 
   // Zero grants means "not configured", never "sees everything" — but an
@@ -270,38 +273,56 @@ describe('JobOrdersService.findOne — job scope', () => {
   });
 });
 
-describe('JobOrdersService.create — industry-first assignment guard', () => {
-  function makeService(consultantIndustryRow: unknown = null, clientRow: unknown = { industryId: 'ind1' }) {
+describe('JobOrdersService.create — assignment guard (industry OR location)', () => {
+  function makeService(
+    grants: Parameters<typeof grantsMock>[0] = {},
+    clientRow: unknown = { industryId: 'ind1' },
+  ) {
     const create = jest.fn().mockResolvedValue(withRelations({ id: 'j1' }));
-    const consultantIndustry = { findUnique: jest.fn().mockResolvedValue(consultantIndustryRow) };
-    const client = { findUnique: jest.fn().mockResolvedValue(clientRow) };
-    const prisma = { jobOrder: { create }, consultantIndustry, client } as unknown as ExtendedPrismaClient;
+    const prisma = {
+      jobOrder: { create },
+      ...grantsMock(grants),
+      client: { findUnique: jest.fn().mockResolvedValue(clientRow) },
+    } as unknown as ExtendedPrismaClient;
     return { service: new JobOrdersService(prisma), create };
   }
 
-  it("rejects assigning a consultant whose industries don't match the client's", async () => {
-    const { service, create } = makeService(null);
+  it('rejects assigning a consultant who covers neither the client industry nor the location', async () => {
+    const { service, create } = makeService();
     await expect(
       service.create({ clientId: 'cl1', jobTitleId: 'jt-1', consultantId: 'cons-1' }),
-    ).rejects.toMatchObject({ response: { code: 'CONSULTANT_INDUSTRY_MISMATCH' } });
+    ).rejects.toMatchObject({ response: { code: 'CONSULTANT_SCOPE_MISMATCH' } });
     expect(create).not.toHaveBeenCalled();
   });
 
-  it('allows assigning a consultant whose industries match the client', async () => {
-    const { service, create } = makeService({ consultantId: 'cons-1', industryId: 'ind1' });
+  it("allows assigning a consultant whose industry matches the client's", async () => {
+    const { service, create } = makeService({ industryIds: ['ind1'] });
     await service.create({ clientId: 'cl1', jobTitleId: 'jt-1', consultantId: 'cons-1' });
     expect(create).toHaveBeenCalledTimes(1);
   });
 
+  // A job order carries its own location — matching it is enough even when the
+  // client's industry sits outside the consultant's grants.
+  it("allows assigning on the job order's own location alone", async () => {
+    const { service, create } = makeService({ locationIds: ['au'], locationCovers: true });
+    await service.create({
+      clientId: 'cl1',
+      jobTitleId: 'jt-1',
+      consultantId: 'cons-1',
+      locationId: 'syd',
+    });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
   it('skips the guard entirely when no consultant is being assigned', async () => {
-    const { service, create } = makeService(null);
+    const { service, create } = makeService();
     await service.create({ clientId: 'cl1', jobTitleId: 'jt-1' });
     expect(create).toHaveBeenCalledTimes(1);
   });
 });
 
 describe('JobOrdersService.update — bidirectional auto-clear on re-link', () => {
-  it('clears a now-mismatched consultant when re-linked to a different client', async () => {
+  function makeService(grants: Parameters<typeof grantsMock>[0] = {}) {
     const findUnique = jest
       .fn()
       // findOne (existing, before the update)
@@ -310,16 +331,20 @@ describe('JobOrdersService.update — bidirectional auto-clear on re-link', () =
       )
       // final re-fetch for the response
       .mockResolvedValueOnce(withRelations({ id: 'j1', clientId: 'cl2', consultantId: null }));
-    const update = jest.fn().mockResolvedValue(withRelations({ id: 'j1', clientId: 'cl2' }));
-    const client = { findUnique: jest.fn().mockResolvedValue({ industryId: 'ind2' }) }; // the new client's industry
-    const consultantIndustry = { findUnique: jest.fn().mockResolvedValue(null) }; // cons-1 doesn't have ind2
+    const update = jest
+      .fn()
+      .mockResolvedValue(withRelations({ id: 'j1', clientId: 'cl2', locationId: 'syd' }));
     const prisma = {
       jobOrder: { findUnique, update, findUniqueOrThrow: findUnique },
-      client,
-      consultantIndustry,
+      ...grantsMock(grants),
+      // the new client's industry
+      client: { findUnique: jest.fn().mockResolvedValue({ industryId: 'ind2' }) },
     } as unknown as ExtendedPrismaClient;
-    const service = new JobOrdersService(prisma);
+    return { service: new JobOrdersService(prisma), update };
+  }
 
+  it('clears a now-uncovered consultant when re-linked to a different client', async () => {
+    const { service, update } = makeService(); // cons-1 covers neither ind2 nor syd
     const result = await service.update('j1', { clientId: 'cl2' }, makeUser());
 
     expect(update).toHaveBeenCalledTimes(2);
@@ -327,6 +352,22 @@ describe('JobOrdersService.update — bidirectional auto-clear on re-link', () =
       expect.objectContaining({ where: { id: 'j1' }, data: { consultantId: null } }),
     );
     expect(result.consultantId).toBeNull();
+  });
+
+  it('leaves the consultant alone when their patch still covers the job order', async () => {
+    const { service, update } = makeService({ locationIds: ['au'], locationCovers: true });
+    await service.update('j1', { clientId: 'cl2' }, makeUser());
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  // Location is an ownership arm now, so moving a job order re-checks even
+  // when it stays with the same client.
+  it('runs the auto-clear when only the location changed', async () => {
+    const { service, update } = makeService();
+    await service.update('j1', { locationId: 'mel' }, makeUser());
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'j1' }, data: { consultantId: null } }),
+    );
   });
 });
 

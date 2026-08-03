@@ -9790,6 +9790,18 @@
           "clientId": {
             "type": "string"
           },
+          "clientName": {
+            "type": "string",
+            "nullable": true,
+            "example": "Bakers Maison Australia",
+            "description": "Resolved client name — the company this role is for"
+          },
+          "clientDisplayId": {
+            "type": "string",
+            "nullable": true,
+            "example": "Client-0128",
+            "description": "The client's human-readable id, for cross-referencing"
+          },
           "consultantId": {
             "type": "string",
             "nullable": true
@@ -9927,6 +9939,8 @@
           "id",
           "displayId",
           "clientId",
+          "clientName",
+          "clientDisplayId",
           "consultantId",
           "jobTitleId",
           "jobTitle",

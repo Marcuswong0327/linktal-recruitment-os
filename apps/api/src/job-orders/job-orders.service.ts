@@ -3,9 +3,9 @@ import { Prisma, SubmissionStatus } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import {
-  assertConsultantIndustryMatchForJobOrder,
+  assertConsultantCoversJobOrder,
   assertInScope,
-  consultantHasIndustry,
+  consultantCovers,
   isScoped,
   jobOrderScope,
 } from '../common/scope';
@@ -29,10 +29,12 @@ import { QueryJobOrdersDto } from './dto/query-job-orders.dto';
 // grows the JobTitle catalog on the way past — new titles go through
 // /job-titles first.
 const JOB_ORDER_INCLUDE = {
-  // industryId is fetched purely for the scope check below (a Job Order has
-  // no industry of its own, only via its Client) — stripped back out in
-  // `toEntity`, never part of the API response.
-  client: { select: { industryId: true } },
+  // companyName/displayId are the client's *label*: a job order response
+  // otherwise carried only a raw `clientId`, so nothing downstream could name
+  // or link the company a role belongs to. industryId rides along purely for
+  // the scope check below (a Job Order has no industry of its own, only via
+  // its Client) and is stripped back out in `toEntity`.
+  client: { select: { industryId: true, companyName: true, displayId: true } },
   jobTitle: { select: { name: true } },
   jobRoleType: { select: { name: true } },
   // `ancestorIds` comes along on the location purely for the single-record
@@ -58,7 +60,7 @@ const JOB_ORDER_INCLUDE = {
 } satisfies Prisma.JobOrderInclude;
 
 type JobOrderWithRelations = {
-  client: { industryId: string } | null;
+  client: { industryId: string; companyName: string; displayId: string } | null;
   jobTitle: { name: string } | null;
   jobRoleType: { name: string } | null;
   location: { name: string; level: string; ancestorIds: string[] } | null;
@@ -80,9 +82,14 @@ function displayName(candidate: { firstName: string | null; lastName: string | n
 }
 
 function toEntity<T extends JobOrderWithRelations>(jobOrder: T) {
-  const { submissions, client: _client, jobTitle, jobRoleType, location, ...rest } = jobOrder;
+  const { submissions, client, jobTitle, jobRoleType, location, ...rest } = jobOrder;
   return {
     ...rest,
+    // `clientId` (on ...rest) is what you PATCH; these two are what you show
+    // and link. industryId is intentionally not re-exported — it's a scope
+    // input, not part of the job order's public shape.
+    clientName: client?.companyName ?? null,
+    clientDisplayId: client?.displayId ?? null,
     jobTitle: jobTitle?.name ?? null,
     jobRoleType: jobRoleType?.name ?? null,
     location: location?.name ?? null,
@@ -130,14 +137,10 @@ export class JobOrdersService {
       where.jobRoleTypeId = { in: query.jobRoleTypeIds };
     }
 
-    if (isScoped(user)) {
-      // Consultants only ever see their own book of job orders — enforced
-      // here, not just hidden in the UI, so a crafted `consultantIds` query
-      // param can't be used to browse someone else's. Overrides whatever the
-      // caller passed; there's no "view others" mode for this role. Every
-      // other role (manager/finance/researcher/admin) sees the full list.
-      where.consultantId = user.consultantId;
-    } else if (query.consultantIds?.length) {
+    if (query.consultantIds?.length) {
+      // Safe to honour for a consultant too: `jobOrderScope` is AND-ed on
+      // below, so filtering *by* another consultant can only narrow what this
+      // caller was already allowed to see, never widen it.
       where.consultantId = { in: query.consultantIds };
     }
 
@@ -251,11 +254,15 @@ export class JobOrdersService {
   }
 
   async create(dto: CreateJobOrderDto) {
-    // Industry-first: a consultant can only be assigned if they hold the
-    // industry of this job order's client — resolved via the client, since
-    // JobOrder has none of its own.
+    // A consultant can only be assigned a job order they'd reach anyway — its
+    // own location, or the industry of its client (JobOrder has none of its own).
     if (dto.consultantId) {
-      await assertConsultantIndustryMatchForJobOrder(this.prisma, dto.consultantId, dto.clientId);
+      await assertConsultantCoversJobOrder(
+        this.prisma,
+        dto.consultantId,
+        dto.clientId,
+        dto.locationId ?? null,
+      );
     }
     // displayId is assigned by the DB (JobOrder_displayId_seq default). A
     // brand-new job order has no submissions yet, but still runs through
@@ -271,13 +278,16 @@ export class JobOrdersService {
   async update(id: string, dto: UpdateJobOrderDto, user: AuthUser) {
     const existing = await this.findOne(id, user);
 
-    // Industry-first: only validated when a consultant is explicitly being
-    // set/changed here — re-linking to a different client never blocks on
-    // this by itself (that's what the auto-clear below is for instead of
-    // erroring).
+    // Only validated when a consultant is explicitly being set/changed here —
+    // re-linking to a different client never blocks on this by itself (that's
+    // what the auto-clear below is for instead of erroring).
     if ('consultantId' in dto && dto.consultantId) {
-      const effectiveClientId = 'clientId' in dto && dto.clientId ? dto.clientId : existing.clientId;
-      await assertConsultantIndustryMatchForJobOrder(this.prisma, dto.consultantId, effectiveClientId);
+      await assertConsultantCoversJobOrder(
+        this.prisma,
+        dto.consultantId,
+        'clientId' in dto && dto.clientId ? dto.clientId : existing.clientId,
+        'locationId' in dto ? (dto.locationId ?? null) : existing.locationId,
+      );
     }
 
     let jobOrder = await this.prisma.jobOrder.update({
@@ -286,15 +296,21 @@ export class JobOrdersService {
       include: JOB_ORDER_INCLUDE,
     });
 
-    // Bidirectional auto-clear: re-linked to a different client without an
-    // explicit consultant change in the same request — silently unassign if
-    // the existing consultant no longer matches the new client's industry.
-    if ('clientId' in dto && dto.clientId && !('consultantId' in dto) && existing.consultantId) {
+    // Bidirectional auto-clear: re-linked to a different client, or moved to a
+    // different location, without an explicit consultant change in the same
+    // request — silently unassign if the existing consultant no longer reaches
+    // it on either arm.
+    const relinked = ('clientId' in dto && dto.clientId) || 'locationId' in dto;
+    if (relinked && !('consultantId' in dto) && existing.consultantId) {
       const client = await this.prisma.client.findUnique({
-        where: { id: dto.clientId },
+        where: { id: jobOrder.clientId },
         select: { industryId: true },
       });
-      if (!(await consultantHasIndustry(this.prisma, existing.consultantId, client?.industryId ?? null))) {
+      const covers = await consultantCovers(this.prisma, existing.consultantId, {
+        industryId: client?.industryId ?? null,
+        locationIds: jobOrder.locationId ? [jobOrder.locationId] : [],
+      });
+      if (!covers) {
         await this.prisma.jobOrder.update({ where: { id }, data: { consultantId: null } });
         jobOrder = await this.prisma.jobOrder.findUniqueOrThrow({ where: { id }, include: JOB_ORDER_INCLUDE });
       }

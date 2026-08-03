@@ -155,10 +155,17 @@ match on **their own coverage**, independent of where their client sits — and 
 `Client` is reachable through such a stakeholder in turn, its fourth arm. So
 `clientScope` is
 `consultantId = me OR industry OR locations OR stakeholders.some(coverage)`.
-Specialization filtering ships stored-but-inactive pending the catalog backfill,
-so the effective rule today is `industry OR location`.
+Specialization narrows the industry arm and **is live** — an untagged record
+passes on its industry alone. Clients are ~100% tagged and candidates ~5%, so it
+cuts client lists hard and candidate lists barely.
 
-Full rules: `docs/rbac-roles.md` §3.
+**Assignment must agree with visibility**: a record can only be assigned to a
+consultant the same `industry OR location` test would let see it (`400
+CONSULTANT_SCOPE_MISMATCH`), and narrowing either grant releases whatever it
+strands. Coverage grants visibility but not ownership — a client has no contacts
+when it's created.
+
+Worked examples + diagrams: `docs/scope-explained.md`. Spec: `docs/rbac-roles.md` §3.
 
 ## RBAC roles
 
@@ -221,6 +228,7 @@ pnpm prisma:migrate   # Run migrations
 | File | Description |
 |------|-------------|
 | `docs/database-erd.md` | ERD, the two hierarchies, table reference |
+| `docs/scope-explained.md` | **Start here for scope.** Worked examples per consultant, diagrams, deletion scenarios, known gaps |
 | `docs/workbook-import-discrepancies.md` | What the workbook importer can't resolve, and what needs deciding |
 | `docs/migrations.md` | DB migration workflow: rollout, rollback, deploy |
 | `docs/rbac-roles.md` | RBAC: permission matrix + the scoping rules (§3) |

@@ -1,14 +1,14 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import {
-  assertConsultantIndustryMatch,
-  assertConsultantIndustryMatchForJobOrder,
+  assertConsultantCovers,
+  assertConsultantCoversJobOrder,
   assertInScope,
   candidateScope,
   clearMismatchedCandidateAssignment,
   clearMismatchedClientAssignment,
-  clearMismatchedConsultantAssignments,
+  clearUncoveredConsultantAssignments,
   clientScope,
-  consultantHasIndustry,
+  consultantCovers,
   isScoped,
   jobOrderScope,
   jobResearchScope,
@@ -316,194 +316,340 @@ function makePrisma(overrides: Record<string, unknown> = {}) {
   return overrides as unknown as ExtendedPrismaClient;
 }
 
-describe('consultantHasIndustry', () => {
-  it('looks the grant up by its composite key', async () => {
-    const findUnique = jest.fn().mockResolvedValue({ consultantId: 'c1', industryId: 'ind1' });
-    const prisma = makePrisma({ consultantIndustry: { findUnique } });
 
-    await expect(consultantHasIndustry(prisma, 'c1', 'ind1')).resolves.toBe(true);
-    expect(findUnique).toHaveBeenCalledWith({
-      where: { consultantId_industryId: { consultantId: 'c1', industryId: 'ind1' } },
+/**
+ * Grants are read as two `findMany`s, and the location arm resolves through a
+ * `location.count` on `ancestorIds` — the same test the scopes above use, so a
+ * COUNTRY grant covers a CITY-tagged record here exactly as it does there.
+ */
+function makeGrantedPrisma(
+  grants: { industryIds?: string[]; locationIds?: string[] },
+  extra: Record<string, unknown> = {},
+) {
+  return makePrisma({
+    consultantIndustry: {
+      findMany: jest.fn().mockResolvedValue((grants.industryIds ?? []).map((industryId) => ({ industryId }))),
+    },
+    consultantLocation: {
+      findMany: jest.fn().mockResolvedValue((grants.locationIds ?? []).map((locationId) => ({ locationId }))),
+    },
+    // Default: no record location sits under a granted node.
+    location: { count: jest.fn().mockResolvedValue(0) },
+    ...extra,
+  });
+}
+
+describe('consultantCovers', () => {
+  it('matches on industry without touching the location tree', async () => {
+    const prisma = makeGrantedPrisma({ industryIds: ['ind1'], locationIds: ['loc1'] });
+    await expect(
+      consultantCovers(prisma, 'c1', { industryId: 'ind1', locationIds: ['locX'] }),
+    ).resolves.toBe(true);
+    expect(prisma.location.count).not.toHaveBeenCalled();
+  });
+
+  // The whole point of the rewrite: location alone is now enough. A consultant
+  // whose only industry holds zero records could previously own nothing at all.
+  it('matches on location when the industry does not', async () => {
+    const prisma = makeGrantedPrisma({ industryIds: ['ind1'], locationIds: ['au'] });
+    (prisma.location.count as jest.Mock).mockResolvedValue(1);
+
+    await expect(
+      consultantCovers(prisma, 'c1', { industryId: 'ind2', locationIds: ['sydney'] }),
+    ).resolves.toBe(true);
+    expect(prisma.location.count).toHaveBeenCalledWith({
+      where: { id: { in: ['sydney'] }, ancestorIds: { hasSome: ['au'] } },
     });
   });
 
-  it('is false for a missing grant, and short-circuits on a null industry', async () => {
-    const findUnique = jest.fn().mockResolvedValue(null);
-    const prisma = makePrisma({ consultantIndustry: { findUnique } });
+  it('is false when neither arm matches', async () => {
+    const prisma = makeGrantedPrisma({ industryIds: ['ind1'], locationIds: ['au'] });
+    await expect(
+      consultantCovers(prisma, 'c1', { industryId: 'ind2', locationIds: ['kl'] }),
+    ).resolves.toBe(false);
+  });
 
-    await expect(consultantHasIndustry(prisma, 'c1', 'ind1')).resolves.toBe(false);
+  it('short-circuits the location query when either side is empty', async () => {
+    const noGrant = makeGrantedPrisma({ industryIds: ['ind1'] });
+    await expect(
+      consultantCovers(noGrant, 'c1', { industryId: null, locationIds: ['sydney'] }),
+    ).resolves.toBe(false);
+    expect(noGrant.location.count).not.toHaveBeenCalled();
 
-    findUnique.mockClear();
-    await expect(consultantHasIndustry(prisma, 'c1', null)).resolves.toBe(false);
-    expect(findUnique).not.toHaveBeenCalled();
+    const noRecordLocation = makeGrantedPrisma({ locationIds: ['au'] });
+    await expect(
+      consultantCovers(noRecordLocation, 'c1', { industryId: null, locationIds: [] }),
+    ).resolves.toBe(false);
+    expect(noRecordLocation.location.count).not.toHaveBeenCalled();
+  });
+
+  // A Client carries a *set* of markets; covering any one of them is enough.
+  it('accepts a record whose second location is the covered one', async () => {
+    const prisma = makeGrantedPrisma({ locationIds: ['au'] });
+    (prisma.location.count as jest.Mock).mockResolvedValue(1);
+    await expect(
+      consultantCovers(prisma, 'c1', { industryId: null, locationIds: ['kl', 'sydney'] }),
+    ).resolves.toBe(true);
   });
 });
 
-describe('assertConsultantIndustryMatch', () => {
+describe('assertConsultantCovers', () => {
   it('skips entirely when there is no consultant to validate (an unassign)', async () => {
-    const findUnique = jest.fn();
-    const prisma = makePrisma({ consultantIndustry: { findUnique } });
-
-    await expect(assertConsultantIndustryMatch(prisma, null, 'ind1')).resolves.toBeUndefined();
-    await expect(assertConsultantIndustryMatch(prisma, undefined, 'ind1')).resolves.toBeUndefined();
-    expect(findUnique).not.toHaveBeenCalled();
+    const prisma = makeGrantedPrisma({});
+    await expect(
+      assertConsultantCovers(prisma, null, { industryId: 'ind1', locationIds: [] }),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertConsultantCovers(prisma, undefined, { industryId: 'ind1', locationIds: [] }),
+    ).resolves.toBeUndefined();
+    expect(prisma.consultantIndustry.findMany).not.toHaveBeenCalled();
   });
 
-  it('throws CONSULTANT_INDUSTRY_MISMATCH when the consultant lacks the industry', async () => {
-    const prisma = makePrisma({ consultantIndustry: { findUnique: jest.fn().mockResolvedValue(null) } });
-    await expect(assertConsultantIndustryMatch(prisma, 'c1', 'ind1')).rejects.toThrow(BadRequestException);
+  it('throws CONSULTANT_SCOPE_MISMATCH when neither arm covers the record', async () => {
+    const prisma = makeGrantedPrisma({ industryIds: ['ind1'], locationIds: ['au'] });
+    const record = { industryId: 'ind2', locationIds: ['kl'] };
 
-    await assertConsultantIndustryMatch(prisma, 'c1', 'ind1').catch((error: BadRequestException) => {
-      expect(error.getResponse()).toMatchObject({ code: 'CONSULTANT_INDUSTRY_MISMATCH' });
+    await expect(assertConsultantCovers(prisma, 'c1', record)).rejects.toThrow(BadRequestException);
+    await assertConsultantCovers(prisma, 'c1', record).catch((error: BadRequestException) => {
+      expect(error.getResponse()).toMatchObject({ code: 'CONSULTANT_SCOPE_MISMATCH' });
     });
+  });
+
+  it('passes silently when one arm covers it', async () => {
+    const prisma = makeGrantedPrisma({ industryIds: ['ind1'] });
+    await expect(
+      assertConsultantCovers(prisma, 'c1', { industryId: 'ind1', locationIds: [] }),
+    ).resolves.toBeUndefined();
   });
 });
 
-describe('assertConsultantIndustryMatchForJobOrder', () => {
-  it('resolves the industry through the job order’s client', async () => {
+describe('assertConsultantCoversJobOrder', () => {
+  it('takes industry from the client and location from the job order', async () => {
     const clientFindUnique = jest.fn().mockResolvedValue({ industryId: 'ind1' });
-    const grantFindUnique = jest.fn().mockResolvedValue({ id: 'g1' });
-    const prisma = makePrisma({
-      client: { findUnique: clientFindUnique },
-      consultantIndustry: { findUnique: grantFindUnique },
-    });
+    const prisma = makeGrantedPrisma(
+      { industryIds: [], locationIds: ['au'] },
+      { client: { findUnique: clientFindUnique } },
+    );
+    (prisma.location.count as jest.Mock).mockResolvedValue(1);
 
-    await assertConsultantIndustryMatchForJobOrder(prisma, 'c1', 'cl1');
+    await assertConsultantCoversJobOrder(prisma, 'c1', 'cl1', 'sydney');
+
     expect(clientFindUnique).toHaveBeenCalledWith({
       where: { id: 'cl1' },
       select: { industryId: true },
     });
-    expect(grantFindUnique.mock.calls[0][0].where.consultantId_industryId.industryId).toBe('ind1');
+    expect(prisma.location.count).toHaveBeenCalledWith({
+      where: { id: { in: ['sydney'] }, ancestorIds: { hasSome: ['au'] } },
+    });
+  });
+
+  // JobOrder.locationId is nullable — an untagged job order has only the
+  // client's industry to qualify on.
+  it('falls back to the client industry when the job order has no location', async () => {
+    const prisma = makeGrantedPrisma(
+      { industryIds: ['ind1'] },
+      { client: { findUnique: jest.fn().mockResolvedValue({ industryId: 'ind1' }) } },
+    );
+    await expect(assertConsultantCoversJobOrder(prisma, 'c1', 'cl1', null)).resolves.toBeUndefined();
+    expect(prisma.location.count).not.toHaveBeenCalled();
   });
 
   it('does not even read the client when there is no consultant to validate', async () => {
     const clientFindUnique = jest.fn();
-    await assertConsultantIndustryMatchForJobOrder(
+    await assertConsultantCoversJobOrder(
       makePrisma({ client: { findUnique: clientFindUnique } }),
       null,
       'cl1',
+      'sydney',
     );
     expect(clientFindUnique).not.toHaveBeenCalled();
   });
 });
 
-// A stale mismatched consultantId must never survive an industry change —
-// otherwise the ownership arm would keep handing someone a record they no
-// longer qualify for.
+// A stale mismatched consultantId must never survive an industry or location
+// change — otherwise the ownership arm would keep handing someone a record
+// they no longer qualify for.
 describe('clearMismatchedClientAssignment', () => {
-  function setup(clientConsultantId: string | null, jobOrders: { id: string; consultantId: string }[] = []) {
-    const clientFindUnique = jest.fn().mockResolvedValue({ consultantId: clientConsultantId });
+  function setup(
+    client: { consultantId: string | null; industryId?: string; locationIds?: string[] } | null,
+    jobOrders: { id: string; consultantId: string; locationId: string | null }[] = [],
+  ) {
+    const clientFindUnique = jest.fn().mockResolvedValue(
+      client && {
+        consultantId: client.consultantId,
+        industryId: client.industryId ?? 'ind1',
+        locations: (client.locationIds ?? []).map((locationId) => ({ locationId })),
+      },
+    );
     const clientUpdate = jest.fn().mockResolvedValue({});
     const jobOrderFindMany = jest.fn().mockResolvedValue(jobOrders);
     const jobOrderUpdate = jest.fn().mockResolvedValue({});
-    const grantFindUnique = jest.fn().mockResolvedValue(null); // nobody holds the new industry
-    const prisma = makePrisma({
-      client: { findUnique: clientFindUnique, update: clientUpdate },
-      jobOrder: { findMany: jobOrderFindMany, update: jobOrderUpdate },
-      consultantIndustry: { findUnique: grantFindUnique },
-    });
+    // Nobody holds anything — every assignment looks stranded unless a test
+    // says otherwise.
+    const prisma = makeGrantedPrisma(
+      {},
+      {
+        client: { findUnique: clientFindUnique, update: clientUpdate },
+        jobOrder: { findMany: jobOrderFindMany, update: jobOrderUpdate },
+      },
+    );
     return { prisma, clientUpdate, jobOrderUpdate, jobOrderFindMany };
   }
 
   it('clears the client’s own consultant and reports that it did', async () => {
-    const { prisma, clientUpdate } = setup('c1');
-    await expect(clearMismatchedClientAssignment(prisma, 'cl1', 'ind2')).resolves.toBe(true);
+    const { prisma, clientUpdate } = setup({ consultantId: 'c1' });
+    await expect(clearMismatchedClientAssignment(prisma, 'cl1')).resolves.toBe(true);
     expect(clientUpdate).toHaveBeenCalledWith({ where: { id: 'cl1' }, data: { consultantId: null } });
   });
 
   // Job Orders inherit their client's industry, so retagging the client has to
   // cascade to them as well.
   it('cascades to the client’s job orders', async () => {
-    const { prisma, jobOrderUpdate, jobOrderFindMany } = setup(null, [
-      { id: 'jo1', consultantId: 'c1' },
-      { id: 'jo2', consultantId: 'c2' },
+    const { prisma, jobOrderUpdate, jobOrderFindMany } = setup({ consultantId: null }, [
+      { id: 'jo1', consultantId: 'c1', locationId: null },
+      { id: 'jo2', consultantId: 'c2', locationId: null },
     ]);
-    await clearMismatchedClientAssignment(prisma, 'cl1', 'ind2');
+    await clearMismatchedClientAssignment(prisma, 'cl1');
 
     expect(jobOrderFindMany).toHaveBeenCalledWith({
       where: { clientId: 'cl1', consultantId: { not: null } },
-      select: { id: true, consultantId: true },
+      select: { id: true, consultantId: true, locationId: true },
     });
     expect(jobOrderUpdate).toHaveBeenCalledTimes(2);
   });
 
   it('reports false when the client had no consultant to clear', async () => {
-    const { prisma, clientUpdate } = setup(null);
-    await expect(clearMismatchedClientAssignment(prisma, 'cl1', 'ind2')).resolves.toBe(false);
+    const { prisma, clientUpdate } = setup({ consultantId: null });
+    await expect(clearMismatchedClientAssignment(prisma, 'cl1')).resolves.toBe(false);
     expect(clientUpdate).not.toHaveBeenCalled();
   });
 
-  it('leaves a still-valid assignment alone', async () => {
-    const { prisma, clientUpdate } = setup('c1');
-    (prisma.consultantIndustry.findUnique as jest.Mock).mockResolvedValue({ id: 'g1' });
-    await expect(clearMismatchedClientAssignment(prisma, 'cl1', 'ind2')).resolves.toBe(false);
+  it('leaves an assignment the owner still reaches by industry alone', async () => {
+    const { prisma, clientUpdate } = setup({ consultantId: 'c1', industryId: 'ind1' });
+    (prisma.consultantIndustry.findMany as jest.Mock).mockResolvedValue([{ industryId: 'ind1' }]);
+    await expect(clearMismatchedClientAssignment(prisma, 'cl1')).resolves.toBe(false);
+    expect(clientUpdate).not.toHaveBeenCalled();
+  });
+
+  // The behaviour change: losing the industry no longer strands a record the
+  // owner's patch still covers.
+  it('leaves an assignment the owner still reaches by location alone', async () => {
+    const { prisma, clientUpdate } = setup({ consultantId: 'c1', locationIds: ['sydney'] });
+    (prisma.consultantLocation.findMany as jest.Mock).mockResolvedValue([{ locationId: 'au' }]);
+    (prisma.location.count as jest.Mock).mockResolvedValue(1);
+    await expect(clearMismatchedClientAssignment(prisma, 'cl1')).resolves.toBe(false);
+    expect(clientUpdate).not.toHaveBeenCalled();
+  });
+
+  it('reports false for a client that no longer exists', async () => {
+    const { prisma, clientUpdate } = setup(null);
+    await expect(clearMismatchedClientAssignment(prisma, 'cl1')).resolves.toBe(false);
     expect(clientUpdate).not.toHaveBeenCalled();
   });
 });
 
 describe('clearMismatchedCandidateAssignment', () => {
-  it('clears a now-invalid assignment and reports it', async () => {
+  function setup(candidate: { consultantId: string | null } | null) {
     const update = jest.fn().mockResolvedValue({});
-    const prisma = makePrisma({
-      candidate: { findUnique: jest.fn().mockResolvedValue({ consultantId: 'c1' }), update },
-      consultantIndustry: { findUnique: jest.fn().mockResolvedValue(null) },
-    });
-    await expect(clearMismatchedCandidateAssignment(prisma, 'cd1', 'ind2')).resolves.toBe(true);
+    const prisma = makeGrantedPrisma(
+      {},
+      {
+        candidate: {
+          findUnique: jest
+            .fn()
+            .mockResolvedValue(
+              candidate && { consultantId: candidate.consultantId, industryId: 'ind1', locationId: 'sydney' },
+            ),
+          update,
+        },
+      },
+    );
+    return { prisma, update };
+  }
+
+  it('clears a now-uncovered assignment and reports it', async () => {
+    const { prisma, update } = setup({ consultantId: 'c1' });
+    await expect(clearMismatchedCandidateAssignment(prisma, 'cd1')).resolves.toBe(true);
     expect(update).toHaveBeenCalledWith({ where: { id: 'cd1' }, data: { consultantId: null } });
   });
 
   it('leaves an unassigned candidate alone', async () => {
-    const update = jest.fn();
-    const prisma = makePrisma({
-      candidate: { findUnique: jest.fn().mockResolvedValue({ consultantId: null }), update },
-      consultantIndustry: { findUnique: jest.fn().mockResolvedValue(null) },
-    });
-    await expect(clearMismatchedCandidateAssignment(prisma, 'cd1', 'ind2')).resolves.toBe(false);
+    const { prisma, update } = setup({ consultantId: null });
+    await expect(clearMismatchedCandidateAssignment(prisma, 'cd1')).resolves.toBe(false);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('leaves an assignment the owner still covers', async () => {
+    const { prisma, update } = setup({ consultantId: 'c1' });
+    (prisma.consultantIndustry.findMany as jest.Mock).mockResolvedValue([{ industryId: 'ind1' }]);
+    await expect(clearMismatchedCandidateAssignment(prisma, 'cd1')).resolves.toBe(false);
     expect(update).not.toHaveBeenCalled();
   });
 });
 
 // The other direction: the consultant's own grants changed, so everything they
-// hold in a removed industry gets released.
-describe('clearMismatchedConsultantAssignments', () => {
-  function setup() {
-    const clientUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
-    const candidateUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
-    const jobOrderUpdateMany = jest.fn().mockResolvedValue({ count: 0 });
-    return {
-      prisma: makePrisma({
-        client: { updateMany: clientUpdateMany },
-        candidate: { updateMany: candidateUpdateMany },
-        jobOrder: { updateMany: jobOrderUpdateMany },
-      }),
-      clientUpdateMany,
-      candidateUpdateMany,
-      jobOrderUpdateMany,
-    };
+// hold that neither arm still reaches gets released.
+describe('clearUncoveredConsultantAssignments', () => {
+  function setup(grants: { industryIds?: string[]; locationIds?: string[] } = {}) {
+    const clientUpdate = jest.fn().mockResolvedValue({});
+    const candidateUpdate = jest.fn().mockResolvedValue({});
+    const jobOrderUpdate = jest.fn().mockResolvedValue({});
+    const prisma = makeGrantedPrisma(grants, {
+      client: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ id: 'cl1', industryId: 'ind1', locations: [{ locationId: 'sydney' }] }]),
+        update: clientUpdate,
+      },
+      candidate: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'cd1', industryId: 'ind1', locationId: 'sydney' }]),
+        update: candidateUpdate,
+      },
+      jobOrder: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ id: 'jo1', locationId: 'sydney', client: { industryId: 'ind1' } }]),
+        update: jobOrderUpdate,
+      },
+    });
+    return { prisma, clientUpdate, candidateUpdate, jobOrderUpdate };
   }
 
-  it('releases clients, candidates and job orders in the removed industries', async () => {
-    const { prisma, clientUpdateMany, candidateUpdateMany, jobOrderUpdateMany } = setup();
-    await clearMismatchedConsultantAssignments(prisma, 'c1', ['ind2', 'ind3']);
+  it('releases every record neither arm still reaches', async () => {
+    const { prisma, clientUpdate, candidateUpdate, jobOrderUpdate } = setup({ industryIds: ['ind2'] });
+    await clearUncoveredConsultantAssignments(prisma, 'c1');
 
-    expect(clientUpdateMany).toHaveBeenCalledWith({
-      where: { consultantId: 'c1', industryId: { in: ['ind2', 'ind3'] } },
-      data: { consultantId: null },
-    });
-    expect(candidateUpdateMany).toHaveBeenCalledWith({
-      where: { consultantId: 'c1', industryId: { in: ['ind2', 'ind3'] } },
-      data: { consultantId: null },
-    });
-    // JobOrder has no industry of its own — matched through its client.
-    expect(jobOrderUpdateMany).toHaveBeenCalledWith({
-      where: { consultantId: 'c1', client: { industryId: { in: ['ind2', 'ind3'] } } },
-      data: { consultantId: null },
-    });
+    expect(clientUpdate).toHaveBeenCalledWith({ where: { id: 'cl1' }, data: { consultantId: null } });
+    expect(candidateUpdate).toHaveBeenCalledWith({ where: { id: 'cd1' }, data: { consultantId: null } });
+    expect(jobOrderUpdate).toHaveBeenCalledWith({ where: { id: 'jo1' }, data: { consultantId: null } });
   });
 
-  it('is a no-op when nothing was removed', async () => {
-    const { prisma, clientUpdateMany } = setup();
-    await clearMismatchedConsultantAssignments(prisma, 'c1', []);
-    expect(clientUpdateMany).not.toHaveBeenCalled();
+  it('keeps everything the surviving industry grant still covers', async () => {
+    const { prisma, clientUpdate, candidateUpdate, jobOrderUpdate } = setup({ industryIds: ['ind1'] });
+    await clearUncoveredConsultantAssignments(prisma, 'c1');
+
+    expect(clientUpdate).not.toHaveBeenCalled();
+    expect(candidateUpdate).not.toHaveBeenCalled();
+    expect(jobOrderUpdate).not.toHaveBeenCalled();
+  });
+
+  // Dropping an industry must not strand a record the location arm still holds.
+  it('keeps everything the surviving location grant still covers', async () => {
+    const { prisma, clientUpdate, candidateUpdate, jobOrderUpdate } = setup({ locationIds: ['au'] });
+    (prisma.location.count as jest.Mock).mockResolvedValue(1);
+    await clearUncoveredConsultantAssignments(prisma, 'c1');
+
+    expect(clientUpdate).not.toHaveBeenCalled();
+    expect(candidateUpdate).not.toHaveBeenCalled();
+    expect(jobOrderUpdate).not.toHaveBeenCalled();
+  });
+
+  it('scopes every lookup to this consultant', async () => {
+    const { prisma } = setup({ industryIds: ['ind1'] });
+    await clearUncoveredConsultantAssignments(prisma, 'c1');
+
+    for (const model of ['client', 'candidate', 'jobOrder'] as const) {
+      expect((prisma[model].findMany as jest.Mock).mock.calls[0][0].where).toEqual({ consultantId: 'c1' });
+    }
   });
 });

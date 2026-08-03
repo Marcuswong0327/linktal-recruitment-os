@@ -13,7 +13,7 @@ import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { RequestContext } from '../common/request-context';
 import {
-  assertConsultantIndustryMatch,
+  assertConsultantCovers,
   assertInScope,
   candidateScope,
   clearMismatchedCandidateAssignment,
@@ -230,10 +230,13 @@ export class CandidatesService {
   }
 
   async create(dto: CreateCandidateDto) {
-    // Industry-first: a consultant can only be assigned once the candidate
-    // already has an industry tagged, and only if they hold that industry.
+    // A consultant can only be assigned a candidate they'd reach anyway —
+    // their industry or their location.
     if (dto.consultantId) {
-      await assertConsultantIndustryMatch(this.prisma, dto.consultantId, dto.industryId ?? null);
+      await assertConsultantCovers(this.prisma, dto.consultantId, {
+        industryId: dto.industryId ?? null,
+        locationIds: dto.locationId ? [dto.locationId] : [],
+      });
     }
     // displayId is assigned by the DB (Candidate_displayId_seq default).
     const candidate = await this.prisma.candidate.create({
@@ -251,12 +254,15 @@ export class CandidatesService {
   async update(id: string, dto: UpdateCandidateDto, user: AuthUser) {
     const existing = await this.findOne(id, user);
 
-    // Industry-first: only validated when a consultant is explicitly being
-    // set/changed here — an industry-only edit never blocks on this (that's
-    // what the auto-clear below is for instead of erroring).
+    // Only validated when a consultant is explicitly being set/changed here —
+    // an industry/location-only edit never blocks on this (that's what the
+    // auto-clear below is for instead of erroring).
     if ('consultantId' in dto && dto.consultantId) {
-      const effectiveIndustryId = 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId;
-      await assertConsultantIndustryMatch(this.prisma, dto.consultantId, effectiveIndustryId);
+      const effectiveLocationId = 'locationId' in dto ? dto.locationId : existing.locationId;
+      await assertConsultantCovers(this.prisma, dto.consultantId, {
+        industryId: 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId,
+        locationIds: effectiveLocationId ? [effectiveLocationId] : [],
+      });
     }
 
     let candidate = await this.prisma.candidate.update({
@@ -282,8 +288,8 @@ export class CandidatesService {
     // Bidirectional auto-clear: the industry changed without an explicit
     // consultant change in the same request — silently unassign if the
     // existing consultant no longer matches, rather than blocking the edit.
-    if ('industryId' in dto && !('consultantId' in dto)) {
-      const cleared = await clearMismatchedCandidateAssignment(this.prisma, id, dto.industryId ?? null);
+    if (('industryId' in dto || 'locationId' in dto) && !('consultantId' in dto)) {
+      const cleared = await clearMismatchedCandidateAssignment(this.prisma, id);
       if (cleared) {
         candidate = await this.prisma.candidate.findUniqueOrThrow({ where: { id }, include: CANDIDATE_INCLUDE });
       }

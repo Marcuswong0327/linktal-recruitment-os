@@ -263,53 +263,99 @@ export function assertInScope(
 // Assignment guards
 // ---------------------------------------------------------------------------
 
-/** True if `consultantId` currently holds `industryId`. */
-export async function consultantHasIndustry(
+/**
+ * **Assignment must agree with visibility.** A record can only be owned by a
+ * consultant who would reach it anyway — same `industry OR location` test the
+ * scopes above apply, so an assignment can never hand someone an account their
+ * own list would then hide.
+ *
+ * It used to check industry *only*, which broke both ways. Too strict: a
+ * consultant granted four cities and an industry holding zero clients
+ * (Equipment, today) could be assigned nothing at all. Too loose: a Sydney
+ * client could be handed to a Melbourne-only consultant, who then couldn't see
+ * it, because location was never consulted.
+ *
+ * Stakeholder coverage — `clientScope`'s fourth arm — is deliberately not part
+ * of this. A client has no contacts at the moment it's created, so a guard
+ * that depended on them would be unenforceable on `create` and inconsistent
+ * with `update`. Coverage still grants *visibility*; it just doesn't grant
+ * *ownership*.
+ */
+type Grants = { industryIds: string[]; locationIds: string[] };
+
+async function loadGrants(
   prisma: ExtendedPrismaClient,
   consultantId: string,
-  industryId: string | null | undefined,
-): Promise<boolean> {
-  if (!industryId) return false;
-  const row = await prisma.consultantIndustry.findUnique({
-    where: { consultantId_industryId: { consultantId, industryId } },
-  });
-  return row !== null;
+): Promise<Grants> {
+  const [industries, locations] = await Promise.all([
+    prisma.consultantIndustry.findMany({ where: { consultantId }, select: { industryId: true } }),
+    prisma.consultantLocation.findMany({ where: { consultantId }, select: { locationId: true } }),
+  ]);
+  return {
+    industryIds: industries.map((i) => i.industryId),
+    locationIds: locations.map((l) => l.locationId),
+  };
 }
 
 /**
- * A Client/Candidate/JobOrder can only be assigned to a consultant who holds
- * its industry. Call with a null/undefined `consultantId` (clearing an
- * assignment) to skip — there's nothing to validate when unassigning.
- *
- * The old `INDUSTRY_REQUIRED` case is gone: `industryId` is a required column
- * now, so there's no untagged state left to guard against.
+ * What the guard needs to know about the record. `locationIds` are the
+ * record's *own* nodes — one for Candidate/JobOrder, a set for Client — and
+ * are matched against grants through `ancestorIds`, so a COUNTRY grant covers
+ * a CITY-tagged record exactly as it does in the scopes above.
  */
-export async function assertConsultantIndustryMatch(
+export type OwnableRecord = { industryId: string | null; locationIds: string[] };
+
+export async function consultantCovers(
   prisma: ExtendedPrismaClient,
-  consultantId: string | null | undefined,
-  industryId: string | null | undefined,
-): Promise<void> {
-  if (!consultantId) return;
-  if (!(await consultantHasIndustry(prisma, consultantId, industryId))) {
-    throw new BadRequestException({
-      code: 'CONSULTANT_INDUSTRY_MISMATCH',
-      message: 'This consultant is not assigned to this industry.',
-    });
-  }
+  consultantId: string,
+  record: OwnableRecord,
+): Promise<boolean> {
+  const grants = await loadGrants(prisma, consultantId);
+  if (record.industryId != null && grants.industryIds.includes(record.industryId)) return true;
+  if (record.locationIds.length === 0 || grants.locationIds.length === 0) return false;
+  const covered = await prisma.location.count({
+    where: { id: { in: record.locationIds }, ancestorIds: { hasSome: grants.locationIds } },
+  });
+  return covered > 0;
 }
 
-/** Same guard for a Job Order, whose industry is only reachable via its Client. */
-export async function assertConsultantIndustryMatchForJobOrder(
+/**
+ * Call with a null/undefined `consultantId` (clearing an assignment) to skip —
+ * there's nothing to validate when unassigning.
+ */
+export async function assertConsultantCovers(
+  prisma: ExtendedPrismaClient,
+  consultantId: string | null | undefined,
+  record: OwnableRecord,
+): Promise<void> {
+  if (!consultantId) return;
+  if (await consultantCovers(prisma, consultantId, record)) return;
+  throw new BadRequestException({
+    code: 'CONSULTANT_SCOPE_MISMATCH',
+    message: "This consultant covers neither this record's industry nor its location.",
+  });
+}
+
+/**
+ * Same guard for a Job Order, which owns a location but reaches its industry
+ * only through its Client — mirroring `jobOrderScope`, which matches on the
+ * job order's own location and the client's industry.
+ */
+export async function assertConsultantCoversJobOrder(
   prisma: ExtendedPrismaClient,
   consultantId: string | null | undefined,
   clientId: string,
+  locationId: string | null | undefined,
 ): Promise<void> {
   if (!consultantId) return;
   const client = await prisma.client.findUnique({
     where: { id: clientId },
     select: { industryId: true },
   });
-  await assertConsultantIndustryMatch(prisma, consultantId, client?.industryId ?? null);
+  await assertConsultantCovers(prisma, consultantId, {
+    industryId: client?.industryId ?? null,
+    locationIds: locationId ? [locationId] : [],
+  });
 }
 
 /**
@@ -317,32 +363,48 @@ export async function assertConsultantIndustryMatchForJobOrder(
  * persist. Two triggers, kept as separate named functions because "what
  * changed" has a different shape in each:
  *
- *  1. A Client/Candidate's own `industryId` changed.
- *  2. A consultant's assigned industries changed (`setIndustries`).
+ *  1. A Client/Candidate's own industry *or* locations changed.
+ *  2. A consultant's own grants changed (`setIndustries` / `setLocations`).
+ *
+ * Both re-read the record's current state rather than taking the new values as
+ * arguments. Locations are a to-many write, so the caller doesn't hold a
+ * single "new location" to pass, and re-reading is the only way the check can't
+ * disagree with what was actually persisted.
  */
 export async function clearMismatchedClientAssignment(
   prisma: ExtendedPrismaClient,
   clientId: string,
-  newIndustryId: string | null,
 ): Promise<boolean> {
   const client = await prisma.client.findUnique({
     where: { id: clientId },
-    select: { consultantId: true },
+    select: { consultantId: true, industryId: true, locations: { select: { locationId: true } } },
   });
+  if (!client) return false;
+  const asRecord: OwnableRecord = {
+    industryId: client.industryId,
+    locationIds: client.locations.map((l) => l.locationId),
+  };
+
   let clearedOwnConsultant = false;
-  if (client?.consultantId && !(await consultantHasIndustry(prisma, client.consultantId, newIndustryId))) {
+  if (client.consultantId && !(await consultantCovers(prisma, client.consultantId, asRecord))) {
     await prisma.client.update({ where: { id: clientId }, data: { consultantId: null } });
     clearedOwnConsultant = true;
   }
 
   // Cascade: this Client's Job Orders inherit its industry, so any of their
-  // own consultants that no longer match get cleared too.
+  // own consultants that no longer reach them get cleared too. Each job order
+  // carries its own location, so they're checked individually rather than
+  // sharing the client's answer.
   const jobOrders = await prisma.jobOrder.findMany({
     where: { clientId, consultantId: { not: null } },
-    select: { id: true, consultantId: true },
+    select: { id: true, consultantId: true, locationId: true },
   });
   for (const jobOrder of jobOrders) {
-    if (!(await consultantHasIndustry(prisma, jobOrder.consultantId as string, newIndustryId))) {
+    const covers = await consultantCovers(prisma, jobOrder.consultantId as string, {
+      industryId: client.industryId,
+      locationIds: jobOrder.locationId ? [jobOrder.locationId] : [],
+    });
+    if (!covers) {
       await prisma.jobOrder.update({ where: { id: jobOrder.id }, data: { consultantId: null } });
     }
   }
@@ -354,35 +416,73 @@ export async function clearMismatchedClientAssignment(
 export async function clearMismatchedCandidateAssignment(
   prisma: ExtendedPrismaClient,
   candidateId: string,
-  newIndustryId: string | null,
 ): Promise<boolean> {
   const candidate = await prisma.candidate.findUnique({
     where: { id: candidateId },
-    select: { consultantId: true },
+    select: { consultantId: true, industryId: true, locationId: true },
   });
-  if (candidate?.consultantId && !(await consultantHasIndustry(prisma, candidate.consultantId, newIndustryId))) {
-    await prisma.candidate.update({ where: { id: candidateId }, data: { consultantId: null } });
-    return true;
-  }
-  return false;
+  if (!candidate?.consultantId) return false;
+  const covers = await consultantCovers(prisma, candidate.consultantId, {
+    industryId: candidate.industryId,
+    locationIds: [candidate.locationId],
+  });
+  if (covers) return false;
+  await prisma.candidate.update({ where: { id: candidateId }, data: { consultantId: null } });
+  return true;
 }
 
-export async function clearMismatchedConsultantAssignments(
+/**
+ * Re-checks every record this consultant owns after *any* grant change, and
+ * unassigns the ones they no longer reach.
+ *
+ * Takes no "what was removed" list on purpose. With two arms granting
+ * ownership, removing an industry no longer implies a record is stranded — the
+ * location arm may still cover it — so the only correct test is to re-run the
+ * same predicate over what they currently hold. Owned sets are small (a book,
+ * not a market), so the per-record round trip is fine.
+ */
+export async function clearUncoveredConsultantAssignments(
   prisma: ExtendedPrismaClient,
   consultantId: string,
-  removedIndustryIds: string[],
 ): Promise<void> {
-  if (removedIndustryIds.length === 0) return;
-  await prisma.client.updateMany({
-    where: { consultantId, industryId: { in: removedIndustryIds } },
-    data: { consultantId: null },
-  });
-  await prisma.candidate.updateMany({
-    where: { consultantId, industryId: { in: removedIndustryIds } },
-    data: { consultantId: null },
-  });
-  await prisma.jobOrder.updateMany({
-    where: { consultantId, client: { industryId: { in: removedIndustryIds } } },
-    data: { consultantId: null },
-  });
+  const [clients, candidates, jobOrders] = await Promise.all([
+    prisma.client.findMany({
+      where: { consultantId },
+      select: { id: true, industryId: true, locations: { select: { locationId: true } } },
+    }),
+    prisma.candidate.findMany({
+      where: { consultantId },
+      select: { id: true, industryId: true, locationId: true },
+    }),
+    prisma.jobOrder.findMany({
+      where: { consultantId },
+      select: { id: true, locationId: true, client: { select: { industryId: true } } },
+    }),
+  ]);
+
+  for (const client of clients) {
+    const covers = await consultantCovers(prisma, consultantId, {
+      industryId: client.industryId,
+      locationIds: client.locations.map((l) => l.locationId),
+    });
+    if (!covers) await prisma.client.update({ where: { id: client.id }, data: { consultantId: null } });
+  }
+  for (const candidate of candidates) {
+    const covers = await consultantCovers(prisma, consultantId, {
+      industryId: candidate.industryId,
+      locationIds: [candidate.locationId],
+    });
+    if (!covers) {
+      await prisma.candidate.update({ where: { id: candidate.id }, data: { consultantId: null } });
+    }
+  }
+  for (const jobOrder of jobOrders) {
+    const covers = await consultantCovers(prisma, consultantId, {
+      industryId: jobOrder.client.industryId,
+      locationIds: jobOrder.locationId ? [jobOrder.locationId] : [],
+    });
+    if (!covers) {
+      await prisma.jobOrder.update({ where: { id: jobOrder.id }, data: { consultantId: null } });
+    }
+  }
 }
