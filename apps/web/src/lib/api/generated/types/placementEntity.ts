@@ -9,8 +9,7 @@ import type { PlacementEntityFeeType } from './placementEntityFeeType';
 import type { PlacementEntityStatus } from './placementEntityStatus';
 
 export interface PlacementEntity {
-  /** @nullable */
-  displayId: string | null;
+  displayId: string;
   id: string;
   submissionId: string;
   /** @nullable */
@@ -32,7 +31,7 @@ export interface PlacementEntity {
   /** @nullable */
   startDate: string | null;
   /**
-     * Auto: startDate + client.guaranteePeriod
+     * End of the guarantee period. Entered manually — guarantee terms live per-TOB and a client can hold several that disagree, so it is not derived from startDate.
      * @nullable
      */
   guaranteeEndDate: string | null;

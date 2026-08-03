@@ -259,9 +259,25 @@ export function DataGrid<TData>({
 }: DataGridProps<TData>) {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
-  const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({});
+  const [rowSelection, setRowSelectionState] = React.useState<RowSelectionState>({});
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const [contextMenuOpen, setContextMenuOpen] = React.useState(false);
+
+  // Mirrors `rowSelection` synchronously, alongside the (batched, one-tick-
+  // delayed) state — a right-click needs to select its row *and* decide
+  // whether to open the context menu within the same native event, and
+  // `selectedRowModel` below is only fresh as of the last render, not the
+  // handler that's still running. Every selection change goes through this
+  // instead of the raw setter so the two never drift.
+  const rowSelectionRef = React.useRef<RowSelectionState>(rowSelection);
+  const setRowSelection = React.useCallback(
+    (updater: RowSelectionState | ((prev: RowSelectionState) => RowSelectionState)) => {
+      const next = typeof updater === 'function' ? updater(rowSelectionRef.current) : updater;
+      rowSelectionRef.current = next;
+      setRowSelectionState(next);
+    },
+    [],
+  );
 
   // Selection is page-scoped (see onSelectionChange doc) — drop it when the
   // visible rows change out from under it. Bails out when already empty:
@@ -272,7 +288,7 @@ export function DataGrid<TData>({
   // (possibly) another new `data` reference — an infinite loop.
   React.useEffect(() => {
     setRowSelection((prev) => (Object.keys(prev).length === 0 ? prev : {}));
-  }, [data]);
+  }, [data, setRowSelection]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
 
   // In server mode, report query state upward (debounced so typing in the
@@ -557,7 +573,15 @@ export function DataGrid<TData>({
     if (autoScrollFrameRef.current !== null) return; // already running
     const EDGE_ZONE = 48; // px from the container's top/bottom edge
     const MAX_SCROLL_SPEED = 16; // px per frame, at the very edge
-    let lastHitRowId: string | null = null;
+    // Seeded with the anchor row, not null — otherwise the very first tick
+    // (pointer still sitting wherever mousedown happened, before any actual
+    // movement) always counts as a "new" hit against `null` and immediately
+    // calls applySelectionRange, marking a plain, stationary click as a real
+    // drag. That's harmless on inert cells, but it fires a state update
+    // between this mousedown and its mouseup — enough to have broken a
+    // nested control's own click (e.g. TagMultiSelect's picker) on a cell
+    // that isn't marked data-no-row-drag.
+    let lastHitRowId: string | null = dragStateRef.current?.anchorId ?? null;
 
     function tick() {
       const pointer = dragPointerRef.current;
@@ -603,16 +627,67 @@ export function DataGrid<TData>({
   const handleRowMouseDown = React.useCallback(
     (e: React.MouseEvent, row: Row<TData>) => {
       if (!enableRowRangeSelect || e.button !== 0) return;
+      // Unconditional, even for cells this function goes on to exclude below
+      // — a mousedown on, say, a Role trigger that turns into any drag (even
+      // just clicking to open its popup, then moving a little before mouseup)
+      // is otherwise never told to suppress the browser's *native* multi-row
+      // text selection, since the early return below happens first and this
+      // line was never reached. That's a completely different mechanism from
+      // this component's own row-range-select below — no dragStateRef, no
+      // React state — just the browser doing what an unprevented mousedown+
+      // drag always does, and it reads exactly like "everything between got
+      // selected" because, natively, it did.
+      e.preventDefault();
       // Let interactive cells (pills, comboboxes, the row's own link) handle
       // their own mousedown — starting a drag from inside one would fight
-      // its click/open behavior.
-      if ((e.target as HTMLElement).closest('[data-no-row-drag]')) return;
-      e.preventDefault(); // suppress native text selection while dragging
+      // its click/open behavior. The role check is a second line of defense
+      // for *portaled* popup content (a Select/Combobox option list): React
+      // bubbles its events up through the component tree regardless of where
+      // the portal actually mounts in the DOM, but the target's real DOM
+      // ancestors are wherever that portal root is — never inside this row —
+      // so a plain `.closest('[data-no-row-drag]')` on the native target
+      // can't see it.
+      //
+      // The `[data-open]` check is the one that actually matters: any
+      // base-ui popup (Select, Combobox, Menu, ...) stamps this on itself
+      // globally while open, so it catches every case in one shot regardless
+      // of which exact element the click landed on inside it — an open
+      // Role/Status/tag popup means "don't start a row drag from *any*
+      // click, anywhere," not just clicks whose target happens to carry the
+      // right role. Role/Status opening its own popup is exactly this case:
+      // the trigger's own mousedown is caught by data-no-row-drag, but
+      // choosing an option afterward is a *second*, separate mousedown, and
+      // this is what stops that one from anchoring a drag here instead.
+      if (
+        (e.target as HTMLElement).closest(
+          '[data-no-row-drag], [role="menu"], [role="dialog"], [role="alertdialog"], [role="listbox"], [role="option"], [role="tooltip"]',
+        ) ||
+        document.querySelector('[data-open]')
+      ) {
+        return;
+      }
       dragStateRef.current = { anchorId: row.id, moved: false };
       dragPointerRef.current = { x: e.clientX, y: e.clientY };
       startAutoScrollLoop();
     },
     [enableRowRangeSelect, startAutoScrollLoop],
+  );
+
+  // Right-clicking a row that isn't already part of the selection selects
+  // just that row (replacing whatever was selected before) — same convention
+  // as Notion/Finder/Sheets. Right-clicking a row that's *already* selected
+  // leaves an existing multi-selection alone, so the menu applies to all of
+  // them. Uses the synchronous ref (not `setRowSelection`'s batched state) so
+  // `onOpenChange` below sees the up-to-date selection within this same
+  // native event, not last render's.
+  const handleRowContextMenu = React.useCallback(
+    (row: Row<TData>) => {
+      if (!selectionContextMenu || !row.getCanSelect()) return;
+      if (!row.getIsSelected()) {
+        setRowSelection({ [row.id]: true });
+      }
+    },
+    [selectionContextMenu, setRowSelection],
   );
 
   // Tracks pointer position during a drag — the auto-scroll loop needs it on
@@ -642,8 +717,19 @@ export function DataGrid<TData>({
       stopAutoScrollLoop();
       setIsRowDragging(false);
     }
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => document.removeEventListener('mouseup', handleMouseUp);
+    // Capture phase, not bubble — a popup item's own click handler (Select,
+    // Combobox) commonly calls stopPropagation so outer "click away"
+    // listeners don't also fire for the same click. A bubble-phase listener
+    // here would never run in that case, leaving dragStateRef dangling with
+    // whatever row the popup belonged to — live until the next animation
+    // frame hit-tests wherever the pointer physically was (often a different
+    // row, once the popup closes), silently starting a phantom range select.
+    // Capture listeners run top-down before any bubble-phase stopPropagation
+    // has a chance to fire, so this cleanup is unconditional: it always
+    // clears the drag on any mouseup, anywhere, regardless of what a
+    // descendant does with the event afterward.
+    document.addEventListener('mouseup', handleMouseUp, true);
+    return () => document.removeEventListener('mouseup', handleMouseUp, true);
   }, [enableRowRangeSelect, stopAutoScrollLoop]);
 
   // Clicking outside the whole component clears the current selection, like
@@ -808,8 +894,14 @@ export function DataGrid<TData>({
         // is a backstop for the brief window right after mousedown, before
         // isRowDragging flips true.
         disabled={isRowDragging}
+        // Reads the ref, not `selectedRowModel` — a right-click on a
+        // not-yet-selected row selects it (handleRowContextMenu) in the same
+        // native event that fires this, and `selectedRowModel` won't reflect
+        // that until next render. The ref is updated synchronously instead.
         onOpenChange={(open) =>
-          setContextMenuOpen(open && selectedRowModel.rows.length > 0 && !dragStateRef.current)
+          setContextMenuOpen(
+            open && Object.keys(rowSelectionRef.current).length > 0 && !dragStateRef.current,
+          )
         }
       >
       <div
@@ -831,7 +923,7 @@ export function DataGrid<TData>({
         >
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="hover:bg-transparent">
+              <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   const canSort = header.column.getCanSort();
                   const sorted = header.column.getIsSorted();
@@ -915,7 +1007,7 @@ export function DataGrid<TData>({
           <TableBody className={cn(isRowDragging && 'select-none')}>
             {isLoading ? (
               Array.from({ length: skeletonRows }).map((_, rowIndex) => (
-                <TableRow key={`skeleton-${rowIndex}`} className="hover:bg-transparent">
+                <TableRow key={`skeleton-${rowIndex}`}>
                   {table.getAllLeafColumns().map((column) => (
                     <TableCell key={column.id}>
                       <Skeleton className="h-4 w-full max-w-[8rem] rounded-md" />
@@ -930,10 +1022,19 @@ export function DataGrid<TData>({
                     key={row.id}
                     data-row-id={row.id}
                     data-state={row.getIsSelected() ? 'selected' : undefined}
-                    onMouseDown={
+                    // Capture, not bubble — a popup's own "click outside
+                    // closes it" logic commonly runs in the capture phase
+                    // too, and can strip its [data-open] marker before a
+                    // bubble-phase handler here would even see it. Running
+                    // in capture as well means this always checks that
+                    // marker while it's still accurate.
+                    onMouseDownCapture={
                       enableRowRangeSelect ? (e) => handleRowMouseDown(e, row) : undefined
                     }
                     onMouseEnter={enableRowRangeSelect ? () => handleRowMouseEnter(row) : undefined}
+                    onContextMenu={
+                      selectionContextMenu ? () => handleRowContextMenu(row) : undefined
+                    }
                     onClick={
                       onRowClick
                         ? () => {
@@ -963,7 +1064,7 @@ export function DataGrid<TData>({
                   </TableRow>
                 ))}
                 {server?.infiniteScroll && server.page < server.pageCount ? (
-                  <TableRow ref={loadMoreRef} className="hover:bg-transparent">
+                  <TableRow ref={loadMoreRef}>
                     <TableCell
                       colSpan={totalColumns}
                       className="py-3 text-center text-xs text-muted-foreground"
@@ -981,7 +1082,7 @@ export function DataGrid<TData>({
                     it also restores the bottom border of the last data row
                     (the primitive strips it from :last-child). */}
                 {!server || server.page >= server.pageCount ? (
-                  <TableRow className="hover:bg-transparent">
+                  <TableRow>
                     <TableCell
                       colSpan={totalColumns}
                       className="py-3 text-center text-xs text-muted-foreground"
@@ -992,7 +1093,7 @@ export function DataGrid<TData>({
                 ) : null}
               </>
             ) : (
-              <TableRow className="hover:bg-transparent">
+              <TableRow>
                 <TableCell
                   colSpan={totalColumns}
                   className="h-32 text-center text-sm text-muted-foreground"

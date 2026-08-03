@@ -26,8 +26,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
+import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { getGetJobOrdersQueryKey } from '@/lib/api/generated/job-orders/job-orders';
 import {
   getGetSubmissionsQueryKey,
@@ -334,6 +336,9 @@ function InterviewRoundsView({
 
   const [roundLabel, setRoundLabel] = React.useState('');
   const [interviewDate, setInterviewDate] = React.useState('');
+  const [confirmingDeleteRound, setConfirmingDeleteRound] = React.useState<{ id: string; roundLabel: string } | null>(
+    null,
+  );
 
   // Reseed the suggested label whenever the round count changes (not on every keystroke).
   React.useEffect(() => {
@@ -364,17 +369,24 @@ function InterviewRoundsView({
       onError: (err) => toast.error(err.message || 'Failed to update interview round'),
     },
   });
-  const deleteInterview = useDeleteInterview({
-    mutation: {
-      onSuccess: invalidate,
-      onError: (err) => toast.error(err.message || 'Failed to remove interview round'),
-    },
-  });
+  const deleteInterview = useDeleteInterview();
 
   function handleAdd() {
     if (!roundLabel.trim() || !interviewDate) return;
     createInterview.mutate({
       data: { submissionId: candidate.submissionId, roundLabel: roundLabel.trim(), interviewDate },
+    });
+  }
+
+  function handleDeleteRound(round: { id: string; roundLabel: string }) {
+    setConfirmingDeleteRound(null);
+    // No restore endpoint for Interview — delayed mode: nothing is sent to
+    // the server until the undo window elapses, so Undo is exact.
+    deleteWithUndo({
+      label: round.roundLabel,
+      deleteFn: () => deleteInterview.mutateAsync({ id: round.id }),
+      onCommitted: invalidate,
+      onUndo: invalidate,
     });
   }
 
@@ -430,8 +442,7 @@ function InterviewRoundsView({
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    disabled={deleteInterview.isPending}
-                    onClick={() => deleteInterview.mutate({ id: round.id })}
+                    onClick={() => setConfirmingDeleteRound({ id: round.id, roundLabel: round.roundLabel })}
                     aria-label="Remove round"
                   >
                     <Trash2 className="text-muted-foreground" />
@@ -465,6 +476,15 @@ function InterviewRoundsView({
           </Button>
         </div>
       </div>
+
+      <ConfirmDeleteDialog
+        open={confirmingDeleteRound !== null}
+        onOpenChange={(open) => !open && setConfirmingDeleteRound(null)}
+        title={`Remove ${confirmingDeleteRound?.roundLabel ?? 'this round'}?`}
+        description="You can undo this from the toast right after, or it's gone for good."
+        confirmLabel="Remove"
+        onConfirm={() => confirmingDeleteRound && handleDeleteRound(confirmingDeleteRound)}
+      />
     </>
   );
 }

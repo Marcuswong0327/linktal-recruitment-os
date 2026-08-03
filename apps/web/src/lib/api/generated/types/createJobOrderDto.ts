@@ -11,22 +11,24 @@ import type { CreateJobOrderDtoStatus } from './createJobOrderDtoStatus';
 export interface CreateJobOrderDto {
   /** Client ID this job order belongs to */
   clientId: string;
-  /** Job title */
-  jobTitle: string;
+  /** Job title ID (see /job-titles) — the client's own words for the role */
+  jobTitleId?: string;
+  /** Job role type ID (see /job-role-types) — the consultant's classification */
+  jobRoleTypeId?: string;
   /** Owning consultant ID */
   consultantId?: string;
-  /** Department */
-  department?: string;
-  /** City */
-  city?: string;
-  /** Suburb */
-  suburb?: string;
+  /** Most specific known Location node (see /locations) — replaces the old city/suburb columns */
+  locationId?: string;
+  /** ClientJobResearch row this job order originated from, if any (see /job-research) */
+  jobResearchId?: string;
   /** Minimum salary */
   salaryMin?: number;
   /** Maximum salary */
   salaryMax?: number;
   /** Salary currency */
   salaryCurrency?: string;
+  /** Forecast value of this job order, entered before anyone is placed — distinct from a Placement fee */
+  estimatedValue?: number;
   /** Number of openings */
   openings?: number;
   /** Number of openings already filled */
@@ -35,14 +37,12 @@ export interface CreateJobOrderDto {
   description?: string;
   /** Requirements */
   requirements?: string;
+  /** Briefing notes — internal, distinct from the public-facing description/requirements copy */
+  notes?: string;
   /** Status; defaults to ACTIVE when omitted */
   status?: CreateJobOrderDtoStatus;
   /** Quality of the job order/posting; defaults to MEDIUM when omitted */
   quality?: CreateJobOrderDtoQuality;
   /** Priority: 1=High, 2=Medium, 3=Low */
   priorityLevel?: number;
-  /** This job order was opened to replace a placement that fell through within the guarantee period; defaults to false */
-  isReplacement?: boolean;
-  /** Two or more consultants worked this job order together (split-desk); defaults to false */
-  isCollaborated?: boolean;
 }

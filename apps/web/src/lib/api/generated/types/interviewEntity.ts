@@ -9,6 +9,7 @@ import type { InterviewEntityOutcome } from './interviewEntityOutcome';
 
 export interface InterviewEntity {
   id: string;
+  displayId: string;
   submissionId: string;
   roundLabel: string;
   interviewDate: string;

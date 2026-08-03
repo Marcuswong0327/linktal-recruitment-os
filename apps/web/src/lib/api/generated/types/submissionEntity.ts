@@ -9,6 +9,7 @@ import type { SubmissionEntityStatus } from './submissionEntityStatus';
 
 export interface SubmissionEntity {
   id: string;
+  displayId: string;
   candidateId: string;
   /**
      * Resolved candidate name

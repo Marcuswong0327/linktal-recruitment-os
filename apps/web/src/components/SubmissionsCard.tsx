@@ -7,9 +7,11 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { EnumSelect } from '@/components/EnumSelect';
 import { CandidateCombobox } from '@/components/CandidateCombobox';
 import { JobOrderCombobox } from '@/components/JobOrderCombobox';
+import { deleteWithUndo } from '@/lib/delete-with-undo';
 import {
   getGetSubmissionsQueryKey,
   useCreateSubmission,
@@ -72,6 +74,7 @@ export function SubmissionsCard(props: SubmissionsCardProps) {
 
   const [adding, setAdding] = React.useState(false);
   const [pickerValue, setPickerValue] = React.useState('');
+  const [confirmingRemove, setConfirmingRemove] = React.useState<SubmissionEntity | null>(null);
 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: getGetSubmissionsQueryKey() });
@@ -100,15 +103,7 @@ export function SubmissionsCard(props: SubmissionsCardProps) {
     },
   });
 
-  const deleteSubmission = useDeleteSubmission({
-    mutation: {
-      onSuccess: () => {
-        invalidateAll();
-        toast.success('Removed');
-      },
-      onError: (err) => toast.error(err.message || 'Failed to remove'),
-    },
-  });
+  const deleteSubmission = useDeleteSubmission();
 
   function handleAdd() {
     if (!pickerValue) return;
@@ -117,6 +112,19 @@ export function SubmissionsCard(props: SubmissionsCardProps) {
         ? { candidateId: subjectId, jobOrderId: pickerValue }
         : { candidateId: pickerValue, jobOrderId: subjectId };
     createSubmission.mutate({ data });
+  }
+
+  function handleRemove(submission: SubmissionEntity) {
+    setConfirmingRemove(null);
+    const name = props.mode === 'candidate' ? (submission.jobOrderTitle ?? 'this job order') : (submission.candidateName ?? 'this candidate');
+    // No restore endpoint for Submission — delayed mode: nothing is sent to
+    // the server until the undo window elapses, so Undo is exact.
+    deleteWithUndo({
+      label: `submission to ${name}`,
+      deleteFn: () => deleteSubmission.mutateAsync({ id: submission.id }),
+      onCommitted: invalidateAll,
+      onUndo: invalidateAll,
+    });
   }
 
   return (
@@ -153,8 +161,7 @@ export function SubmissionsCard(props: SubmissionsCardProps) {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  disabled={deleteSubmission.isPending}
-                  onClick={() => deleteSubmission.mutate({ id: s.id })}
+                  onClick={() => setConfirmingRemove(s)}
                   aria-label="Remove"
                   title="Remove"
                 >
@@ -207,6 +214,15 @@ export function SubmissionsCard(props: SubmissionsCardProps) {
           {props.mode === 'candidate' ? 'Submit to a job order' : 'Submit a candidate'}
         </Button>
       )}
+
+      <ConfirmDeleteDialog
+        open={confirmingRemove !== null}
+        onOpenChange={(open) => !open && setConfirmingRemove(null)}
+        title="Remove submission?"
+        description="You can undo this from the toast right after, or it's gone for good."
+        confirmLabel="Remove"
+        onConfirm={() => confirmingRemove && handleRemove(confirmingRemove)}
+      />
     </div>
   );
 }

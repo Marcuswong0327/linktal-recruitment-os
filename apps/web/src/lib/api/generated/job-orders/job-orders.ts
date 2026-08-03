@@ -84,7 +84,7 @@ export const getGetJobOrdersUrl = (params?: GetJobOrdersParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["statuses","qualities","consultantIds","priorityLevels"];
+    const explodeParameters = ["statuses","qualities","consultantIds","jobTitleIds","jobRoleTypeIds","locationIds","priorityLevels"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {

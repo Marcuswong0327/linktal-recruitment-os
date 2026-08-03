@@ -7,6 +7,6 @@
  */
 
 export interface CreateStakeholderRoleTypeDto {
-  /** Role type name */
+  /** StakeholderRoleType name */
   name: string;
 }

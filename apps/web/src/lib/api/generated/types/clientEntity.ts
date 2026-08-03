@@ -7,14 +7,13 @@
  */
 import type { ClientEntityQuality } from './clientEntityQuality';
 import type { ClientEntityStatus } from './clientEntityStatus';
-import type { ClientNoteDto } from './clientNoteDto';
 
 export interface ClientEntity {
   id: string;
   displayId: string;
   companyName: string;
-  /** @nullable */
-  industryId: string | null;
+  /** Required — the industry arm of the scope resolver relies on it */
+  industryId: string;
   /**
      * Resolved industry name
      * @nullable
@@ -27,30 +26,50 @@ export interface ClientEntity {
      * @nullable
      */
   specialization: string | null;
-  /** @nullable */
-  country: string | null;
-  /** @nullable */
-  city: string | null;
+  /** Resolved names of the Location nodes this client hires from — its market, not its office address */
+  locations: string[];
+  /** Location IDs backing `locations` — what an editable multi-select actually binds to */
+  locationIds: string[];
+  /**
+     * The client's own physical office address(es) — distinct from `locations`
+     * @nullable
+     */
+  addresses: string[] | null;
+  /**
+     * The client's own office suburb/postcode(s)
+     * @nullable
+     */
+  suburbsAndPostcodes: string[] | null;
   /** @nullable */
   website: string | null;
-  tobSigned: boolean;
   /** @nullable */
-  feePercentage: number | null;
-  guaranteePeriod: number;
+  seekJobMarketUrl: string | null;
+  /** @nullable */
+  linkedinJobMarketUrl: string | null;
+  /** @nullable */
+  generalDescription: string | null;
   status: ClientEntityStatus;
   quality: ClientEntityQuality;
-  /** @nullable */
-  notes: ClientNoteDto[] | null;
   /**
      * Latest contactedAt across this client's stakeholders; null if never contacted
      * @nullable
      */
   lastContactedAt: string | null;
   /**
+     * Consultant who made the most recent contact
+     * @nullable
+     */
+  lastContactedById: string | null;
+  /**
      * Contact method of the most recent contact, across all stakeholders (email, call, meeting, linkedin)
      * @nullable
      */
   lastContactType: string | null;
+  /**
+     * Category of the most recent contact — distinct from lastContactType, which is the channel
+     * @nullable
+     */
+  lastContactCategory: string | null;
   /**
      * Notes from the most recent contact, across all stakeholders
      * @nullable

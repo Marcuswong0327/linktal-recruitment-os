@@ -19,8 +19,10 @@ export interface UpdatePlacementDto {
   feePercentage?: number;
   /** Flat fee value (only used when feeType = FLAT — ignored/overwritten by the auto-calc when feeType = PERCENTAGE) */
   feeValue?: number;
-  /** Candidate's start date = invoice date. guaranteeEndDate auto-calculates from this + the client's guarantee period. */
+  /** Candidate's start date = invoice date. */
   startDate?: string;
+  /** End of the guarantee period. Entered manually — guarantee terms live per-TOB and a client can hold several that disagree, so it is not derived from startDate. */
+  guaranteeEndDate?: string;
   /** Whether accounts/finance has been notified of this placement */
   accountsNotified?: boolean;
   /** Notes */

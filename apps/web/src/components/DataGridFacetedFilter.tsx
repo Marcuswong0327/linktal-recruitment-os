@@ -134,7 +134,9 @@ export function DataGridFacetedFilter({
                   {isChecked ? <Check className="size-3" /> : null}
                 </span>
                 {option.variant ? (
-                  <Badge variant={option.variant}>{option.label}</Badge>
+                  <Badge variant={option.variant} className="rounded-md">
+                    {option.label}
+                  </Badge>
                 ) : (
                   option.label
                 )}

@@ -6,12 +6,25 @@
  * OpenAPI spec version: 1.0
  */
 import type { CreateCandidateContactHistoryDtoContactType } from './createCandidateContactHistoryDtoContactType';
+import type { CreateCandidateContactHistoryDtoStatus } from './createCandidateContactHistoryDtoStatus';
 
 export interface CreateCandidateContactHistoryDto {
   /** How this contact happened */
   contactType: CreateCandidateContactHistoryDtoContactType;
-  /** Notes from this contact */
-  notes?: string;
+  /** Kind of note — distinct from contactType, which is the channel */
+  category?: string;
+  /** The screening call content */
+  conversationSummary?: string;
+  /** Notes for an outreach campaign entry */
+  outreachCampaignNotes?: string;
+  /** Snapshot of the candidate's status at the time of this contact; defaults to WARM */
+  status?: CreateCandidateContactHistoryDtoStatus;
+  /** Suburb captured during this contact */
+  suburb?: string;
+  /** Free text, not a number — the source records values like "35 per hour" */
+  currentSalary?: string;
+  /** Free text, same reasoning as currentSalary */
+  expectedSalary?: string;
   /** When this contact happened (ISO 8601); defaults to now if omitted — set explicitly to log a past contact */
   contactedAt?: string;
 }

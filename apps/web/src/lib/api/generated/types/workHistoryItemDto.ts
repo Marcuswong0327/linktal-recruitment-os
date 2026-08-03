@@ -9,8 +9,6 @@
 export interface WorkHistoryItemDto {
   company?: string;
   role?: string;
-  /** ISO date or free text */
-  startDate?: string;
-  /** ISO date or free text; omit if current */
-  endDate?: string;
+  /** Free text */
+  period?: string;
 }

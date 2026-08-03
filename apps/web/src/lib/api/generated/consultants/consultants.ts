@@ -26,11 +26,15 @@ import type {
 
 import type {
   ConsultantEntity,
+  ConsultantNodeEntity,
   CreateConsultantDto,
   ErrorResponse,
+  GetConsultantHierarchyParams,
   GetConsultantsParams,
   PaginatedConsultantsEntity,
   SetConsultantIndustriesDto,
+  SetConsultantLocationsDto,
+  SetConsultantSpecializationsDto,
   UpdateConsultantDto,
   UpdateMeDto
 } from '../types';
@@ -282,7 +286,138 @@ export const useCreateConsultant = <TError = ErrorResponse,
       > => {
       return useMutation(getCreateConsultantMutationOptions(options), queryClient);
     }
-    export type getMeResponse200 = {
+    export type getConsultantHierarchyResponse200 = {
+  data: ConsultantNodeEntity[]
+  status: 200
+}
+
+export type getConsultantHierarchyResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getConsultantHierarchyResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getConsultantHierarchyResponseSuccess = (getConsultantHierarchyResponse200) & {
+  headers: Headers;
+};
+export type getConsultantHierarchyResponseError = (getConsultantHierarchyResponse400 | getConsultantHierarchyResponse500) & {
+  headers: Headers;
+};
+
+export type getConsultantHierarchyResponse = (getConsultantHierarchyResponseSuccess | getConsultantHierarchyResponseError)
+
+export const getGetConsultantHierarchyUrl = (params?: GetConsultantHierarchyParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/consultants/hierarchy?${stringifiedParams}` : `/consultants/hierarchy`
+}
+
+/**
+ * @summary Org chart, or one person’s team. Presentation only — reporting lines are never a permission boundary (see docs/rbac-roles.md §3).
+ */
+export const getConsultantHierarchy = async (params?: GetConsultantHierarchyParams, options?: RequestInit): Promise<getConsultantHierarchyResponse> => {
+
+  return customFetch<getConsultantHierarchyResponse>(getGetConsultantHierarchyUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetConsultantHierarchyQueryKey = (params?: GetConsultantHierarchyParams,) => {
+    return [
+    `/consultants/hierarchy`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetConsultantHierarchyQueryOptions = <TData = Awaited<ReturnType<typeof getConsultantHierarchy>>, TError = ErrorResponse>(params?: GetConsultantHierarchyParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getConsultantHierarchy>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetConsultantHierarchyQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getConsultantHierarchy>>> = ({ signal }) => getConsultantHierarchy(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getConsultantHierarchy>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetConsultantHierarchyQueryResult = NonNullable<Awaited<ReturnType<typeof getConsultantHierarchy>>>
+export type GetConsultantHierarchyQueryError = ErrorResponse
+
+
+export function useGetConsultantHierarchy<TData = Awaited<ReturnType<typeof getConsultantHierarchy>>, TError = ErrorResponse>(
+ params: undefined |  GetConsultantHierarchyParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getConsultantHierarchy>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getConsultantHierarchy>>,
+          TError,
+          Awaited<ReturnType<typeof getConsultantHierarchy>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetConsultantHierarchy<TData = Awaited<ReturnType<typeof getConsultantHierarchy>>, TError = ErrorResponse>(
+ params?: GetConsultantHierarchyParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getConsultantHierarchy>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getConsultantHierarchy>>,
+          TError,
+          Awaited<ReturnType<typeof getConsultantHierarchy>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetConsultantHierarchy<TData = Awaited<ReturnType<typeof getConsultantHierarchy>>, TError = ErrorResponse>(
+ params?: GetConsultantHierarchyParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getConsultantHierarchy>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Org chart, or one person’s team. Presentation only — reporting lines are never a permission boundary (see docs/rbac-roles.md §3).
+ */
+
+export function useGetConsultantHierarchy<TData = Awaited<ReturnType<typeof getConsultantHierarchy>>, TError = ErrorResponse>(
+ params?: GetConsultantHierarchyParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getConsultantHierarchy>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetConsultantHierarchyQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getMeResponse200 = {
   data: ConsultantEntity
   status: 200
 }
@@ -1056,4 +1191,204 @@ export const useSetConsultantIndustries = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getSetConsultantIndustriesMutationOptions(options), queryClient);
+    }
+    export type setConsultantSpecializationsResponse200 = {
+  data: ConsultantEntity
+  status: 200
+}
+
+export type setConsultantSpecializationsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type setConsultantSpecializationsResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type setConsultantSpecializationsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type setConsultantSpecializationsResponseSuccess = (setConsultantSpecializationsResponse200) & {
+  headers: Headers;
+};
+export type setConsultantSpecializationsResponseError = (setConsultantSpecializationsResponse400 | setConsultantSpecializationsResponse404 | setConsultantSpecializationsResponse500) & {
+  headers: Headers;
+};
+
+export type setConsultantSpecializationsResponse = (setConsultantSpecializationsResponseSuccess | setConsultantSpecializationsResponseError)
+
+export const getSetConsultantSpecializationsUrl = (id: string,) => {
+
+
+
+
+  return `/consultants/${id}/specializations`
+}
+
+/**
+ * @summary Replace a consultant's assigned specializations, narrowing their industry arm (admin/manager only; same escalation rules as industries)
+ */
+export const setConsultantSpecializations = async (id: string,
+    setConsultantSpecializationsDto: SetConsultantSpecializationsDto, options?: RequestInit): Promise<setConsultantSpecializationsResponse> => {
+
+  return customFetch<setConsultantSpecializationsResponse>(getSetConsultantSpecializationsUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setConsultantSpecializationsDto)
+  }
+);}
+
+
+
+
+
+export const getSetConsultantSpecializationsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setConsultantSpecializations>>, TError,{id: string;data: SetConsultantSpecializationsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setConsultantSpecializations>>, TError,{id: string;data: SetConsultantSpecializationsDto}, TContext> => {
+
+const mutationKey = ['setConsultantSpecializations'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setConsultantSpecializations>>, {id: string;data: SetConsultantSpecializationsDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setConsultantSpecializations(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetConsultantSpecializationsMutationResult = NonNullable<Awaited<ReturnType<typeof setConsultantSpecializations>>>
+    export type SetConsultantSpecializationsMutationBody = SetConsultantSpecializationsDto
+    export type SetConsultantSpecializationsMutationError = ErrorResponse
+
+    /**
+ * @summary Replace a consultant's assigned specializations, narrowing their industry arm (admin/manager only; same escalation rules as industries)
+ */
+export const useSetConsultantSpecializations = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setConsultantSpecializations>>, TError,{id: string;data: SetConsultantSpecializationsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof setConsultantSpecializations>>,
+        TError,
+        {id: string;data: SetConsultantSpecializationsDto},
+        TContext
+      > => {
+      return useMutation(getSetConsultantSpecializationsMutationOptions(options), queryClient);
+    }
+    export type setConsultantLocationsResponse200 = {
+  data: ConsultantEntity
+  status: 200
+}
+
+export type setConsultantLocationsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type setConsultantLocationsResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type setConsultantLocationsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type setConsultantLocationsResponseSuccess = (setConsultantLocationsResponse200) & {
+  headers: Headers;
+};
+export type setConsultantLocationsResponseError = (setConsultantLocationsResponse400 | setConsultantLocationsResponse404 | setConsultantLocationsResponse500) & {
+  headers: Headers;
+};
+
+export type setConsultantLocationsResponse = (setConsultantLocationsResponseSuccess | setConsultantLocationsResponseError)
+
+export const getSetConsultantLocationsUrl = (id: string,) => {
+
+
+
+
+  return `/consultants/${id}/locations`
+}
+
+/**
+ * @summary Replace a consultant's assigned locations — their patch (admin/manager only; same escalation rules as industries)
+ */
+export const setConsultantLocations = async (id: string,
+    setConsultantLocationsDto: SetConsultantLocationsDto, options?: RequestInit): Promise<setConsultantLocationsResponse> => {
+
+  return customFetch<setConsultantLocationsResponse>(getSetConsultantLocationsUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setConsultantLocationsDto)
+  }
+);}
+
+
+
+
+
+export const getSetConsultantLocationsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setConsultantLocations>>, TError,{id: string;data: SetConsultantLocationsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setConsultantLocations>>, TError,{id: string;data: SetConsultantLocationsDto}, TContext> => {
+
+const mutationKey = ['setConsultantLocations'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setConsultantLocations>>, {id: string;data: SetConsultantLocationsDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setConsultantLocations(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetConsultantLocationsMutationResult = NonNullable<Awaited<ReturnType<typeof setConsultantLocations>>>
+    export type SetConsultantLocationsMutationBody = SetConsultantLocationsDto
+    export type SetConsultantLocationsMutationError = ErrorResponse
+
+    /**
+ * @summary Replace a consultant's assigned locations — their patch (admin/manager only; same escalation rules as industries)
+ */
+export const useSetConsultantLocations = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setConsultantLocations>>, TError,{id: string;data: SetConsultantLocationsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof setConsultantLocations>>,
+        TError,
+        {id: string;data: SetConsultantLocationsDto},
+        TContext
+      > => {
+      return useMutation(getSetConsultantLocationsMutationOptions(options), queryClient);
     }

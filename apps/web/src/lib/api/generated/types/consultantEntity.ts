@@ -14,6 +14,26 @@ export interface ConsultantEntity {
   azureId: string | null;
   email: string;
   fullName: string;
+  /**
+     * Seniority is carried as a JobTitle ("Consultant (Senior)"), not its own enum.
+     * @nullable
+     */
+  jobTitleId: string | null;
+  /**
+     * Monthly cost of this consultant.
+     * @nullable
+     */
+  salary: number | null;
+  /**
+     * P&L bucket this consultant's cost rolls up to.
+     * @nullable
+     */
+  costTo: string | null;
+  /**
+     * This consultant's manager — powers the org chart. Null at the top of the tree.
+     * @nullable
+     */
+  reportsToId: string | null;
   /** @nullable */
   roleId: string | null;
   isActive: boolean;
@@ -24,4 +44,12 @@ export interface ConsultantEntity {
   industries?: string[];
   /** Industry IDs backing `industries` */
   industryIds?: string[];
+  /** Assigned specializations, narrowing the industry arm. A grant covers the node plus every child. */
+  specializations?: string[];
+  /** Specialization IDs backing `specializations` */
+  specializationIds?: string[];
+  /** Assigned locations — this consultant's patch, at any level. A grant covers the node plus every descendant. */
+  locations?: string[];
+  /** Location IDs backing `locations` */
+  locationIds?: string[];
 }

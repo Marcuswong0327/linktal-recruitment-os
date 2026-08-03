@@ -52,7 +52,7 @@ function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
     <tr
       data-slot="table-row"
       className={cn(
-        'border-b border-border transition-colors hover:bg-accent data-[state=selected]:bg-primary/10 data-[state=selected]:ring-1 data-[state=selected]:ring-inset data-[state=selected]:ring-primary/50 data-[state=selected]:hover:bg-primary/15',
+        'border-b border-border transition-colors data-[state=selected]:bg-primary/10 data-[state=selected]:ring-1 data-[state=selected]:ring-inset data-[state=selected]:ring-primary/50 data-[state=selected]:hover:bg-primary/15',
         // Keeps the tbody's even-row stripe going through the selected state
         // instead of flattening into one solid block — same idea, tinted
         // primary instead of muted, at higher specificity so it wins over
@@ -82,8 +82,13 @@ function TableCell({ className, ...props }: React.ComponentProps<'td'>) {
   return (
     <td
       data-slot="table-cell"
+      // `relative` with no offsets — invisible by itself, but lets a cell's
+      // own content anchor an `absolute inset-0` overlay to the true cell
+      // box (e.g. a full-cell click target) without depending on percentage
+      // width/height propagating correctly through whatever wrapper divs
+      // sit in between, which in practice didn't.
       className={cn(
-        'overflow-hidden px-3 py-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-px',
+        'relative overflow-hidden px-3 py-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-px',
         className,
       )}
       {...props}

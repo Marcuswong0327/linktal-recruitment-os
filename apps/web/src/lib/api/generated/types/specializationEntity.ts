@@ -9,6 +9,15 @@
 export interface SpecializationEntity {
   id: string;
   name: string;
+  /** Specializations belong to exactly one Industry. */
+  industryId: string;
+  /**
+     * Parent category, e.g. "Food" for "Food - Bakery". Null for a top-level category.
+     * @nullable
+     */
+  parentId: string | null;
+  /** This specialization plus every ancestor. A consultant grant on any of these ids covers this row — see common/scope.ts. */
+  ancestorIds: string[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

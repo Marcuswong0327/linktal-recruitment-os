@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Orbit, Shield } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,15 +17,23 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  ContextMenuItem,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+} from '@/components/ui/context-menu';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import {
   getGetConsultantsQueryKey,
   updateConsultant as updateConsultantRequest,
   useGetConsultants,
   useSetConsultantIndustries,
+  useSetConsultantSpecializations,
   useUpdateConsultant,
 } from '@/lib/api/generated/consultants/consultants';
 import { useGetIndustries } from '@/lib/api/generated/industries/industries';
+import { useGetSpecializations } from '@/lib/api/generated/specializations/specializations';
 import type { UpdateConsultantDto } from '@/lib/api/generated/types';
 import { hasPermission } from '@/lib/auth/permissions';
 import { getConsultantColumns } from './columns';
@@ -92,6 +100,8 @@ export function ConsultantsTable() {
   // returning them empty) without `consultant_industry:read`.
   const canReadIndustries = hasPermission(session, 'consultant_industry', 'read');
   const canEditIndustries = hasPermission(session, 'consultant_industry', 'update');
+  const canReadSpecializations = hasPermission(session, 'consultant_specialization', 'read');
+  const canEditSpecializations = hasPermission(session, 'consultant_specialization', 'update');
 
   const { data, isLoading, isFetching, isError, error } = useGetConsultants(
     { page, pageSize: PAGE_SIZE, q: search, roleName: role, isActive },
@@ -107,6 +117,17 @@ export function ConsultantsTable() {
         ? industriesData.data.map((i) => ({ value: i.id, label: i.name }))
         : [],
     [industriesData],
+  );
+
+  const { data: specializationsData } = useGetSpecializations({
+    query: { enabled: canReadSpecializations },
+  });
+  const specializationOptions = React.useMemo(
+    () =>
+      specializationsData?.status === 200
+        ? specializationsData.data.map((s) => ({ value: s.id, label: s.name }))
+        : [],
+    [specializationsData],
   );
 
   const updateUser = useUpdateConsultant({
@@ -132,13 +153,25 @@ export function ConsultantsTable() {
     },
   });
 
+  const setSpecializations = useSetConsultantSpecializations({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetConsultantsQueryKey() });
+        toast.success('Specializations updated');
+      },
+      onError: (err) => toast.error(err.message || 'Failed to update specializations'),
+    },
+  });
+
   const result = data?.status === 200 ? data.data : undefined;
   const users = result?.data ?? [];
   const pendingId = updateUser.isPending
     ? (updateUser.variables?.id ?? null)
     : setIndustries.isPending
       ? (setIndustries.variables?.id ?? null)
-      : null;
+      : setSpecializations.isPending
+        ? (setSpecializations.variables?.id ?? null)
+        : null;
 
   function handleQueryChange({ search, columnFilters }: DataGridQuery) {
     const roleFilter = columnFilters.find((f) => f.id === 'roleName')?.value as
@@ -186,8 +219,29 @@ export function ConsultantsTable() {
                 : undefined,
             }
           : undefined,
+        specializations: canReadSpecializations
+          ? {
+              options: specializationOptions,
+              onSpecializationsChange: canEditSpecializations
+                ? (user, specializationIds) =>
+                    setSpecializations.mutate({ id: user.id, data: { specializationIds } })
+                : undefined,
+            }
+          : undefined,
       }),
-    [pendingId, currentConsultantId, updateUser, canReadIndustries, canEditIndustries, industryOptions, setIndustries],
+    [
+      pendingId,
+      currentConsultantId,
+      updateUser,
+      canReadIndustries,
+      canEditIndustries,
+      industryOptions,
+      setIndustries,
+      canReadSpecializations,
+      canEditSpecializations,
+      specializationOptions,
+      setSpecializations,
+    ],
   );
 
   if (isError) {
@@ -225,8 +279,11 @@ export function ConsultantsTable() {
             />
             <DropdownMenuContent align="end">
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger>Set role</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
+                <DropdownMenuSubTrigger>
+                  <Shield />
+                  Change role
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="min-w-48">
                   {consultantRoles.map((r) => (
                     <DropdownMenuItem
                       key={r}
@@ -234,29 +291,90 @@ export function ConsultantsTable() {
                         handleBulkUpdate({ roleName: r }, `Role set to ${consultantRoleLabels[r]}`)
                       }
                     >
-                      <Badge variant={roleFilterVariant[r]}>{consultantRoleLabels[r]}</Badge>
+                      <Badge variant={roleFilterVariant[r]} className="rounded-md">
+                        {consultantRoleLabels[r]}
+                      </Badge>
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger>Set status</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
+                <DropdownMenuSubTrigger>
+                  <Orbit />
+                  Update status
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="min-w-48">
                   <DropdownMenuItem
                     onClick={() => handleBulkUpdate({ isActive: true }, 'Activated')}
                   >
-                    <Badge variant="success">Active</Badge>
+                    <Badge variant="success" className="rounded-md">
+                      Active
+                    </Badge>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => handleBulkUpdate({ isActive: false }, 'Deactivated')}
                   >
-                    <Badge variant="destructive">Inactive</Badge>
+                    <Badge variant="destructive" className="rounded-md">
+                      Inactive
+                    </Badge>
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             </DropdownMenuContent>
           </DropdownMenu>
         ) : undefined
+      }
+      // Unconditional, unlike the toolbar dropdown above — DataGrid only
+      // mounts its right-click listener at all while this is non-null
+      // (see OptionalContextMenu's `if (!content) return children`). Gating
+      // it on selectedUsers.length here would mean the very first right-click
+      // on an unselected row (which selects it and should open this same
+      // menu) fires before the listener exists — selection would update a
+      // few renders later, too late for that native contextmenu event.
+      // Whether it's actually allowed to open is still correctly decided
+      // inside DataGrid, from the row selection the same right-click just
+      // produced.
+      selectionContextMenu={
+        <>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Shield />
+              Change role
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="min-w-48">
+              {consultantRoles.map((r) => (
+                <ContextMenuItem
+                  key={r}
+                  onClick={() =>
+                    handleBulkUpdate({ roleName: r }, `Role set to ${consultantRoleLabels[r]}`)
+                  }
+                >
+                  <Badge variant={roleFilterVariant[r]} className="rounded-md">
+                    {consultantRoleLabels[r]}
+                  </Badge>
+                </ContextMenuItem>
+              ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <Orbit />
+              Update status
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="min-w-48">
+              <ContextMenuItem onClick={() => handleBulkUpdate({ isActive: true }, 'Activated')}>
+                <Badge variant="success" className="rounded-md">
+                      Active
+                    </Badge>
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => handleBulkUpdate({ isActive: false }, 'Deactivated')}>
+                <Badge variant="destructive" className="rounded-md">
+                      Inactive
+                    </Badge>
+              </ContextMenuItem>
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+        </>
       }
       server={{
         total: result?.total ?? 0,
