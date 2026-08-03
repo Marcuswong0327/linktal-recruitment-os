@@ -11,9 +11,15 @@ const DEFAULT_ROLE = 'viewer';
 // has no role yet — they're real recruiters, so they get the consultant role.
 const LINKED_DEFAULT_ROLE = 'consultant';
 
-// Consultant + its role + the role's permissions, in one query.
+// Consultant + its role + the role's permissions + all three arms of its
+// visibility scope, in one query. Only the granted node ids are loaded —
+// descendants are resolved at query time via each tree's `ancestorIds`
+// (see common/scope.ts), so a COUNTRY grant stays one id here, not 1,500.
 const withRole = {
   role: { include: { permissions: { include: { permission: true } } } },
+  industries: { select: { industryId: true } },
+  specializations: { select: { specializationId: true } },
+  locations: { select: { locationId: true } },
 } as const;
 
 type ConsultantWithRole = {
@@ -27,6 +33,9 @@ type ConsultantWithRole = {
     name: string;
     permissions: { permission: { resource: string; action: string } }[];
   } | null;
+  industries: { industryId: string }[];
+  specializations: { specializationId: string }[];
+  locations: { locationId: string }[];
 };
 
 @Injectable()
@@ -116,6 +125,9 @@ export class RbacService {
       'password-registration',
     );
 
+    // The row is created first, then rejected — deliberately. Registration
+    // never proves the submitter owns the address, so the account exists but
+    // stays dormant until an admin activates it. Same in every environment.
     throw new ForbiddenException({
       code: 'ACCOUNT_PENDING_APPROVAL',
       message: 'Your account has been created and is pending admin approval.',
@@ -258,6 +270,9 @@ export class RbacService {
       roleName: consultant.role?.name ?? null,
       isActive: consultant.isActive,
       permissions,
+      industryIds: consultant.industries.map((ci) => ci.industryId),
+      specializationIds: consultant.specializations.map((cs) => cs.specializationId),
+      locationIds: consultant.locations.map((cl) => cl.locationId),
     };
   }
 }

@@ -266,13 +266,27 @@ export function getCompanyColumns({
             meta: { align: 'center', strictMinSize: true },
             cell: ({ row }) => {
               const company = row.original;
+              // Industry-first: no industry tagged yet means no consultant
+              // can be assigned at all (enforced server-side too, in
+              // ClientsService — see INDUSTRY_REQUIRED). Once tagged, only
+              // consultants who hold that industry are offered — picking a
+              // mismatched one would just be rejected on save.
+              const availableConsultants = !company.industryId
+                ? []
+                : consultants.filter(
+                    (c) => c.industryIds === undefined || c.industryIds.includes(company.industryId!),
+                  );
               return (
-                <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  data-no-row-drag
+                  title={!company.industryId ? 'Tag an industry before assigning a consultant' : undefined}
+                >
                   <ConsultantCombobox
                     value={company.consultantId ?? ''}
                     onValueChange={(v) => onConsultantChange(company, v)}
-                    consultants={consultants}
-                    disabled={pendingRowId === company.id}
+                    consultants={availableConsultants}
+                    disabled={pendingRowId === company.id || !company.industryId}
                     className="w-fit mx-auto"
                   />
                 </div>

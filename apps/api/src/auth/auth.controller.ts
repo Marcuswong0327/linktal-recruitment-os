@@ -79,6 +79,9 @@ export class AuthController {
         fullName: user.fullName,
         roleName: user.roleName,
         permissions: Array.from(user.permissions),
+        industryIds: user.industryIds,
+        specializationIds: user.specializationIds,
+        locationIds: user.locationIds,
       },
     };
   }
@@ -97,6 +100,9 @@ export class AuthController {
         fullName: user.fullName,
         roleName: user.roleName,
         permissions: Array.from(user.permissions),
+        industryIds: user.industryIds,
+        specializationIds: user.specializationIds,
+        locationIds: user.locationIds,
       },
     };
   }
@@ -109,6 +115,9 @@ export class AuthController {
       name: user.fullName,
       roleName: user.roleName,
       permissions: Array.from(user.permissions),
+      industryIds: user.industryIds,
+      specializationIds: user.specializationIds,
+      locationIds: user.locationIds,
     };
   }
 }

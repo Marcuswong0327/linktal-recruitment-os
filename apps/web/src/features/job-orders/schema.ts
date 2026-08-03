@@ -1,10 +1,11 @@
-import { JobOrderEntityStatus } from '@/lib/api/generated/types';
-import type { JobOrderEntity } from '@/lib/api/generated/types';
+import { JobOrderEntityQuality, JobOrderEntityStatus } from '@/lib/api/generated/types';
+import type { JobOrderEntity, JobOrderPipelineCandidateEntity } from '@/lib/api/generated/types';
 
 // Types come straight from the generated API client, which is derived from
 // the Prisma schema — the single source of truth. Don't hand-maintain shapes
 // here.
 export type JobOrder = JobOrderEntity;
+export type PipelineCandidate = JobOrderPipelineCandidateEntity;
 
 // Job Order pipeline status (Workflow 3). Submission/interview stages live on
 // CandidateSubmission instead — JobOrder itself only tracks these 4.
@@ -35,6 +36,37 @@ export const statusTriggerClassName: Record<JobOrderStatus, string> = {
   ON_HOLD: 'border-transparent bg-muted text-muted-foreground',
   CLOSED: 'border-destructive/30 bg-destructive/10 text-destructive',
 };
+
+// Quality of the job order/posting itself — same LOW/MEDIUM/HIGH scale and
+// styling as Client.quality (Companies feature), for a consistent look.
+export const jobOrderQualities = Object.values(JobOrderEntityQuality);
+export type JobOrderQuality = (typeof jobOrderQualities)[number];
+
+export const jobOrderQualityLabels: Record<JobOrderQuality, string> = {
+  LOW: 'Low',
+  MEDIUM: 'Medium',
+  HIGH: 'High',
+};
+
+// Ascending scale: muted (low) -> info (medium) -> success (high).
+export const qualityVariant: Record<JobOrderQuality, 'muted' | 'info' | 'success'> = {
+  LOW: 'muted',
+  MEDIUM: 'info',
+  HIGH: 'success',
+};
+
+export const qualityTriggerClassName: Record<JobOrderQuality, string> = {
+  LOW: 'border-transparent bg-muted text-muted-foreground',
+  MEDIUM: 'border-info/30 bg-info/10 text-info',
+  HIGH: 'border-success/30 bg-success/10 text-success',
+};
+
+export const qualityOptions = jobOrderQualities.map((value) => ({
+  value,
+  label: jobOrderQualityLabels[value],
+  variant: qualityVariant[value],
+  triggerClassName: qualityTriggerClassName[value],
+}));
 
 export const priorityLabels: Record<number, string> = {
   1: 'High',

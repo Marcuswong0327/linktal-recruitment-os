@@ -4,21 +4,19 @@ import { IsArray, IsEnum, IsISO8601, IsInt, IsOptional, IsString, Max, Min } fro
 import { CandidateStatus, PlacementStatus, SubmissionStatus } from '@prisma/client';
 
 /**
- * Columns the list may be sorted by. Deliberately narrow: IDs, names, numeric
- * fields, and lastContactedAt (a denormalized column — see
- * Candidate.lastContactedAt in schema.prisma). Categorical / free-text
- * columns (industry, roleType, country, city, currentCompany,
- * currentPosition, email) are exposed as filters instead, since sorting by
- * them only yields arbitrary alphabetical groupings. `status` is included
- * despite being categorical — its values have a meaningful temperature order
- * (Cold < Warm < Hot < Placed), unlike the other enums here.
+ * Columns the list may be sorted by. Deliberately narrow: IDs, names, and
+ * lastContactedAt (a denormalized column — see Candidate.lastContactedAt in
+ * schema.prisma). Categorical / free-text columns (industry, jobRoleType,
+ * location, currentCompany, currentRole, email) are exposed as filters
+ * instead, since sorting by them only yields arbitrary alphabetical
+ * groupings. `status` is included despite being categorical — its values have
+ * a meaningful temperature order (Cold < Warm < Placed < Uns), unlike the
+ * other enums here.
  */
 export enum CandidateSortField {
   displayId = 'displayId',
-  fullName = 'fullName',
-  familyName = 'familyName',
-  givenName = 'givenName',
-  yearsExperience = 'yearsExperience',
+  firstName = 'firstName',
+  lastName = 'lastName',
   lastContactedAt = 'lastContactedAt',
   status = 'status',
 }
@@ -62,7 +60,7 @@ export class QueryCandidatesDto {
 
   @ApiPropertyOptional({
     description:
-      'Free-text search across fullName, email, displayId, mobile, city, country, currentPosition, currentCompany, and industry/role type name',
+      'Free-text search across firstName, lastName, email, displayId, mobile, currentRole, currentCompany, and location/industry/job role type name',
   })
   @IsOptional()
   @IsString()
@@ -82,12 +80,12 @@ export class QueryCandidatesDto {
   @IsString({ each: true })
   industryIds?: string[];
 
-  @ApiPropertyOptional({ description: 'Filter by role type ID(s) (see /candidate-role-types)', type: [String] })
+  @ApiPropertyOptional({ description: 'Filter by job role type ID(s) (see /job-role-types)', type: [String] })
   @IsOptional()
   @Transform(toArray)
   @IsArray()
   @IsString({ each: true })
-  roleTypeIds?: string[];
+  jobRoleTypeIds?: string[];
 
   @ApiPropertyOptional({ description: 'Filter by specialization ID(s) (see /specializations)', type: [String] })
   @IsOptional()
@@ -96,12 +94,6 @@ export class QueryCandidatesDto {
   @IsString({ each: true })
   specializationIds?: string[];
 
-  @ApiPropertyOptional({ description: 'Filter by skill tag(s) (exact match against the free-entry skills list)', type: [String] })
-  @IsOptional()
-  @Transform(toArray)
-  @IsArray()
-  @IsString({ each: true })
-  skills?: string[];
 
   @ApiPropertyOptional({ description: 'Filter by owning consultant ID(s)', type: [String] })
   @IsOptional()
@@ -124,7 +116,10 @@ export class QueryCandidatesDto {
   @IsEnum(PlacementStatus, { each: true })
   placementStatuses?: PlacementStatus[];
 
-  @ApiPropertyOptional({ description: 'Filter by location — matches city OR country (contains, case-insensitive)' })
+  @ApiPropertyOptional({
+    description:
+      "Filter by location name (contains, case-insensitive) — matches the candidate's own node only. Use locationIds to match descendants too.",
+  })
   @IsOptional()
   @IsString()
   location?: string;
@@ -134,24 +129,11 @@ export class QueryCandidatesDto {
   @IsString()
   currentCompany?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by current position (contains, case-insensitive)' })
+  @ApiPropertyOptional({ description: 'Filter by current role (contains, case-insensitive)' })
   @IsOptional()
   @IsString()
-  currentPosition?: string;
+  currentRole?: string;
 
-  @ApiPropertyOptional({ description: 'Minimum years of experience (inclusive)', minimum: 0 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  yearsExperienceMin?: number;
-
-  @ApiPropertyOptional({ description: 'Maximum years of experience (inclusive)', minimum: 0 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  yearsExperienceMax?: number;
 
   @ApiPropertyOptional({ description: 'Only candidates last contacted on/after this date (ISO 8601)' })
   @IsOptional()
@@ -162,4 +144,15 @@ export class QueryCandidatesDto {
   @IsOptional()
   @IsISO8601()
   lastContactedTo?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Filter by Location id(s). Selecting a country or state matches every candidate beneath it, via the ancestor path.',
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @IsArray()
+  @IsString({ each: true })
+  locationIds?: string[];
 }

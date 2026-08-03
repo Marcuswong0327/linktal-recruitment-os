@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
@@ -7,22 +7,34 @@ import { CreateSubmissionDto } from './dto/create-submission.dto';
 import { UpdateSubmissionDto } from './dto/update-submission.dto';
 import { QuerySubmissionsDto } from './dto/query-submissions.dto';
 
+// Candidate names are firstName/lastName now, and a job order's title is a
+// JobTitle relation rather than a scalar — both are flattened back to plain
+// strings in `toEntity` so the API shape is unchanged.
 const SUBMISSION_INCLUDE = {
-  candidate: { select: { fullName: true } },
-  jobOrder: { select: { jobTitle: true } },
+  candidate: { select: { firstName: true, lastName: true } },
+  jobOrder: { select: { displayId: true, jobTitle: { select: { name: true } } } },
 } satisfies Prisma.CandidateSubmissionInclude;
 
 type SubmissionWithRelations = {
-  candidate: { fullName: string } | null;
-  jobOrder: { jobTitle: string } | null;
+  candidate: { firstName: string | null; lastName: string | null } | null;
+  jobOrder: { displayId: string; jobTitle: { name: string } | null } | null;
 };
+
+/** Joins the name parts, tolerating a candidate with only one (or neither) on file. */
+function fullName(person: { firstName: string | null; lastName: string | null } | null): string | null {
+  if (!person) return null;
+  const joined = [person.firstName, person.lastName].filter(Boolean).join(' ');
+  return joined || null;
+}
 
 function toEntity<T extends SubmissionWithRelations>(submission: T) {
   const { candidate, jobOrder, ...rest } = submission;
   return {
     ...rest,
-    candidateName: candidate?.fullName ?? null,
-    jobOrderTitle: jobOrder?.jobTitle ?? null,
+    candidateName: fullName(candidate),
+    // Falls back to the job order's displayId when it has no title tagged —
+    // jobTitleId is optional now, and an empty pipeline cell reads as a bug.
+    jobOrderTitle: jobOrder?.jobTitle?.name ?? jobOrder?.displayId ?? null,
   };
 }
 
@@ -66,8 +78,39 @@ export class SubmissionsService {
    * on CandidateSubmission). So re-submitting the same candidate to the same
    * job order after a removal restores the dead row (fresh status, cleared
    * deletedAt) instead of colliding with the constraint.
+   *
+   * Industry guard: a candidate's own industry tag must match the job
+   * order's client's industry (a Job Order has none of its own). Blocks the
+   * mismatch at the source — the pairing that would otherwise let a scoped
+   * consultant's candidate silently end up on a job order outside their
+   * industry — rather than allowing it and special-casing visibility around
+   * it later. Applies to every role, not just scoped consultants: this is a
+   * data-integrity rule about whether the pairing makes sense, not access
+   * control.
    */
   async create(dto: CreateSubmissionDto) {
+    const [candidate, jobOrder] = await Promise.all([
+      this.prisma.candidate.findUnique({ where: { id: dto.candidateId }, select: { industryId: true } }),
+      this.prisma.jobOrder.findUnique({
+        where: { id: dto.jobOrderId },
+        select: { client: { select: { industryId: true } } },
+      }),
+    ]);
+    if (!candidate) {
+      throw new NotFoundException(`Candidate ${dto.candidateId} not found`);
+    }
+    if (!jobOrder) {
+      throw new NotFoundException(`Job order ${dto.jobOrderId} not found`);
+    }
+    // industryId is required on Client and Candidate now, so this is a plain
+    // equality check — there's no untagged case left to guard against.
+    if (candidate.industryId !== jobOrder.client.industryId) {
+      throw new BadRequestException({
+        code: 'SUBMISSION_INDUSTRY_MISMATCH',
+        message: "This candidate's industry does not match this job order.",
+      });
+    }
+
     const existing = await this.base.candidateSubmission.findUnique({
       where: { candidateId_jobOrderId: { candidateId: dto.candidateId, jobOrderId: dto.jobOrderId } },
     });

@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { CreateJobOrderDtoQuality } from './createJobOrderDtoQuality';
 import type { CreateJobOrderDtoStatus } from './createJobOrderDtoStatus';
 
 export interface CreateJobOrderDto {
@@ -16,10 +17,10 @@ export interface CreateJobOrderDto {
   consultantId?: string;
   /** Department */
   department?: string;
-  /** Location */
-  location?: string;
-  /** Job type */
-  jobType?: string;
+  /** City */
+  city?: string;
+  /** Suburb */
+  suburb?: string;
   /** Minimum salary */
   salaryMin?: number;
   /** Maximum salary */
@@ -36,6 +37,12 @@ export interface CreateJobOrderDto {
   requirements?: string;
   /** Status; defaults to ACTIVE when omitted */
   status?: CreateJobOrderDtoStatus;
+  /** Quality of the job order/posting; defaults to MEDIUM when omitted */
+  quality?: CreateJobOrderDtoQuality;
   /** Priority: 1=High, 2=Medium, 3=Low */
   priorityLevel?: number;
+  /** This job order was opened to replace a placement that fell through within the guarantee period; defaults to false */
+  isReplacement?: boolean;
+  /** Two or more consultants worked this job order together (split-desk); defaults to false */
+  isCollaborated?: boolean;
 }

@@ -1,15 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  IsBoolean,
+  ArrayNotEmpty,
+  IsArray,
   IsEnum,
-  IsInt,
-  IsNumber,
   IsOptional,
   IsString,
   IsUrl,
-  Max,
   MaxLength,
-  Min,
   MinLength,
 } from 'class-validator';
 import { ClientQuality, ClientStatus } from '@prisma/client';
@@ -21,48 +18,65 @@ export class CreateClientDto {
   @MaxLength(200)
   companyName!: string;
 
-  @ApiPropertyOptional({ description: 'Industry ID' })
-  @IsOptional()
+  // Required — the industry arm of the scope resolver relies on this never
+  // being null (see the SCOPING note in schema.prisma). Specialization is the
+  // optional narrowing within it.
+  @ApiProperty({ description: 'Industry ID (see /industries)' })
   @IsString()
-  industryId?: string;
+  industryId!: string;
 
-  @ApiPropertyOptional({ description: 'Specialization ID' })
+  @ApiPropertyOptional({ description: 'Specialization ID (see /specializations)' })
   @IsOptional()
   @IsString()
   specializationId?: string;
 
-  @ApiPropertyOptional({ description: 'Country', example: 'Australia' })
-  @IsOptional()
-  @IsString()
-  country?: string;
+  @ApiProperty({
+    description:
+      "Location nodes this client hires from — its market, not its office address. At least one is required (country level at minimum); mixed granularity is fine.",
+    type: [String],
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsString({ each: true })
+  locationIds!: string[];
 
-  @ApiPropertyOptional({ description: 'City', example: 'Brisbane' })
+  @ApiPropertyOptional({
+    description: "The client's own physical office address(es) — distinct from `locationIds` above",
+    type: [String],
+  })
   @IsOptional()
-  @IsString()
-  city?: string;
+  @IsArray()
+  @IsString({ each: true })
+  addresses?: string[];
+
+  @ApiPropertyOptional({
+    description: "The client's own office suburb/postcode(s) — same distinction as `addresses`",
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  suburbsAndPostcodes?: string[];
 
   @ApiPropertyOptional({ description: 'Website URL', example: 'https://acme.com' })
   @IsOptional()
   @IsUrl()
   website?: string;
 
-  @ApiPropertyOptional({ description: 'Terms of Business signed', default: false })
+  @ApiPropertyOptional({ description: 'Seek / Job Street job market URL' })
   @IsOptional()
-  @IsBoolean()
-  tobSigned?: boolean;
+  @IsUrl()
+  seekJobMarketUrl?: string;
 
-  @ApiPropertyOptional({ description: 'Fee as percentage of package (null until agreed)', example: 15 })
+  @ApiPropertyOptional({ description: 'LinkedIn job market URL' })
   @IsOptional()
-  @IsNumber()
-  @Min(0)
-  @Max(100)
-  feePercentage?: number;
+  @IsUrl()
+  linkedinJobMarketUrl?: string;
 
-  @ApiPropertyOptional({ description: 'Guarantee period in days', example: 90, default: 90 })
+  @ApiPropertyOptional({ description: 'General description of the company' })
   @IsOptional()
-  @IsInt()
-  @Min(0)
-  guaranteePeriod?: number;
+  @IsString()
+  generalDescription?: string;
 
   @ApiPropertyOptional({ description: 'Status; defaults to COLD when omitted', enum: ClientStatus, example: 'COLD' })
   @IsOptional()

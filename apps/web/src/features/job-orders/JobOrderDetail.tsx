@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -44,9 +45,13 @@ import { contactTypeLabels, type ContactType } from '@/lib/contact-types';
 import type { ClientEntity, ConsultantEntity, UpdateJobOrderDto } from '@/lib/api/generated/types';
 import {
   type JobOrder,
+  type JobOrderQuality,
   type JobOrderStatus,
+  jobOrderQualityLabels,
   jobOrderStatusLabels,
   priorityOptions,
+  qualityOptions,
+  qualityVariant,
   statusOptions,
   statusVariant,
 } from './schema';
@@ -100,10 +105,13 @@ function toPatch(values: {
   clientId: string;
   consultantId: string;
   department: string;
-  location: string;
-  jobType: string;
+  city: string;
+  suburb: string;
+  quality: JobOrderQuality;
   status: JobOrderStatus;
   priorityLevel: string;
+  isReplacement: boolean;
+  isCollaborated: boolean;
   salaryMin: string;
   salaryMax: string;
   salaryCurrency: string;
@@ -117,10 +125,13 @@ function toPatch(values: {
     clientId: values.clientId,
     consultantId: values.consultantId || null,
     department: values.department || null,
-    location: values.location || null,
-    jobType: values.jobType || null,
+    city: values.city || null,
+    suburb: values.suburb || null,
+    quality: values.quality,
     status: values.status,
     priorityLevel: values.priorityLevel === '' ? null : Number(values.priorityLevel),
+    isReplacement: values.isReplacement,
+    isCollaborated: values.isCollaborated,
     salaryMin: values.salaryMin === '' ? null : Number(values.salaryMin),
     salaryMax: values.salaryMax === '' ? null : Number(values.salaryMax),
     salaryCurrency: values.salaryCurrency || null,
@@ -146,12 +157,15 @@ function JobOrderEditForm({
   const [clientId, setClientId] = React.useState(jobOrder.clientId);
   const [consultantId, setConsultantId] = React.useState(jobOrder.consultantId ?? '');
   const [department, setDepartment] = React.useState(jobOrder.department ?? '');
-  const [location, setLocation] = React.useState(jobOrder.location ?? '');
-  const [jobType, setJobType] = React.useState(jobOrder.jobType ?? '');
+  const [city, setCity] = React.useState(jobOrder.city ?? '');
+  const [suburb, setSuburb] = React.useState(jobOrder.suburb ?? '');
+  const [quality, setQuality] = React.useState<JobOrderQuality>(jobOrder.quality);
   const [status, setStatus] = React.useState<JobOrderStatus>(jobOrder.status);
   const [priorityLevel, setPriorityLevel] = React.useState(
     jobOrder.priorityLevel != null ? String(jobOrder.priorityLevel) : '',
   );
+  const [isReplacement, setIsReplacement] = React.useState(jobOrder.isReplacement);
+  const [isCollaborated, setIsCollaborated] = React.useState(jobOrder.isCollaborated);
   const [salaryMin, setSalaryMin] = React.useState(jobOrder.salaryMin != null ? String(jobOrder.salaryMin) : '');
   const [salaryMax, setSalaryMax] = React.useState(jobOrder.salaryMax != null ? String(jobOrder.salaryMax) : '');
   const [salaryCurrency, setSalaryCurrency] = React.useState(jobOrder.salaryCurrency ?? '');
@@ -165,10 +179,13 @@ function JobOrderEditForm({
     clientId !== jobOrder.clientId ||
     consultantId !== (jobOrder.consultantId ?? '') ||
     department !== (jobOrder.department ?? '') ||
-    location !== (jobOrder.location ?? '') ||
-    jobType !== (jobOrder.jobType ?? '') ||
+    city !== (jobOrder.city ?? '') ||
+    suburb !== (jobOrder.suburb ?? '') ||
+    quality !== jobOrder.quality ||
     status !== jobOrder.status ||
     priorityLevel !== (jobOrder.priorityLevel != null ? String(jobOrder.priorityLevel) : '') ||
+    isReplacement !== jobOrder.isReplacement ||
+    isCollaborated !== jobOrder.isCollaborated ||
     salaryMin !== (jobOrder.salaryMin != null ? String(jobOrder.salaryMin) : '') ||
     salaryMax !== (jobOrder.salaryMax != null ? String(jobOrder.salaryMax) : '') ||
     salaryCurrency !== (jobOrder.salaryCurrency ?? '') ||
@@ -184,6 +201,19 @@ function JobOrderEditForm({
   // client's own (org-wide) value, already in `clients` from the combobox
   // fetch above; no separate job-order-level tracking.
   const client = clients.find((c) => c.id === jobOrder.clientId);
+
+  // Industry-first: a Job Order has no industry of its own, only via its
+  // (possibly just-changed) Client — reacts to the live `clientId` selection,
+  // not the original `jobOrder.clientId`, so switching Client immediately
+  // updates which consultants are assignable. No industry tagged yet means
+  // no consultant can be assigned at all (enforced server-side too, in
+  // JobOrdersService — see INDUSTRY_REQUIRED).
+  const selectedClientIndustryId = clients.find((c) => c.id === clientId)?.industryId ?? null;
+  const availableConsultants = !selectedClientIndustryId
+    ? []
+    : consultants.filter(
+        (c) => c.industryIds === undefined || c.industryIds.includes(selectedClientIndustryId),
+      );
 
   const { data: pipelineData, isLoading: pipelineLoading } = useGetJobOrderPipelineTimeline(jobOrder.id);
   const pipelineEvents = pipelineData?.status === 200 ? pipelineData.data : undefined;
@@ -211,10 +241,13 @@ function JobOrderEditForm({
         clientId,
         consultantId,
         department,
-        location,
-        jobType,
+        city,
+        suburb,
+        quality,
         status,
         priorityLevel,
+        isReplacement,
+        isCollaborated,
         salaryMin,
         salaryMax,
         salaryCurrency,
@@ -249,6 +282,9 @@ function JobOrderEditForm({
               <div className="flex items-center gap-3">
                 <h1 className="font-heading text-2xl font-semibold tracking-tight">{jobOrder.jobTitle}</h1>
                 <Badge variant={statusVariant[jobOrder.status]}>{jobOrderStatusLabels[jobOrder.status]}</Badge>
+                <Badge variant={qualityVariant[jobOrder.quality]}>
+                  {jobOrderQualityLabels[jobOrder.quality]} quality
+                </Badge>
               </div>
               <span className="font-mono text-xs text-muted-foreground">{jobOrder.displayId}</span>
             </div>
@@ -282,22 +318,39 @@ function JobOrderEditForm({
                 <FormField label="Client" htmlFor="clientId">
                   <ClientCombobox id="clientId" value={clientId} onValueChange={setClientId} clients={clients} />
                 </FormField>
-                <FormField label="Consultant" htmlFor="consultantId">
+                <FormField
+                  label="Consultant"
+                  htmlFor="consultantId"
+                  description={
+                    !selectedClientIndustryId
+                      ? 'Tag the client with an industry before assigning a consultant'
+                      : undefined
+                  }
+                >
                   <ConsultantCombobox
                     id="consultantId"
                     value={consultantId}
                     onValueChange={setConsultantId}
-                    consultants={consultants}
+                    consultants={availableConsultants}
+                    disabled={!selectedClientIndustryId}
                   />
                 </FormField>
                 <FormField label="Department" htmlFor="department">
                   <Input id="department" value={department} onChange={(e) => setDepartment(e.target.value)} />
                 </FormField>
-                <FormField label="Location" htmlFor="location">
-                  <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} />
+                <FormField label="City" htmlFor="city">
+                  <Input id="city" value={city} onChange={(e) => setCity(e.target.value)} />
                 </FormField>
-                <FormField label="Job type" htmlFor="jobType">
-                  <Input id="jobType" value={jobType} onChange={(e) => setJobType(e.target.value)} />
+                <FormField label="Suburb" htmlFor="suburb">
+                  <Input id="suburb" value={suburb} onChange={(e) => setSuburb(e.target.value)} />
+                </FormField>
+                <FormField label="Quality" htmlFor="quality">
+                  <EnumSelect
+                    id="quality"
+                    value={quality}
+                    onValueChange={(v) => setQuality(v as JobOrderQuality)}
+                    options={qualityOptions}
+                  />
                 </FormField>
                 <FormField label="Status" htmlFor="status">
                   <EnumSelect
@@ -316,6 +369,22 @@ function JobOrderEditForm({
                     placeholder="Not set"
                   />
                 </FormField>
+                <label htmlFor="isReplacement" className="flex items-center gap-2 pt-6 text-sm">
+                  <Checkbox
+                    id="isReplacement"
+                    checked={isReplacement}
+                    onCheckedChange={(checked) => setIsReplacement(!!checked)}
+                  />
+                  Replacement job order
+                </label>
+                <label htmlFor="isCollaborated" className="flex items-center gap-2 pt-6 text-sm">
+                  <Checkbox
+                    id="isCollaborated"
+                    checked={isCollaborated}
+                    onCheckedChange={(checked) => setIsCollaborated(!!checked)}
+                  />
+                  Collaborated (split-desk)
+                </label>
               </CardContent>
             </Card>
 

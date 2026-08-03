@@ -1,544 +1,306 @@
-# Recruitment System Database ERD
+# Database ERD
 
-> **Source of truth:** `apps/api/prisma/schema.prisma`. This document is kept in
-> sync with that schema and the RBAC seed (`apps/api/prisma/seed.ts`). If they
-> disagree, the schema wins — update this doc.
+Schema of record: `apps/api/prisma/schema.prisma`. This document explains the
+*shape* — what each table is for, and the two ideas (the location tree and the
+industry/specialization tree) that most of the design hangs off. Field-level
+detail lives in the schema itself, which carries its own comments; duplicating
+every column here only guarantees the copy goes stale.
 
-## Entity Relationship Diagram
+Migrations: a single squashed `0_init` (see `docs/migrations.md`). The earlier
+25-migration history was discarded when the database was rebuilt — nothing
+depends on it.
+
+---
+
+## The two hierarchies
+
+Almost every scoping and filtering decision in this system resolves through one
+of two trees, and both work identically: **a node covers itself plus every
+descendant.**
+
+**Geography** — `Location`, four rungs, bulk-loaded from GeoNames:
+
+```
+Australia (COUNTRY) → New South Wales (STATE) → Sydney (CITY) → Silverwater 2128 (SUBURB)
+```
+
+Nothing in this table is hand-typed. `location:create` is admin-only, because
+the scope resolver reads this tree and a drifted node silently changes who can
+see what. Linktal's own desk labels are *not* nodes — `Brisbane GC QLD` is two
+CITY grants (Brisbane, Gold Coast), `East Malaysia` is two STATE grants (Sabah,
+Sarawak), `All Malaysia` is one COUNTRY grant.
+
+**Taxonomy** — `Industry` → `Specialization` → child `Specialization`:
+
+```
+Manufacturing → Engineering Parts → Engineering Parts Fibre Optics
+Manufacturing → Food             → Food Bakery
+```
+
+The source data already encoded this second tier in its naming; the `parentId`
+self-relation is what makes it queryable. Consultants grant coarse categories
+(`Food`); clients and candidates tag specific leaves (`Food Bakery`). Both
+`industry:create` and `specialization:create` are admin+manager only, for the
+same scope-bearing reason as Location.
+
+### Single node vs. set of nodes
+
+| Carries | Entities | Why |
+|---|---|---|
+| **One** most-specific node | `Candidate.locationId` (required), `JobOrder.locationId`, `ClientJobResearch.locationId` | a person or a job is in one place |
+| **A set** of nodes, any level | `Client.locations`, `Stakeholder.coverage`, `Consultant.locations` | a hiring market, a coverage area, or a desk spans several |
+
+Matching one against the other is just walking the single node up its parent
+chain and testing for membership in the set — which is why mixed granularity on
+either side costs nothing.
+
+---
+
+## Scoping
+
+```
+visible  =  (industry match AND specialization match)  OR  (location match)
+```
+
+Applies to the `consultant` role only; admin, manager, finance and researcher
+are unrestricted. Full rules, wildcard handling and null semantics are in
+`docs/rbac-roles.md` §3 — that file is the source of truth for authorization,
+this one only notes which columns it reads.
+
+---
+
+## Job Title vs. Role Type
+
+Two different facts about the same job, deliberately kept apart:
+
+| | Who assigns it | Table | Example |
+|---|---|---|---|
+| **Job Title** | the company | `JobTitle` | "Product Engineer" |
+| **Role Type** | the Linktal consultant | `JobRoleType` / `StakeholderRoleType` | "Software Engineer" |
+
+Role types are split into two catalogs because the vocabularies never overlap:
+`JobRoleType` classifies *jobs and people* (Electrician, Fitter Lead, CNC
+Machinist) and is used by Candidate / JobOrder / ClientJobResearch;
+`StakeholderRoleType` classifies *contacts* by function (HR, Finance, Safety,
+Procurement) and is used by Stakeholder alone. Merging them would offer trades
+in the dropdown when tagging a CFO.
+
+All three catalogs are combobox-growable by any consultant — none of them
+carries scoping weight, so free creation costs nothing and speeds data entry.
+
+A Candidate has no `JobTitle`: their equivalent is `currentRole`, free text for
+whatever their current employer calls them.
+
+---
+
+## Entity relationship diagram
 
 ```mermaid
 erDiagram
-    %% ==================== RBAC DOMAIN ====================
-    Role {
-        string id PK
-        string name "unique: admin|manager|consultant|finance|researcher|viewer"
-        string description
-    }
-
-    Permission {
-        string id PK
-        string resource "candidate|client|stakeholder|job_order|job_research|submission|placement|consultant|role|permission|industry|specialization|stakeholder_role_type|candidate_role_type|saved_search|report|audit"
-        string action "create|read|update|delete"
-        string description
-    }
-
-    RolePermission {
-        string id PK
-        string roleId FK
-        string permissionId FK
-    }
-
-    %% ==================== IDENTITY / CONSULTANT ====================
-    %% There is no separate User table. Authentication is handled by NextAuth
-    %% (Auth.js) + Microsoft Entra ID (Azure AD), external; Consultant is the
-    %% local identity + role record, linked by azureId. A first-time login is
-    %% provisioned just-in-time (viewer role).
-    Consultant {
-        string id PK
-        string displayId "unique: consultant-XXXX"
-        string azureId "unique, nullable - Azure AD object id (oid)"
-        string email "unique"
-        string fullName
-        string roleId FK "nullable"
-        boolean isActive "default true"
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    %% ==================== CLIENT DOMAIN ====================
-    %% Industry/Specialization/StakeholderRoleType are reference tables (a
-    %% fixed row instead of free text), so values stay consistent and
-    %% reusable. No admin management page: the relevant form's combobox
-    %% doubles as the catalog editor (pick existing, or type new to create
-    %% one). See rbac-roles.md §4 for the create+read-only permission shape
-    %% they share.
-    Industry {
-        string id PK
-        string name "unique"
-        boolean isActive "default true"
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    Specialization {
-        string id PK
-        string name "unique"
-        boolean isActive "default true"
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    StakeholderRoleType {
-        string id PK
-        string name "unique - Director|Hiring Manager|HR|Talent Acquisition|Operations|Finance|Department Head|Other, growable"
-        boolean isActive "default true"
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    Client {
-        string id PK
-        string displayId "unique: Client-XXXX"
-        string companyName
-        string industryId FK "nullable"
-        string specializationId FK "nullable"
-        string country
-        string city
-        string website
-        boolean tobSigned "default false"
-        float feePercentage "default 15"
-        int guaranteePeriod "days, default 90"
-        enum status "COLD|WARM|TRADED, default COLD"
-        enum quality "LOW|MEDIUM|HIGH, default MEDIUM - recruiter's read on prospect quality"
-        jsonb notes "array of {id, content, timestamp, by, editedAt, editedBy}"
-        datetime lastContactedAt "nullable, denormalized - max(contactedAt) across this client's stakeholders"
-        string consultantId FK "nullable - owning consultant"
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    Stakeholder {
-        string id PK
-        string displayId "unique: Stake-XXXX"
-        string clientId FK
-        string fullName
-        string jobTitle
-        string roleTypeId FK "nullable - derived from jobTitle by keyword match, independently editable"
-        string email
-        string mobile
-        boolean isDecisionMaker "default false"
-        string notes
-        datetime lastContactedAt "nullable, denormalized - max(contactedAt) across this stakeholder's own history"
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    StakeholderContactHistory {
-        string id PK
-        string stakeholderId FK
-        string contactType "call|email|meeting|linkedin"
-        string contactedById FK "nullable - consultant who made this specific contact"
-        string notes
-        datetime contactedAt "default now"
-        datetime createdAt
-    }
-
-    ClientJobResearch {
-        string id PK
-        string clientId FK
-        string jobTitle
-        string sourceUrl
-        string salaryRange
-        string notes
-        boolean isContacted "default false"
-        datetime researchedAt
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    %% ==================== CANDIDATE DOMAIN ====================
-    %% CandidateRoleType is the same reference-table pattern as
-    %% StakeholderRoleType above, but its own catalog — a candidate's role
-    %% type is an employment category (Permanent/Contract/...), not
-    %% StakeholderRoleType's functional/department classification.
-    %% Industry/Specialization are shared with the Client domain (same
-    %% catalog, e.g. one org-wide Industry list). Specialization is
-    %% many-to-many for Candidate (unlike Client's single FK) via the
-    %% CandidateSpecialization join, since a candidate can carry several.
-    CandidateRoleType {
-        string id PK
-        string name "unique - employment type, e.g. Permanent|Contract|Temp, growable"
-        boolean isActive "default true"
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    Candidate {
-        string id PK
-        string displayId "unique: CDD-XXXX"
-        string fullName
-        string givenName
-        string familyName
-        string email
-        string mobile
-        string country
-        string city
-        string industryId FK "nullable"
-        string roleTypeId FK "nullable"
-        string currentPosition
-        string currentCompany
-        int yearsExperience
-        string salaryExpectation
-        string linkedinUrl
-        string resumeUrl
-        jsonb workHistory "array of {company, role, startDate, endDate}"
-        jsonb skills "array of strings - free-entry tags, distinct from specializations (a shared reference-table taxonomy)"
-        enum status "COLD|WARM|HOT|PLACED, default COLD"
-        jsonb notes "array of {id, content, timestamp, by, editedAt, editedBy} - mirrors Client.notes"
-        string consultantId FK "nullable - owning consultant, same shape as Client.consultantId"
-        datetime lastContactedAt "nullable, denormalized - max(CandidateContactHistory.contactedAt)"
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    %% Join table: a candidate can carry several specializations (unlike
-    %% Client's single specializationId). No id/timestamps — pure join.
-    CandidateSpecialization {
-        string candidateId PK "also FK -> Candidate"
-        string specializationId PK "also FK -> Specialization"
-    }
-
-    CandidateScreeningHistory {
-        string id PK
-        string candidateId FK
-        jsonb notes "array of {text, createdAt}"
-        datetime screenedAt
-        datetime createdAt
-    }
-
-    %% A consultant's saved candidate search — personal, not shared. `filters`
-    %% is opaque JSON (same shape as GET /candidates' query params) rather
-    %% than individual columns, since it's only ever fetched whole by owner.
-    CandidateSavedSearch {
-        string id PK
-        string name
-        string consultantId FK
-        jsonb filters "serialized filter state, same shape as GET /candidates query params"
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    %% Mirrors StakeholderContactHistory exactly. Kept separate from
-    %% CandidateScreeningHistory on purpose: a quick call/email/LinkedIn
-    %% touch isn't the same event as a formal screening pass.
-    CandidateContactHistory {
-        string id PK
-        string candidateId FK
-        string contactType "call|email|meeting|linkedin"
-        string contactedById FK "nullable - consultant who made this specific contact"
-        string notes
-        datetime contactedAt "default now"
-        datetime createdAt
-    }
-
-    %% ==================== JOB ORDER DOMAIN ====================
-    JobOrder {
-        string id PK
-        string displayId "unique, nullable"
-        string clientId FK
-        string consultantId FK "nullable"
-        string jobTitle
-        string department
-        string location
-        string jobType "Full-time|Part-time|Contract"
-        float salaryMin
-        float salaryMax
-        string salaryCurrency "default AUD"
-        int openings "default 1"
-        int filledCount "default 0"
-        string description
-        string requirements
-        enum status "ACTIVE|PLACED|CLOSED|ON_HOLD, default ACTIVE"
-        int priorityLevel "1=High,2=Medium,3=Low; default 2"
-        datetime receivedAt
-        datetime closedAt
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    %% ==================== SUBMISSION / PLACEMENT DOMAIN ====================
-    CandidateSubmission {
-        string id PK
-        string candidateId FK
-        string jobOrderId FK
-        enum status "SUBMITTED|INTERVIEWING|REJECTED|PLACED, default SUBMITTED"
-        datetime submittedAt
-        string notes
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    Placement {
-        string id PK
-        string displayId "unique, nullable: PLC-XXXX"
-        string submissionId FK "unique - one placement per submission"
-        float salary
-        datetime startDate
-        datetime guaranteeEndDate "auto: startDate + client.guaranteePeriod"
-        float fee
-        float feePercentage
-        enum status "ACTIVE|COMPLETED|FAILED, default ACTIVE"
-        string notes
-        datetime createdAt
-        datetime updatedAt
-    }
-
-    %% ==================== AUDIT / HISTORY DOMAIN ====================
-    %% Not a domain table a user creates directly — every write to a model in
-    %% AUDITED_MODELS (see below) produces one of these automatically via a
-    %% Prisma Client Extension. No FK to actorId/entityId on purpose: it must
-    %% keep a row even after the actor or the entity itself is gone.
-    AuditLog {
-        string id PK
-        string actorId "logical ref to Consultant.id, nullable = system/import"
-        string action "CREATE|UPDATE|SOFT_DELETE|RESTORE|HARD_DELETE|DEACTIVATE"
-        string entityType "e.g. Candidate, Client, CandidateSubmission"
-        string entityId "logical ref, no FK"
-        jsonb changes "nullable: {field: {from, to}} for updates; created row for creates"
-        jsonb metadata "nullable: {requestId?, ip?, cascade?, source: 'app'}"
-        datetime createdAt
-    }
-
-    %% ==================== RELATIONSHIPS ====================
-    Role ||--o{ RolePermission : "has"
-    Permission ||--o{ RolePermission : "granted via"
-    Role ||--o{ Consultant : "assigned to"
-
-    Consultant ||--o{ Client : "owns"
-    Consultant ||--o{ JobOrder : "manages"
-    Consultant ||--o{ Candidate : "owns"
-    Consultant ||--o{ StakeholderContactHistory : "made"
-    Consultant ||--o{ CandidateContactHistory : "made"
-    Consultant ||--o{ CandidateSavedSearch : "owns"
-
-    Industry ||--o{ Client : "categorizes"
-    Specialization ||--o{ Client : "categorizes"
-    StakeholderRoleType ||--o{ Stakeholder : "categorizes"
-    Industry ||--o{ Candidate : "categorizes"
-    CandidateRoleType ||--o{ Candidate : "categorizes"
-    Candidate ||--o{ CandidateSpecialization : "has"
-    Specialization ||--o{ CandidateSpecialization : "categorizes"
-
-    Client ||--o{ Stakeholder : "has"
-    Stakeholder ||--o{ StakeholderContactHistory : "has"
-    Client ||--o{ ClientJobResearch : "has"
-    Client ||--o{ JobOrder : "opens"
-
-    Candidate ||--o{ CandidateScreeningHistory : "has"
-    Candidate ||--o{ CandidateContactHistory : "has"
-    Candidate ||--o{ CandidateSubmission : "submitted via"
-    JobOrder ||--o{ CandidateSubmission : "receives"
-    CandidateSubmission ||--o| Placement : "results in"
+    Role ||--}| RolePermission : "role"
+    Permission ||--}| RolePermission : "permission"
+    JobTitle ||--}o Consultant : "jobTitle"
+    Consultant ||--}o Consultant : "reportsTo"
+    Role ||--}o Consultant : "role"
+    Consultant ||--}| ConsultantIndustry : "consultant"
+    Industry ||--}| ConsultantIndustry : "industry"
+    Consultant ||--}| ConsultantSpecialization : "consultant"
+    Specialization ||--}| ConsultantSpecialization : "specialization"
+    Consultant ||--}| ConsultantLocation : "consultant"
+    Location ||--}| ConsultantLocation : "location"
+    Location ||--}o Location : "parent"
+    Industry ||--}| Specialization : "industry"
+    Specialization ||--}o Specialization : "parent"
+    Industry ||--}| Client : "industry"
+    Specialization ||--}o Client : "specialization"
+    Consultant ||--}o Client : "consultant"
+    Client ||--}| ClientLocation : "client"
+    Location ||--}| ClientLocation : "location"
+    Client ||--}| Tob : "client"
+    Consultant ||--}o Tob : "linktalRepresentative"
+    Client ||--}| Stakeholder : "client"
+    JobTitle ||--}o Stakeholder : "jobTitle"
+    StakeholderRoleType ||--}o Stakeholder : "stakeholderRoleType"
+    Stakeholder ||--}| StakeholderLocation : "stakeholder"
+    Location ||--}| StakeholderLocation : "location"
+    Stakeholder ||--}| StakeholderContactHistory : "stakeholder"
+    Consultant ||--}o StakeholderContactHistory : "contactedBy"
+    Client ||--}| ClientJobResearch : "client"
+    Consultant ||--}o ClientJobResearch : "consultant"
+    Location ||--}o ClientJobResearch : "location"
+    JobTitle ||--}o ClientJobResearch : "jobTitle"
+    JobRoleType ||--}o ClientJobResearch : "jobRoleType"
+    Location ||--}| Candidate : "location"
+    Industry ||--}| Candidate : "industry"
+    JobRoleType ||--}o Candidate : "jobRoleType"
+    Consultant ||--}o Candidate : "consultant"
+    Candidate ||--}| CandidateSpecialization : "candidate"
+    Specialization ||--}| CandidateSpecialization : "specialization"
+    Candidate ||--}| CandidateContactHistory : "candidate"
+    Consultant ||--}o CandidateContactHistory : "contactedBy"
+    Client ||--}| JobOrder : "client"
+    Consultant ||--}o JobOrder : "consultant"
+    JobTitle ||--}o JobOrder : "jobTitle"
+    JobRoleType ||--}o JobOrder : "jobRoleType"
+    Location ||--}o JobOrder : "location"
+    ClientJobResearch ||--}o JobOrder : "jobResearch"
+    Candidate ||--}| CandidateSubmission : "candidate"
+    JobOrder ||--}| CandidateSubmission : "jobOrder"
+    CandidateSubmission ||--}| Interview : "submission"
+    CandidateSubmission ||--}| Placement : "submission"
 ```
 
-## Tables Summary
+---
 
-### RBAC (roles attach to Consultant; no separate User table)
+## Tables
 
-| Table | Description | ID |
-|-------|-------------|----|
-| **Role** | Named roles (admin, manager, consultant, finance, researcher, viewer) | cuid |
-| **Permission** | `resource` + `action` pair | cuid, unique(resource, action) |
-| **RolePermission** | Join: roles ↔ permissions | cuid, unique(roleId, permissionId) |
-| **Consultant** | Local identity + role (linked to Azure AD via `azureId`) | cuid, displayId `consultant-XXXX` |
+### RBAC & identity
+| Table | Purpose |
+|---|---|
+| `Role` · `Permission` · `RolePermission` | the permission matrix (seeded — `prisma/seed.ts`) |
+| `Consultant` | every system user: login identity, role, seniority (`jobTitleId`), `salary`, `costTo`, and `reportsToId` for the org chart. There is no separate User table |
+| `ConsultantIndustry` · `ConsultantSpecialization` · `ConsultantLocation` | the visibility grants — explicit join models, not implicit m2m, so each grant is written as its own audited create/delete |
 
-### Core Entities
+### Reference catalogs
+| Table | Created by | Scope-bearing |
+|---|---|---|
+| `Location` | admin only (GeoNames) | yes |
+| `Industry` · `Specialization` | admin + manager | yes |
+| `JobTitle` · `JobRoleType` · `StakeholderRoleType` | anyone (combobox) | no |
 
-| Table | Description | Display ID |
-|-------|-------------|------------|
-| **Client** | Client companies (employers) | `Client-XXXX` |
-| **Industry** | Reference table for `Client.industryId` — growable via combobox | — |
-| **Specialization** | Reference table for `Client.specializationId` — growable via combobox | — |
-| **Stakeholder** | Contacts at client companies | `Stake-XXXX` |
-| **StakeholderRoleType** | Reference table for `Stakeholder.roleTypeId` — seeded (Director, Hiring Manager, HR, Talent Acquisition, Operations, Finance, Department Head, Other), auto-derived from `jobTitle` by keyword match, growable via combobox | — |
-| **StakeholderContactHistory** | Communications with stakeholders (`contactedById` attributes to a consultant) | — |
-| **ClientJobResearch** | Job-opening research / prospecting | — |
-| **CandidateRoleType** | Reference table for `Candidate.roleTypeId` — own catalog (employment type: Permanent/Contract/...), distinct from `StakeholderRoleType`, growable via combobox | — |
-| **Candidate** | Job seekers (`workHistory`/`skills` as JSONB; `industryId`/`roleTypeId` FKs; specializations many-to-many via `CandidateSpecialization`) | `CDD-XXXX` |
-| **CandidateSpecialization** | Join: candidates ↔ specializations (many-to-many — a candidate can carry several, unlike Client's single FK) | composite PK(candidateId, specializationId) |
-| **CandidateScreeningHistory** | Screening notes (`notes` as JSONB) | — |
-| **CandidateContactHistory** | Communications with candidates (mirrors `StakeholderContactHistory`) | — |
-| **CandidateSavedSearch** | A consultant's saved candidate search (personal, `filters` as opaque JSON) | — |
-| **JobOrder** | Open positions | optional custom |
-| **CandidateSubmission** | Candidate → JobOrder submissions | unique(candidateId, jobOrderId) |
-| **Placement** | Successful placements (fee/guarantee) | `PLC-XXXX` |
-| **AuditLog** | Append-only history of every write to an audited model — see [Audit & History Tracking](#audit--history-tracking) | — |
+### Client side
+| Table | Purpose |
+|---|---|
+| `Client` | the hiring company. `industryId` required, `specializationId` optional, hiring market via `ClientLocation` |
+| `ClientLocation` | m2m — where this client hires from |
+| `Tob` | Terms of Business, many per client. Everything but `clientId` optional; `pricing` is free text ("13%-(80k below)15%-18%"), `guaranteePeriod` numeric days |
+| `Stakeholder` | a contact at a client. Both `jobTitleId` and `stakeholderRoleTypeId`; coverage via `StakeholderLocation` |
+| `StakeholderLocation` | m2m — the territory this contact covers, matched on its own, independent of where the client sits |
+| `StakeholderContactHistory` | one logged touch. `category` separates "Detailed Brief Notes" from "Outreach Campaign History"; `contactType` is the channel |
+| `ClientJobResearch` | a job ad found in the market (Seek/LinkedIn) — public information, unrelated to whether Linktal has been briefed. Optionally linked from a `JobOrder` |
 
-### JSONB Fields
+### Candidate side
+| Table | Purpose |
+|---|---|
+| `Candidate` | `locationId` and `industryId` required, everything else optional. `jobRoleTypeId` for classification, `currentRole`/`currentCompany` free text, `workHistory` JSONB |
+| `CandidateSpecialization` | m2m — a candidate can carry several |
+| `CandidateContactHistory` | screening notes *and* outreach notes, separated by `category`. `currentSalary`/`expectedSalary` are free text — the source records them as "35 per hour", "more 53-55" |
 
-| Table | Field | Structure |
-|-------|-------|-----------|
-| **Candidate** | `workHistory` | `[{ company, role, startDate, endDate }]` |
-| **Candidate** | `skills` | `["string"]` — free-entry tags, distinct from specializations (a shared, reference-table taxonomy) |
-| **Candidate** | `notes` | `[{ content, timestamp, by }]` — internal note timeline, mirrors `Client.notes` |
-| **CandidateScreeningHistory** | `notes` | `[{ text, createdAt }]` |
-| **CandidateSavedSearch** | `filters` | serialized filter state, same shape as `GET /candidates`' query params |
-| **Client** | `notes` | `[{ id, content, timestamp, by, editedAt, editedBy }]` — internal note timeline, newest last |
-| **Candidate** | `notes` | `[{ id, content, timestamp, by, editedAt, editedBy }]` — identical shape to `Client.notes`; only the note's author or an admin may edit/delete it |
-| **AuditLog** | `changes` | `{ field: { from, to } }` per changed field (updates); the full created row (creates) |
-| **AuditLog** | `metadata` | `{ requestId?, ip?, cascade?, source: 'app' }` |
+### Pipeline
+| Table | Purpose |
+|---|---|
+| `JobOrder` | a position Linktal has been briefed on. Both `jobTitleId` and `jobRoleTypeId` |
+| `CandidateSubmission` | one candidate put forward to one job order (unique pair) |
+| `Interview` | rounds within a submission — `roundLabel` free text, not an enum |
+| `Placement` | a successful hire, with the fee calculation |
+| `AuditLog` | append-only record of every write and its actor |
 
-## Status Enums
+---
+
+## displayId
+
+Every entity carries a human-readable `displayId`, generated by a per-table
+Postgres sequence (`ALTER SEQUENCE ... OWNED BY` in `0_init`, so it drops with
+its table):
+
+| | | | |
+|---|---|---|---|
+| `consultant-####` | `Client-####` | `Stake-####` | `CDD-####` |
+| `TOB-####` | `CN-####` | `CDN-####` | `JR-####` |
+| `JO-####` | `SUB-####` | `INT-####` | `PLC-####` |
+
+These double as the **import identity**. The source workbook's own ID columns
+are entirely empty and its cross-sheet links are written as name + spreadsheet
+row number, so the importer assigns `displayId` deterministically from row
+position and re-imports match on it. Natural keys can't do this job: 744
+candidate rows share an email with another row, 568 share a mobile, and 31 have
+neither — keying on email would silently merge distinct people.
+
+Consequence: rows must not be re-sorted in the source workbook between imports.
+Appending is safe. Writing the assigned `displayId`s back into the workbook's ID
+columns removes that constraint permanently.
+
+---
+
+## JSONB fields
+
+| Field | Shape |
+|---|---|
+| `Candidate.workHistory` | `[{company, role, period}]` — `period` is free text ("2020 – 2021 (1 year)"); the source never stores parseable dates |
+| `Candidate.notes` | `[{id, content, timestamp, by, editedAt, editedBy}]` — edit/delete restricted to the note's author or an admin |
+| `Client.addresses` · `Client.suburbsAndPostcodes` | arrays of strings — the client's own offices, distinct from its hiring market |
+
+`Client` has no notes timeline; client-side notes live in
+`StakeholderContactHistory`.
+
+---
+
+## Denormalized `lastContactedAt` / `lastContactedById`
+
+Present on `Client`, `Stakeholder` and `Candidate`. These are real columns, not
+computed: Prisma's relation-aggregate `orderBy` supports only `_count`, not
+`_max`, so sorting a list by "most recently contacted" needs a column. Source of
+truth remains the contact-history tables; the columns are advanced on write, and
+only when the incoming contact is newer than what's stored (a backdated entry
+must not clobber a more recent one).
+
+The rest of the "latest contact" detail (channel, notes, who) is resolved live
+from the top-1 history row — it's display-only and never sorted or filtered on.
+
+---
+
+## Status enums
 
 | Enum | Values |
-|------|--------|
-| **ClientStatus** | `COLD` · `WARM` · `TRADED` |
-| **ClientQuality** | `LOW` · `MEDIUM` (default) · `HIGH` — declared in this order so the native Postgres enum sorts ordinally, not alphabetically |
-| **CandidateStatus** | `COLD` · `WARM` · `HOT` · `PLACED` |
-| **JobOrderStatus** | `ACTIVE` · `PLACED` · `CLOSED` · `ON_HOLD` |
-| **SubmissionStatus** | `SUBMITTED` · `INTERVIEWING` · `REJECTED` · `PLACED` |
-| **PlacementStatus** | `ACTIVE` · `COMPLETED` · `FAILED` |
-| **UserStatus** *(enum defined, not yet used by a model)* | `ACTIVE` · `INACTIVE` · `SUSPENDED` |
+|---|---|
+| `ClientStatus` | COLD · WARM · TRADED |
+| `CandidateStatus` | COLD · WARM · PLACED · UNS |
+| `JobOrderStatus` | ACTIVE · PLACED · CLOSED · ON_HOLD |
+| `SubmissionStatus` | SUBMITTED · INTERVIEWING · REJECTED · PLACED |
+| `InterviewOutcome` | SCHEDULED · PENDING · PASSED · FAILED · CANCELLED |
+| `PlacementStatus` | ACTIVE · COMPLETED · FAILED |
+| `PlacementFeeType` | PERCENTAGE · FLAT |
+| `ClientQuality` · `JobOrderQuality` | LOW · MEDIUM · HIGH |
+| `LocationLevel` | COUNTRY · STATE · CITY · SUBURB |
 
-## RBAC
+**Declaration order is sort order.** Postgres native enums sort by ordinal, not
+alphabetically, so `ORDER BY quality` yields LOW < MEDIUM < HIGH and
+`ORDER BY status` puts Active job orders first — no CASE expression needed.
+`CandidateStatus.UNS` ("unsuitable") sits last deliberately: it's a dead end,
+not a warmer stage than PLACED.
 
-Roles and permissions are created by `apps/api/prisma/seed.ts`. Access is
-**role + resource + action** — there is **no row-level / "own" scoping**; a
-permission like `candidate:read` grants read on all candidates. Enforcement:
-`@RequirePermission(resource, action)` on controllers → `PermissionsGuard`.
+Source values that don't map 1:1 are translated on import — job order `Warm` →
+`ACTIVE`, `Hold` → `ON_HOLD`. `CandidateStatus.HOT` was dropped; it appears
+nowhere in the data.
 
-### Resources & actions (seed)
+---
 
-- **Resources:** `candidate`, `client`, `stakeholder`, `job_order`,
-  `job_research`, `submission`, `placement`, `consultant`, `role`, `permission`,
-  `industry`, `specialization`, `stakeholder_role_type`, `candidate_role_type`,
-  `saved_search`, `report`, `audit`
-- **Actions:** `create`, `read`, `update`, `delete` (`industry`,
-  `specialization`, `stakeholder_role_type`, and `candidate_role_type` are
-  create+read only; `saved_search` is create+read+delete only — no `update`,
-  rename isn't supported, delete+re-save covers it — see `rbac-roles.md` §4)
+## Placement fee calculation
 
-### Role → permission matrix (from seed)
+```
+Base Salary × (1 + Super%)  = Total Package
+Total Package × Fee%        = Placement Fee     (feeType PERCENTAGE)
+                            … or a flat feeValue (feeType FLAT)
+```
 
-| Role | Grants |
-|------|--------|
-| **admin** | All actions on all resources |
-| **manager** | `read` on all; `create`/`update` on candidate, client, stakeholder, job_order, job_research, submission, placement, consultant; `create` on industry, specialization, stakeholder_role_type, candidate_role_type, saved_search; `create` on report |
-| **consultant** | Full CRUD on candidate, client, stakeholder, job_order, job_research, submission, placement; `create`/`read` on industry, specialization, stakeholder_role_type, candidate_role_type (needed by those fields' comboboxes); `create`/`read`/`delete` on saved_search (own candidate searches) |
-| **finance** | `read` on placement, client, job_order; `create`/`read` on report |
-| **researcher** | `create`/`read`/`update` on client, stakeholder, job_research, candidate; `create`/`read` on industry, specialization, stakeholder_role_type, candidate_role_type; `create`/`read`/`delete` on saved_search; `read` on job_order, submission, placement |
-| **viewer** | `read` on candidate, client, stakeholder, job_order, job_research, submission, placement |
+`guaranteeEndDate` is **entered manually**. It used to be derived from
+`Client.guaranteePeriod`, but guarantee terms now live per-`Tob` and a client can
+hold several that disagree — picking the applicable one automatically would be
+guesswork.
 
-> New users are provisioned just-in-time on first login with the **viewer** role
-> (`RbacService`). An imported consultant matched by email is backfilled with the
-> **consultant** role.
+---
 
-## Key Relationships
+## Soft delete & audit
 
-1. **Role → Consultant** — one role per consultant (nullable).
-2. **Role ↔ Permission** (via RolePermission) — many-to-many.
-3. **Consultant → Client / JobOrder / Candidate** — a consultant owns clients, candidates, and manages job orders (`consultantId`, nullable). This is *ownership*, distinct from #4/#10 below (*who actually made a specific contact*) — the two aren't required to be the same person.
-4. **Client → Stakeholder → ContactHistory ← Consultant** — contacts and their communications; each `StakeholderContactHistory` row attributes to the consultant who made it (`contactedById`, nullable).
-5. **Client → ClientJobResearch** — prospecting research.
-6. **Client → JobOrder** — open positions.
-7. **Candidate → ScreeningHistory** — screening notes.
-8. **Candidate → CandidateSubmission ← JobOrder** — submissions (unique per candidate+job).
-9. **CandidateSubmission → Placement** — one placement per successful submission.
-10. **Candidate → ContactHistory ← Consultant** — mirrors #4 for candidates (`CandidateContactHistory`, `contactedById`).
-11. **Industry / Specialization → Client**, **StakeholderRoleType → Stakeholder** — reference-table categorization (see `Industry` note above the ERD).
-12. **Industry / CandidateRoleType → Candidate** — same reference-table pattern; Industry is the same shared catalog Client uses, CandidateRoleType is its own (employment type, not Stakeholder's functional classification).
-13. **Candidate ↔ Specialization** (via `CandidateSpecialization`) — many-to-many; unlike Client's single `specializationId`, a candidate can carry several.
-14. **Consultant → CandidateSavedSearch** — a consultant's own saved candidate searches; owner-scoped, never shared across consultants.
+Soft-deleted models carry `deletedAt` / `deletedById`; the extended Prisma client
+(`src/prisma/prisma.extensions.ts`) rewrites reads to exclude them and turns
+`delete` into an update. Every write on an audited model lands in `AuditLog` with
+its actor, action and a field-level diff.
 
-### Denormalized `lastContactedAt`
+Two consequences worth knowing:
 
-`Client`, `Stakeholder`, and `Candidate` each carry a `lastContactedAt` column
-that mirrors the max `contactedAt` of their contact history, so the
-companies/stakeholders/candidates lists can sort/filter by "last contacted"
-without a live cross-table aggregate on every page load (Prisma's
-relation-aggregate `orderBy` only supports `_count`, not `_max`, on to-many
-relations — a real column is the only way to make this a cheap, indexed sort).
-`Client.lastContactedAt` specifically is the max across *all* of that
-client's stakeholders (a company is never contacted directly).
-
-These columns are kept in sync two ways:
-- **Live**: `POST /stakeholders/:id/contact-history` and
-  `POST /candidates/:id/contact-history` bump the relevant `lastContactedAt`
-  column(s) — but only if the new contact is newer than what's already
-  stored, so a backdated log entry can't clobber a more recent one.
-  `contactedById` on both endpoints always comes from the caller's own
-  session, never the request body.
-- **Historical backfill**: `prisma/migrations/20260718143814_backfill_contact_data`
-  (a data-only migration, no schema change) seeded the `StakeholderRoleType`
-  catalog, classified every existing stakeholder's `jobTitle` into a role
-  type by keyword match, and computed `lastContactedAt` for `Client` and
-  `Stakeholder` from the historical `StakeholderContactHistory` rows the
-  Excel import created. `Candidate.lastContactedAt`,
-  `Candidate.consultantId`, and both `contactedById` columns have no
-  historical source data (nothing tracked "who" before this schema change)
-  — they start empty and fill in only via the live endpoints above.
-
-## Audit & History Tracking
-
-The system keeps a full history of changes, not just the latest value, via a
-single generic mechanism rather than bespoke tracking per entity.
-
-### How it works
-
-`apps/api/src/prisma/prisma.extensions.ts` defines one Prisma Client
-Extension that intercepts every write (`$allOperations`) for the models
-listed in `AUDITED_MODELS` — `Client`, `Stakeholder`, `ClientJobResearch`,
-`Candidate`, `JobOrder`, `CandidateSubmission`, `Placement`, `Consultant`,
-`Role`, `Permission`. For each write it inserts one `AuditLog` row recording:
-who (`actorId`, from the request's `RequestContext`, `null` = system/import),
-when (`createdAt`), which record (`entityType` + `entityId`), what changed
-(`changes`: `{ field: { from, to } }` for updates, the full row for creates),
-and the source (`metadata.source`). `AuditLog` itself is neither soft-deleted
-nor audited — it's the bottom of the stack.
-
-The same extension also rewrites soft-deletable models
-(`SOFT_DELETE_MODELS` — the same list minus `Consultant`/`Role`/`Permission`,
-which are hard-deleted but still audited): `delete`/`deleteMany` become an
-update stamping `deletedAt`/`deletedById`, and reads filter out
-`deletedAt != null` automatically. Restoring a soft-deleted row (setting
-`deletedAt` back to `null`) logs a `RESTORE` action.
-
-Because interception happens at the Prisma layer, every service that writes
-to an audited model gets a history for free — no per-feature audit-writing
-code, and no route can accidentally skip it.
-
-### Reading the history
-
-- **`GET /audit-logs`** (`audit:read`, admin-only) — paginated, filterable
-  (`action`, `entityType`, `actorId`, `from`/`to`), sortable
-  (`createdAt`/`action`/`entityType`). Powers the web "Activity Log" page.
-  Each row is resolved to a human label (e.g. `Client-0042 · Acme Corp`) via
-  `ENTITY_LABEL` in `audit.service.ts`.
-- **`GET /candidates/:id/pipeline-timeline`** / **`GET /job-orders/:id/pipeline-timeline`**
-  (gated by `candidate:read`/`job_order:read`, not `audit:read` — it's scoped
-  to a record the caller can already see) — a derived view, not a separate
-  table. `AuditService.getPipelineTimeline` reads the `CandidateSubmission`
-  rows in scope plus their `AuditLog` entries (`entityType: 'CandidateSubmission'`)
-  and reshapes them into typed events: `CREATE` → `SUBMITTED`,
-  `UPDATE` with a `status` change → `STAGE_CHANGE`, `SOFT_DELETE` →
-  `REMOVED`, `RESTORE` → `RESTORED`. Each event carries candidate, job order,
-  previous/new stage, actor, and timestamp. Rendered as the "Pipeline
-  history" card on both the Candidate and Job Order detail pages.
-
-### Candidate / Client notes
-
-`Candidate.notes` and `Client.notes` are JSONB timelines, not plain strings
-(see JSONB Fields above) — each entry independently carries its own author,
-created-at, and (if edited) editor + edited-at, so editing a note never loses
-who wrote the original or when. Only the note's author or an admin may edit
-or delete it. Because the whole array is replaced on every note write, the
-audit extension's generic array/object diffing also captures note edits as an
-ordinary `changes.notes` entry on the parent `Candidate`/`Client` — the note
-timeline and the generic audit log agree with each other.
-
-### What isn't covered
-
-Two pieces of the original spec were explicitly deferred (not built):
-- A free-text **"reason"** field on ordinary audited writes — no current flow
-  captures a meaningful "why" for a plain field edit, so there's nothing to
-  attach it to yet. `AuditLog.metadata` is open JSON, so it's a small
-  follow-up if a specific flow needs it.
-- Explicitly flagging historical **Excel-imported** contact history as
-  "imported" rather than merely unattributed — imported
-  `StakeholderContactHistory`/`CandidateContactHistory` rows have
-  `contactedById: null`, which today reads the same as "nobody knows who."
-
-## Excel Import
-
-Historical data is loaded from the Excel workbooks in `apps/api/data/` by the
-scripts in `apps/api/scripts/`. **Those scripts are the authoritative
-Excel→schema column mapping** (kept here previously, but they drift — read the
-code instead):
-
-| Script | Loads |
-|--------|-------|
-| `import:excel` | Candidates, Clients, Job Orders |
-| `import:placements` | Submissions + Placements |
-| `inspect:excel` | Prints sheet/column structure (no writes) |
-
-See `apps/api/data/README.md` for setup. Run `seed` (RBAC) before importing.
+- **Nested relation writes aren't diffable.** The extension sees top-level calls,
+  which is why the grant joins are explicit models written one row at a time.
+- **`CandidateSubmission`'s unique `(candidateId, jobOrderId)` is not partial** —
+  a soft-deleted row still holds the pair, so re-submitting must restore the dead
+  row rather than insert a new one.

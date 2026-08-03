@@ -1,47 +1,44 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsEnum,
-  IsInt,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Max,
-  MaxLength,
-  Min,
-  MinLength,
-} from 'class-validator';
-import { JobOrderStatus } from '@prisma/client';
+import { IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { JobOrderQuality, JobOrderStatus } from '@prisma/client';
 
 export class CreateJobOrderDto {
   @ApiProperty({ description: 'Client ID this job order belongs to' })
   @IsString()
   clientId!: string;
 
-  @ApiProperty({ description: 'Job title', example: 'Production Manager' })
+  // Both kept, deliberately: the client's brief vs. the consultant's own
+  // classification of the same job (see JobTitle / JobRoleType in
+  // schema.prisma). Both are catalog ids — a title new to the catalog is
+  // created through /job-titles first, not invented here on the way past.
+  @ApiPropertyOptional({ description: "Job title ID (see /job-titles) — the client's own words for the role" })
+  @IsOptional()
   @IsString()
-  @MinLength(1)
-  @MaxLength(200)
-  jobTitle!: string;
+  jobTitleId?: string;
+
+  @ApiPropertyOptional({ description: "Job role type ID (see /job-role-types) — the consultant's classification" })
+  @IsOptional()
+  @IsString()
+  jobRoleTypeId?: string;
 
   @ApiPropertyOptional({ description: 'Owning consultant ID' })
   @IsOptional()
   @IsString()
   consultantId?: string;
 
-  @ApiPropertyOptional({ description: 'Department', example: 'Operations' })
+  @ApiPropertyOptional({
+    description: 'Most specific known Location node (see /locations) — replaces the old city/suburb columns',
+  })
   @IsOptional()
   @IsString()
-  department?: string;
+  locationId?: string;
 
-  @ApiPropertyOptional({ description: 'Location', example: 'Brisbane' })
+  @ApiPropertyOptional({
+    description: 'ClientJobResearch row this job order originated from, if any (see /job-research)',
+  })
   @IsOptional()
   @IsString()
-  location?: string;
-
-  @ApiPropertyOptional({ description: 'Job type', example: 'Full-time' })
-  @IsOptional()
-  @IsString()
-  jobType?: string;
+  jobResearchId?: string;
 
   @ApiPropertyOptional({ description: 'Minimum salary', example: 120000 })
   @IsOptional()
@@ -60,6 +57,15 @@ export class CreateJobOrderDto {
   @IsString()
   @MaxLength(3)
   salaryCurrency?: string;
+
+  @ApiPropertyOptional({
+    description: 'Forecast value of this job order, entered before anyone is placed — distinct from a Placement fee',
+    example: 25000,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  estimatedValue?: number;
 
   @ApiPropertyOptional({ description: 'Number of openings', example: 1, default: 1 })
   @IsOptional()
@@ -83,10 +89,22 @@ export class CreateJobOrderDto {
   @IsString()
   requirements?: string;
 
+  @ApiPropertyOptional({
+    description: 'Briefing notes — internal, distinct from the public-facing description/requirements copy',
+  })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
   @ApiPropertyOptional({ description: 'Status; defaults to ACTIVE when omitted', enum: JobOrderStatus, example: 'ACTIVE' })
   @IsOptional()
   @IsEnum(JobOrderStatus)
   status?: JobOrderStatus;
+
+  @ApiPropertyOptional({ description: 'Quality of the job order/posting; defaults to MEDIUM when omitted', enum: JobOrderQuality, example: 'MEDIUM' })
+  @IsOptional()
+  @IsEnum(JobOrderQuality)
+  quality?: JobOrderQuality;
 
   @ApiPropertyOptional({ description: 'Priority: 1=High, 2=Medium, 3=Low', example: 2, default: 2 })
   @IsOptional()

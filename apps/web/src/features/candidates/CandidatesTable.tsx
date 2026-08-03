@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useSession } from 'next-auth/react';
 import { ChevronDown, Download, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
@@ -100,6 +101,13 @@ export function CandidatesTable({
   /** Fetched once by the parent (also needed there for the query-language and chip labels) — avoids fetching it twice. */
   consultants: ConsultantEntity[];
 }) {
+  const { data: session } = useSession();
+  // A scoped consultant already only ever sees/searches candidates within
+  // their own industries — filtering by another consultant's name would
+  // just return nothing extra, and this app has no browsing-other-consultants
+  // affordance elsewhere either (same reasoning as the Companies/Job Orders
+  // consultant column being hidden for this role).
+  const isConsultant = session?.user?.roleName === 'consultant';
   const queryClient = useQueryClient();
   const [loggingContactFor, setLoggingContactFor] = React.useState<Candidate | null>(null);
 
@@ -259,12 +267,14 @@ export function CandidatesTable({
           onChange={(values) => search.set('skills', values)}
           placeholder="Type a skill, Enter to add…"
         />
-        <DataGridFacetedFilter
-          title="Consultant"
-          options={consultants.map((c) => ({ value: c.id, label: c.fullName }))}
-          selected={search.filters.consultantIds}
-          onChange={(values) => search.set('consultantIds', values)}
-        />
+        {!isConsultant ? (
+          <DataGridFacetedFilter
+            title="Consultant"
+            options={consultants.map((c) => ({ value: c.id, label: c.fullName }))}
+            selected={search.filters.consultantIds}
+            onChange={(values) => search.set('consultantIds', values)}
+          />
+        ) : null}
         <DataGridFacetedFilter
           title="Submission status"
           options={submissionStatusOptions}

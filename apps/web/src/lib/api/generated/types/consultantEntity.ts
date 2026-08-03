@@ -21,4 +21,7 @@ export interface ConsultantEntity {
   updatedAt: string;
   /** @nullable */
   role?: RoleSummaryEntity | null;
+  industries?: string[];
+  /** Industry IDs backing `industries` */
+  industryIds?: string[];
 }
