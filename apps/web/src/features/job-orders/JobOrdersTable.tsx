@@ -8,17 +8,6 @@ import { ChevronDown, Plus, Rocket, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -31,11 +20,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Combobox } from '@base-ui/react/combobox';
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import {
   ConsultantComboboxPopup,
   useConsultantLookup,
 } from '@/components/ConsultantCombobox';
+import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { useGetCandidates } from '@/lib/api/generated/candidates/candidates';
 import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
@@ -92,7 +83,7 @@ export function JobOrdersTable({
   const [consultantIds, setConsultantIds] = React.useState<string[] | undefined>();
   const [selectedJobOrders, setSelectedJobOrders] = React.useState<JobOrder[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
-  const [isBulkDeleting, setIsBulkDeleting] = React.useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [consultantPickerOpen, setConsultantPickerOpen] = React.useState(false);
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
 
@@ -206,17 +197,22 @@ export function JobOrdersTable({
     setSelectedJobOrders([]);
   }
 
-  async function handleBulkDelete() {
-    setIsBulkDeleting(true);
-    const results = await Promise.allSettled(
-      selectedJobOrders.map((j) => deleteJobOrderRequest(j.id)),
-    );
-    const failed = results.filter((r) => r.status === 'rejected').length;
-    const succeeded = results.length - failed;
-    queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
-    if (succeeded > 0) toast.success(`Deleted ${succeeded} job order${succeeded === 1 ? '' : 's'}`);
-    if (failed > 0) toast.error(`Failed to delete ${failed} job order${failed === 1 ? '' : 's'}`);
-    setIsBulkDeleting(false);
+  function handleBulkDelete() {
+    setDeleteConfirmOpen(false);
+    const toDelete = selectedJobOrders;
+    const label = `${toDelete.length} job order${toDelete.length === 1 ? '' : 's'}`;
+    // No restore endpoint for JobOrder — delayed mode: nothing is sent to
+    // the server until the undo window elapses, so Undo is exact.
+    deleteWithUndo({
+      label,
+      deleteFn: async () => {
+        const results = await Promise.allSettled(toDelete.map((j) => deleteJobOrderRequest(j.id)));
+        const failed = results.filter((r) => r.status === 'rejected').length;
+        if (failed > 0) toast.error(`Failed to delete ${failed} of ${toDelete.length} job orders`);
+      },
+      onCommitted: () => queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() }),
+      onUndo: () => queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() }),
+    });
     setSelectedJobOrders([]);
   }
 
@@ -250,38 +246,23 @@ export function JobOrdersTable({
         toolbar={
           selectedJobOrders.length > 0 ? (
             <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
-              <AlertDialog>
-                <AlertDialogTrigger
-                  render={
-                    <Button
-                      variant="destructive"
-                      size="lg"
-                      disabled={!canDelete || isBulkDeleting}
-                      title={
-                        canDelete ? undefined : "You don't have permission to delete job orders"
-                      }
-                    >
-                      <Trash2 />
-                      Delete
-                    </Button>
-                  }
-                />
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      Delete {selectedJobOrders.length} job order
-                      {selectedJobOrders.length === 1 ? '' : 's'}?
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This permanently removes the selected job orders and can't be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleBulkDelete}>Delete</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <Button
+                variant="destructive"
+                size="lg"
+                disabled={!canDelete}
+                title={canDelete ? undefined : "You don't have permission to delete job orders"}
+                onClick={() => setDeleteConfirmOpen(true)}
+              >
+                <Trash2 />
+                Delete
+              </Button>
+              <ConfirmDeleteDialog
+                open={deleteConfirmOpen}
+                onOpenChange={setDeleteConfirmOpen}
+                title={`Delete ${selectedJobOrders.length} job order${selectedJobOrders.length === 1 ? '' : 's'}?`}
+                description="You can undo this from the toast right after, or it's gone for good."
+                onConfirm={handleBulkDelete}
+              />
 
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -396,7 +377,7 @@ export function JobOrdersTable({
           </Button>
         )}
 
-        {/* 2.5: choose between the internal Companies database or Seek to
+        {/* 2.5: choose between our own stakeholder contacts or Seek to
             go find more clients. */}
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -409,8 +390,8 @@ export function JobOrdersTable({
             }
           />
           <DropdownMenuContent align="center">
-            <DropdownMenuItem onClick={() => router.push('/companies')}>
-              Companies (our database)
+            <DropdownMenuItem onClick={() => router.push('/stakeholders')}>
+              Stakeholders (our database)
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => window.open('https://www.seek.com.au', '_blank', 'noopener,noreferrer')}
