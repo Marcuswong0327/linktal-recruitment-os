@@ -1,6 +1,6 @@
 ---
 name: create-pr
-description: Open a pull request for this repo (linktal-recruitment-os) against main, with repo-specific pre-flight checks and a test-plan checklist. Use when the user asks to create a PR, open a pull request, or ship the current branch. Triggers on "create a PR", "open a PR", "make a pull request", "ship this branch".
+description: Open a pull request for this repo (linktal-recruitment-os) against dev, with repo-specific pre-flight checks and a test-plan checklist. Use when the user asks to create a PR, open a pull request, or ship the current branch. Triggers on "create a PR", "open a PR", "make a pull request", "ship this branch".
 allowed-tools: Bash(git *), Bash(gh *), Bash(pnpm *)
 ---
 
@@ -16,7 +16,7 @@ loudly (report to the user, don't silently skip) if any of them fail.
 2. **`pnpm typecheck`** (root — runs both apps via turbo). This repo
    currently has known pre-existing failures in `apps/web/src/features/candidates/*`
    (stale generated API client — see `docs/ux-patterns.md`'s "Known gap"
-   section), so "passing" means **no new errors versus `main`**, not zero
+   section), so "passing" means **no new errors versus `dev`**, not zero
    errors. Compare with:
    ```
    git stash && pnpm typecheck > /tmp/pr-baseline-typecheck.txt 2>&1; git stash pop
@@ -62,7 +62,7 @@ that likely need a matching doc change:
 
 Follow the repo's standard PR flow (same as the top-level "Creating pull
 requests" instructions): gather `git status`, `git diff`, `git log
-main...HEAD` and `git diff main...HEAD` in parallel to see the *full*
+dev...HEAD` and `git diff dev...HEAD` in parallel to see the *full*
 commit range, not just the latest commit. Draft:
 
 - **Title** — under 70 characters, imperative mood, matching this repo's
@@ -75,7 +75,7 @@ commit range, not just the latest commit. Draft:
   - ...
 
   ## Test plan
-  - [ ] `pnpm typecheck` — no new errors vs main
+  - [ ] `pnpm typecheck` — no new errors vs dev
   - [ ] `pnpm lint` clean
   - [ ] `pnpm --filter api test` passing
   - [ ] API client regenerated (`pnpm gen:api`)
@@ -86,5 +86,5 @@ commit range, not just the latest commit. Draft:
   doesn't need any of them.
 
 Push with `-u` if the branch isn't tracked yet, then `gh pr create --title
-"..." --body "$(cat <<'EOF' ... EOF)"` against `main` (this repo's base
+"..." --body "$(cat <<'EOF' ... EOF)"` against `dev` (this repo's base
 branch). Return the PR URL.
