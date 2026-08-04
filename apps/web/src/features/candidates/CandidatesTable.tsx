@@ -6,17 +6,6 @@ import { ChevronDown, Download, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { DataGrid, type DataGridQuery } from '@/components/DataGrid';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
@@ -36,9 +26,11 @@ import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { useConsultantLookup } from '@/components/ConsultantCombobox';
 import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
+import { deleteWithUndo } from '@/lib/delete-with-undo';
 import {
   deleteCandidate as deleteCandidateRequest,
   getGetCandidatesQueryKey,
+  restoreCandidate as restoreCandidateRequest,
   updateCandidate as updateCandidateRequest,
   useAddCandidateContactHistory,
   useGetCandidates,
@@ -52,6 +44,7 @@ import type {
 } from '@/lib/api/generated/types';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
+  candidateFullName,
   type Candidate,
   type CandidateStatus,
   candidateStatuses,
@@ -76,16 +69,13 @@ const placementStatusOptions = Object.entries(placementStatusLabels).map(([value
 
 const PAGE_SIZE = 20;
 
-/** Editable fields for the row edit drawer — a quick-edit subset mirroring the table's columns. */
+/** Editable fields for the row edit drawer — a quick-edit subset mirroring the table's columns. Location isn't editable here (needs a Location picker) — full profile lives on the detail page. */
 interface CandidateFormValues {
-  fullName: string;
-  currentPosition: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  currentRole: string | null;
   currentCompany: string | null;
-  city: string | null;
-  country: string | null;
   status: CandidateStatus;
-  yearsExperience: number | null;
-  salaryExpectation: string | null;
 }
 
 export function CandidatesTable({
@@ -137,7 +127,7 @@ export function CandidatesTable({
   const [editing, setEditing] = React.useState<Candidate | null>(null);
   const [selectedCandidates, setSelectedCandidates] = React.useState<Candidate[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
-  const [isBulkDeleting, setIsBulkDeleting] = React.useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
 
   // The search-gate's filter state is the single source of truth for query
   // params; reset to page 1 whenever it actually changes (queryParams is
@@ -230,15 +220,27 @@ export function CandidatesTable({
     });
   }
 
-  async function handleBulkDelete() {
-    setIsBulkDeleting(true);
-    const results = await Promise.allSettled(selectedCandidates.map((c) => deleteCandidateRequest(c.id)));
-    const failed = results.filter((r) => r.status === 'rejected').length;
-    const succeeded = results.length - failed;
-    queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
-    if (succeeded > 0) toast.success(`Deleted ${succeeded} candidate${succeeded === 1 ? '' : 's'}`);
-    if (failed > 0) toast.error(`Failed to delete ${failed} candidate${failed === 1 ? '' : 's'}`);
-    setIsBulkDeleting(false);
+  function handleBulkDelete() {
+    setDeleteConfirmOpen(false);
+    const toDelete = selectedCandidates;
+    const label = `${toDelete.length} candidate${toDelete.length === 1 ? '' : 's'}`;
+    const invalidate = () => queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
+    // Candidate has a real soft-delete/restore endpoint — restore mode:
+    // delete fires immediately, Undo calls restore, so it's a genuine
+    // reversal rather than a cancelled timer.
+    deleteWithUndo({
+      label,
+      deleteFn: async () => {
+        const results = await Promise.allSettled(toDelete.map((c) => deleteCandidateRequest(c.id)));
+        const failed = results.filter((r) => r.status === 'rejected').length;
+        if (failed > 0) toast.error(`Failed to delete ${failed} of ${toDelete.length} candidates`);
+      },
+      restoreFn: async () => {
+        await Promise.allSettled(toDelete.map((c) => restoreCandidateRequest(c.id)));
+      },
+      onCommitted: invalidate,
+      onUndo: invalidate,
+    });
     setSelectedCandidates([]);
   }
 
@@ -326,35 +328,23 @@ export function CandidatesTable({
                 Export to Excel
               </Button>
 
-              <AlertDialog>
-                <AlertDialogTrigger
-                  render={
-                    <Button
-                      variant="destructive"
-                      size="lg"
-                      disabled={!canDelete || isBulkDeleting}
-                      title={canDelete ? undefined : "You don't have permission to delete candidates"}
-                    >
-                      <Trash2 />
-                      Delete
-                    </Button>
-                  }
-                />
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      Delete {selectedCandidates.length} candidate{selectedCandidates.length === 1 ? '' : 's'}?
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This permanently removes the selected candidates and can't be undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleBulkDelete}>Delete</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              <Button
+                variant="destructive"
+                size="lg"
+                disabled={!canDelete}
+                title={canDelete ? undefined : "You don't have permission to delete candidates"}
+                onClick={() => setDeleteConfirmOpen(true)}
+              >
+                <Trash2 />
+                Delete
+              </Button>
+              <ConfirmDeleteDialog
+                open={deleteConfirmOpen}
+                onOpenChange={setDeleteConfirmOpen}
+                title={`Delete ${selectedCandidates.length} candidate${selectedCandidates.length === 1 ? '' : 's'}?`}
+                description="Archived (soft delete) — you can undo this from the toast right after."
+                onConfirm={handleBulkDelete}
+              />
 
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -409,7 +399,7 @@ export function CandidatesTable({
       <LogContactSheet
         open={loggingContactFor !== null}
         onOpenChange={(open) => !open && setLoggingContactFor(null)}
-        subjectLabel={loggingContactFor?.fullName ?? ''}
+        subjectLabel={loggingContactFor ? candidateFullName(loggingContactFor) || 'this candidate' : ''}
         isSaving={addContactHistory.isPending}
         onSave={handleLogContact}
       />
@@ -429,53 +419,44 @@ function CandidateForm({
   onSave: (values: CandidateFormValues) => void;
   onCancel: () => void;
 }) {
-  const [fullName, setFullName] = React.useState(candidate.fullName);
-  const [currentPosition, setCurrentPosition] = React.useState(candidate.currentPosition ?? '');
+  const [firstName, setFirstName] = React.useState(candidate.firstName ?? '');
+  const [lastName, setLastName] = React.useState(candidate.lastName ?? '');
+  const [currentRole, setCurrentRole] = React.useState(candidate.currentRole ?? '');
   const [currentCompany, setCurrentCompany] = React.useState(candidate.currentCompany ?? '');
-  const [city, setCity] = React.useState(candidate.city ?? '');
-  const [country, setCountry] = React.useState(candidate.country ?? '');
   const [status, setStatus] = React.useState<CandidateStatus>(candidate.status);
-  const [yearsExperience, setYearsExperience] = React.useState(
-    candidate.yearsExperience != null ? String(candidate.yearsExperience) : '',
-  );
-  const [salaryExpectation, setSalaryExpectation] = React.useState(candidate.salaryExpectation ?? '');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     onSave({
-      fullName,
-      currentPosition: currentPosition || null,
+      firstName: firstName || null,
+      lastName: lastName || null,
+      currentRole: currentRole || null,
       currentCompany: currentCompany || null,
-      city: city || null,
-      country: country || null,
       status,
-      yearsExperience: yearsExperience === '' ? null : Number(yearsExperience),
-      salaryExpectation: salaryExpectation || null,
     });
   }
+
+  const displayName = candidateFullName(candidate) || 'this candidate';
 
   return (
     <form onSubmit={handleSubmit} className="flex h-full flex-col">
       <SheetHeader>
         <SheetTitle>Edit candidate</SheetTitle>
-        <SheetDescription>Update {candidate.fullName}’s profile.</SheetDescription>
+        <SheetDescription>Update {displayName}’s profile.</SheetDescription>
       </SheetHeader>
 
       <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
-        <FormField label="Full name" htmlFor="candidate-name">
-          <Input id="candidate-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+        <FormField label="First name" htmlFor="candidate-first-name">
+          <Input id="candidate-first-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
         </FormField>
-        <FormField label="Current title" htmlFor="candidate-position">
-          <Input id="candidate-position" value={currentPosition} onChange={(e) => setCurrentPosition(e.target.value)} />
+        <FormField label="Last name" htmlFor="candidate-last-name">
+          <Input id="candidate-last-name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
+        </FormField>
+        <FormField label="Current title" htmlFor="candidate-role">
+          <Input id="candidate-role" value={currentRole} onChange={(e) => setCurrentRole(e.target.value)} />
         </FormField>
         <FormField label="Current company" htmlFor="candidate-company">
           <Input id="candidate-company" value={currentCompany} onChange={(e) => setCurrentCompany(e.target.value)} />
-        </FormField>
-        <FormField label="City" htmlFor="candidate-city">
-          <Input id="candidate-city" value={city} onChange={(e) => setCity(e.target.value)} />
-        </FormField>
-        <FormField label="Country" htmlFor="candidate-country">
-          <Input id="candidate-country" value={country} onChange={(e) => setCountry(e.target.value)} />
         </FormField>
         <FormField label="Status" htmlFor="candidate-status">
           <EnumSelect
@@ -485,29 +466,13 @@ function CandidateForm({
             options={statusOptions}
           />
         </FormField>
-        <FormField label="Years of experience" htmlFor="candidate-experience">
-          <Input
-            id="candidate-experience"
-            type="number"
-            min={0}
-            value={yearsExperience}
-            onChange={(e) => setYearsExperience(e.target.value)}
-          />
-        </FormField>
-        <FormField label="Expected salary" htmlFor="candidate-salary">
-          <Input
-            id="candidate-salary"
-            value={salaryExpectation}
-            onChange={(e) => setSalaryExpectation(e.target.value)}
-          />
-        </FormField>
       </div>
 
       <SheetFooter className="flex-row justify-end">
         <Button type="button" variant="outline" size="lg" onClick={onCancel} disabled={isSaving}>
           Cancel
         </Button>
-        <Button type="submit" size="lg" disabled={isSaving || !fullName.trim()}>
+        <Button type="submit" size="lg" disabled={isSaving}>
           {isSaving ? 'Saving…' : 'Save changes'}
         </Button>
       </SheetFooter>

@@ -3,7 +3,7 @@ import type { CandidateFilterState } from './useCandidateSearch';
 import { candidateStatusLabels, candidateStatuses, candidateStatusVariants } from './schema';
 
 /** Subset of Badge's variant prop this module cares about — kept local so parsing logic doesn't import a UI component just for its prop type. */
-type SuggestionBadgeVariant = 'info' | 'warning' | 'destructive' | 'success';
+type SuggestionBadgeVariant = 'info' | 'warning' | 'destructive' | 'success' | 'muted';
 
 interface NamedOption {
   id: string;

@@ -6,18 +6,25 @@ import { Check, ChevronDown } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import type { CandidateEntity } from '@/lib/api/generated/types';
+import { candidateFullName } from '@/features/candidates/schema';
 
 /** Shared lookup + display helpers for any Combobox picking a candidate. */
 export function useCandidateLookup(candidates: CandidateEntity[]) {
   const byId = useMemo(() => new Map(candidates.map((c) => [c.id, c])), [candidates]);
   const items = useMemo(() => candidates.map((c) => c.id), [candidates]);
 
-  const labelFor = useCallback((candidateId: string) => byId.get(candidateId)?.fullName ?? 'Unknown', [byId]);
-  // Drives filtering — combine name + current position so typing either finds the match.
+  const labelFor = useCallback(
+    (candidateId: string) => {
+      const candidate = byId.get(candidateId);
+      return candidate ? candidateFullName(candidate) || 'Unnamed candidate' : 'Unknown';
+    },
+    [byId],
+  );
+  // Drives filtering — combine name + current role so typing either finds the match.
   const searchTextFor = useCallback(
     (candidateId: string) => {
       const candidate = byId.get(candidateId);
-      return candidate ? `${candidate.fullName} ${candidate.currentPosition ?? ''}` : candidateId;
+      return candidate ? `${candidateFullName(candidate)} ${candidate.currentRole ?? ''}` : candidateId;
     },
     [byId],
   );
@@ -85,8 +92,8 @@ export function CandidateCombobox({ id, value, onValueChange, candidates, disabl
                   >
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate">{labelFor(candidateId)}</span>
-                      {candidate?.currentPosition ? (
-                        <span className="truncate text-xs text-muted-foreground">{candidate.currentPosition}</span>
+                      {candidate?.currentRole ? (
+                        <span className="truncate text-xs text-muted-foreground">{candidate.currentRole}</span>
                       ) : null}
                     </span>
                     <Combobox.ItemIndicator className="shrink-0">

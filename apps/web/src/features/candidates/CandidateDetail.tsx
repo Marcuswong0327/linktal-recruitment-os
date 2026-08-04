@@ -79,6 +79,7 @@ import {
 import type { CreateCandidateContactHistoryDto, UpdateCandidateDto } from '@/lib/api/generated/types';
 import { contactTypeLabels, type ContactType } from '@/lib/contact-types';
 import {
+  candidateFullName,
   type Candidate,
   candidateStatusLabels,
   candidateStatusVariants,
@@ -108,6 +109,7 @@ function isConflictError(err: unknown): boolean {
 }
 
 function initials(name: string) {
+  if (!name) return '?';
   return name
     .split(' ')
     .map((part) => part[0])
@@ -186,19 +188,16 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
   const { register, handleSubmit, formState } =
     useForm<UpdateCandidateDto>({
       defaultValues: {
-        fullName: candidate.fullName,
-        givenName: candidate.givenName ?? '',
-        familyName: candidate.familyName ?? '',
+        firstName: candidate.firstName ?? '',
+        lastName: candidate.lastName ?? '',
         email: candidate.email ?? '',
         mobile: candidate.mobile ?? '',
-        country: candidate.country ?? '',
-        city: candidate.city ?? '',
-        currentPosition: candidate.currentPosition ?? '',
+        currentRole: candidate.currentRole ?? '',
         currentCompany: candidate.currentCompany ?? '',
-        yearsExperience: candidate.yearsExperience ?? undefined,
-        salaryExpectation: candidate.salaryExpectation ?? '',
         linkedinUrl: candidate.linkedinUrl ?? '',
-        resumeUrl: candidate.resumeUrl ?? '',
+        seekTalentUrl: candidate.seekTalentUrl ?? '',
+        rawResumeUrl: candidate.rawResumeUrl ?? '',
+        editedResumeUrl: candidate.editedResumeUrl ?? '',
       },
     });
 
@@ -207,7 +206,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
   // CompanyDetail's industryId/specializationId) and merged into the patch
   // on submit, since RHF's dirty-tracking doesn't see them.
   const [industryId, setIndustryId] = React.useState(candidate.industryId ?? '');
-  const [roleTypeId, setRoleTypeId] = React.useState(candidate.roleTypeId ?? '');
+  const [roleTypeId, setRoleTypeId] = React.useState(candidate.jobRoleTypeId ?? '');
   const [specializationIds, setSpecializationIds] = React.useState(candidate.specializationIds);
 
   const { data: industryData } = useGetIndustries();
@@ -248,7 +247,10 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
     return res.data;
   }
   async function handleCreateSpecialization(name: string) {
-    const res = await createSpecialization.mutateAsync({ data: { name } });
+    // A Specialization belongs to exactly one Industry — can't create one
+    // without knowing which.
+    if (!industryId) throw new Error('Select an industry first');
+    const res = await createSpecialization.mutateAsync({ data: { name, industryId } });
     if (res.status !== 201) throw new Error('Failed to add specialization');
     return res.data;
   }
@@ -256,7 +258,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
   const isDirty =
     formState.isDirty ||
     industryId !== (candidate.industryId ?? '') ||
-    roleTypeId !== (candidate.roleTypeId ?? '') ||
+    roleTypeId !== (candidate.jobRoleTypeId ?? '') ||
     !sameIds(specializationIds, candidate.specializationIds);
 
   const updateCandidate = useUpdateCandidate({
@@ -266,7 +268,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
         queryClient.invalidateQueries({
           queryKey: getGetCandidateQueryKey(candidate.id),
         });
-        toast.success(`Saved changes to ${candidate.fullName}`);
+        toast.success(`Saved changes to ${candidateFullName(candidate) || 'candidate'}`);
       },
       onError: (err) => {
         toast.error(err.message || 'Failed to save candidate');
@@ -280,7 +282,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
       data: {
         ...cleanPatch(values),
         industryId: industryId || null,
-        roleTypeId: roleTypeId || null,
+        jobRoleTypeId: roleTypeId || null,
         specializationIds,
       } as UpdateCandidateDto,
     });
@@ -412,12 +414,12 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 font-heading text-lg font-semibold text-primary">
-              {initials(candidate.fullName)}
+              {initials(candidateFullName(candidate))}
             </span>
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-3">
                 <h1 className="font-heading text-2xl font-semibold tracking-tight">
-                  {candidate.fullName}
+                  {candidateFullName(candidate) || 'Unnamed candidate'}
                 </h1>
                 <Badge variant={candidateStatusVariants[candidate.status]}>
                   {candidateStatusLabels[candidate.status]}
@@ -460,15 +462,11 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                 <CardDescription>Identity, contact and location.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Full name" htmlFor="fullName">
-                  <Input id="fullName" {...register('fullName')} />
+                <FormField label="First name" htmlFor="firstName">
+                  <Input id="firstName" {...register('firstName')} />
                 </FormField>
-                <div aria-hidden className="hidden sm:block" />
-                <FormField label="Given name" htmlFor="givenName">
-                  <Input id="givenName" {...register('givenName')} />
-                </FormField>
-                <FormField label="Family name" htmlFor="familyName">
-                  <Input id="familyName" {...register('familyName')} />
+                <FormField label="Last name" htmlFor="lastName">
+                  <Input id="lastName" {...register('lastName')} />
                 </FormField>
                 <FormField label="Email" htmlFor="email">
                   <Input id="email" type="email" {...register('email')} />
@@ -476,11 +474,12 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                 <FormField label="Mobile" htmlFor="mobile">
                   <Input id="mobile" {...register('mobile')} />
                 </FormField>
-                <FormField label="Country" htmlFor="country">
-                  <Input id="country" {...register('country')} />
-                </FormField>
-                <FormField label="City" htmlFor="city">
-                  <Input id="city" {...register('city')} />
+                <FormField
+                  label="Location"
+                  htmlFor="location"
+                  description="Read-only for now — location editing isn't wired up here yet."
+                >
+                  <Input id="location" value={candidate.location ?? '—'} disabled />
                 </FormField>
               </CardContent>
             </Card>
@@ -494,8 +493,8 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                 <CardDescription>Current role, background and expectations.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Current title" htmlFor="currentPosition">
-                  <Input id="currentPosition" {...register('currentPosition')} />
+                <FormField label="Current title" htmlFor="currentRole">
+                  <Input id="currentRole" {...register('currentRole')} />
                 </FormField>
                 <FormField label="Current company" htmlFor="currentCompany">
                   <Input id="currentCompany" {...register('currentCompany')} />
@@ -520,22 +519,17 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                     placeholder="Select role type…"
                   />
                 </FormField>
-                <FormField label="Years of experience" htmlFor="yearsExperience">
-                  <Input
-                    id="yearsExperience"
-                    type="number"
-                    min={0}
-                    {...register('yearsExperience', { valueAsNumber: true })}
-                  />
-                </FormField>
-                <FormField label="Expected salary" htmlFor="salaryExpectation">
-                  <Input id="salaryExpectation" {...register('salaryExpectation')} />
-                </FormField>
                 <FormField label="LinkedIn URL" htmlFor="linkedinUrl">
                   <Input id="linkedinUrl" {...register('linkedinUrl')} />
                 </FormField>
-                <FormField label="Resume URL" htmlFor="resumeUrl">
-                  <Input id="resumeUrl" {...register('resumeUrl')} />
+                <FormField label="Seek Talent URL" htmlFor="seekTalentUrl">
+                  <Input id="seekTalentUrl" {...register('seekTalentUrl')} />
+                </FormField>
+                <FormField label="Raw resume URL" htmlFor="rawResumeUrl">
+                  <Input id="rawResumeUrl" {...register('rawResumeUrl')} />
+                </FormField>
+                <FormField label="Edited resume URL" htmlFor="editedResumeUrl">
+                  <Input id="editedResumeUrl" {...register('editedResumeUrl')} />
                 </FormField>
               </CardContent>
             </Card>
@@ -817,7 +811,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
       <LogContactSheet
         open={loggingContact}
         onOpenChange={setLoggingContact}
-        subjectLabel={candidate.fullName}
+        subjectLabel={candidateFullName(candidate) || 'this candidate'}
         isSaving={addContactHistory.isPending}
         onSave={handleLogContact}
       />

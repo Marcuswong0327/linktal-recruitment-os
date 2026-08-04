@@ -18,6 +18,7 @@ import {
   getGetCandidateQueryKey,
 } from '@/lib/api/generated/candidates/candidates';
 import {
+  candidateFullName,
   type Candidate,
   candidateStatuses,
   candidateStatusLabels,
@@ -39,7 +40,7 @@ export function CandidateStatusCell({ candidate }: { candidate: Candidate }) {
           queryKey: getGetCandidateQueryKey(candidate.id),
         });
         toast.success(
-          `${candidate.fullName} marked ${candidateStatusLabels[data.status ?? candidate.status]}`,
+          `${candidateFullName(candidate) || 'Candidate'} marked ${candidateStatusLabels[data.status ?? candidate.status]}`,
         );
       },
       onError: (err) => {

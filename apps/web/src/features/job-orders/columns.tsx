@@ -2,10 +2,9 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
-import { ArrowUpRight, Check, X } from 'lucide-react';
+import { ArrowUpRight } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils';
 import type { CandidateEntity } from '@/lib/api/generated/types';
 import { CandidatesCell, rosterCellLabel } from './CandidatesCell';
 import { PipelineSheetTrigger } from './PipelineSheet';
@@ -33,21 +32,6 @@ function formatSalary(min: number | null, max: number | null, currency: string |
 
 function formatDate(iso: string | null | undefined) {
   return iso ? dateFormatter.format(new Date(iso)) : '—';
-}
-
-/** Read-only Yes/No pill for the Replacement?/Collaborated? columns — set from the dedicated Job Order page, not the main sheet. */
-function BooleanFlagCell({ value }: { value: boolean }) {
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 text-xs',
-        value ? 'text-foreground' : 'text-muted-foreground/60',
-      )}
-    >
-      {value ? <Check className="size-3.5 text-success" /> : <X className="size-3.5" />}
-      {value ? 'Yes' : 'No'}
-    </span>
-  );
 }
 
 interface JobOrderColumnsOptions {
@@ -97,18 +81,11 @@ export function getJobOrderColumns({
       cell: ({ row }) => <span>{clientName(row.original.clientId)}</span>,
     },
     {
-      accessorKey: 'city',
-      header: 'City',
+      accessorKey: 'location',
+      header: 'Location',
       enableSorting: false,
-      size: 130,
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.city ?? '—'}</span>,
-    },
-    {
-      accessorKey: 'suburb',
-      header: 'Suburb',
-      enableSorting: false,
-      size: 130,
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.suburb ?? '—'}</span>,
+      size: 160,
+      cell: ({ row }) => <span className="text-muted-foreground">{row.original.location ?? '—'}</span>,
     },
     {
       id: 'jobCreatedDate',
@@ -263,22 +240,6 @@ export function getJobOrderColumns({
         const fee = row.original.pipelineSubmissions.find((c) => c.placementFeeValue != null)?.placementFeeValue;
         return <span className="tabular-nums whitespace-nowrap">{fee != null ? numberFormatter.format(fee) : '—'}</span>;
       },
-    },
-    {
-      accessorKey: 'isReplacement',
-      header: 'Replacement?',
-      enableSorting: false,
-      size: 110,
-      meta: { align: 'center' },
-      cell: ({ row }) => <BooleanFlagCell value={row.original.isReplacement} />,
-    },
-    {
-      accessorKey: 'isCollaborated',
-      header: 'Collaborated?',
-      enableSorting: false,
-      size: 110,
-      meta: { align: 'center' },
-      cell: ({ row }) => <BooleanFlagCell value={row.original.isCollaborated} />,
     },
     {
       id: 'latestSubmissionDate',

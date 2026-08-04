@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { cn } from '@/lib/utils';
+import { candidateFullName } from '@/features/candidates/schema';
 import { getGetJobOrdersQueryKey } from '@/lib/api/generated/job-orders/job-orders';
 import {
   getGetSubmissionsQueryKey,
@@ -92,14 +93,20 @@ export function CandidatesCell({
   // candidates, so an already-submitted person can fall outside that window
   // and wrongly show as "Unknown candidate" even though they exist.
   const labelFor = React.useCallback(
-    (id: string) =>
-      submissionByCandidateId.get(id)?.candidateName ?? candidateById.get(id)?.fullName ?? 'Unknown candidate',
+    (id: string) => {
+      const candidate = candidateById.get(id);
+      return (
+        submissionByCandidateId.get(id)?.candidateName ||
+        (candidate ? candidateFullName(candidate) : '') ||
+        'Unknown candidate'
+      );
+    },
     [submissionByCandidateId, candidateById],
   );
   const searchTextFor = React.useCallback(
     (id: string) => {
       const candidate = candidateById.get(id);
-      return candidate ? `${candidate.fullName} ${candidate.displayId}` : id;
+      return candidate ? `${candidateFullName(candidate)} ${candidate.displayId}` : id;
     },
     [candidateById],
   );
