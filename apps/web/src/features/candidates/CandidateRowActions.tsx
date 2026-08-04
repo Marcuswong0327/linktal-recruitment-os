@@ -11,6 +11,7 @@ import {
   useDeleteCandidate,
   useRestoreCandidate,
 } from '@/lib/api/generated/candidates/candidates';
+import { undoLabel } from '@/lib/delete-with-undo';
 import type { Candidate } from './schema';
 
 /**
@@ -32,8 +33,7 @@ export function CandidateRowActions({
 }) {
   const queryClient = useQueryClient();
   // No params → the base list key; invalidates every candidates page/filter.
-  const invalidate = () =>
-    queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
 
   const remove = useDeleteCandidate();
   const restore = useRestoreCandidate();
@@ -48,7 +48,7 @@ export function CandidateRowActions({
           toast.success(`Deleted ${candidate.fullName}`, {
             description: 'Archived (soft delete) — recoverable.',
             action: {
-              label: 'Undo',
+              label: undoLabel,
               onClick: () =>
                 restore.mutate(
                   { id: candidate.id },

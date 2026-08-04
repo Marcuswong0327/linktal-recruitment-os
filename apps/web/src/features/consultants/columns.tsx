@@ -68,6 +68,12 @@ interface ConsultantColumnsOptions {
     options: TagOption[];
     /** Absent when the caller lacks `consultant_industry:update` — read-only chips instead of an editable picker. */
     onIndustriesChange?: (user: Consultant, industryIds: string[]) => void;
+    /** Grows the Industry catalog itself (not just this consultant's grants) — present only for `industry:create` (admin, manager). */
+    onCreateIndustry?: (name: string) => Promise<TagOption>;
+    /** Renames the underlying Industry row — present only for `industry:update` (admin, manager). */
+    onEditIndustry?: (option: TagOption) => void;
+    /** Deactivates the underlying Industry row — present only for `industry:delete` (admin, manager). */
+    onDeleteIndustry?: (option: TagOption) => void;
   };
   /**
    * Same gating pattern as `industries`, keyed to `consultant_specialization:read`.
@@ -78,6 +84,12 @@ interface ConsultantColumnsOptions {
     options: TagOption[];
     /** Absent when the caller lacks `consultant_specialization:update` — read-only chips instead of an editable picker. */
     onSpecializationsChange?: (user: Consultant, specializationIds: string[]) => void;
+    /** Grows the Specialization catalog itself — present only for `specialization:create` (admin, manager). */
+    onCreateSpecialization?: (name: string) => Promise<TagOption>;
+    /** Renames the underlying Specialization row — present only for `specialization:update` (admin, manager). */
+    onEditSpecialization?: (option: TagOption) => void;
+    /** Deactivates the underlying Specialization row — present only for `specialization:delete` (admin, manager). */
+    onDeleteSpecialization?: (option: TagOption) => void;
   };
 }
 
@@ -205,6 +217,12 @@ export function getConsultantColumns({
                   selected={selected}
                   onChange={(ids) => industries.onIndustriesChange!(user, ids)}
                   disabled={disabled}
+                  onCreate={industries.onCreateIndustry}
+                  tagActions={
+                    industries.onEditIndustry || industries.onDeleteIndustry
+                      ? { onEdit: industries.onEditIndustry, onDelete: industries.onDeleteIndustry }
+                      : undefined
+                  }
                 />
               );
             },
@@ -232,6 +250,15 @@ export function getConsultantColumns({
                   selected={selected}
                   onChange={(ids) => specializations.onSpecializationsChange!(user, ids)}
                   disabled={disabled}
+                  onCreate={specializations.onCreateSpecialization}
+                  tagActions={
+                    specializations.onEditSpecialization || specializations.onDeleteSpecialization
+                      ? {
+                          onEdit: specializations.onEditSpecialization,
+                          onDelete: specializations.onDeleteSpecialization,
+                        }
+                      : undefined
+                  }
                 />
               );
             },
