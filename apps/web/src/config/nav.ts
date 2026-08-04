@@ -3,7 +3,7 @@ import {
   Users,
   Cog,
   ScrollText,
-  Building2,
+  Contact,
   type LucideIcon,
   Mail,
   SquareCheck,
@@ -51,7 +51,7 @@ export const navGroups: NavGroup[] = [
   {
     label: 'OPERATIONS',
     items: [
-      { title: 'Companies', href: '/companies', icon: Building2 },
+      { title: 'Stakeholders', href: '/stakeholders', icon: Contact },
       { title: 'Job Orders', href: '/job-orders', icon: BookA },
       { title: 'Candidates', href: '/candidates', icon: UsersRound },
       { title: 'Submissions', href: '/submissions', icon: FileText, disabled: true },
@@ -80,3 +80,23 @@ export const navGroups: NavGroup[] = [
     ],
   },
 ];
+
+export type NavAuthContext = { permissions: string[]; isAdmin: boolean };
+
+export const hasPermission = (auth: Pick<NavAuthContext, 'permissions'>, required?: RequiredPermission) =>
+  !required || auth.permissions.includes(`${required.resource}:${required.action}`);
+
+/**
+ * Applies the same visibility rules the sidebar uses (admin-only groups,
+ * per-item/group permissions, `hidden` items) so any other surface — e.g. the
+ * command palette — stays in sync with the sidebar without duplicating the
+ * predicate.
+ */
+export const filterNavGroups = (groups: NavGroup[], auth: NavAuthContext): NavGroup[] =>
+  groups
+    .filter((group) => !(group.adminOnly && !auth.isAdmin) && hasPermission(auth, group.requiredPermission))
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.hidden && hasPermission(auth, item.requiredPermission)),
+    }))
+    .filter((group) => group.items.length > 0);

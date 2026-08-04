@@ -24,6 +24,10 @@ export interface TokenClaims {
 export interface AccessTokenClaims extends TokenClaims {
   roleName: string | null;
   permissions: string[];
+  /** Scope grants assigned at mint time — same refresh-latency trade-off as roleName/permissions. */
+  industryIds: string[];
+  specializationIds: string[];
+  locationIds: string[];
 }
 
 /** The authenticated principal attached to each request after the guards run. */
@@ -37,4 +41,13 @@ export interface AuthUser {
   isActive: boolean;
   /** Flat set of `resource:action` strings for O(1) permission checks. */
   permissions: Set<string>;
+  /**
+   * The three arms of the visibility scope, only meaningful for
+   * roleName === 'consultant' (every other role is unrestricted regardless).
+   * These hold the *granted* node ids; descendants are resolved at query time
+   * via each tree's `ancestorIds` — see common/scope.ts.
+   */
+  industryIds: string[];
+  specializationIds: string[];
+  locationIds: string[];
 }

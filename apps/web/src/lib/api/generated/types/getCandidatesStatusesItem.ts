@@ -12,6 +12,6 @@ export type GetCandidatesStatusesItem = typeof GetCandidatesStatusesItem[keyof t
 export const GetCandidatesStatusesItem = {
   COLD: 'COLD',
   WARM: 'WARM',
-  HOT: 'HOT',
   PLACED: 'PLACED',
+  UNS: 'UNS',
 } as const;

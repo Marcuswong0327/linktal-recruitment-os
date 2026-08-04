@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { CandidateEntityLocationLevel } from './candidateEntityLocationLevel';
 import type { CandidateEntityStatus } from './candidateEntityStatus';
 import type { CandidateEntityWorkHistoryItem } from './candidateEntityWorkHistoryItem';
 import type { CandidateNoteDto } from './candidateNoteDto';
@@ -12,55 +13,66 @@ import type { CandidateNoteDto } from './candidateNoteDto';
 export interface CandidateEntity {
   id: string;
   displayId: string;
-  fullName: string;
   /** @nullable */
-  givenName: string | null;
+  firstName: string | null;
   /** @nullable */
-  familyName: string | null;
+  lastName: string | null;
   /** @nullable */
   email: string | null;
   /** @nullable */
   mobile: string | null;
-  /** @nullable */
-  country: string | null;
-  /** @nullable */
-  city: string | null;
-  /** @nullable */
-  industryId: string | null;
+  /** Most specific known Location node — required, the scope resolver relies on it */
+  locationId: string;
+  /**
+     * Resolved location name
+     * @nullable
+     */
+  location: string | null;
+  /**
+     * Which rung of the geography tree `location` sits on — a candidate known only to city level has no suburb
+     * @nullable
+     */
+  locationLevel: CandidateEntityLocationLevel;
+  /** Required — the industry arm of the scope resolver relies on it */
+  industryId: string;
   /**
      * Resolved industry name
      * @nullable
      */
   industry: string | null;
   /** @nullable */
-  roleTypeId: string | null;
+  jobRoleTypeId: string | null;
   /**
-     * Resolved role type name
+     * Resolved role type name — the consultant's classification of what this person does
      * @nullable
      */
-  roleType: string | null;
-  /** @nullable */
-  currentPosition: string | null;
+  jobRoleType: string | null;
+  /**
+     * Title at their current employer, in the employer's own words
+     * @nullable
+     */
+  currentRole: string | null;
   /** @nullable */
   currentCompany: string | null;
   /** @nullable */
-  yearsExperience: number | null;
-  /** @nullable */
-  salaryExpectation: string | null;
-  /** @nullable */
   linkedinUrl: string | null;
   /** @nullable */
-  resumeUrl: string | null;
+  seekTalentUrl: string | null;
   /**
-     * [{ company, role, startDate, endDate }]
+     * The original, as-submitted resume
+     * @nullable
+     */
+  rawResumeUrl: string | null;
+  /**
+     * Linktal's own reformatted version of the resume
+     * @nullable
+     */
+  editedResumeUrl: string | null;
+  /**
+     * [{ company, role, period }] — `period` is free text, the source never stores parseable dates
      * @nullable
      */
   workHistory: CandidateEntityWorkHistoryItem[] | null;
-  /**
-     * Free-entry skill tags
-     * @nullable
-     */
-  skills: string[] | null;
   /** Resolved specialization names */
   specializations: string[];
   /** Specialization IDs backing `specializations` — what an editable multi-select actually binds to */
@@ -76,12 +88,22 @@ export interface CandidateEntity {
      */
   lastContactedAt: string | null;
   /**
+     * Consultant who made the most recent contact
+     * @nullable
+     */
+  lastContactedById: string | null;
+  /**
      * Contact method of the most recent contact (email, call, meeting, linkedin)
      * @nullable
      */
   lastContactType: string | null;
   /**
-     * Notes from the most recent contact
+     * Category of the most recent contact — distinct from lastContactType, which is the channel
+     * @nullable
+     */
+  lastContactCategory: string | null;
+  /**
+     * Notes from the most recent contact — its screening summary, or its outreach notes when that is what was logged
      * @nullable
      */
   lastContactNotes: string | null;

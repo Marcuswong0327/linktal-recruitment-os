@@ -16,7 +16,8 @@ import { UpdateJobOrderDto } from './dto/update-job-order.dto';
 import { QueryJobOrdersDto } from './dto/query-job-orders.dto';
 import { JobOrderEntity } from './entities/job-order.entity';
 import { PaginatedJobOrdersEntity } from './entities/paginated-job-orders.entity';
-import { RequirePermission } from '../auth/auth.decorators';
+import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
+import { AuthUser } from '../auth/auth.types';
 import { AuditService } from '../audit/audit.service';
 import { PipelineTimelineEventEntity } from '../audit/entities/pipeline-timeline-event.entity';
 
@@ -36,8 +37,8 @@ export class JobOrdersController {
     summary: 'List job orders (paginated, filterable, sortable)',
   })
   @ApiResponse({ status: 200, description: 'Paginated job orders', type: PaginatedJobOrdersEntity })
-  findAll(@Query() query: QueryJobOrdersDto) {
-    return this.jobOrders.findAll(query);
+  findAll(@Query() query: QueryJobOrdersDto, @CurrentUser() user: AuthUser) {
+    return this.jobOrders.findAll(query, user);
   }
 
   @Get('by-display-id/:displayId')
@@ -52,8 +53,8 @@ export class JobOrdersController {
   @RequirePermission('job_order', 'read')
   @ApiOperation({ operationId: 'getJobOrder', summary: 'Get job order by ID' })
   @ApiResponse({ status: 200, description: 'Job order found', type: JobOrderEntity })
-  findOne(@Param('id') id: string) {
-    return this.jobOrders.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.jobOrders.findOne(id, user);
   }
 
   @Get(':id/pipeline-timeline')
@@ -79,8 +80,8 @@ export class JobOrdersController {
   @RequirePermission('job_order', 'update')
   @ApiOperation({ operationId: 'updateJobOrder', summary: 'Update a job order' })
   @ApiResponse({ status: 200, description: 'Job order updated', type: JobOrderEntity })
-  update(@Param('id') id: string, @Body() dto: UpdateJobOrderDto) {
-    return this.jobOrders.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdateJobOrderDto, @CurrentUser() user: AuthUser) {
+    return this.jobOrders.update(id, dto, user);
   }
 
   @Delete(':id')
@@ -88,7 +89,7 @@ export class JobOrdersController {
   @RequirePermission('job_order', 'delete')
   @ApiOperation({ operationId: 'deleteJobOrder', summary: 'Delete a job order' })
   @ApiResponse({ status: 204, description: 'Job order deleted' })
-  remove(@Param('id') id: string) {
-    return this.jobOrders.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.jobOrders.remove(id, user);
   }
 }

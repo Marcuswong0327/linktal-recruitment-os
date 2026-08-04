@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, ListFilter } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +34,14 @@ interface DataGridFacetedFilterProps {
   single?: boolean;
   /** Overrides the trigger button's layout (e.g. `w-full justify-between` for a full-width search-gate dropdown instead of the compact toolbar pill). */
   triggerClassName?: string;
+  /**
+   * Icon-only trigger with no title text/count badge — for embedding inside a
+   * column header (the header already shows the column's label), instead of
+   * the toolbar's full pill with title + selected-count.
+   */
+  compact?: boolean;
+  /** Disables the trigger — e.g. while a row's own mutation is in flight, or the caller lacks edit permission. */
+  disabled?: boolean;
 }
 
 export function DataGridFacetedFilter({
@@ -43,6 +51,8 @@ export function DataGridFacetedFilter({
   onChange,
   single = false,
   triggerClassName,
+  compact = false,
+  disabled = false,
 }: DataGridFacetedFilterProps) {
   const selectedSet = new Set(selected);
 
@@ -65,28 +75,41 @@ export function DataGridFacetedFilter({
       <DropdownMenuTrigger
         render={
           <Button
-            variant="outline"
-            size="default"
+            variant="ghost"
+            size={compact ? 'icon-sm' : 'default'}
+            aria-label={compact ? `Filter ${title}` : undefined}
+            title={compact ? `Filter ${title}` : undefined}
+            onClick={(e) => e.stopPropagation()}
+            disabled={disabled}
             className={cn(
-              'rounded-lg border-dashed border-foreground/40 aria-expanded:border-solid dark:bg-input/50 dark:hover:bg-input/70',
+              compact
+                ? 'text-muted-foreground hover:text-foreground'
+                : 'rounded-lg border-dashed border-foreground/40 aria-expanded:border-solid dark:bg-input/50 dark:hover:bg-input/70',
               // Active state stays neutral — the selected value's own pill
               // carries the semantic color.
-              selectedSet.size > 0 && 'border-solid',
+              !compact && selectedSet.size > 0 && 'border-solid',
+              compact && selectedSet.size > 0 && 'text-primary',
               triggerClassName,
             )}
           />
         }
       >
-        {title}
-        {selectedSet.size > 0 ? (
+        {compact ? (
+          <ListFilter className={selectedSet.size > 0 ? '' : 'opacity-60'} />
+        ) : (
           <>
-            <span className="mx-0.5 h-4 w-px bg-border" />
-            <Badge variant="muted" className="rounded-sm px-1 font-normal">
-              {selectedSet.size} selected
-            </Badge>
+            {title}
+            {selectedSet.size > 0 ? (
+              <>
+                <span className="mx-0.5 h-4 w-px bg-border" />
+                <Badge variant="muted" className="rounded-sm px-1 font-normal">
+                  {selectedSet.size} selected
+                </Badge>
+              </>
+            ) : null}
+            <ChevronDown className="opacity-50" />
           </>
-        ) : null}
-        <ChevronDown className="opacity-50" />
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-44">
         <DropdownMenuGroup>
@@ -111,7 +134,9 @@ export function DataGridFacetedFilter({
                   {isChecked ? <Check className="size-3" /> : null}
                 </span>
                 {option.variant ? (
-                  <Badge variant={option.variant}>{option.label}</Badge>
+                  <Badge variant={option.variant} className="rounded-md">
+                    {option.label}
+                  </Badge>
                 ) : (
                   option.label
                 )}

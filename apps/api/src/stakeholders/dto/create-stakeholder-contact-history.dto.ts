@@ -14,6 +14,16 @@ export class CreateStakeholderContactHistoryDto {
   notes?: string;
 
   @ApiPropertyOptional({
+    description:
+      'Which kind of note this is — "Detailed Brief Notes" or "Outreach Campaign History". Distinct from contactType, which is the channel.',
+    example: 'Detailed Brief Notes',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  category?: string;
+
+  @ApiPropertyOptional({
     description: 'When this contact happened (ISO 8601); defaults to now if omitted — set explicitly to log a past contact',
     example: '2026-07-16T18:58:34.123Z',
   })

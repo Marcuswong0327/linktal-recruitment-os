@@ -1,5 +1,5 @@
 import { downloadAsExcel, splitContactDateTime } from '@/lib/excel-export';
-import { candidateStatusLabels } from './schema';
+import { candidateFullName, candidateStatusLabels } from './schema';
 import type { Candidate } from './schema';
 
 /**
@@ -15,12 +15,12 @@ export function exportCandidatesToExcel(
   const rows = candidates.map((c) => {
     const { date, time } = splitContactDateTime(c.lastContactedAt);
     return {
-      'Candidate Name': c.fullName,
+      'Candidate Name': candidateFullName(c),
       Email: c.email ?? '',
       Mobile: c.mobile ?? '',
-      'Current Position': c.currentPosition ?? '',
+      'Current Role': c.currentRole ?? '',
       'Current Company': c.currentCompany ?? '',
-      Location: [c.city, c.country].filter(Boolean).join(', '),
+      Location: c.location ?? '',
       Status: candidateStatusLabels[c.status],
       'Owning Consultant': consultantLabelFor(c.consultantId ?? ''),
       'Last Contacted Date': date,

@@ -5,18 +5,51 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { CandidateContactHistoryEntityStatus } from './candidateContactHistoryEntityStatus';
 
 export interface CandidateContactHistoryEntity {
   id: string;
+  displayId: string;
   candidateId: string;
-  contactType: string;
+  /**
+     * Channel: email, call, meeting, linkedin
+     * @nullable
+     */
+  contactType: string | null;
+  /**
+     * Kind of note — distinct from contactType, which is the channel.
+     * @nullable
+     */
+  category: string | null;
   /**
      * Consultant who made this contact
      * @nullable
      */
   contactedById: string | null;
+  /**
+     * The screening call content.
+     * @nullable
+     */
+  conversationSummary: string | null;
+  /**
+     * Filled for outreach campaign entries.
+     * @nullable
+     */
+  outreachCampaignNotes: string | null;
+  /** Snapshot of the candidate's status at the time of this contact. */
+  status: CandidateContactHistoryEntityStatus;
   /** @nullable */
-  notes: string | null;
+  suburb: string | null;
+  /**
+     * Free text, not a number — the source records values like "35 per hour".
+     * @nullable
+     */
+  currentSalary: string | null;
+  /**
+     * Free text, e.g. "55-60".
+     * @nullable
+     */
+  expectedSalary: string | null;
   contactedAt: string;
   createdAt: string;
 }

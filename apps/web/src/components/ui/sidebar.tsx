@@ -6,6 +6,7 @@ import { useRender } from '@base-ui/react/use-render';
 import { cva, type VariantProps } from 'class-variance-authority';
 
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMac } from '@/hooks/use-is-mac';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -234,6 +235,7 @@ function Sidebar({
 
 function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<typeof Button>) {
   const { state, toggleSidebar } = useSidebar();
+  const isMac = useIsMac();
 
   return (
     <Tooltip>
@@ -258,6 +260,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
       />
       <TooltipContent side="bottom" align="center">
         {state === 'expanded' ? 'Collapse sidebar' : 'Expand sidebar'}
+        <span className="font-mono text-[10px] opacity-70">{isMac ? '⌘B' : 'Ctrl B'}</span>
       </TooltipContent>
     </Tooltip>
   );

@@ -11,7 +11,8 @@ export type GetStakeholdersSortBy = typeof GetStakeholdersSortBy[keyof typeof Ge
 
 export const GetStakeholdersSortBy = {
   displayId: 'displayId',
-  fullName: 'fullName',
+  firstName: 'firstName',
+  lastName: 'lastName',
   createdAt: 'createdAt',
   lastContactedAt: 'lastContactedAt',
 } as const;

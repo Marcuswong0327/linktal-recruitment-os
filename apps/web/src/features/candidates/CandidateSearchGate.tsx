@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useSession } from 'next-auth/react';
 import { Info, Search, UserSearch, X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -11,11 +12,10 @@ import { PageHeader } from '@/components/app-shell/PageLayout';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { useGetIndustries } from '@/lib/api/generated/industries/industries';
 import { useGetSpecializations } from '@/lib/api/generated/specializations/specializations';
-import { useGetCandidateRoleTypes } from '@/lib/api/generated/candidate-role-types/candidate-role-types';
+import { useGetJobRoleTypes } from '@/lib/api/generated/job-role-types/job-role-types';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import { AdvancedSearchInput } from './AdvancedSearchInput';
 import { CandidatesTable } from './CandidatesTable';
-import { SavedSearchesMenu } from './SavedSearchesMenu';
 import { parseQueryLanguage, QUERY_LANGUAGE_HELP } from './parseQueryLanguage';
 import { type CandidateFilterState, useCandidateSearch } from './useCandidateSearch';
 
@@ -35,9 +35,20 @@ function mergeAdditive(prev: CandidateFilterState, patch: Partial<CandidateFilte
 }
 
 export function CandidateSearchGate({ canCreate, canDelete }: { canCreate: boolean; canDelete: boolean }) {
+  const { data: session } = useSession();
   const { data: industriesData } = useGetIndustries();
   const industries = industriesData?.status === 200 ? industriesData.data : [];
-  const { data: roleTypesData } = useGetCandidateRoleTypes();
+  // A scoped consultant can only ever match their own assigned industries
+  // (the backend ANDs this in regardless of what's requested — see
+  // industryScope in the API) — restricting the options shown here is a UX
+  // nicety, not a security boundary: picking/typing an out-of-scope industry
+  // would otherwise just silently return zero results with no explanation.
+  const isConsultant = session?.user?.roleName === 'consultant';
+  const scopedIndustryIds = session?.user?.industryIds ?? [];
+  const selectableIndustries = isConsultant
+    ? industries.filter((i) => scopedIndustryIds.includes(i.id))
+    : industries;
+  const { data: roleTypesData } = useGetJobRoleTypes();
   const roleTypes = roleTypesData?.status === 200 ? roleTypesData.data : [];
   const { data: specializationsData } = useGetSpecializations();
   const specializations = specializationsData?.status === 200 ? specializationsData.data : [];
@@ -73,7 +84,7 @@ export function CandidateSearchGate({ canCreate, canDelete }: { canCreate: boole
       search.applyFilters({ q: [search.filters.q, trimmed].filter(Boolean).join(' ') });
     } else {
       const { patch, unmatched } = parseQueryLanguage(trimmed, {
-        industries,
+        industries: selectableIndustries,
         roleTypes,
         specializations,
         consultants: consultantOptions,
@@ -92,13 +103,6 @@ export function CandidateSearchGate({ canCreate, canDelete }: { canCreate: boole
       <PageHeader
         title="Search Candidates"
         description="Start by searching or filtering to find the right candidates."
-        actions={
-          <SavedSearchesMenu
-            currentFilters={search.filters}
-            hasActiveQuery={search.hasActiveQuery}
-            onApply={(filters) => search.applyFilters(filters)}
-          />
-        }
       />
 
       <div className="grid gap-4 rounded-xl border border-border bg-card p-4 sm:grid-cols-3">
@@ -106,7 +110,7 @@ export function CandidateSearchGate({ canCreate, canDelete }: { canCreate: boole
           <span className="text-sm font-medium text-muted-foreground">1. Industry</span>
           <DataGridFacetedFilter
             title="Select industry"
-            options={industries.map((i) => ({ value: i.id, label: i.name }))}
+            options={selectableIndustries.map((i) => ({ value: i.id, label: i.name }))}
             selected={search.filters.industryIds}
             onChange={(values) => search.set('industryIds', values)}
             triggerClassName="w-full justify-between"
@@ -187,7 +191,7 @@ export function CandidateSearchGate({ canCreate, canDelete }: { canCreate: boole
               value={searchText}
               onChange={setSearchText}
               onSubmit={handleSearchSubmit}
-              lookups={{ industries, roleTypes, specializations, consultants: consultantOptions }}
+              lookups={{ industries: selectableIndustries, roleTypes, specializations, consultants: consultantOptions }}
               placeholder="Status: Warm, Location: Sydney"
             />
           )}

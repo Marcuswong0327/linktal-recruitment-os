@@ -3,7 +3,8 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { Info } from 'lucide-react';
 
-import { EnumSelect } from '@/components/EnumSelect';
+import { ComboboxSelect } from '@/components/ComboboxSelect';
+import { TagMultiSelect, TagPills, type TagOption } from '@/components/TagMultiSelect';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   type Consultant,
@@ -57,6 +58,27 @@ interface ConsultantColumnsOptions {
   isSelf: (user: Consultant) => boolean;
   onRoleChange: (user: Consultant, role: ConsultantRole) => void;
   onStatusChange: (user: Consultant, isActive: boolean) => void;
+  /**
+   * Present only when the caller holds `consultant_industry:read` — the
+   * whole column is omitted otherwise (matches `industries`/`industryIds`
+   * being absent from the API response entirely for a caller without that
+   * permission, not just empty).
+   */
+  industries?: {
+    options: TagOption[];
+    /** Absent when the caller lacks `consultant_industry:update` — read-only chips instead of an editable picker. */
+    onIndustriesChange?: (user: Consultant, industryIds: string[]) => void;
+  };
+  /**
+   * Same gating pattern as `industries`, keyed to `consultant_specialization:read`.
+   * Narrows the industry arm rather than granting on its own — see
+   * docs/scope-explained.md §4.
+   */
+  specializations?: {
+    options: TagOption[];
+    /** Absent when the caller lacks `consultant_specialization:update` — read-only chips instead of an editable picker. */
+    onSpecializationsChange?: (user: Consultant, specializationIds: string[]) => void;
+  };
 }
 
 export function getConsultantColumns({
@@ -64,6 +86,8 @@ export function getConsultantColumns({
   isSelf,
   onRoleChange,
   onStatusChange,
+  industries,
+  specializations,
 }: ConsultantColumnsOptions): ColumnDef<Consultant>[] {
   return [
     {
@@ -92,31 +116,27 @@ export function getConsultantColumns({
       id: 'roleName',
       accessorFn: (user) => user.role?.name ?? '',
       header: 'Role',
-      size: 160,
-      meta: { align: 'center' },
+      meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => {
         const user = row.original;
         const disabled = isSelf(user) || pendingId === user.id;
         return (
-          <div data-no-row-drag>
-            <EnumSelect
-              value={user.role?.name ?? ''}
-              onValueChange={(v) => onRoleChange(user, v as ConsultantRole)}
-              options={roleOptions}
-              placeholder="No role"
-              disabled={disabled}
-              size="badge"
-              className="w-fit mx-auto"
-            />
-          </div>
+          <ComboboxSelect
+            title="Role"
+            value={user.role?.name ?? ''}
+            onValueChange={(v) => onRoleChange(user, v as ConsultantRole)}
+            options={roleOptions}
+            placeholder="No role"
+            disabled={disabled}
+            triggerClassName="mx-auto"
+          />
         );
       },
     },
     {
       accessorKey: 'isActive',
-      size: 150,
       enableSorting: false,
-      meta: { align: 'center' },
+      meta: { align: 'center', strictMinSize: true },
       header: () => (
         <span className="inline-flex items-center gap-1">
           Status
@@ -139,16 +159,14 @@ export function getConsultantColumns({
         const user = row.original;
         const disabled = isSelf(user) || pendingId === user.id;
         return (
-          <div data-no-row-drag>
-            <EnumSelect
-              value={String(user.isActive)}
-              onValueChange={(v) => onStatusChange(user, v === 'true')}
-              options={statusOptions}
-              disabled={disabled}
-              size="badge"
-              className="w-fit mx-auto"
-            />
-          </div>
+          <ComboboxSelect
+            title="Status"
+            value={String(user.isActive)}
+            onValueChange={(v) => onStatusChange(user, v === 'true')}
+            options={statusOptions}
+            disabled={disabled}
+            triggerClassName="mx-auto"
+          />
         );
       },
     },
@@ -161,6 +179,65 @@ export function getConsultantColumns({
     //     <span className="tabular-nums">{row.original.openJobOrders}</span>
     //   ),
     // },
+    ...(industries
+      ? [
+          {
+            id: 'industries',
+            header: 'Industries',
+            size: 200,
+            enableSorting: false,
+            cell: ({ row }: { row: { original: Consultant } }) => {
+              const user = row.original;
+              const selected = user.industryIds ?? [];
+              if (!industries.onIndustriesChange) {
+                return <TagPills options={industries.options} selected={selected} />;
+              }
+              const disabled = pendingId === user.id;
+              // No data-no-row-drag here (or on Role/Status/Specializations)
+              // — a mousedown that turns into a real drag never reaches this
+              // element's click at all (the browser only fires `click` when
+              // mouseup lands back on the same target), so row range-select
+              // and "click to open the picker" don't actually conflict.
+              return (
+                <TagMultiSelect
+                  title="Industries"
+                  options={industries.options}
+                  selected={selected}
+                  onChange={(ids) => industries.onIndustriesChange!(user, ids)}
+                  disabled={disabled}
+                />
+              );
+            },
+          } satisfies ColumnDef<Consultant>,
+        ]
+      : []),
+    ...(specializations
+      ? [
+          {
+            id: 'specializations',
+            header: 'Specializations',
+            size: 200,
+            enableSorting: false,
+            cell: ({ row }: { row: { original: Consultant } }) => {
+              const user = row.original;
+              const selected = user.specializationIds ?? [];
+              if (!specializations.onSpecializationsChange) {
+                return <TagPills options={specializations.options} selected={selected} />;
+              }
+              const disabled = pendingId === user.id;
+              return (
+                <TagMultiSelect
+                  title="Specializations"
+                  options={specializations.options}
+                  selected={selected}
+                  onChange={(ids) => specializations.onSpecializationsChange!(user, ids)}
+                  disabled={disabled}
+                />
+              );
+            },
+          } satisfies ColumnDef<Consultant>,
+        ]
+      : []),
     {
       accessorKey: 'createdAt',
       header: 'Joined',

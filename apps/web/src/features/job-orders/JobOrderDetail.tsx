@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ClientCombobox } from '@/components/ClientCombobox';
 import { ConsultantCombobox } from '@/components/ConsultantCombobox';
+import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { PipelineTimeline } from '@/components/PipelineTimeline';
@@ -40,13 +41,18 @@ import {
   useGetJobOrderPipelineTimeline,
   useUpdateJobOrder,
 } from '@/lib/api/generated/job-orders/job-orders';
+import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
 import { contactTypeLabels, type ContactType } from '@/lib/contact-types';
 import type { ClientEntity, ConsultantEntity, UpdateJobOrderDto } from '@/lib/api/generated/types';
 import {
   type JobOrder,
+  type JobOrderQuality,
   type JobOrderStatus,
+  jobOrderQualityLabels,
   jobOrderStatusLabels,
   priorityOptions,
+  qualityOptions,
+  qualityVariant,
   statusOptions,
   statusVariant,
 } from './schema';
@@ -96,12 +102,10 @@ export function JobOrderDetail({ id }: { id: string }) {
 
 /** Empty strings/inputs become `null` (not omitted) so a cleared field actually saves as cleared. */
 function toPatch(values: {
-  jobTitle: string;
+  jobTitleId: string;
   clientId: string;
   consultantId: string;
-  department: string;
-  location: string;
-  jobType: string;
+  quality: JobOrderQuality;
   status: JobOrderStatus;
   priorityLevel: string;
   salaryMin: string;
@@ -113,12 +117,10 @@ function toPatch(values: {
   requirements: string;
 }) {
   return {
-    jobTitle: values.jobTitle,
+    jobTitleId: values.jobTitleId || null,
     clientId: values.clientId,
     consultantId: values.consultantId || null,
-    department: values.department || null,
-    location: values.location || null,
-    jobType: values.jobType || null,
+    quality: values.quality,
     status: values.status,
     priorityLevel: values.priorityLevel === '' ? null : Number(values.priorityLevel),
     salaryMin: values.salaryMin === '' ? null : Number(values.salaryMin),
@@ -142,12 +144,19 @@ function JobOrderEditForm({
 }) {
   const queryClient = useQueryClient();
 
-  const [jobTitle, setJobTitle] = React.useState(jobOrder.jobTitle);
+  const [jobTitleId, setJobTitleId] = React.useState(jobOrder.jobTitleId ?? '');
+  const { data: jobTitleData } = useGetJobTitles({ take: 200 });
+  const jobTitles = jobTitleData?.status === 200 ? jobTitleData.data : [];
+  const createJobTitle = useCreateJobTitle();
+  async function handleCreateJobTitle(name: string) {
+    const res = await createJobTitle.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add job title');
+    return res.data;
+  }
+
   const [clientId, setClientId] = React.useState(jobOrder.clientId);
   const [consultantId, setConsultantId] = React.useState(jobOrder.consultantId ?? '');
-  const [department, setDepartment] = React.useState(jobOrder.department ?? '');
-  const [location, setLocation] = React.useState(jobOrder.location ?? '');
-  const [jobType, setJobType] = React.useState(jobOrder.jobType ?? '');
+  const [quality, setQuality] = React.useState<JobOrderQuality>(jobOrder.quality);
   const [status, setStatus] = React.useState<JobOrderStatus>(jobOrder.status);
   const [priorityLevel, setPriorityLevel] = React.useState(
     jobOrder.priorityLevel != null ? String(jobOrder.priorityLevel) : '',
@@ -161,12 +170,10 @@ function JobOrderEditForm({
   const [requirements, setRequirements] = React.useState(jobOrder.requirements ?? '');
 
   const isDirty =
-    jobTitle !== jobOrder.jobTitle ||
+    jobTitleId !== (jobOrder.jobTitleId ?? '') ||
     clientId !== jobOrder.clientId ||
     consultantId !== (jobOrder.consultantId ?? '') ||
-    department !== (jobOrder.department ?? '') ||
-    location !== (jobOrder.location ?? '') ||
-    jobType !== (jobOrder.jobType ?? '') ||
+    quality !== jobOrder.quality ||
     status !== jobOrder.status ||
     priorityLevel !== (jobOrder.priorityLevel != null ? String(jobOrder.priorityLevel) : '') ||
     salaryMin !== (jobOrder.salaryMin != null ? String(jobOrder.salaryMin) : '') ||
@@ -185,6 +192,19 @@ function JobOrderEditForm({
   // fetch above; no separate job-order-level tracking.
   const client = clients.find((c) => c.id === jobOrder.clientId);
 
+  // Industry-first: a Job Order has no industry of its own, only via its
+  // (possibly just-changed) Client — reacts to the live `clientId` selection,
+  // not the original `jobOrder.clientId`, so switching Client immediately
+  // updates which consultants are assignable. No industry tagged yet means
+  // no consultant can be assigned at all (enforced server-side too, in
+  // JobOrdersService — see INDUSTRY_REQUIRED).
+  const selectedClientIndustryId = clients.find((c) => c.id === clientId)?.industryId ?? null;
+  const availableConsultants = !selectedClientIndustryId
+    ? []
+    : consultants.filter(
+        (c) => c.industryIds === undefined || c.industryIds.includes(selectedClientIndustryId),
+      );
+
   const { data: pipelineData, isLoading: pipelineLoading } = useGetJobOrderPipelineTimeline(jobOrder.id);
   const pipelineEvents = pipelineData?.status === 200 ? pipelineData.data : undefined;
 
@@ -196,7 +216,7 @@ function JobOrderEditForm({
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
         queryClient.invalidateQueries({ queryKey: getGetJobOrderQueryKey(jobOrder.id) });
-        toast.success(`Saved changes to ${jobTitle}`);
+        toast.success(`Saved changes to ${jobTitles.find((j) => j.id === jobTitleId)?.name ?? 'this job order'}`);
       },
       onError: (err) => toast.error(err.message || 'Failed to save job order'),
     },
@@ -207,12 +227,10 @@ function JobOrderEditForm({
     updateJobOrder.mutate({
       id: jobOrder.id,
       data: toPatch({
-        jobTitle,
+        jobTitleId,
         clientId,
         consultantId,
-        department,
-        location,
-        jobType,
+        quality,
         status,
         priorityLevel,
         salaryMin,
@@ -247,8 +265,11 @@ function JobOrderEditForm({
             </span>
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-3">
-                <h1 className="font-heading text-2xl font-semibold tracking-tight">{jobOrder.jobTitle}</h1>
+                <h1 className="font-heading text-2xl font-semibold tracking-tight">{jobOrder.jobTitle ?? 'Untitled role'}</h1>
                 <Badge variant={statusVariant[jobOrder.status]}>{jobOrderStatusLabels[jobOrder.status]}</Badge>
+                <Badge variant={qualityVariant[jobOrder.quality]}>
+                  {jobOrderQualityLabels[jobOrder.quality]} quality
+                </Badge>
               </div>
               <span className="font-mono text-xs text-muted-foreground">{jobOrder.displayId}</span>
             </div>
@@ -276,28 +297,49 @@ function JobOrderEditForm({
                 <CardDescription>Position, client and assignment.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Role" htmlFor="jobTitle">
-                  <Input id="jobTitle" value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} />
+                <FormField label="Role" htmlFor="jobTitle" description="The client's own words for the role.">
+                  <CreatableCombobox
+                    id="jobTitle"
+                    value={jobTitleId}
+                    onValueChange={setJobTitleId}
+                    options={jobTitles}
+                    onCreate={handleCreateJobTitle}
+                  />
                 </FormField>
                 <FormField label="Client" htmlFor="clientId">
                   <ClientCombobox id="clientId" value={clientId} onValueChange={setClientId} clients={clients} />
                 </FormField>
-                <FormField label="Consultant" htmlFor="consultantId">
+                <FormField
+                  label="Consultant"
+                  htmlFor="consultantId"
+                  description={
+                    !selectedClientIndustryId
+                      ? 'Tag the client with an industry before assigning a consultant'
+                      : undefined
+                  }
+                >
                   <ConsultantCombobox
                     id="consultantId"
                     value={consultantId}
                     onValueChange={setConsultantId}
-                    consultants={consultants}
+                    consultants={availableConsultants}
+                    disabled={!selectedClientIndustryId}
                   />
                 </FormField>
-                <FormField label="Department" htmlFor="department">
-                  <Input id="department" value={department} onChange={(e) => setDepartment(e.target.value)} />
+                <FormField
+                  label="Location"
+                  htmlFor="location"
+                  description="Read-only for now — location editing isn't wired up here yet."
+                >
+                  <Input id="location" value={jobOrder.location ?? '—'} disabled />
                 </FormField>
-                <FormField label="Location" htmlFor="location">
-                  <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} />
-                </FormField>
-                <FormField label="Job type" htmlFor="jobType">
-                  <Input id="jobType" value={jobType} onChange={(e) => setJobType(e.target.value)} />
+                <FormField label="Quality" htmlFor="quality">
+                  <EnumSelect
+                    id="quality"
+                    value={quality}
+                    onValueChange={(v) => setQuality(v as JobOrderQuality)}
+                    options={qualityOptions}
+                  />
                 </FormField>
                 <FormField label="Status" htmlFor="status">
                   <EnumSelect
@@ -496,7 +538,7 @@ function JobOrderEditForm({
           <AlertDialogHeader>
             <AlertDialogTitle>Unsaved changes</AlertDialogTitle>
             <AlertDialogDescription>
-              You have unsaved changes to {jobOrder.jobTitle}. Leaving now will discard them.
+              You have unsaved changes to {jobOrder.jobTitle ?? 'this job order'}. Leaving now will discard them.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

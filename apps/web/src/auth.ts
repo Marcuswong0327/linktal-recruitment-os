@@ -13,6 +13,7 @@ interface ApiSessionUser {
   fullName: string;
   roleName: string | null;
   permissions: string[];
+  industryIds: string[];
 }
 
 interface ApiSession {
@@ -122,6 +123,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           consultantId: result.data.user.consultantId,
           roleName: result.data.user.roleName,
           permissions: result.data.user.permissions,
+          industryIds: result.data.user.industryIds,
         };
       },
     }),
@@ -161,6 +163,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             fullName: user.name ?? '',
             roleName: user.roleName ?? null,
             permissions: user.permissions ?? [],
+            industryIds: user.industryIds ?? [],
           },
           error: undefined,
         };
@@ -197,6 +200,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           consultantId: token.user.consultantId,
           roleName: token.user.roleName,
           permissions: token.user.permissions,
+          industryIds: token.user.industryIds,
         };
       }
       // Deliberately omit refreshToken — never sent to the client.

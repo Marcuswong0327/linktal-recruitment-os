@@ -49,6 +49,9 @@ describe('AuthGuard', () => {
         name: 'A B',
         roleName: 'viewer',
         permissions: ['candidate:read'],
+        industryIds: ['ind1'],
+        specializationIds: [],
+        locationIds: [],
       }),
     });
 
@@ -62,6 +65,9 @@ describe('AuthGuard', () => {
       roleName: 'viewer',
       isActive: true,
       permissions: new Set(['candidate:read']),
+      industryIds: ['ind1'],
+      specializationIds: [],
+      locationIds: [],
     });
   });
 

@@ -5,9 +5,10 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { GetJobOrdersQualitiesItem } from './getJobOrdersQualitiesItem';
 import type { GetJobOrdersSortBy } from './getJobOrdersSortBy';
 import type { GetJobOrdersSortOrder } from './getJobOrdersSortOrder';
-import type { GetJobOrdersStatus } from './getJobOrdersStatus';
+import type { GetJobOrdersStatusesItem } from './getJobOrdersStatusesItem';
 
 export type GetJobOrdersParams = {
 /**
@@ -22,7 +23,7 @@ page?: number;
  */
 pageSize?: number;
 /**
- * Column to sort by. Defaults to most recently created.
+ * Column to sort by. Defaults to status ascending (Active first — JobOrderStatus is declared ACTIVE/PLACED/CLOSED/ON_HOLD, so a native-enum sort already puts Active first) then most recently received.
  */
 sortBy?: GetJobOrdersSortBy;
 sortOrder?: GetJobOrdersSortOrder;
@@ -31,35 +32,41 @@ sortOrder?: GetJobOrdersSortOrder;
  */
 q?: string;
 /**
- * Filter by status. Defaults to ALL (every status); pass a specific status to narrow.
+ * Filter by status (one or more). Omit for all statuses.
  */
-status?: GetJobOrdersStatus;
+statuses?: GetJobOrdersStatusesItem[];
+/**
+ * Filter by quality (one or more). Omit for all qualities.
+ */
+qualities?: GetJobOrdersQualitiesItem[];
 /**
  * Filter by client ID (exact match)
  */
 clientId?: string;
 /**
- * Filter by consultant ID (exact match)
+ * Filter by owning consultant ID(s). Ignored (overridden by the caller's own id) for the `consultant` role.
  */
-consultantId?: string;
+consultantIds?: string[];
 /**
- * Filter by job type (contains, case-insensitive)
+ * Filter by job title ID(s) (see /job-titles)
  */
-jobType?: string;
+jobTitleIds?: string[];
 /**
- * Filter by location (contains, case-insensitive)
+ * Filter by job role type ID(s) (see /job-role-types)
+ */
+jobRoleTypeIds?: string[];
+/**
+ * Filter by location name (contains, case-insensitive) — matches the job order's own node only. Use locationIds to match descendants too.
  */
 location?: string;
 /**
- * Filter by department (contains, case-insensitive)
+ * Filter by Location id(s). Selecting a country or state matches every job order beneath it, via the ancestor path.
  */
-department?: string;
+locationIds?: string[];
 /**
- * Filter by priority level (1=High, 2=Medium, 3=Low)
- * @minimum 1
- * @maximum 3
+ * Filter by priority level(s) (1=High, 2=Medium, 3=Low). Omit for all.
  */
-priorityLevel?: number;
+priorityLevels?: number[];
 /**
  * Minimum salary (matches salaryMax >= value)
  * @minimum 0

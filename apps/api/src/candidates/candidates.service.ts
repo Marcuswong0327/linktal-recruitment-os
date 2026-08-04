@@ -12,6 +12,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { RequestContext } from '../common/request-context';
+import {
+  assertConsultantCovers,
+  assertInScope,
+  candidateScope,
+  clearMismatchedCandidateAssignment,
+  isScoped,
+} from '../common/scope';
 import { AuthUser } from '../auth/auth.types';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
@@ -21,47 +28,64 @@ import { AddCandidateNoteDto, CandidateNoteDto, UpdateCandidateNoteDto } from '.
 
 // lastContactedAt is a plain scalar column (see schema.prisma) — denormalized
 // for sorting, same reasoning as Client/Stakeholder.lastContactedAt. The rest
-// of the "latest contact" detail (type/notes/who) isn't sorted or filtered
-// on, so it's resolved live via the top-1 contact history row instead of
-// also being denormalized — display-only, cheap per row.
+// of the "latest contact" detail isn't sorted or filtered on, so it's resolved
+// live from the top-1 contact history row — display-only, cheap per row.
 //
-// industry/roleType are `select: { name: true } }`-included and flattened
-// back onto the entity as plain strings (see toEntity), same pattern as
-// StakeholderEntity.roleType. specializations is a many-to-many with no
-// scalar column at all, so it's always resolved this way — there's no
-// "sometimes denormalized" version of it.
+// industry/jobRoleType/location are FK relations, flattened back onto the
+// entity as plain strings in `toEntity` so the API shape stays flat.
+// `ancestorIds` comes along on the location purely for the single-record scope
+// check, and is stripped back out — never part of the response.
 const CANDIDATE_INCLUDE = {
   contactHistory: {
     orderBy: { contactedAt: 'desc' },
     take: 1,
-    select: { contactType: true, notes: true, contactedBy: { select: { fullName: true } } },
+    select: {
+      contactType: true,
+      category: true,
+      conversationSummary: true,
+      outreachCampaignNotes: true,
+      contactedBy: { select: { fullName: true } },
+    },
   },
   industry: { select: { name: true } },
-  roleType: { select: { name: true } },
-  // specializationId (the join row's own scalar) is kept alongside the
-  // resolved name — the name is display-only, the id is what an editable
-  // multi-select actually needs to preselect/diff against.
+  jobRoleType: { select: { name: true } },
+  location: { select: { name: true, level: true, ancestorIds: true } },
+  // specializationId (the join row's own scalar) is kept alongside the resolved
+  // name — the name is display-only, the id is what an editable multi-select
+  // needs to preselect and diff against.
   specializations: { select: { specializationId: true, specialization: { select: { name: true } } } },
 } satisfies Prisma.CandidateInclude;
 
 type CandidateWithRelations = {
-  contactHistory: { contactType: string; notes: string | null; contactedBy: { fullName: string } | null }[];
+  contactHistory: {
+    contactType: string | null;
+    category: string | null;
+    conversationSummary: string | null;
+    outreachCampaignNotes: string | null;
+    contactedBy: { fullName: string } | null;
+  }[];
   industry: { name: string } | null;
-  roleType: { name: string } | null;
+  jobRoleType: { name: string } | null;
+  location: { name: string; level: string; ancestorIds: string[] } | null;
   specializations: { specializationId: string; specialization: { name: string } }[];
 };
 
 function toEntity<T extends CandidateWithRelations>(candidate: T) {
-  const { contactHistory, industry, roleType, specializations, ...rest } = candidate;
+  const { contactHistory, industry, jobRoleType, location, specializations, ...rest } = candidate;
   const latest = contactHistory[0];
   return {
     ...rest,
     industry: industry?.name ?? null,
-    roleType: roleType?.name ?? null,
+    jobRoleType: jobRoleType?.name ?? null,
+    location: location?.name ?? null,
+    locationLevel: location?.level ?? null,
     specializations: specializations.map((s) => s.specialization.name),
     specializationIds: specializations.map((s) => s.specializationId),
     lastContactType: latest?.contactType ?? null,
-    lastContactNotes: latest?.notes ?? null,
+    lastContactCategory: latest?.category ?? null,
+    // The old single `notes` column is gone — screening and outreach notes are
+    // separate fields now, distinguished by `category`.
+    lastContactNotes: latest?.conversationSummary ?? latest?.outreachCampaignNotes ?? null,
     lastContactedBy: latest?.contactedBy?.fullName ?? null,
   };
 }
@@ -80,55 +104,43 @@ export class CandidatesService {
     private readonly base: PrismaService,
   ) {}
 
-  async findAll(query: QueryCandidatesDto) {
+  async findAll(query: QueryCandidatesDto, user: AuthUser) {
     const { page, pageSize, sortBy, sortOrder, q } = query;
 
     // Built as an AND-ed list of independent conditions rather than
-    // assigning fields onto one `where` object, since more than one
-    // condition here needs its own `OR` (skills, free-text q) — top-level
-    // `where.OR` assignments would just clobber each other.
+    // assigning fields onto one `where` object, since a condition here needs
+    // its own `OR` (the free-text q) — top-level `where.OR` assignments would
+    // just clobber each other.
     const and: Prisma.CandidateWhereInput[] = [];
 
     if (query.statuses?.length) and.push({ status: { in: query.statuses } });
     if (query.industryIds?.length) and.push({ industryId: { in: query.industryIds } });
-    if (query.roleTypeIds?.length) and.push({ roleTypeId: { in: query.roleTypeIds } });
+    if (query.jobRoleTypeIds?.length) and.push({ jobRoleTypeId: { in: query.jobRoleTypeIds } });
     if (query.specializationIds?.length) {
       and.push({ specializations: { some: { specializationId: { in: query.specializationIds } } } });
     }
     if (query.consultantIds?.length) and.push({ consultantId: { in: query.consultantIds } });
+    if (isScoped(user)) and.push(candidateScope(user));
     if (query.submissionStatuses?.length) {
       and.push({ submissions: { some: { status: { in: query.submissionStatuses } } } });
     }
     if (query.placementStatuses?.length) {
       and.push({ submissions: { some: { placement: { status: { in: query.placementStatuses } } } } });
     }
-    if (query.skills?.length) {
-      // OR: a candidate matches if they carry *any* of the selected tags.
-      and.push({ OR: query.skills.map((skill) => ({ skills: { array_contains: [skill] } })) });
+    // Location is a node in the tree now: selecting a country matches every
+    // candidate beneath it, via the denormalized ancestor path.
+    if (query.locationIds?.length) {
+      and.push({ location: { ancestorIds: { hasSome: query.locationIds } } });
     }
-
     if (query.location) {
-      // "Location" is one filter over two columns — matches either.
       and.push({
-        OR: [
-          { city: { contains: query.location, mode: Prisma.QueryMode.insensitive } },
-          { country: { contains: query.location, mode: Prisma.QueryMode.insensitive } },
-        ],
+        location: { name: { contains: query.location, mode: Prisma.QueryMode.insensitive } },
       });
     }
     const companyFilter = contains(query.currentCompany);
     if (companyFilter) and.push({ currentCompany: companyFilter });
-    const positionFilter = contains(query.currentPosition);
-    if (positionFilter) and.push({ currentPosition: positionFilter });
-
-    if (query.yearsExperienceMin != null || query.yearsExperienceMax != null) {
-      and.push({
-        yearsExperience: {
-          ...(query.yearsExperienceMin != null ? { gte: query.yearsExperienceMin } : {}),
-          ...(query.yearsExperienceMax != null ? { lte: query.yearsExperienceMax } : {}),
-        },
-      });
-    }
+    const roleFilter = contains(query.currentRole);
+    if (roleFilter) and.push({ currentRole: roleFilter });
 
     if (query.lastContactedFrom || query.lastContactedTo) {
       and.push({
@@ -140,34 +152,33 @@ export class CandidatesService {
     }
 
     // Quick search: scalar columns (backed by the trigram indexes added in
-    // 20260719021500_candidate_search_trigram_indexes) plus industry/role
-    // type's resolved name via relation. Skills/specializations are
-    // deliberately left out — substring matching inside a JSON array / a
-    // joined many-to-many isn't worth the complexity for free-text search;
-    // they're filter-only (industryIds/roleTypeIds/specializationIds/skills).
+    // 20260719021500_candidate_search_trigram_indexes) plus the resolved names
+    // of location, industry and job role type via relation. Specializations
+    // are deliberately left out — substring matching inside a joined
+    // many-to-many isn't worth the complexity for free-text search; they're
+    // filter-only (specializationIds).
     if (q) {
       and.push({
         OR: [
-          { fullName: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { firstName: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { lastName: { contains: q, mode: Prisma.QueryMode.insensitive } },
           { email: { contains: q, mode: Prisma.QueryMode.insensitive } },
           { currentCompany: { contains: q, mode: Prisma.QueryMode.insensitive } },
           { displayId: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { currentPosition: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { city: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { country: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { currentRole: { contains: q, mode: Prisma.QueryMode.insensitive } },
+          { location: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
           { mobile: { contains: q, mode: Prisma.QueryMode.insensitive } },
           { industry: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
-          { roleType: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
+          { jobRoleType: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
         ],
       });
     }
 
     const where: Prisma.CandidateWhereInput = and.length > 0 ? { AND: and } : {};
 
-    // status sorts by Postgres's native enum ordinal (COLD < WARM < HOT <
-    // PLACED, per the declaration order in schema.prisma) — no CASE
-    // expression needed, `ORDER BY "status"` already gives the temperature
-    // order.
+    // status sorts by Postgres's native enum ordinal (COLD < WARM < PLACED <
+    // UNS, per the declaration order in schema.prisma) — no CASE expression
+    // needed, `ORDER BY "status"` already gives the temperature order.
     const orderBy: Prisma.CandidateOrderByWithRelationInput = sortBy
       ? { [sortBy]: sortOrder }
       : { createdAt: 'desc' };
@@ -189,7 +200,7 @@ export class CandidatesService {
     return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user: AuthUser) {
     const candidate = await this.prisma.candidate.findUnique({
       where: { id },
       include: CANDIDATE_INCLUDE,
@@ -197,6 +208,13 @@ export class CandidatesService {
     if (!candidate) {
       throw new NotFoundException(`Candidate ${id} not found`);
     }
+    // `consultantId` short-circuits the arms below — an assigned candidate is
+    // always their owner's to open (see ownedBy in common/scope.ts).
+    assertInScope(user, {
+      consultantId: candidate.consultantId,
+      industryId: candidate.industryId,
+      locationAncestorIds: candidate.location?.ancestorIds ?? [],
+    });
     return toEntity(candidate);
   }
 
@@ -212,6 +230,14 @@ export class CandidatesService {
   }
 
   async create(dto: CreateCandidateDto) {
+    // A consultant can only be assigned a candidate they'd reach anyway —
+    // their industry or their location.
+    if (dto.consultantId) {
+      await assertConsultantCovers(this.prisma, dto.consultantId, {
+        industryId: dto.industryId ?? null,
+        locationIds: dto.locationId ? [dto.locationId] : [],
+      });
+    }
     // displayId is assigned by the DB (Candidate_displayId_seq default).
     const candidate = await this.prisma.candidate.create({
       data: {
@@ -225,9 +251,21 @@ export class CandidatesService {
     return toEntity(candidate);
   }
 
-  async update(id: string, dto: UpdateCandidateDto) {
-    await this.findOne(id);
-    const candidate = await this.prisma.candidate.update({
+  async update(id: string, dto: UpdateCandidateDto, user: AuthUser) {
+    const existing = await this.findOne(id, user);
+
+    // Only validated when a consultant is explicitly being set/changed here —
+    // an industry/location-only edit never blocks on this (that's what the
+    // auto-clear below is for instead of erroring).
+    if ('consultantId' in dto && dto.consultantId) {
+      const effectiveLocationId = 'locationId' in dto ? dto.locationId : existing.locationId;
+      await assertConsultantCovers(this.prisma, dto.consultantId, {
+        industryId: 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId,
+        locationIds: effectiveLocationId ? [effectiveLocationId] : [],
+      });
+    }
+
+    let candidate = await this.prisma.candidate.update({
       where: { id },
       data: {
         ...this.toPrismaData(dto),
@@ -246,6 +284,17 @@ export class CandidatesService {
       },
       include: CANDIDATE_INCLUDE,
     });
+
+    // Bidirectional auto-clear: the industry changed without an explicit
+    // consultant change in the same request — silently unassign if the
+    // existing consultant no longer matches, rather than blocking the edit.
+    if (('industryId' in dto || 'locationId' in dto) && !('consultantId' in dto)) {
+      const cleared = await clearMismatchedCandidateAssignment(this.prisma, id);
+      if (cleared) {
+        candidate = await this.prisma.candidate.findUniqueOrThrow({ where: { id }, include: CANDIDATE_INCLUDE });
+      }
+    }
+
     return toEntity(candidate);
   }
 
@@ -256,8 +305,8 @@ export class CandidatesService {
    * audit extension writes outside it. A partial failure is recoverable via
    * `restore` — children are removed before the parent.
    */
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, user: AuthUser) {
+    await this.findOne(id, user);
     const submissions = await this.prisma.candidateSubmission.findMany({
       where: { candidateId: id },
       select: { id: true },
@@ -332,7 +381,13 @@ export class CandidatesService {
       data: {
         candidateId: id,
         contactType: dto.contactType,
-        notes: dto.notes,
+        category: dto.category,
+        conversationSummary: dto.conversationSummary,
+        outreachCampaignNotes: dto.outreachCampaignNotes,
+        status: dto.status,
+        suburb: dto.suburb,
+        currentSalary: dto.currentSalary,
+        expectedSalary: dto.expectedSalary,
         contactedAt,
         contactedById: consultantId,
       },
@@ -397,15 +452,15 @@ export class CandidatesService {
   }
 
   /** Appends one entry to the candidate's note timeline (never overwrites prior entries). */
-  async addNote(id: string, dto: AddCandidateNoteDto, consultantId: string) {
-    const candidate = await this.findOne(id);
+  async addNote(id: string, dto: AddCandidateNoteDto, user: AuthUser) {
+    const candidate = await this.findOne(id, user);
     const next: CandidateNoteDto[] = [
       ...this.getNotes(candidate),
       {
         id: randomUUID(),
         content: dto.content,
         timestamp: new Date().toISOString(),
-        by: consultantId,
+        by: user.consultantId,
         editedAt: null,
         editedBy: null,
       },
@@ -415,7 +470,7 @@ export class CandidatesService {
 
   /** Edits one note's content in place; restricted to its author or an admin. */
   async updateNote(id: string, noteId: string, dto: UpdateCandidateNoteDto, user: AuthUser) {
-    const candidate = await this.findOne(id);
+    const candidate = await this.findOne(id, user);
     const notes = this.getNotes(candidate);
     const index = this.findNoteOrThrow(notes, noteId);
     this.assertCanModifyNote(notes[index], user);
@@ -433,7 +488,7 @@ export class CandidatesService {
 
   /** Removes one note from the timeline; restricted to its author or an admin. */
   async deleteNote(id: string, noteId: string, user: AuthUser, expectedVersion?: string) {
-    const candidate = await this.findOne(id);
+    const candidate = await this.findOne(id, user);
     const notes = this.getNotes(candidate);
     const index = this.findNoteOrThrow(notes, noteId);
     this.assertCanModifyNote(notes[index], user);
@@ -452,13 +507,12 @@ export class CandidatesService {
    * of the payload themselves from `dto.specializationIds` directly.
    */
   private toPrismaData<T extends CreateCandidateDto | UpdateCandidateDto>(dto: T) {
-    const { workHistory, skills, specializationIds: _specializationIds, ...rest } = dto;
+    const { workHistory, specializationIds: _specializationIds, ...rest } = dto;
     return {
       ...rest,
       ...(workHistory !== undefined
         ? { workHistory: workHistory as unknown as Prisma.InputJsonValue }
         : {}),
-      ...(skills !== undefined ? { skills: skills as unknown as Prisma.InputJsonValue } : {}),
     };
   }
 }

@@ -12,6 +12,6 @@ export type CandidateEntityStatus = typeof CandidateEntityStatus[keyof typeof Ca
 export const CandidateEntityStatus = {
   COLD: 'COLD',
   WARM: 'WARM',
-  HOT: 'HOT',
   PLACED: 'PLACED',
+  UNS: 'UNS',
 } as const;

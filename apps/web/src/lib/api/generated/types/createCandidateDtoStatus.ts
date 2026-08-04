@@ -15,6 +15,6 @@ export type CreateCandidateDtoStatus = typeof CreateCandidateDtoStatus[keyof typ
 export const CreateCandidateDtoStatus = {
   COLD: 'COLD',
   WARM: 'WARM',
-  HOT: 'HOT',
   PLACED: 'PLACED',
+  UNS: 'UNS',
 } as const;

@@ -11,22 +11,24 @@ import type { CreateClientDtoStatus } from './createClientDtoStatus';
 export interface CreateClientDto {
   /** Company name */
   companyName: string;
-  /** Industry ID */
-  industryId?: string;
-  /** Specialization ID */
+  /** Industry ID (see /industries) */
+  industryId: string;
+  /** Specialization ID (see /specializations) */
   specializationId?: string;
-  /** Country */
-  country?: string;
-  /** City */
-  city?: string;
+  /** Location nodes this client hires from — its market, not its office address. At least one is required (country level at minimum); mixed granularity is fine. */
+  locationIds: string[];
+  /** The client's own physical office address(es) — distinct from `locationIds` above */
+  addresses?: string[];
+  /** The client's own office suburb/postcode(s) — same distinction as `addresses` */
+  suburbsAndPostcodes?: string[];
   /** Website URL */
   website?: string;
-  /** Terms of Business signed */
-  tobSigned?: boolean;
-  /** Fee as percentage of package (null until agreed) */
-  feePercentage?: number;
-  /** Guarantee period in days */
-  guaranteePeriod?: number;
+  /** Seek / Job Street job market URL */
+  seekJobMarketUrl?: string;
+  /** LinkedIn job market URL */
+  linkedinJobMarketUrl?: string;
+  /** General description of the company */
+  generalDescription?: string;
   /** Status; defaults to COLD when omitted */
   status?: CreateClientDtoStatus;
   /** Lead quality; defaults to MEDIUM when omitted */

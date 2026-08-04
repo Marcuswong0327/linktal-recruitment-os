@@ -79,8 +79,10 @@ export const config = {
     // BFF proxy path.
     '/api/backend/:path*',
     // App pages: everything except sign-in, NextAuth's own routes, the
-    // public healthcheck, Next internals, and files with an extension
+    // public healthcheck, Next internals, the generated favicon route (icon.tsx
+    // — served at a clean, extensionless /icon path so it isn't caught by the
+    // '.*\.' file-extension exclusion below), and files with an extension
     // (static assets).
-    '/((?!sign-in|api/auth|api/health|_next/static|_next/image|favicon.ico|.*\\.).*)',
+    '/((?!sign-in|api/auth|api/health|_next/static|_next/image|favicon.ico|icon|.*\\.).*)',
   ],
 };
