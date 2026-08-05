@@ -541,7 +541,7 @@ research      → deleted              research      → live  ← 4 rows, still
 client        → deleted              client        → deleted
 ```
 
-Both columns are the same client — Client-0439 "Hakka" — run in a rolled-back
+Both columns are the same client — CLI-000439 "Hakka" — run in a rolled-back
 transaction.
 
 The same candidate, deleted two ways:

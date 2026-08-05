@@ -34,7 +34,7 @@ import { CandidateNoteDto } from '../dto/candidate-note.dto';
  */
 export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedById' | 'notes'> {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'CDD-0001' }) displayId!: string;
+  @ApiProperty({ example: 'CDD-000001' }) displayId!: string;
   @ApiProperty({ type: String, nullable: true, example: 'John' }) firstName!: string | null;
   @ApiProperty({ type: String, nullable: true, example: 'Smith' }) lastName!: string | null;
   @ApiProperty({ type: String, nullable: true }) email!: string | null;

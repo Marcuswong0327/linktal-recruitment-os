@@ -1803,7 +1803,7 @@
             "bearer": []
           }
         ],
-        "summary": "Get client by display ID (Client-XXXX)",
+        "summary": "Get client by display ID (CLI-XXXX)",
         "tags": [
           "Clients"
         ]
@@ -2409,7 +2409,7 @@
             "bearer": []
           }
         ],
-        "summary": "Get stakeholder by display ID (Stake-XXXX)",
+        "summary": "Get stakeholder by display ID (STK-XXXX)",
         "tags": [
           "Stakeholders"
         ]
@@ -5055,7 +5055,7 @@
             "bearer": []
           }
         ],
-        "summary": "Get consultant by display ID (consultant-XXXX)",
+        "summary": "Get consultant by display ID (CST-XXXX)",
         "tags": [
           "Consultants"
         ]
@@ -7900,7 +7900,7 @@
           },
           "displayId": {
             "type": "string",
-            "example": "CDD-0001"
+            "example": "CDD-000001"
           },
           "firstName": {
             "type": "string",
@@ -8518,7 +8518,7 @@
           },
           "displayId": {
             "type": "string",
-            "example": "CDN-0001"
+            "example": "CDN-000001"
           },
           "candidateId": {
             "type": "string"
@@ -8630,7 +8630,7 @@
           "entityLabel": {
             "type": "string",
             "nullable": true,
-            "example": "CDD-0042 · Jane Doe",
+            "example": "CDD-000042 · Jane Doe",
             "description": "Human label (displayId + name); null if the entity was hard-deleted"
           },
           "changes": {
@@ -8707,7 +8707,7 @@
           },
           "displayId": {
             "type": "string",
-            "example": "Client-0001"
+            "example": "CLI-000001"
           },
           "companyName": {
             "type": "string",
@@ -9077,7 +9077,7 @@
           },
           "displayId": {
             "type": "string",
-            "example": "Stake-0001"
+            "example": "STK-000001"
           },
           "clientId": {
             "type": "string"
@@ -9413,7 +9413,7 @@
           },
           "displayId": {
             "type": "string",
-            "example": "CN-0001"
+            "example": "CN-000001"
           },
           "stakeholderId": {
             "type": "string"
@@ -9468,7 +9468,7 @@
           },
           "displayId": {
             "type": "string",
-            "example": "TOB-0001"
+            "example": "TOB-000001"
           },
           "clientId": {
             "type": "string"
@@ -9785,7 +9785,7 @@
           },
           "displayId": {
             "type": "string",
-            "example": "JO-0001"
+            "example": "JO-000001"
           },
           "clientId": {
             "type": "string"
@@ -9799,7 +9799,7 @@
           "clientDisplayId": {
             "type": "string",
             "nullable": true,
-            "example": "Client-0128",
+            "example": "CLI-000128",
             "description": "The client's human-readable id, for cross-referencing"
           },
           "consultantId": {
@@ -10220,7 +10220,7 @@
           },
           "displayId": {
             "type": "string",
-            "example": "JR-0001"
+            "example": "JR-000001"
           },
           "clientId": {
             "type": "string"
@@ -10578,7 +10578,7 @@
           },
           "displayId": {
             "type": "string",
-            "example": "consultant-0001"
+            "example": "CST-000001"
           },
           "azureId": {
             "type": "string",
@@ -10741,7 +10741,7 @@
           },
           "displayId": {
             "type": "string",
-            "example": "consultant-0002"
+            "example": "CST-000002"
           },
           "fullName": {
             "type": "string",
@@ -11427,7 +11427,7 @@
           },
           "displayId": {
             "type": "string",
-            "example": "SUB-0001"
+            "example": "SUB-000001"
           },
           "candidateId": {
             "type": "string"
@@ -11553,7 +11553,7 @@
           },
           "displayId": {
             "type": "string",
-            "example": "INT-0001"
+            "example": "INT-000001"
           },
           "submissionId": {
             "type": "string"
@@ -11675,7 +11675,7 @@
         "properties": {
           "displayId": {
             "type": "string",
-            "example": "PLC-0001"
+            "example": "PLC-000001"
           },
           "id": {
             "type": "string"

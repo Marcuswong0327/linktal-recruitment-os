@@ -19,7 +19,7 @@ export class AuditLogEntity {
   @ApiProperty({
     type: String,
     nullable: true,
-    example: 'CDD-0042 · Jane Doe',
+    example: 'CDD-000042 · Jane Doe',
     description: 'Human label (displayId + name); null if the entity was hard-deleted',
   })
   entityLabel!: string | null;

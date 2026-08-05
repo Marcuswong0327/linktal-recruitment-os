@@ -4,7 +4,7 @@ import { StakeholderContactHistory } from '@prisma/client';
 /** OpenAPI response shape for a StakeholderContactHistory row (one logged contact). */
 export class StakeholderContactHistoryEntity implements StakeholderContactHistory {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'CN-0001' }) displayId!: string;
+  @ApiProperty({ example: 'CN-000001' }) displayId!: string;
   @ApiProperty() stakeholderId!: string;
   @ApiProperty({ type: String, nullable: true, example: 'call', description: 'Channel: email, call, meeting, linkedin' })
   contactType!: string | null;

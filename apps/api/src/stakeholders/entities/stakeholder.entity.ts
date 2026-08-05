@@ -24,7 +24,7 @@ import { Stakeholder } from '@prisma/client';
  */
 export class StakeholderEntity implements Omit<Stakeholder, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'Stake-0001' }) displayId!: string;
+  @ApiProperty({ example: 'STK-000001' }) displayId!: string;
   @ApiProperty() clientId!: string;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved client company name' })
   companyName!: string | null;

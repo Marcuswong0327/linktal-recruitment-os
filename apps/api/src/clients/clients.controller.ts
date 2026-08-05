@@ -31,7 +31,7 @@ export class ClientsController {
   @RequirePermission('client', 'read')
   @ApiOperation({
     operationId: 'getClientByDisplayId',
-    summary: 'Get client by display ID (Client-XXXX)',
+    summary: 'Get client by display ID (CLI-XXXX)',
   })
   @ApiResponse({ status: 200, description: 'Client found', type: ClientEntity })
   findByDisplayId(@Param('displayId') displayId: string) {

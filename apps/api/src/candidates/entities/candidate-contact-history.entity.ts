@@ -10,7 +10,7 @@ import { CandidateContactHistory, CandidateStatus } from '@prisma/client';
  */
 export class CandidateContactHistoryEntity implements CandidateContactHistory {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'CDN-0001' }) displayId!: string;
+  @ApiProperty({ example: 'CDN-000001' }) displayId!: string;
   @ApiProperty() candidateId!: string;
   @ApiProperty({ type: String, nullable: true, example: 'call', description: 'Channel: email, call, meeting, linkedin' })
   contactType!: string | null;

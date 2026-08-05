@@ -11,7 +11,7 @@ import { CandidateSubmission, SubmissionStatus } from '@prisma/client';
  */
 export class SubmissionEntity implements Omit<CandidateSubmission, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'SUB-0001' }) displayId!: string;
+  @ApiProperty({ example: 'SUB-000001' }) displayId!: string;
   @ApiProperty() candidateId!: string;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved candidate name' })
   candidateName!: string | null;

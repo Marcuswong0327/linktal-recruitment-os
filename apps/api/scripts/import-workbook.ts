@@ -8,13 +8,24 @@
  *
  * ## Import identity
  *
- * The workbook's own ID columns are empty and its cross-sheet links are written
- * as name + spreadsheet row number, so **row position is the identity**. Each
- * record's `displayId` is derived from its row (`Client-0439` is the client on
- * spreadsheet row 439) and every write is an upsert on it. That makes re-imports
- * idempotent and lets a later tab resolve "Hakka Pty Ltd - Row 439" to a real
- * record without guessing. Natural keys can't do this job: 744 candidate rows
+ * The workbook's own ID columns are empty, so `displayId` is assigned by each
+ * importer counting its own successful writes in sheet order — `CLI-000001`
+ * is whichever client row is first to actually import, not spreadsheet row 1
+ * (a header) or any particular row number. Every write is an upsert on that
+ * displayId, which keeps a re-import of an *unchanged* sheet idempotent. Row
+ * numbers still matter within one run: a tab's cross-sheet links ("Hakka Pty
+ * Ltd - Row 439") are spreadsheet row references, resolved through the
+ * row->id registry the target tab's importer builds while assigning displayIds
+ * (`clientIdByRow`, `candidateIdByRow`, `jobOrderIdByRow` in `main()`) —
+ * never by recomputing a displayId from the row number, which no longer
+ * encodes it. Natural keys can't stand in for any of this: 744 candidate rows
  * share an email and 568 share a mobile.
+ *
+ * Caveat: because the ordinal depends on which earlier rows survived,
+ * inserting, deleting or newly-rejecting a row *before* another row in the
+ * same tab shifts every later row's displayId. A re-import after an edit like
+ * that is not idempotent against the old numbering — run it against empty
+ * tables, not on top of data from the previous numbering.
  *
  * ## Rejects, not guesses
  *
@@ -38,6 +49,7 @@ import 'dotenv/config';
 import { CandidateStatus, ClientStatus, JobOrderQuality, JobOrderStatus, PrismaClient, SubmissionStatus } from '@prisma/client';
 import { RejectReport, norm, parseDate, parseRowLink, readSheet, splitList, splitName } from './workbook';
 import { AliasTarget, resolveAlias } from './seed-data/location-aliases';
+import { resyncDisplayIdSequences } from './display-ids';
 
 const prisma = new PrismaClient();
 
@@ -227,9 +239,28 @@ function guaranteeDays(raw: string | null): number | null {
   return Math.round(value * perUnit);
 }
 
-/** `Client-0439` for spreadsheet row 439 — see "Import identity" above. */
-function displayIdFor(prefix: string, rowNumber: number): string {
-  return `${prefix}-${String(rowNumber).padStart(4, '0')}`;
+/**
+ * `CLI-000001` for the first row that actually imports on this tab —
+ * `ordinal` is a per-tab counter advanced only on a write, never on a
+ * rejected/skipped row. See "Import identity" above.
+ */
+function displayIdFor(prefix: string, ordinal: number): string {
+  return `${prefix}-${String(ordinal).padStart(6, '0')}`;
+}
+
+/**
+ * Loads a tab's already-imported rows by displayId, keyed for a dependency
+ * that's needed this run (its row->id registry must be rebuilt) but wasn't
+ * itself selected via `--only=` — i.e. it must already have been imported in
+ * an earlier run. If it wasn't, the recomputed displayId simply won't be in
+ * this map and the dependent row rejects, same as an unresolved link always
+ * has.
+ */
+async function loadExistingByDisplayId<T extends { id: string; displayId: string }>(
+  findMany: () => Promise<T[]>,
+): Promise<Map<string, string>> {
+  const rows = await findMany();
+  return new Map(rows.map((r) => [r.displayId, r.id]));
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +397,10 @@ function companyKey(raw: string): string {
 
 /**
  * Companies the job-order and TOB tabs name differently from the client list,
- * mapped to the client's `displayId`.
+ * mapped to the client's `companyName` (resolved the same way any other
+ * client lookup is, via `companyKey`). Was keyed on `displayId` — a fixed
+ * `Client-0261` — until displayId stopped encoding spreadsheet row position;
+ * the company name is the one identity that survives renumbering.
  *
  * Hand-listed rather than fuzzy-matched, and that restraint is the point. Of the
  * ten unmatched names, six are plainly the same company written shorter
@@ -380,11 +414,11 @@ function companyKey(raw: string): string {
  * Keys are already `companyKey`-normalised.
  */
 const COMPANY_ALIASES: Record<string, string> = {
-  'cordina chicken': 'Client-0261', // "Cordina Chicken Farms Pty Ltd"
-  'regal mushroom': 'Client-0827', // "Regal Mushrooms"
-  'premier fresh': 'Client-0777', // "Premier Fresh Australia"
-  'baker s maison': 'Client-0128', // "Bakers Maison Australia" (first of 3 duplicates)
-  jbs: 'Client-0526', // "JBS Australia Pty Limited"
+  'cordina chicken': 'Cordina Chicken Farms Pty Ltd',
+  'regal mushroom': 'Regal Mushrooms',
+  'premier fresh': 'Premier Fresh Australia',
+  'baker s maison': 'Bakers Maison Australia', // first of 3 duplicates
+  jbs: 'JBS Australia Pty Limited',
 };
 
 /**
@@ -421,11 +455,16 @@ class CatalogCache {
 // Tab: clients
 // ---------------------------------------------------------------------------
 
-async function importClients(refs: Refs, rejects: RejectReport): Promise<Map<number, string>> {
+async function importClients(refs: Refs, rejects: RejectReport, write: boolean): Promise<Map<number, string>> {
   const { rows } = await readSheet('clients');
   const idByRow = new Map<number, string>();
+  // Needed when this tab is a dependency (jobResearch) but wasn't itself
+  // selected via `--only=` — see loadExistingByDisplayId.
+  const existingByDisplayId =
+    write || DRY_RUN ? null : await loadExistingByDisplayId(() => prisma.client.findMany({ select: { id: true, displayId: true } }));
   let created = 0;
   let skipped = 0;
+  let ordinal = 0;
 
   for (const row of rows) {
     const reject = (field: string, value: unknown, reason: string) =>
@@ -507,30 +546,35 @@ async function importClients(refs: Refs, rejects: RejectReport): Promise<Map<num
       lastContactedById: lastContactedById ?? null,
     };
 
-    const displayId = displayIdFor('Client', row.rowNumber);
+    const displayId = displayIdFor('CLI', ++ordinal);
     if (DRY_RUN) {
-      idByRow.set(row.rowNumber, displayId);
+      idByRow.set(row.rowNumber, displayId); // placeholder — nothing is written this run
       created += 1;
       continue;
     }
 
-    // Upsert on displayId so a re-run updates in place rather than duplicating.
-    // Locations are replaced wholesale — the list is short and the sheet is the
-    // source of truth for it.
-    const client = await prisma.client.upsert({
-      where: { displayId },
-      create: {
-        displayId,
-        ...scalars,
-        locations: { create: locationIds.map((locationId) => ({ locationId })) },
-      },
-      update: {
-        ...scalars,
-        locations: { deleteMany: {}, create: locationIds.map((locationId) => ({ locationId })) },
-      },
-      select: { id: true },
-    });
-    idByRow.set(row.rowNumber, client.id);
+    if (write) {
+      // Upsert on displayId so a re-run updates in place rather than duplicating.
+      // Locations are replaced wholesale — the list is short and the sheet is
+      // the source of truth for it.
+      const client = await prisma.client.upsert({
+        where: { displayId },
+        create: {
+          displayId,
+          ...scalars,
+          locations: { create: locationIds.map((locationId) => ({ locationId })) },
+        },
+        update: {
+          ...scalars,
+          locations: { deleteMany: {}, create: locationIds.map((locationId) => ({ locationId })) },
+        },
+        select: { id: true },
+      });
+      idByRow.set(row.rowNumber, client.id);
+    } else {
+      const existingId = existingByDisplayId?.get(displayId);
+      if (existingId) idByRow.set(row.rowNumber, existingId);
+    }
     created += 1;
   }
 
@@ -564,9 +608,7 @@ async function loadClientIndex(): Promise<{ byKey: Map<string, string>; duplicat
   });
   const byKey = new Map<string, string>();
   const seen = new Map<string, string[]>();
-  const byDisplayId = new Map<string, string>();
   for (const c of clients) {
-    byDisplayId.set(c.displayId, c.id);
     const key = companyKey(c.companyName);
     if (!key) continue;
     const names = seen.get(key) ?? [];
@@ -576,8 +618,8 @@ async function loadClientIndex(): Promise<{ byKey: Map<string, string>; duplicat
   }
   // Asserted aliases win over the derived key, and are the only fuzziness
   // allowed anywhere in company matching.
-  for (const [key, displayId] of Object.entries(COMPANY_ALIASES)) {
-    const id = byDisplayId.get(displayId);
+  for (const [key, companyName] of Object.entries(COMPANY_ALIASES)) {
+    const id = byKey.get(companyKey(companyName));
     if (id) byKey.set(key, id);
   }
   const duplicates = new Map([...seen.entries()].filter(([, v]) => v.length > 1));
@@ -607,6 +649,7 @@ async function importStakeholders(refs: Refs, rejects: RejectReport): Promise<vo
   let imported = 0;
   let skipped = 0;
   let unmatched = 0;
+  let ordinal = 0;
 
   for (const row of rows) {
     const reject = (field: string, value: unknown, reason: string) =>
@@ -663,7 +706,7 @@ async function importStakeholders(refs: Refs, rejects: RejectReport): Promise<vo
       inaccurateReason,
     };
 
-    const displayId = displayIdFor('Stake', row.rowNumber);
+    const displayId = displayIdFor('STK', ++ordinal);
     if (!DRY_RUN) {
       await prisma.stakeholder.upsert({
         where: { displayId },
@@ -746,15 +789,21 @@ function workHistoryOf(cells: (string | number | null)[]): { company: string | n
   return entries.filter((e) => e.company || e.role);
 }
 
-async function importCandidates(refs: Refs, rejects: RejectReport): Promise<void> {
+async function importCandidates(refs: Refs, rejects: RejectReport, write: boolean): Promise<Map<number, string>> {
   const { rows } = await readSheet('candidates');
   const roleTypes = new CatalogCache(
     (name) => prisma.jobRoleType.findUnique({ where: { name }, select: { id: true } }),
     (name) => prisma.jobRoleType.create({ data: { name }, select: { id: true } }),
   );
+  const idByRow = new Map<number, string>();
+  // Needed when this tab is a dependency (interactions) but wasn't itself
+  // selected via `--only=` — see loadExistingByDisplayId.
+  const existingByDisplayId =
+    write || DRY_RUN ? null : await loadExistingByDisplayId(() => prisma.candidate.findMany({ select: { id: true, displayId: true } }));
 
   let imported = 0;
   let skipped = 0;
+  let ordinal = 0;
 
   for (const row of rows) {
     const reject = (field: string, value: unknown, reason: string) =>
@@ -829,9 +878,15 @@ async function importCandidates(refs: Refs, rejects: RejectReport): Promise<void
       status: candidateStatus(norm(row.cells[CANDIDATE.status])),
     };
 
-    const displayId = displayIdFor('CDD', row.rowNumber);
-    if (!DRY_RUN) {
-      await prisma.candidate.upsert({
+    const displayId = displayIdFor('CDD', ++ordinal);
+    if (DRY_RUN) {
+      idByRow.set(row.rowNumber, displayId); // placeholder — nothing is written this run
+      imported += 1;
+      continue;
+    }
+
+    if (write) {
+      const candidate = await prisma.candidate.upsert({
         where: { displayId },
         create: {
           displayId,
@@ -846,11 +901,16 @@ async function importCandidates(refs: Refs, rejects: RejectReport): Promise<void
         },
         select: { id: true },
       });
+      idByRow.set(row.rowNumber, candidate.id);
+    } else {
+      const existingId = existingByDisplayId?.get(displayId);
+      if (existingId) idByRow.set(row.rowNumber, existingId);
     }
     imported += 1;
   }
 
   console.log(`  candidates: ${imported} imported, ${skipped} skipped`);
+  return idByRow;
 }
 
 // ---------------------------------------------------------------------------
@@ -940,6 +1000,7 @@ async function importCandidateContacts(refs: Refs, rejects: RejectReport): Promi
   let ambiguous = 0;
   let unmatched = 0;
   let skipped = 0;
+  let ordinal = 0;
 
   for (const row of rows) {
     const reject = (field: string, value: unknown, reason: string) =>
@@ -996,7 +1057,7 @@ async function importCandidateContacts(refs: Refs, rejects: RejectReport): Promi
       expectedSalary: norm(row.cells[CANDIDATE_CONTACT.expectedSalary]),
     };
 
-    const displayId = displayIdFor('CDN', row.rowNumber);
+    const displayId = displayIdFor('CDN', ++ordinal);
     if (!DRY_RUN) {
       await prisma.candidateContactHistory.upsert({
         where: { displayId },
@@ -1029,6 +1090,7 @@ async function importTobs(refs: Refs, rejects: RejectReport): Promise<void> {
   const { byKey } = await loadClientIndex();
   let imported = 0;
   let skipped = 0;
+  let ordinal = 0;
 
   for (const row of rows) {
     const reject = (field: string, value: unknown, reason: string) =>
@@ -1077,7 +1139,7 @@ async function importTobs(refs: Refs, rejects: RejectReport): Promise<void> {
       invoiceContactEmail: norm(row.cells[TOB.invoiceContactEmail]),
     };
 
-    const displayId = displayIdFor('TOB', row.rowNumber);
+    const displayId = displayIdFor('TOB', ++ordinal);
     if (!DRY_RUN) {
       await prisma.tob.upsert({ where: { displayId }, create: { displayId, ...scalars }, update: scalars, select: { id: true } });
     }
@@ -1088,18 +1150,13 @@ async function importTobs(refs: Refs, rejects: RejectReport): Promise<void> {
 }
 
 /**
- * Indexes clients by `displayId`, which is how the row-linked tabs address them:
- * "Hakka Pty Ltd - Row 439" resolves through `Client-0439`. This is the identity
- * scheme working as designed — no name matching needed.
+ * `Client(Company) ID` on this tab is row-linked to the clients tab
+ * ("Hakka Pty Ltd - Row 439"), so the row it names resolves through
+ * `clientIdByRow` — the registry `importClients` built while assigning that
+ * row's displayId — rather than by name matching.
  */
-async function loadClientByDisplayId(): Promise<Map<string, string>> {
-  const clients = await prisma.client.findMany({ select: { id: true, displayId: true } });
-  return new Map(clients.map((c) => [c.displayId, c.id]));
-}
-
-async function importJobResearch(refs: Refs, rejects: RejectReport): Promise<void> {
+async function importJobResearch(refs: Refs, rejects: RejectReport, clientIdByRow: Map<number, string>): Promise<void> {
   const { rows } = await readSheet('jobResearch');
-  const byDisplayId = await loadClientByDisplayId();
   const jobTitles = new CatalogCache(
     (name) => prisma.jobTitle.findUnique({ where: { name }, select: { id: true } }),
     (name) => prisma.jobTitle.create({ data: { name }, select: { id: true } }),
@@ -1111,6 +1168,7 @@ async function importJobResearch(refs: Refs, rejects: RejectReport): Promise<voi
 
   let imported = 0;
   let skipped = 0;
+  let ordinal = 0;
 
   for (const row of rows) {
     const reject = (field: string, value: unknown, reason: string) =>
@@ -1124,7 +1182,7 @@ async function importJobResearch(refs: Refs, rejects: RejectReport): Promise<voi
     // 100% of this column is row-linked, so parse the row number rather than
     // falling back to the name.
     const link = parseRowLink(rawLink);
-    const clientId = link.rowNumber ? byDisplayId.get(displayIdFor('Client', link.rowNumber)) : undefined;
+    const clientId = link.rowNumber ? clientIdByRow.get(link.rowNumber) : undefined;
     if (!clientId) {
       reject('Client(Company) ID', rawLink, 'row link does not resolve to a client — row skipped');
       skipped += 1;
@@ -1157,7 +1215,7 @@ async function importJobResearch(refs: Refs, rejects: RejectReport): Promise<voi
       salaryRange: norm(row.cells[JOB_RESEARCH.salary]),
     };
 
-    const displayId = displayIdFor('JR', row.rowNumber);
+    const displayId = displayIdFor('JR', ++ordinal);
     if (!DRY_RUN) {
       await prisma.clientJobResearch.upsert({
         where: { displayId },
@@ -1216,7 +1274,7 @@ function jobOrderQuality(raw: string | null): JobOrderQuality | undefined {
   }
 }
 
-async function importJobOrders(refs: Refs, rejects: RejectReport): Promise<void> {
+async function importJobOrders(refs: Refs, rejects: RejectReport, write: boolean): Promise<Map<number, string>> {
   const { rows } = await readSheet('jobOrders');
   const { byKey } = await loadClientIndex();
   const jobTitles = new CatalogCache(
@@ -1227,9 +1285,15 @@ async function importJobOrders(refs: Refs, rejects: RejectReport): Promise<void>
     (name) => prisma.jobRoleType.findUnique({ where: { name }, select: { id: true } }),
     (name) => prisma.jobRoleType.create({ data: { name }, select: { id: true } }),
   );
+  const idByRow = new Map<number, string>();
+  // Needed when this tab is a dependency (interactions) but wasn't itself
+  // selected via `--only=` — see loadExistingByDisplayId.
+  const existingByDisplayId =
+    write || DRY_RUN ? null : await loadExistingByDisplayId(() => prisma.jobOrder.findMany({ select: { id: true, displayId: true } }));
 
   let imported = 0;
   let skipped = 0;
+  let ordinal = 0;
 
   for (const row of rows) {
     const reject = (field: string, value: unknown, reason: string) =>
@@ -1284,19 +1348,30 @@ async function importJobOrders(refs: Refs, rejects: RejectReport): Promise<void>
       quality: jobOrderQuality(norm(row.cells[JOB_ORDER.quality])),
     };
 
-    const displayId = displayIdFor('JO', row.rowNumber);
-    if (!DRY_RUN) {
-      await prisma.jobOrder.upsert({
+    const displayId = displayIdFor('JO', ++ordinal);
+    if (DRY_RUN) {
+      idByRow.set(row.rowNumber, displayId); // placeholder — nothing is written this run
+      imported += 1;
+      continue;
+    }
+
+    if (write) {
+      const jobOrder = await prisma.jobOrder.upsert({
         where: { displayId },
         create: { displayId, ...scalars },
         update: scalars,
         select: { id: true },
       });
+      idByRow.set(row.rowNumber, jobOrder.id);
+    } else {
+      const existingId = existingByDisplayId?.get(displayId);
+      if (existingId) idByRow.set(row.rowNumber, existingId);
     }
     imported += 1;
   }
 
   console.log(`  jobOrders: ${imported} imported, ${skipped} skipped`);
+  return idByRow;
 }
 
 // ---------------------------------------------------------------------------
@@ -1318,6 +1393,7 @@ async function importClientContacts(refs: Refs, rejects: RejectReport): Promise<
   const { byKey } = await loadClientIndex();
   let imported = 0;
   let skipped = 0;
+  let ordinal = 0;
 
   for (const row of rows) {
     const reject = (field: string, value: unknown, reason: string) =>
@@ -1372,7 +1448,7 @@ async function importClientContacts(refs: Refs, rejects: RejectReport): Promise<
       ...(contactedAt ? { contactedAt } : {}),
     };
 
-    const displayId = displayIdFor('CN', row.rowNumber);
+    const displayId = displayIdFor('CN', ++ordinal);
     if (!DRY_RUN) {
       await prisma.stakeholderContactHistory.upsert({
         where: { displayId },
@@ -1393,24 +1469,24 @@ async function importClientContacts(refs: Refs, rejects: RejectReport): Promise<
  * Interviewing×1, Placed×1.
  *
  * Both its link columns are 100% row-linked, so candidate and job order resolve
- * through `displayId` exactly. Each row is one action against a
- * (candidate, job order) pair, and `CandidateSubmission` is unique on that pair,
- * so the rows are folded into one submission per pair carrying the furthest
- * status reached.
+ * through `candidateIdByRow`/`jobOrderIdByRow` — the registries `importCandidates`
+ * and `importJobOrders` built while assigning those rows' displayIds. Each row
+ * is one action against a (candidate, job order) pair, and `CandidateSubmission`
+ * is unique on that pair, so the rows are folded into one submission per pair
+ * carrying the furthest status reached.
  *
  * No `Placement` is created even for the Placed row: a placement needs a fee,
  * salary and start date, none of which this tab records, and inventing them
  * would put fabricated money in the reporting. The submission is marked PLACED
  * and the real placement is left to be entered by hand.
  */
-async function importInteractions(refs: Refs, rejects: RejectReport): Promise<void> {
+async function importInteractions(
+  refs: Refs,
+  rejects: RejectReport,
+  candidateIdByRow: Map<number, string>,
+  jobOrderIdByRow: Map<number, string>,
+): Promise<void> {
   const { rows } = await readSheet('interactions');
-  const [candidates, jobOrders] = await Promise.all([
-    prisma.candidate.findMany({ select: { id: true, displayId: true } }),
-    prisma.jobOrder.findMany({ select: { id: true, displayId: true } }),
-  ]);
-  const candidateByDisplayId = new Map(candidates.map((c) => [c.displayId, c.id]));
-  const jobOrderByDisplayId = new Map(jobOrders.map((j) => [j.displayId, j.id]));
 
   // Declaration order is progression order, so a later action always wins.
   const RANK: Record<string, SubmissionStatus> = {
@@ -1429,8 +1505,8 @@ async function importInteractions(refs: Refs, rejects: RejectReport): Promise<vo
 
     const candLink = parseRowLink(norm(row.cells[3]));
     const joLink = parseRowLink(norm(row.cells[4]));
-    const candidateId = candLink.rowNumber ? candidateByDisplayId.get(displayIdFor('CDD', candLink.rowNumber)) : undefined;
-    const jobOrderId = joLink.rowNumber ? jobOrderByDisplayId.get(displayIdFor('JO', joLink.rowNumber)) : undefined;
+    const candidateId = candLink.rowNumber ? candidateIdByRow.get(candLink.rowNumber) : undefined;
+    const jobOrderId = joLink.rowNumber ? jobOrderIdByRow.get(joLink.rowNumber) : undefined;
 
     if (!candidateId || !jobOrderId) {
       reject('Candidate/JobOrder link', `${norm(row.cells[3])} → ${norm(row.cells[4])}`,
@@ -1491,14 +1567,19 @@ async function main() {
   const rejects = new RejectReport();
 
   // Dependency order: a tab never runs before the records it links into.
-  if (wanted('clients')) {
-    await importClients(refs, rejects);
+  // `clients`, `candidates` and `jobOrders` also run — write-disabled — when
+  // not themselves selected but a later `--only=` tab still needs their
+  // row->id registry to resolve its row-links (see loadExistingByDisplayId).
+  let clientIdByRow = new Map<number, string>();
+  if (wanted('clients') || wanted('jobResearch')) {
+    clientIdByRow = await importClients(refs, rejects, wanted('clients'));
   }
   if (wanted('stakeholders')) {
     await importStakeholders(refs, rejects);
   }
-  if (wanted('candidates')) {
-    await importCandidates(refs, rejects);
+  let candidateIdByRow = new Map<number, string>();
+  if (wanted('candidates') || wanted('interactions')) {
+    candidateIdByRow = await importCandidates(refs, rejects, wanted('candidates'));
   }
   if (wanted('candidateContacts')) {
     await importCandidateContacts(refs, rejects);
@@ -1507,20 +1588,26 @@ async function main() {
     await importTobs(refs, rejects);
   }
   if (wanted('jobResearch')) {
-    await importJobResearch(refs, rejects);
+    await importJobResearch(refs, rejects, clientIdByRow);
   }
-  if (wanted('jobOrders')) {
-    await importJobOrders(refs, rejects);
+  let jobOrderIdByRow = new Map<number, string>();
+  if (wanted('jobOrders') || wanted('interactions')) {
+    jobOrderIdByRow = await importJobOrders(refs, rejects, wanted('jobOrders'));
   }
   if (wanted('clientContacts')) {
     await importClientContacts(refs, rejects);
   }
   if (wanted('interactions')) {
-    await importInteractions(refs, rejects);
+    await importInteractions(refs, rejects, candidateIdByRow, jobOrderIdByRow);
   }
 
   rejects.print();
   if (rejects.count > 0) rejects.writeTo('import-workbook-rejects.csv');
+
+  if (!DRY_RUN) {
+    console.log('\nResyncing displayId sequences...');
+    await resyncDisplayIdSequences(prisma);
+  }
 }
 
 main()

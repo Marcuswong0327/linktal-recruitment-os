@@ -73,7 +73,7 @@ export class AuditService {
       : [];
     const nameById = new Map(actors.map((a) => [a.id, a.fullName]));
 
-    // Resolve each entity to a human label ("CDD-0042 · Jane Doe"), grouped by
+    // Resolve each entity to a human label ("CDD-000042 · Jane Doe"), grouped by
     // type so it's one query per type. Uses the base client, so soft-deleted
     // rows still resolve; hard-purged rows won't be found → label stays null.
     const idsByType = new Map<string, Set<string>>();

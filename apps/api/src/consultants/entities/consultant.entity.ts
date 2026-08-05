@@ -19,7 +19,7 @@ export class RoleSummaryEntity {
  */
 export class ConsultantEntity implements Omit<Consultant, 'passwordHash'> {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'consultant-0001' }) displayId!: string;
+  @ApiProperty({ example: 'CST-000001' }) displayId!: string;
   @ApiProperty({ type: String, nullable: true }) azureId!: string | null;
   @ApiProperty({ example: 'jane@linktal.com' }) email!: string;
   @ApiProperty({ example: 'Jane Doe' }) fullName!: string;
