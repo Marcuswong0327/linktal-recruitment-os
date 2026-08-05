@@ -473,9 +473,10 @@ describe('ConsultantsService', () => {
     it('replaces the whole set, removing before adding', async () => {
       const prisma = makePrisma();
       prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.consultantIndustry.findMany.mockResolvedValue([{ industryId: 'ind1' }]);
       prisma.specialization.findMany.mockResolvedValue([
-        { id: 'spec2', isActive: true },
-        { id: 'spec3', isActive: true },
+        { id: 'spec2', isActive: true, industryId: 'ind1' },
+        { id: 'spec3', isActive: true, industryId: 'ind1' },
       ]);
       prisma.consultantSpecialization.findMany.mockResolvedValue([
         { specializationId: 'spec1' },
@@ -499,6 +500,7 @@ describe('ConsultantsService', () => {
     it('rejects unknown specialization ids', async () => {
       const prisma = makePrisma();
       prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.consultantIndustry.findMany.mockResolvedValue([{ industryId: 'ind1' }]);
       prisma.specialization.findMany.mockResolvedValue([]);
       const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
 
@@ -511,12 +513,43 @@ describe('ConsultantsService', () => {
     it('rejects retired specializations', async () => {
       const prisma = makePrisma();
       prisma.consultant.findUnique.mockResolvedValue(makeTarget());
-      prisma.specialization.findMany.mockResolvedValue([{ id: 'spec1', isActive: false }]);
+      prisma.consultantIndustry.findMany.mockResolvedValue([{ industryId: 'ind1' }]);
+      prisma.specialization.findMany.mockResolvedValue([
+        { id: 'spec1', isActive: false, industryId: 'ind1' },
+      ]);
       const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
 
       await expect(
         service.setSpecializations('co1', ['spec1'], actor('admin')),
       ).rejects.toMatchObject({ response: { code: 'INACTIVE_SPECIALIZATION' } });
+    });
+
+    it('rejects specializations when the consultant holds no industries', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      // consultantIndustry.findMany defaults to [] in makePrisma().
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await expect(
+        service.setSpecializations('co1', ['spec1'], actor('admin')),
+      ).rejects.toMatchObject({ response: { code: 'NO_INDUSTRIES_ASSIGNED' } });
+      expect(prisma.specialization.findMany).not.toHaveBeenCalled();
+      expect(prisma.consultantSpecialization.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a specialization whose industry the consultant does not hold', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.consultantIndustry.findMany.mockResolvedValue([{ industryId: 'ind1' }]);
+      prisma.specialization.findMany.mockResolvedValue([
+        { id: 'spec1', isActive: true, industryId: 'ind2' },
+      ]);
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await expect(
+        service.setSpecializations('co1', ['spec1'], actor('admin')),
+      ).rejects.toMatchObject({ response: { code: 'SPECIALIZATION_INDUSTRY_MISMATCH' } });
+      expect(prisma.consultantSpecialization.create).not.toHaveBeenCalled();
     });
 
     it('applies the same escalation rules as industries', async () => {

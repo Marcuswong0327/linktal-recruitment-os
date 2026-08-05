@@ -75,6 +75,16 @@ export function TagPills({ options, selected }: { options: TagOption[]; selected
 interface TagMultiSelectProps {
   title: string;
   options: TagOption[];
+  /**
+   * Subset of `options` offered in the dropdown to pick from — e.g.
+   * Specializations narrowed to whichever Industries a consultant already
+   * holds. `options` itself still resolves the label/color for anything
+   * already `selected`, so a value that's no longer selectable (its parent
+   * industry got dropped) still renders correctly as a chip and can still be
+   * removed — it just can't be picked again. Defaults to `options` when
+   * omitted, i.e. everything is selectable.
+   */
+  selectableOptions?: TagOption[];
   selected: string[];
   onChange: (values: string[]) => void;
   disabled?: boolean;
@@ -108,6 +118,7 @@ interface TagMultiSelectProps {
 export function TagMultiSelect({
   title,
   options,
+  selectableOptions,
   selected,
   onChange,
   disabled = false,
@@ -115,15 +126,25 @@ export function TagMultiSelect({
   onCreate,
   tagActions,
 }: TagMultiSelectProps) {
-  // Rows created through this picker before `options` (owned by the caller's
-  // own query) has refetched to include them — merged in so the new tag
-  // renders with its real name immediately instead of a bare id.
+  // Rows created through this picker before `options`/`selectableOptions`
+  // (owned by the caller's own query) has refetched to include them — merged
+  // in so the new tag renders with its real name immediately instead of a
+  // bare id.
   const [justCreated, setJustCreated] = React.useState<TagOption[]>([]);
   const allOptions = React.useMemo(() => {
     const pending = justCreated.filter((jc) => !options.some((o) => o.value === jc.value));
     return pending.length ? [...options, ...pending] : options;
   }, [options, justCreated]);
   const byId = React.useMemo(() => new Map(allOptions.map((o) => [o.value, o])), [allOptions]);
+
+  // What the dropdown actually offers to pick — narrower than `allOptions`
+  // when the caller passes `selectableOptions`; `byId` above (built from the
+  // full `options`) is what resolves a selected chip's label regardless.
+  const catalog = selectableOptions ?? options;
+  const allSelectable = React.useMemo(() => {
+    const pending = justCreated.filter((jc) => !catalog.some((o) => o.value === jc.value));
+    return pending.length ? [...catalog, ...pending] : catalog;
+  }, [catalog, justCreated]);
 
   const [open, setOpen] = React.useState(false);
   // The popup's own search text — separate from the closed trigger's tags,
@@ -134,10 +155,10 @@ export function TagMultiSelect({
   const [creating, setCreating] = React.useState(false);
 
   const trimmed = inputValue.trim();
-  const hasExactMatch = allOptions.some((o) => o.label.toLowerCase() === trimmed.toLowerCase());
+  const hasExactMatch = allSelectable.some((o) => o.label.toLowerCase() === trimmed.toLowerCase());
   const filtered = trimmed
-    ? allOptions.filter((o) => o.label.toLowerCase().includes(trimmed.toLowerCase()))
-    : allOptions;
+    ? allSelectable.filter((o) => o.label.toLowerCase().includes(trimmed.toLowerCase()))
+    : allSelectable;
   const items =
     onCreate && trimmed && !hasExactMatch
       ? [...filtered.map((o) => o.value), CREATE_SENTINEL]

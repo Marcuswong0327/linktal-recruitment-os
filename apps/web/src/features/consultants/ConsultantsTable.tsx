@@ -164,11 +164,11 @@ export function ConsultantsTable() {
         ? specializationsData.data.map((s) => ({
             value: s.id,
             label: s.name,
-            // ancestorIds is [self, ...ancestors, root] (root-last — see
-            // scripts/backfill-ancestors.ts) — keying color on the root
-            // instead of the row's own id means "Food" and "Food - Bakery"
-            // share a color instead of getting unrelated random ones.
-            colorKey: s.ancestorIds[s.ancestorIds.length - 1] ?? s.id,
+            // Industry badges have no colorKey, so they color off their own
+            // id — keying specialization color on industryId (not the root
+            // specialization's own id) makes a specialization's badge match
+            // its parent Industry's badge, not just its sibling specializations.
+            colorKey: s.industryId,
           }))
         : [],
     [specializationsData],
@@ -180,6 +180,12 @@ export function ConsultantsTable() {
   const specializationRows = React.useMemo(
     () => (specializationsData?.status === 200 ? specializationsData.data : []),
     [specializationsData],
+  );
+  // Specialization id -> owning Industry id, so the Specializations column
+  // can filter each row's addable options down to its own held industries.
+  const specializationIndustryId = React.useMemo(
+    () => Object.fromEntries(specializationRows.map((s) => [s.id, s.industryId])),
+    [specializationRows],
   );
 
   const updateUser = useUpdateConsultant({
@@ -410,6 +416,7 @@ export function ConsultantsTable() {
         specializations: canReadSpecializations
           ? {
               options: specializationOptions,
+              industryIdByOption: specializationIndustryId,
               onSpecializationsChange: canEditSpecializations
                 ? (user, specializationIds) =>
                     setSpecializations.mutate({ id: user.id, data: { specializationIds } })
@@ -450,6 +457,7 @@ export function ConsultantsTable() {
       canDeleteSpecializations,
       specializationOptions,
       specializationRows,
+      specializationIndustryId,
       setSpecializations,
       handleCreateSpecialization,
     ],

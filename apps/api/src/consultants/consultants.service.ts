@@ -356,6 +356,14 @@ export class ConsultantsService {
    * child ("Food Meat", "Food Bakery", ...) through `ancestorIds`, so this
    * list stays short and coarse.
    *
+   * A specialization grant only means anything as a narrowing of an industry
+   * grant the consultant already holds (schema.prisma's wildcard rule: "if a
+   * consultant lists specific children under a parent they hold..."), so this
+   * rejects outright if they hold no industries yet, and rejects any
+   * specialization whose own industry isn't one of their current
+   * `ConsultantIndustry` rows — a specialization grant can never dangle
+   * without the industry it narrows.
+   *
    * Same escalation rules and full-set-replace shape as `setIndustries`; no
    * assignment cascade, since nothing is assigned by specialization.
    */
@@ -364,11 +372,33 @@ export class ConsultantsService {
 
     const uniqueIds = Array.from(new Set(specializationIds));
     if (uniqueIds.length > 0) {
+      const grantedIndustries = await this.prisma.consultantIndustry.findMany({
+        where: { consultantId: id },
+        select: { industryId: true },
+      });
+      const grantedIndustryIds = new Set(grantedIndustries.map((g) => g.industryId));
+      if (grantedIndustryIds.size === 0) {
+        throw new BadRequestException({
+          code: 'NO_INDUSTRIES_ASSIGNED',
+          message: 'Assign at least one industry before adding specializations.',
+        });
+      }
+
       const specializations = await this.prisma.specialization.findMany({
         where: { id: { in: uniqueIds } },
-        select: { id: true, isActive: true },
+        select: { id: true, isActive: true, industryId: true },
       });
       this.assertScopeIdsValid(uniqueIds, specializations, 'specialization');
+
+      const outOfIndustry = specializations.filter((s) => !grantedIndustryIds.has(s.industryId));
+      if (outOfIndustry.length > 0) {
+        throw new BadRequestException({
+          code: 'SPECIALIZATION_INDUSTRY_MISMATCH',
+          message: `Specialization id(s) not under an industry this consultant holds: ${outOfIndustry
+            .map((s) => s.id)
+            .join(', ')}`,
+        });
+      }
     }
 
     const current = await this.prisma.consultantSpecialization.findMany({
