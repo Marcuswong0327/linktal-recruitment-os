@@ -8921,6 +8921,72 @@
           "createdAt"
         ]
       },
+      "ResolvedValue": {
+        "type": "object",
+        "properties": {
+          "raw": {
+            "type": "object",
+            "nullable": true,
+            "description": "Exactly what is stored — never replaced, even when a label is available"
+          },
+          "label": {
+            "type": "string",
+            "nullable": true,
+            "description": "Human label; null when the raw value is null, or when an id could not be resolved (e.g. a hard-purged record)"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fk",
+              "enum",
+              "plain"
+            ],
+            "description": "\"fk\" = raw was an id resolved via targetType; \"enum\" = raw was a schema enum value; \"plain\" = shown as-is"
+          },
+          "targetType": {
+            "type": "string",
+            "description": "The model the id was resolved against (e.g. \"Industry\") — enables deep-linking from the UI. Only present when kind is \"fk\"."
+          },
+          "deleted": {
+            "type": "boolean",
+            "description": "True when the resolved fk target is soft-deleted"
+          },
+          "redacted": {
+            "type": "boolean",
+            "description": "True when this value was suppressed (e.g. Consultant salary/costTo) rather than shown, regardless of raw"
+          }
+        },
+        "required": [
+          "raw",
+          "label",
+          "kind"
+        ]
+      },
+      "ResolvedChange": {
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "example": "industryId"
+          },
+          "fieldLabel": {
+            "type": "string",
+            "example": "Industry"
+          },
+          "from": {
+            "$ref": "#/components/schemas/ResolvedValue"
+          },
+          "to": {
+            "$ref": "#/components/schemas/ResolvedValue"
+          }
+        },
+        "required": [
+          "field",
+          "fieldLabel",
+          "from",
+          "to"
+        ]
+      },
       "AuditLogEntity": {
         "type": "object",
         "properties": {
@@ -8943,7 +9009,13 @@
           },
           "entityType": {
             "type": "string",
-            "example": "Candidate"
+            "example": "Candidate",
+            "description": "The raw Prisma model name — prefer entityTypeLabel for display"
+          },
+          "entityTypeLabel": {
+            "type": "string",
+            "example": "Job Order",
+            "description": "Human name for entityType (e.g. ConsultantIndustry -> \"Industry Assignment\") — what an admin who doesn't know the schema should see"
           },
           "entityId": {
             "type": "string"
@@ -8952,17 +9024,33 @@
             "type": "string",
             "nullable": true,
             "example": "CDD-000042 · Jane Doe",
-            "description": "Human label (displayId + name); null if the entity was hard-deleted"
+            "description": "Human label (displayId + name); falls back to a label synthesized from the diff's own resolved fields when the entity itself has no single id to resolve (e.g. a composite-key grant row) or has since been hard-purged; null only when neither is available"
+          },
+          "entityDeleted": {
+            "type": "boolean",
+            "description": "True when the row's own entity is soft-deleted"
           },
           "changes": {
             "type": "object",
             "nullable": true,
-            "description": "Field-level diff { field: { from, to } }, or created snapshot"
+            "description": "Raw field-level diff { field: { from, to } }, or the raw created/deleted snapshot — unchanged, kept for completeness. Prefer resolvedChanges for display."
           },
           "metadata": {
             "type": "object",
             "nullable": true,
             "description": "requestId / cascade / count etc."
+          },
+          "resolvedChanges": {
+            "nullable": true,
+            "description": "Every field in `changes`, with foreign-key ids resolved to labels and enum values resolved to display labels — what the UI should render.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResolvedChange"
+            }
+          },
+          "omittedFieldCount": {
+            "type": "number",
+            "description": "How many raw fields a CREATE snapshot omitted as noise (nulls, ids, timestamps). 0 for every other action."
           },
           "createdAt": {
             "format": "date-time",
@@ -8975,10 +9063,14 @@
           "actorName",
           "action",
           "entityType",
+          "entityTypeLabel",
           "entityId",
           "entityLabel",
+          "entityDeleted",
           "changes",
           "metadata",
+          "resolvedChanges",
+          "omittedFieldCount",
           "createdAt"
         ]
       },

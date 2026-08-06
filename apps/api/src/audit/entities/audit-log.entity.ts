@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { ResolvedChange } from './resolved-change.entity';
 
 /** OpenAPI response shape for one activity-log entry (AuditLog + resolved actor). */
 export class AuditLogEntity {
@@ -12,7 +13,14 @@ export class AuditLogEntity {
 
   @ApiProperty({ example: 'SOFT_DELETE' }) action!: string;
 
-  @ApiProperty({ example: 'Candidate' }) entityType!: string;
+  @ApiProperty({ example: 'Candidate', description: 'The raw Prisma model name — prefer entityTypeLabel for display' })
+  entityType!: string;
+
+  @ApiProperty({
+    example: 'Job Order',
+    description: "Human name for entityType (e.g. ConsultantIndustry -> \"Industry Assignment\") — what an admin who doesn't know the schema should see",
+  })
+  entityTypeLabel!: string;
 
   @ApiProperty() entityId!: string;
 
@@ -20,19 +28,34 @@ export class AuditLogEntity {
     type: String,
     nullable: true,
     example: 'CDD-000042 · Jane Doe',
-    description: 'Human label (displayId + name); null if the entity was hard-deleted',
+    description: 'Human label (displayId + name); falls back to a label synthesized from the diff\'s own resolved fields when the entity itself has no single id to resolve (e.g. a composite-key grant row) or has since been hard-purged; null only when neither is available',
   })
   entityLabel!: string | null;
+
+  @ApiProperty({ description: "True when the row's own entity is soft-deleted" })
+  entityDeleted!: boolean;
 
   @ApiProperty({
     type: Object,
     nullable: true,
-    description: 'Field-level diff { field: { from, to } }, or created snapshot',
+    description: 'Raw field-level diff { field: { from, to } }, or the raw created/deleted snapshot — unchanged, kept for completeness. Prefer resolvedChanges for display.',
   })
   changes!: unknown;
 
   @ApiProperty({ type: Object, nullable: true, description: 'requestId / cascade / count etc.' })
   metadata!: unknown;
+
+  @ApiProperty({
+    type: [ResolvedChange],
+    nullable: true,
+    description: 'Every field in `changes`, with foreign-key ids resolved to labels and enum values resolved to display labels — what the UI should render.',
+  })
+  resolvedChanges!: ResolvedChange[] | null;
+
+  @ApiProperty({
+    description: 'How many raw fields a CREATE snapshot omitted as noise (nulls, ids, timestamps). 0 for every other action.',
+  })
+  omittedFieldCount!: number;
 
   @ApiProperty() createdAt!: Date;
 }
