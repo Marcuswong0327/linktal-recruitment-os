@@ -14,6 +14,8 @@ interface ApiSessionUser {
   roleName: string | null;
   permissions: string[];
   industryIds: string[];
+  specializationIds: string[];
+  locationIds: string[];
 }
 
 interface ApiSession {
@@ -124,6 +126,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           roleName: result.data.user.roleName,
           permissions: result.data.user.permissions,
           industryIds: result.data.user.industryIds,
+          specializationIds: result.data.user.specializationIds,
+          locationIds: result.data.user.locationIds,
         };
       },
     }),
@@ -164,6 +168,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             roleName: user.roleName ?? null,
             permissions: user.permissions ?? [],
             industryIds: user.industryIds ?? [],
+            specializationIds: user.specializationIds ?? [],
+            locationIds: user.locationIds ?? [],
           },
           error: undefined,
         };
@@ -201,6 +207,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           roleName: token.user.roleName,
           permissions: token.user.permissions,
           industryIds: token.user.industryIds,
+          specializationIds: token.user.specializationIds,
+          locationIds: token.user.locationIds,
         };
       }
       // Deliberately omit refreshToken — never sent to the client.

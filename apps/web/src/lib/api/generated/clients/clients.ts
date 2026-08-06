@@ -326,7 +326,7 @@ export const getGetClientByDisplayIdUrl = (displayId: string,) => {
 }
 
 /**
- * @summary Get client by display ID (Client-XXXX)
+ * @summary Get client by display ID (CLI-XXXX)
  */
 export const getClientByDisplayId = async (displayId: string, options?: RequestInit): Promise<getClientByDisplayIdResponse> => {
 
@@ -397,7 +397,7 @@ export function useGetClientByDisplayId<TData = Awaited<ReturnType<typeof getCli
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Get client by display ID (Client-XXXX)
+ * @summary Get client by display ID (CLI-XXXX)
  */
 
 export function useGetClientByDisplayId<TData = Awaited<ReturnType<typeof getClientByDisplayId>>, TError = ErrorResponse>(

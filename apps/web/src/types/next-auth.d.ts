@@ -9,6 +9,10 @@ interface ApiSessionUser {
   permissions: string[];
   /** Industry ids this consultant is scoped to — only enforced when roleName === 'consultant'. */
   industryIds: string[];
+  /** Specialization ids this consultant is scoped to — narrows the industry arm; empty means the whole industry. Only enforced for roleName === 'consultant'. */
+  specializationIds: string[];
+  /** Location ids this consultant is scoped to — each covers that node and every descendant. Only enforced for roleName === 'consultant'. */
+  locationIds: string[];
 }
 
 declare module 'next-auth' {
@@ -24,6 +28,8 @@ declare module 'next-auth' {
       roleName?: string | null;
       permissions?: string[];
       industryIds?: string[];
+      specializationIds?: string[];
+      locationIds?: string[];
     };
   }
 }
@@ -54,5 +60,7 @@ declare module '@auth/core/types' {
     roleName?: string | null;
     permissions?: string[];
     industryIds?: string[];
+    specializationIds?: string[];
+    locationIds?: string[];
   }
 }

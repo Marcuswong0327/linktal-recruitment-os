@@ -75,6 +75,7 @@ describe('CandidatesService.create', () => {
       lastContactCategory: null,
       lastContactNotes: null,
       lastContactedBy: null,
+      lastContactDate: null,
     });
   });
 

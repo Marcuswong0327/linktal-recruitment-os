@@ -566,6 +566,212 @@
         ]
       }
     },
+    "/candidates/facets/job-role-types": {
+      "get": {
+        "operationId": "getCandidateJobRoleTypeFacets",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across firstName, lastName, email, displayId, mobile, currentRole, currentCompany, and location/industry/job role type name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by status (one or more). Omit for all statuses.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "PLACED",
+                  "UNS"
+                ]
+              }
+            }
+          },
+          {
+            "name": "industryIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by industry ID(s) (see /industries)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "specializationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by specialization ID(s) (see /specializations)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "consultantIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by owning consultant ID(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "submissionStatuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by submission status (has at least one submission with this status)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "SUBMITTED",
+                  "INTERVIEWING",
+                  "REJECTED",
+                  "PLACED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "placementStatuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by placement status (has at least one placement with this status)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "COMPLETED",
+                  "FAILED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "location",
+            "required": false,
+            "in": "query",
+            "description": "Filter by location name (contains, case-insensitive) — matches the candidate's own node only. Use locationIds to match descendants too.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "currentCompany",
+            "required": false,
+            "in": "query",
+            "description": "Filter by current company (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "currentRole",
+            "required": false,
+            "in": "query",
+            "description": "Filter by current role (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedFrom",
+            "required": false,
+            "in": "query",
+            "description": "Only candidates last contacted on/after this date (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedTo",
+            "required": false,
+            "in": "query",
+            "description": "Only candidates last contacted on/before this date (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Location id(s). Selecting a country or state matches every candidate beneath it, via the ancestor path.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One row per Role Type with at least one match, highest count first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobRoleTypeFacetEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Candidate counts per Role Type, given the current filters (jobRoleTypeIds itself excluded)",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
     "/candidates/by-display-id/{displayId}": {
       "get": {
         "operationId": "getCandidateByDisplayId",
@@ -6011,7 +6217,28 @@
     "/specializations": {
       "get": {
         "operationId": "getSpecializations",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Filter by name (contains, case-insensitive) — what the combobox types into",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "take",
+            "required": false,
+            "in": "query",
+            "description": "Maximum rows to return, for a search-driven picker that asks for a page matching what's been typed. Omit for the full catalog (775+ rows) — existing pickers (candidate/consultant specialization editors) rely on getting everything back, so this only limits when a caller opts in.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "number"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Active specializations",
@@ -6052,7 +6279,7 @@
             "bearer": []
           }
         ],
-        "summary": "List active specializations",
+        "summary": "List active specializations (optionally searched/capped)",
         "tags": [
           "Specializations"
         ]
@@ -6108,6 +6335,72 @@
           }
         ],
         "summary": "Create a specialization, or return the existing one with that name",
+        "tags": [
+          "Specializations"
+        ]
+      }
+    },
+    "/specializations/{id}": {
+      "get": {
+        "operationId": "getSpecialization",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Specialization found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecializationEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get one specialization by id — resolves a selected id back to a name for a search-driven picker that has since scrolled it out of its results",
         "tags": [
           "Specializations"
         ]
@@ -8058,6 +8351,12 @@
             "nullable": true,
             "description": "Resolved name of the consultant who made the most recent contact"
           },
+          "lastContactDate": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved live from the latest CandidateContactHistory row (see lastContactType/lastContactedBy) — distinct from lastContactedAt, which is a denormalized column left null on imported history. Sort/filter by lastContactedAt; display this."
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -8099,6 +8398,7 @@
           "lastContactCategory",
           "lastContactNotes",
           "lastContactedBy",
+          "lastContactDate",
           "createdAt",
           "updatedAt"
         ]
@@ -8139,6 +8439,27 @@
           "page",
           "pageSize",
           "pageCount"
+        ]
+      },
+      "JobRoleTypeFacetEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "example": "Fitter"
+          },
+          "count": {
+            "type": "number",
+            "example": 793
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "count"
         ]
       },
       "PipelineTimelineEventEntity": {

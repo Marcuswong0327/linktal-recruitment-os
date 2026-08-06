@@ -115,34 +115,40 @@ export function DataGridFacetedFilter({
         <DropdownMenuGroup>
           <DropdownMenuLabel>{title}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {options.map((option) => {
-            const isChecked = selectedSet.has(option.value);
-            return (
-              <DropdownMenuCheckboxItem
-                key={option.value}
-                checked={isChecked}
-                onCheckedChange={(checked) => toggle(option.value, checked)}
-                // Leading box checkbox instead of the primitive's right-side tick.
-                className="pr-2 [&_[data-slot=dropdown-menu-checkbox-item-indicator]]:hidden"
-              >
-                <span
-                  className={cn(
-                    'flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input transition-colors',
-                    isChecked && 'border-primary bg-primary text-primary-foreground',
-                  )}
-                >
-                  {isChecked ? <Check className="size-3" /> : null}
-                </span>
-                {option.variant ? (
-                  <Badge variant={option.variant} className="rounded-md">
-                    {option.label}
-                  </Badge>
-                ) : (
-                  option.label
-                )}
-              </DropdownMenuCheckboxItem>
-            );
-          })}
+          {options.length === 0 ? (
+            <p className="px-2 py-3 text-center text-xs text-muted-foreground">No options available.</p>
+          ) : (
+            <div className="max-h-64 overflow-y-auto">
+              {options.map((option) => {
+                const isChecked = selectedSet.has(option.value);
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={option.value}
+                    checked={isChecked}
+                    onCheckedChange={(checked) => toggle(option.value, checked)}
+                    // Leading box checkbox instead of the primitive's right-side tick.
+                    className="pr-2 [&_[data-slot=dropdown-menu-checkbox-item-indicator]]:hidden"
+                  >
+                    <span
+                      className={cn(
+                        'flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input transition-colors',
+                        isChecked && 'border-primary bg-primary text-primary-foreground',
+                      )}
+                    >
+                      {isChecked ? <Check className="size-3" /> : null}
+                    </span>
+                    {option.variant ? (
+                      <Badge variant={option.variant} className="rounded-md">
+                        {option.label}
+                      </Badge>
+                    ) : (
+                      option.label
+                    )}
+                  </DropdownMenuCheckboxItem>
+                );
+              })}
+            </div>
+          )}
         </DropdownMenuGroup>
         {selectedSet.size > 0 ? (
           <>

@@ -234,6 +234,22 @@ interface DataGridProps<TData> {
    * special context menu) while nothing is selected.
    */
   selectionContextMenu?: React.ReactNode;
+  /**
+   * Default `true`: the grid's root and row-container use `flex-1 min-h-0`
+   * so that, when every ancestor up to a viewport-bounded shell is also a
+   * flex column, the grid fills the remaining height and scrolls its own
+   * rows (header/footer stay put). Set `false` to opt out and let the grid
+   * size to its actual content instead — for a page with a lot of its own
+   * chrome above the grid (search bars, filter rows), where the intent is
+   * for the *page* to scroll normally, not the grid internally. Relying on
+   * an intervening non-flex wrapper to achieve the same thing doesn't
+   * reliably work: `flex-1` is `flex-basis: 0%`, so an auto-height flex
+   * column ancestor can still resolve to something other than pure content
+   * height depending on the rest of the chain — this prop sidesteps that
+   * by removing the flex-fill classes outright rather than trying to make
+   * them inert.
+   */
+  fillHeight?: boolean;
 }
 
 export function DataGrid<TData>({
@@ -253,6 +269,7 @@ export function DataGrid<TData>({
   getRowId,
   onSelectionChange,
   canSelectRow,
+  fillHeight = true,
   enableRowRangeSelect = false,
   hideSelectColumn = false,
   selectionContextMenu,
@@ -823,10 +840,11 @@ export function DataGrid<TData>({
   }, [rows, isLoading]);
 
   return (
-    // flex-1/min-h-0 let the grid fill a height-locked page and scroll its
-    // own rows (which also makes the sticky header work); in an unconstrained
-    // parent they're inert and the grid sizes to its content as before.
-    <div ref={rootRef} className="flex min-h-0 flex-1 flex-col gap-3">
+    // flex-1/min-h-0 (when fillHeight) let the grid fill a height-locked
+    // page and scroll its own rows (sticky header) — see the fillHeight doc
+    // for why this is an explicit prop rather than something callers are
+    // expected to neutralize from outside.
+    <div ref={rootRef} className={cn('flex flex-col gap-3', fillHeight && 'min-h-0 flex-1')}>
       {/* Toolbar: search + primary action on their own row, filters wrap freely on the next */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -906,7 +924,7 @@ export function DataGrid<TData>({
       >
       <div
         ref={gridContainerRef}
-        className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card"
+        className={cn('overflow-hidden rounded-xl border border-border bg-card', fillHeight && 'min-h-0 flex-1')}
       >
         {/* Vertical gridlines + tight rows for the spreadsheet look.
             table-fixed: widths come from the header row (header.getSize(),
