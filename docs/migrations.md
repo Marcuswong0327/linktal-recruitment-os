@@ -298,6 +298,15 @@ step individually reversible.
   this same DB** and does not run `migrate deploy` on its own (§3) — migrations
   reach it only via a teammate's local `migrate dev`, so a broken local
   migration is everyone's problem immediately, not just at deploy time.
+- **`displayId` sequences don't move on their own.** They only advance on
+  `nextval()` — the DB default every app-level create goes through. Any
+  bulk/raw load that writes `displayId` explicitly (a workbook re-import, a
+  restore from a Neon branch/PITR) leaves the sequence behind the table's real
+  max, and the next app-created row on that table then collides
+  (`P2002`/`displayId` unique violation). Run
+  `pnpm --filter @linktal/api resync:display-ids` right after any such load; add
+  `--check` to a health check or CI step to catch drift without writing
+  anything. See `docs/database-erd.md`'s displayId section.
 
 ---
 

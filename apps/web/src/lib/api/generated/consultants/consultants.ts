@@ -673,7 +673,7 @@ export const getGetConsultantByDisplayIdUrl = (displayId: string,) => {
 }
 
 /**
- * @summary Get consultant by display ID (consultant-XXXX)
+ * @summary Get consultant by display ID (CST-XXXX)
  */
 export const getConsultantByDisplayId = async (displayId: string, options?: RequestInit): Promise<getConsultantByDisplayIdResponse> => {
 
@@ -744,7 +744,7 @@ export function useGetConsultantByDisplayId<TData = Awaited<ReturnType<typeof ge
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Get consultant by display ID (consultant-XXXX)
+ * @summary Get consultant by display ID (CST-XXXX)
  */
 
 export function useGetConsultantByDisplayId<TData = Awaited<ReturnType<typeof getConsultantByDisplayId>>, TError = ErrorResponse>(

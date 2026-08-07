@@ -37,7 +37,7 @@ export class JobOrderPipelineCandidateEntity {
  */
 export class JobOrderEntity implements Omit<JobOrder, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'JO-0001' }) displayId!: string;
+  @ApiProperty({ example: 'JO-000001' }) displayId!: string;
   @ApiProperty() clientId!: string;
   @ApiProperty({
     type: String,
@@ -49,7 +49,7 @@ export class JobOrderEntity implements Omit<JobOrder, 'deletedAt' | 'deletedById
   @ApiProperty({
     type: String,
     nullable: true,
-    example: 'Client-0128',
+    example: 'CLI-000128',
     description: "The client's human-readable id, for cross-referencing",
   })
   clientDisplayId!: string | null;

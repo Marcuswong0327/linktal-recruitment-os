@@ -112,6 +112,11 @@ export interface CandidateEntity {
      * @nullable
      */
   lastContactedBy: string | null;
+  /**
+     * Resolved live from the latest CandidateContactHistory row (see lastContactType/lastContactedBy) — distinct from lastContactedAt, which is a denormalized column left null on imported history. Sort/filter by lastContactedAt; display this.
+     * @nullable
+     */
+  lastContactDate: string | null;
   createdAt: string;
   updatedAt: string;
 }

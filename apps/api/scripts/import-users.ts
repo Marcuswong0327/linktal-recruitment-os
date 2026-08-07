@@ -23,6 +23,7 @@
  */
 import 'dotenv/config';
 import { PrismaClient, LocationLevel } from '@prisma/client';
+import { resyncDisplayIdSequences } from './display-ids';
 import { readSheet, norm, splitList, isWildcard, parseRowLink, RejectReport } from './workbook';
 import { resolveAlias, AliasTarget } from './seed-data/location-aliases';
 import { canonicalIndustry, categoryFor } from './seed-data/specialization-categories';
@@ -363,6 +364,8 @@ async function main() {
 
   console.log(`\n✅ Consultants seeded — ${users.length} users.`);
   rejects.print();
+
+  await resyncDisplayIdSequences(prisma);
 }
 
 main()

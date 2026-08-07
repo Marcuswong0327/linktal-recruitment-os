@@ -117,13 +117,18 @@ least one `ClientLocation`.
 
 ### displayId
 
-Every entity has a sequence-generated `displayId` (`Client-####`, `CDD-####`,
-`Stake-####`, `JO-####`, `TOB-####`, `CN-####`, `CDN-####`, `JR-####`,
-`SUB-####`, `INT-####`, `PLC-####`, `consultant-####`). These double as the
-**import identity** — the source workbook's ID columns are empty and its
-cross-sheet links are name + row number, so the importer assigns `displayId`
-from row position and re-imports match on it. Natural keys can't: 744 candidate
-rows share an email, 568 share a mobile, 31 have neither.
+Every entity has a sequence-generated `displayId` (`CLI-000###`, `CDD-000###`,
+`STK-000###`, `JO-000###`, `TOB-000###`, `CN-000###`, `CDN-000###`, `JR-000###`,
+`SUB-000###`, `INT-000###`, `PLC-000###`, `CST-000###`) — 6 digits,
+non-truncating past that (`display_id()`, see `docs/database-erd.md`). These
+double as the **import identity** for the 7 workbook-imported tables — the
+source workbook's ID columns are empty and its cross-sheet links are name + row
+number, so each importer assigns `displayId` from a per-tab ordinal counter
+(sheet order, advanced only on a row that imports) and re-imports match on it.
+Natural keys can't: 744 candidate rows share an email, 568 share a mobile, 31
+have neither. Any bulk/raw load must be followed by `pnpm --filter @linktal/api
+resync:display-ids`, or the next app-created row on an affected table collides
+with an already-imported one.
 
 ### Status enums
 

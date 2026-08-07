@@ -15,20 +15,22 @@ import {
 import { candidateFullName, type Candidate } from './schema';
 
 /**
- * Per-row actions: log a contact (always available — the backend enforces
- * `candidate:update`, same as every other inline edit in this app; there's
- * no separate frontend permission gate) and delete (soft, only when
- * `canDelete`). Delete confirms first, then fires via deleteWithUndo's
- * restore mode — Candidate has a real soft-delete/restore endpoint, so
- * "Undo" is a genuine reversal, not a cancelled timer.
+ * Per-row actions: log a contact (gated by `canUpdate` — the backend enforces
+ * `candidate:update` on this endpoint, so a read-only role would otherwise
+ * see a button that 403s) and delete (soft, only when `canDelete`). Delete
+ * confirms first, then fires via deleteWithUndo's restore mode — Candidate
+ * has a real soft-delete/restore endpoint, so "Undo" is a genuine reversal,
+ * not a cancelled timer.
  */
 export function CandidateRowActions({
   candidate,
   canDelete = true,
+  canUpdate = true,
   onLogContact,
 }: {
   candidate: Candidate;
   canDelete?: boolean;
+  canUpdate?: boolean;
   onLogContact: (candidate: Candidate) => void;
 }) {
   const queryClient = useQueryClient();
@@ -66,15 +68,17 @@ export function CandidateRowActions({
 
   return (
     <div className="flex items-center justify-center gap-1" data-no-row-drag>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={handleLogContact}
-        aria-label={`Log a contact with ${name}`}
-        title="Log a contact"
-      >
-        <Phone className="text-muted-foreground" />
-      </Button>
+      {canUpdate ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleLogContact}
+          aria-label={`Log a contact with ${name}`}
+          title="Log a contact"
+        >
+          <Phone className="text-muted-foreground" />
+        </Button>
+      ) : null}
       {canDelete ? (
         <>
           <Button

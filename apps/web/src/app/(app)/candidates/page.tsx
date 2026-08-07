@@ -13,6 +13,7 @@ export default async function CandidatesPage() {
         <CandidateSearchGate
           canCreate={hasPermission(session, 'candidate', 'create')}
           canDelete={hasPermission(session, 'candidate', 'delete')}
+          canUpdate={hasPermission(session, 'candidate', 'update')}
         />
       ) : (
         <AccessDenied resource="candidates" />

@@ -32,7 +32,9 @@ import type {
   CreateCandidateDto,
   DeleteCandidateNoteParams,
   ErrorResponse,
+  GetCandidateJobRoleTypeFacetsParams,
   GetCandidatesParams,
+  JobRoleTypeFacetEntity,
   PaginatedCandidatesEntity,
   PipelineTimelineEventEntity,
   UpdateCandidateDto,
@@ -294,7 +296,146 @@ export const useCreateCandidate = <TError = ErrorResponse,
       > => {
       return useMutation(getCreateCandidateMutationOptions(options), queryClient);
     }
-    export type getCandidateByDisplayIdResponse200 = {
+    export type getCandidateJobRoleTypeFacetsResponse200 = {
+  data: JobRoleTypeFacetEntity[]
+  status: 200
+}
+
+export type getCandidateJobRoleTypeFacetsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getCandidateJobRoleTypeFacetsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getCandidateJobRoleTypeFacetsResponseSuccess = (getCandidateJobRoleTypeFacetsResponse200) & {
+  headers: Headers;
+};
+export type getCandidateJobRoleTypeFacetsResponseError = (getCandidateJobRoleTypeFacetsResponse400 | getCandidateJobRoleTypeFacetsResponse500) & {
+  headers: Headers;
+};
+
+export type getCandidateJobRoleTypeFacetsResponse = (getCandidateJobRoleTypeFacetsResponseSuccess | getCandidateJobRoleTypeFacetsResponseError)
+
+export const getGetCandidateJobRoleTypeFacetsUrl = (params?: GetCandidateJobRoleTypeFacetsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["statuses","industryIds","specializationIds","consultantIds","submissionStatuses","placementStatuses","locationIds"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/candidates/facets/job-role-types?${stringifiedParams}` : `/candidates/facets/job-role-types`
+}
+
+/**
+ * @summary Candidate counts per Role Type, given the current filters (jobRoleTypeIds itself excluded)
+ */
+export const getCandidateJobRoleTypeFacets = async (params?: GetCandidateJobRoleTypeFacetsParams, options?: RequestInit): Promise<getCandidateJobRoleTypeFacetsResponse> => {
+
+  return customFetch<getCandidateJobRoleTypeFacetsResponse>(getGetCandidateJobRoleTypeFacetsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCandidateJobRoleTypeFacetsQueryKey = (params?: GetCandidateJobRoleTypeFacetsParams,) => {
+    return [
+    `/candidates/facets/job-role-types`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetCandidateJobRoleTypeFacetsQueryOptions = <TData = Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>, TError = ErrorResponse>(params?: GetCandidateJobRoleTypeFacetsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCandidateJobRoleTypeFacetsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>> = ({ signal }) => getCandidateJobRoleTypeFacets(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetCandidateJobRoleTypeFacetsQueryResult = NonNullable<Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>>
+export type GetCandidateJobRoleTypeFacetsQueryError = ErrorResponse
+
+
+export function useGetCandidateJobRoleTypeFacets<TData = Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>, TError = ErrorResponse>(
+ params: undefined |  GetCandidateJobRoleTypeFacetsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>,
+          TError,
+          Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCandidateJobRoleTypeFacets<TData = Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>, TError = ErrorResponse>(
+ params?: GetCandidateJobRoleTypeFacetsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>,
+          TError,
+          Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetCandidateJobRoleTypeFacets<TData = Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>, TError = ErrorResponse>(
+ params?: GetCandidateJobRoleTypeFacetsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Candidate counts per Role Type, given the current filters (jobRoleTypeIds itself excluded)
+ */
+
+export function useGetCandidateJobRoleTypeFacets<TData = Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>, TError = ErrorResponse>(
+ params?: GetCandidateJobRoleTypeFacetsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getCandidateJobRoleTypeFacets>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetCandidateJobRoleTypeFacetsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getCandidateByDisplayIdResponse200 = {
   data: CandidateEntity
   status: 200
 }

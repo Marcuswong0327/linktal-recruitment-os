@@ -17,6 +17,7 @@ import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { QueryCandidatesDto } from './dto/query-candidates.dto';
 import { CreateCandidateContactHistoryDto } from './dto/create-candidate-contact-history.dto';
+import { QueryCandidateFacetsDto } from './dto/query-candidate-facets.dto';
 import {
   AddCandidateNoteDto,
   DeleteCandidateNoteQueryDto,
@@ -25,6 +26,7 @@ import {
 import { CandidateEntity } from './entities/candidate.entity';
 import { PaginatedCandidatesEntity } from './entities/paginated-candidates.entity';
 import { CandidateContactHistoryEntity } from './entities/candidate-contact-history.entity';
+import { JobRoleTypeFacetEntity } from './entities/job-role-type-facet.entity';
 import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
 import { AuthUser } from '../auth/auth.types';
 import { ForbiddenException } from '@nestjs/common';
@@ -49,9 +51,20 @@ export class CandidatesController {
     return this.candidates.findAll(query, user);
   }
 
-  // The static 'by-display-id/:displayId' route must come before the dynamic
-  // @Get(':id') below — Nest/Express match in registration order, so ':id'
-  // would otherwise swallow it.
+  // The static routes below must come before the dynamic @Get(':id') further
+  // down — Nest/Express match in registration order, so ':id' would
+  // otherwise swallow them.
+  @Get('facets/job-role-types')
+  @RequirePermission('candidate', 'read')
+  @ApiOperation({
+    operationId: 'getCandidateJobRoleTypeFacets',
+    summary: 'Candidate counts per Role Type, given the current filters (jobRoleTypeIds itself excluded)',
+  })
+  @ApiResponse({ status: 200, description: 'One row per Role Type with at least one match, highest count first', type: JobRoleTypeFacetEntity, isArray: true })
+  getJobRoleTypeFacets(@Query() query: QueryCandidateFacetsDto, @CurrentUser() user: AuthUser) {
+    return this.candidates.jobRoleTypeFacets(query, user);
+  }
+
   @Get('by-display-id/:displayId')
   @RequirePermission('candidate', 'read')
   @ApiOperation({ operationId: 'getCandidateByDisplayId', summary: 'Get candidate by display ID (CDD-XXXX)' })

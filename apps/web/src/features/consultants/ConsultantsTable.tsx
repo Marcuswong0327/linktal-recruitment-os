@@ -155,7 +155,7 @@ export function ConsultantsTable() {
     [industriesData],
   );
 
-  const { data: specializationsData } = useGetSpecializations({
+  const { data: specializationsData } = useGetSpecializations(undefined, {
     query: { enabled: canReadSpecializations },
   });
   const specializationOptions = React.useMemo(

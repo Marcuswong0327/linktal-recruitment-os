@@ -7,7 +7,7 @@
  */
 
 /**
- * Field-level diff { field: { from, to } }, or created snapshot
+ * Raw field-level diff { field: { from, to } }, or the raw created/deleted snapshot — unchanged, kept for completeness. Prefer resolvedChanges for display.
  * @nullable
  */
 export type AuditLogEntityChanges = { [key: string]: unknown } | null;

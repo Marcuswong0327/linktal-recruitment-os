@@ -142,7 +142,7 @@ model RolePermission {
 
 model Consultant {
   id           String  @id @default(cuid())
-  displayId    String  @unique @default(dbgenerated("('consultant-'::text || lpad((nextval('\"Consultant_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: consultant-####
+  displayId    String  @unique @default(dbgenerated("display_id('CST-'::text, '\"Consultant_displayId_seq\"'::regclass)")) // Auto: CST-000###
   azureId      String? @unique // Azure AD object id (oid claim)
   passwordHash String? // bcrypt hash; set when the consultant has email+password auth enabled
   email        String  @unique
@@ -425,7 +425,7 @@ model Specialization {
 
 model Client {
   id          String @id @default(cuid())
-  displayId   String @unique @default(dbgenerated("('Client-'::text || lpad((nextval('\"Client_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Client-####
+  displayId   String @unique @default(dbgenerated("display_id('CLI-'::text, '\"Client_displayId_seq\"'::regclass)")) // Auto: CLI-000###
   companyName String
 
   // Required — the industry arm of the scope resolver relies on this never
@@ -501,7 +501,7 @@ model ClientLocation {
 // carry commercial detail at all.
 model Tob {
   id        String @id @default(cuid())
-  displayId String @unique @default(dbgenerated("('TOB-'::text || lpad((nextval('\"Tob_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: TOB-####
+  displayId String @unique @default(dbgenerated("display_id('TOB-'::text, '\"Tob_displayId_seq\"'::regclass)")) // Auto: TOB-000###
   clientId  String
   client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -537,7 +537,7 @@ model Tob {
 
 model Stakeholder {
   id        String @id @default(cuid())
-  displayId String @unique @default(dbgenerated("('Stake-'::text || lpad((nextval('\"Stakeholder_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: Stake-####
+  displayId String @unique @default(dbgenerated("display_id('STK-'::text, '\"Stakeholder_displayId_seq\"'::regclass)")) // Auto: STK-000###
   clientId  String
   client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -594,7 +594,7 @@ model StakeholderLocation {
 
 model StakeholderContactHistory {
   id            String      @id @default(cuid())
-  displayId     String      @unique @default(dbgenerated("('CN-'::text || lpad((nextval('\"StakeholderContactHistory_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: CN-####
+  displayId     String      @unique @default(dbgenerated("display_id('CN-'::text, '\"StakeholderContactHistory_displayId_seq\"'::regclass)")) // Auto: CN-000###
   stakeholderId String
   stakeholder   Stakeholder @relation(fields: [stakeholderId], references: [id], onDelete: Cascade)
 
@@ -618,7 +618,7 @@ model StakeholderContactHistory {
 // this is what's advertised in the market, not a brief Linktal has been given.
 model ClientJobResearch {
   id        String @id @default(cuid())
-  displayId String @unique @default(dbgenerated("('JR-'::text || lpad((nextval('\"ClientJobResearch_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: JR-####
+  displayId String @unique @default(dbgenerated("display_id('JR-'::text, '\"ClientJobResearch_displayId_seq\"'::regclass)")) // Auto: JR-000###
   clientId  String
   client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -665,7 +665,7 @@ model ClientJobResearch {
 
 model Candidate {
   id        String  @id @default(cuid())
-  displayId String  @unique @default(dbgenerated("('CDD-'::text || lpad((nextval('\"Candidate_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: CDD-####
+  displayId String  @unique @default(dbgenerated("display_id('CDD-'::text, '\"Candidate_displayId_seq\"'::regclass)")) // Auto: CDD-000###
   firstName String?
   lastName  String?
   email     String?
@@ -748,7 +748,7 @@ model CandidateSpecialization {
 // CandidateScreeningHistory model was dropped as redundant.
 model CandidateContactHistory {
   id          String    @id @default(cuid())
-  displayId   String    @unique @default(dbgenerated("('CDN-'::text || lpad((nextval('\"CandidateContactHistory_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: CDN-####
+  displayId   String    @unique @default(dbgenerated("display_id('CDN-'::text, '\"CandidateContactHistory_displayId_seq\"'::regclass)")) // Auto: CDN-000###
   candidateId String
   candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
@@ -780,7 +780,7 @@ model CandidateContactHistory {
 
 model JobOrder {
   id        String @id @default(cuid())
-  displayId String @unique @default(dbgenerated("('JO-'::text || lpad((nextval('\"JobOrder_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: JO-####
+  displayId String @unique @default(dbgenerated("display_id('JO-'::text, '\"JobOrder_displayId_seq\"'::regclass)")) // Auto: JO-000###
   clientId  String
   client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -839,7 +839,7 @@ model JobOrder {
 
 model CandidateSubmission {
   id          String           @id @default(cuid())
-  displayId   String           @unique @default(dbgenerated("('SUB-'::text || lpad((nextval('\"CandidateSubmission_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: SUB-####
+  displayId   String           @unique @default(dbgenerated("display_id('SUB-'::text, '\"CandidateSubmission_displayId_seq\"'::regclass)")) // Auto: SUB-000###
   candidateId String
   candidate   Candidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   jobOrderId  String
@@ -873,7 +873,7 @@ model CandidateSubmission {
 // need a migration to add "Panel Interview".
 model Interview {
   id            String              @id @default(cuid())
-  displayId     String              @unique @default(dbgenerated("('INT-'::text || lpad((nextval('\"Interview_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: INT-####
+  displayId     String              @unique @default(dbgenerated("display_id('INT-'::text, '\"Interview_displayId_seq\"'::regclass)")) // Auto: INT-000###
   submissionId  String
   submission    CandidateSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   roundLabel    String
@@ -904,7 +904,7 @@ model Interview {
 // automatically would be guesswork, so the consultant sets the date.
 model Placement {
   id               String              @id @default(cuid())
-  displayId        String              @unique @default(dbgenerated("('PLC-'::text || lpad((nextval('\"Placement_displayId_seq\"'::regclass))::text, 4, '0'::text))")) // Auto: PLC-####
+  displayId        String              @unique @default(dbgenerated("display_id('PLC-'::text, '\"Placement_displayId_seq\"'::regclass)")) // Auto: PLC-000###
   submissionId     String              @unique
   submission       CandidateSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
   baseSalary       Float?

@@ -7,6 +7,7 @@
  */
 import type { AuditLogEntityChanges } from './auditLogEntityChanges';
 import type { AuditLogEntityMetadata } from './auditLogEntityMetadata';
+import type { ResolvedChange } from './resolvedChange';
 
 export interface AuditLogEntity {
   id: string;
@@ -21,15 +22,20 @@ export interface AuditLogEntity {
      */
   actorName: string | null;
   action: string;
+  /** The raw Prisma model name — prefer entityTypeLabel for display */
   entityType: string;
+  /** Human name for entityType (e.g. ConsultantIndustry -> "Industry Assignment") — what an admin who doesn't know the schema should see */
+  entityTypeLabel: string;
   entityId: string;
   /**
-     * Human label (displayId + name); null if the entity was hard-deleted
+     * Human label (displayId + name); falls back to a label synthesized from the diff's own resolved fields when the entity itself has no single id to resolve (e.g. a composite-key grant row) or has since been hard-purged; null only when neither is available
      * @nullable
      */
   entityLabel: string | null;
+  /** True when the row's own entity is soft-deleted */
+  entityDeleted: boolean;
   /**
-     * Field-level diff { field: { from, to } }, or created snapshot
+     * Raw field-level diff { field: { from, to } }, or the raw created/deleted snapshot — unchanged, kept for completeness. Prefer resolvedChanges for display.
      * @nullable
      */
   changes: AuditLogEntityChanges;
@@ -38,5 +44,12 @@ export interface AuditLogEntity {
      * @nullable
      */
   metadata: AuditLogEntityMetadata;
+  /**
+     * Every field in `changes`, with foreign-key ids resolved to labels and enum values resolved to display labels — what the UI should render.
+     * @nullable
+     */
+  resolvedChanges: ResolvedChange[] | null;
+  /** How many raw fields a CREATE snapshot omitted as noise (nulls, ids, timestamps). 0 for every other action. */
+  omittedFieldCount: number;
   createdAt: string;
 }

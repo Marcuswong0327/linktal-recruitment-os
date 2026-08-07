@@ -1,18 +1,40 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSpecializationDto } from './dto/create-specialization.dto';
+import { QuerySpecializationsDto } from './dto/query-specializations.dto';
 import { UpdateSpecializationDto } from './dto/update-specialization.dto';
 
 @Injectable()
 export class SpecializationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Active specializations only — inactive ones (the "hide from picker" toggle — see `deactivate`) stay out of the list. */
-  findAll() {
+  /**
+   * Active specializations only — inactive ones (the "hide from picker"
+   * toggle — see `deactivate`) stay out of the list. `q`/`take` are both
+   * optional and unset by default — existing callers (the candidate and
+   * consultant specialization editors) ask for no params and get the full
+   * 775+ row catalog, same as before this DTO existed. A search-driven
+   * picker opts into the capped/filtered form explicitly.
+   */
+  findAll(query: QuerySpecializationsDto = {}) {
+    const where: Prisma.SpecializationWhereInput = { isActive: true };
+    if (query.q) {
+      where.name = { contains: query.q, mode: Prisma.QueryMode.insensitive };
+    }
     return this.prisma.specialization.findMany({
-      where: { isActive: true },
+      where,
       orderBy: { name: 'asc' },
+      take: query.take,
     });
+  }
+
+  async findOne(id: string) {
+    const specialization = await this.prisma.specialization.findUnique({ where: { id } });
+    if (!specialization) {
+      throw new NotFoundException(`Specialization ${id} not found`);
+    }
+    return specialization;
   }
 
   /**

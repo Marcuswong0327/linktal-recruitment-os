@@ -10,6 +10,7 @@
     "lint": "eslint \"{src,test}/**/*.ts\" --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "jest --passWithNoTests",
+    "test:integration": "jest --config test/jest-integration.config.js",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -22,7 +23,9 @@
     "import:locations": "ts-node scripts/import-locations.ts",
     "import:taxonomy": "ts-node scripts/import-taxonomy.ts",
     "import:users": "ts-node scripts/import-users.ts",
-    "backfill:ancestors": "ts-node scripts/backfill-ancestors.ts"
+    "backfill:ancestors": "ts-node scripts/backfill-ancestors.ts",
+    "renumber:display-ids": "ts-node scripts/display-ids.ts --renumber",
+    "resync:display-ids": "ts-node scripts/display-ids.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

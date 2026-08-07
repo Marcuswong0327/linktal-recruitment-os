@@ -370,7 +370,7 @@ Managing a consultant is **admin-only IAM**, even though managers hold the
   their own role away from admin via these endpoints (`400 CANNOT_MODIFY_SELF`).
 - **Last-admin protection:** no one can demote or deactivate the **final active
   admin** (`409`). At least one active admin always exists.
-- **Not settable via the API:** `displayId` (DB sequence `consultant-####`) and
+- **Not settable via the API:** `displayId` (DB sequence `CST-000###`) and
   `azureId` (set by auth on login-link).
 
 > The web "Consultants" admin page and the Activity Log are gated to the **admin
