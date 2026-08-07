@@ -54,6 +54,7 @@ export type ConsultantNode = {
 };
 
 type ConsultantWithScope = {
+  id: string;
   industries: { industryId: string; industry: { name: string } }[];
   specializations: { specializationId: string; specialization: { name: string } }[];
   locations: { locationId: string; location: { name: string } }[];
@@ -63,25 +64,30 @@ type ConsultantWithScope = {
  * Strips the raw join rows into parallel name/id arrays per arm, dropping any
  * arm the caller can't read entirely (not just emptying it — an empty list
  * would read as "no grants", which is a materially different statement about a
- * consultant than "you can't see this").
+ * consultant than "you can't see this"). A consultant can always read their
+ * own arms regardless of the `consultant_*:read` permissions — same "assigned
+ * record is always visible to its owner" rule the scope resolver applies
+ * elsewhere (see docs/scope-explained.md) — since this is their own data, not
+ * someone else's.
  */
 function toEntity<T extends ConsultantWithScope>(consultant: T, actor: AuthUser) {
   const { industries, specializations, locations, ...rest } = consultant;
+  const isSelf = consultant.id === actor.consultantId;
   return {
     ...rest,
-    ...(actor.permissions.has(CONSULTANT_INDUSTRY_READ)
+    ...(isSelf || actor.permissions.has(CONSULTANT_INDUSTRY_READ)
       ? {
           industries: industries.map((ci) => ci.industry.name),
           industryIds: industries.map((ci) => ci.industryId),
         }
       : {}),
-    ...(actor.permissions.has(CONSULTANT_SPECIALIZATION_READ)
+    ...(isSelf || actor.permissions.has(CONSULTANT_SPECIALIZATION_READ)
       ? {
           specializations: specializations.map((cs) => cs.specialization.name),
           specializationIds: specializations.map((cs) => cs.specializationId),
         }
       : {}),
-    ...(actor.permissions.has(CONSULTANT_LOCATION_READ)
+    ...(isSelf || actor.permissions.has(CONSULTANT_LOCATION_READ)
       ? {
           locations: locations.map((cl) => cl.location.name),
           locationIds: locations.map((cl) => cl.locationId),

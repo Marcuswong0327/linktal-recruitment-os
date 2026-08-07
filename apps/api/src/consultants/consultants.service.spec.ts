@@ -300,6 +300,9 @@ describe('ConsultantsService', () => {
         id: 'actor',
         isActive: true,
         role: { name: 'admin' },
+        industries: [],
+        specializations: [],
+        locations: [],
       });
       const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
 
@@ -316,6 +319,8 @@ describe('ConsultantsService', () => {
         id: 'co1',
         role: { name: roleName },
         industries: [],
+        specializations: [],
+        locations: [],
         isActive: true,
         email: 'target@linktal.com',
         fullName: 'Target',
