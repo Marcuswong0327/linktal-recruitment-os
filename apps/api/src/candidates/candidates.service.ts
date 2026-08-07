@@ -312,14 +312,17 @@ export class CandidatesService {
     return toEntity(candidate);
   }
 
-  async create(dto: CreateCandidateDto) {
+  async create(dto: CreateCandidateDto, user: AuthUser) {
     // A consultant can only be assigned a candidate they'd reach anyway —
-    // their industry or their location.
+    // their industry or their location — unless an admin/manager is
+    // deliberately making an exception (see assertConsultantCovers).
     if (dto.consultantId) {
-      await assertConsultantCovers(this.prisma, dto.consultantId, {
-        industryId: dto.industryId ?? null,
-        locationIds: dto.locationId ? [dto.locationId] : [],
-      });
+      await assertConsultantCovers(
+        this.prisma,
+        dto.consultantId,
+        { industryId: dto.industryId ?? null, locationIds: dto.locationId ? [dto.locationId] : [] },
+        user.roleName,
+      );
     }
     // displayId is assigned by the DB (Candidate_displayId_seq default).
     const candidate = await this.prisma.candidate.create({
@@ -342,10 +345,15 @@ export class CandidatesService {
     // auto-clear below is for instead of erroring).
     if ('consultantId' in dto && dto.consultantId) {
       const effectiveLocationId = 'locationId' in dto ? dto.locationId : existing.locationId;
-      await assertConsultantCovers(this.prisma, dto.consultantId, {
-        industryId: 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId,
-        locationIds: effectiveLocationId ? [effectiveLocationId] : [],
-      });
+      await assertConsultantCovers(
+        this.prisma,
+        dto.consultantId,
+        {
+          industryId: 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId,
+          locationIds: effectiveLocationId ? [effectiveLocationId] : [],
+        },
+        user.roleName,
+      );
     }
 
     let candidate = await this.prisma.candidate.update({
@@ -382,23 +390,12 @@ export class CandidatesService {
   }
 
   /**
-   * Soft-deletes the candidate and cascades to its submissions + their
-   * placements. Runs as sequential soft-deletes on the extended client (each
-   * op is audited); not wrapped in an interactive transaction because the
-   * audit extension writes outside it. A partial failure is recoverable via
-   * `restore` — children are removed before the parent.
+   * Soft-deletes the candidate. Cascading to its submissions and their
+   * placements is handled centrally by the Prisma extension's CASCADE_MAP —
+   * see prisma.extensions.ts.
    */
   async remove(id: string, user: AuthUser) {
     await this.findOne(id, user);
-    const submissions = await this.prisma.candidateSubmission.findMany({
-      where: { candidateId: id },
-      select: { id: true },
-    });
-    const submissionIds = submissions.map((s) => s.id);
-    if (submissionIds.length > 0) {
-      await this.prisma.placement.deleteMany({ where: { submissionId: { in: submissionIds } } });
-      await this.prisma.candidateSubmission.deleteMany({ where: { candidateId: id } });
-    }
     return this.prisma.candidate.delete({ where: { id } });
   }
 

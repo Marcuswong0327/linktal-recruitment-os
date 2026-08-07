@@ -96,8 +96,8 @@ export class CandidatesController {
   @RequirePermission('candidate', 'create')
   @ApiOperation({ operationId: 'createCandidate', summary: 'Create a new candidate' })
   @ApiResponse({ status: 201, description: 'Candidate created', type: CandidateEntity })
-  create(@Body() dto: CreateCandidateDto) {
-    return this.candidates.create(dto);
+  create(@Body() dto: CreateCandidateDto, @CurrentUser() user: AuthUser) {
+    return this.candidates.create(dto, user);
   }
 
   @Patch(':id')

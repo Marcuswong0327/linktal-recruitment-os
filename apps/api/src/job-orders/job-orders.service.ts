@@ -253,15 +253,18 @@ export class JobOrdersService {
     return toEntity(jobOrder);
   }
 
-  async create(dto: CreateJobOrderDto) {
+  async create(dto: CreateJobOrderDto, user: AuthUser) {
     // A consultant can only be assigned a job order they'd reach anyway — its
-    // own location, or the industry of its client (JobOrder has none of its own).
+    // own location, or the industry of its client (JobOrder has none of its
+    // own) — unless an admin/manager is deliberately making an exception
+    // (see assertConsultantCovers).
     if (dto.consultantId) {
       await assertConsultantCoversJobOrder(
         this.prisma,
         dto.consultantId,
         dto.clientId,
         dto.locationId ?? null,
+        user.roleName,
       );
     }
     // displayId is assigned by the DB (JobOrder_displayId_seq default). A
@@ -287,6 +290,7 @@ export class JobOrdersService {
         dto.consultantId,
         'clientId' in dto && dto.clientId ? dto.clientId : existing.clientId,
         'locationId' in dto ? (dto.locationId ?? null) : existing.locationId,
+        user.roleName,
       );
     }
 
@@ -320,21 +324,12 @@ export class JobOrdersService {
   }
 
   /**
-   * Soft-deletes the job order and cascades to its submissions + their
-   * placements (children first). Sequential soft-deletes on the extended
-   * client (each audited); recoverable via a restore if a step fails.
+   * Soft-deletes the job order. Cascading to its submissions and their
+   * placements is handled centrally by the Prisma extension's CASCADE_MAP —
+   * see prisma.extensions.ts.
    */
   async remove(id: string, user: AuthUser) {
     await this.findOne(id, user);
-    const submissions = await this.prisma.candidateSubmission.findMany({
-      where: { jobOrderId: id },
-      select: { id: true },
-    });
-    const submissionIds = submissions.map((s) => s.id);
-    if (submissionIds.length > 0) {
-      await this.prisma.placement.deleteMany({ where: { submissionId: { in: submissionIds } } });
-      await this.prisma.candidateSubmission.deleteMany({ where: { jobOrderId: id } });
-    }
     return this.prisma.jobOrder.delete({ where: { id } });
   }
 }

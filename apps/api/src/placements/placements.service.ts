@@ -185,8 +185,61 @@ export class PlacementsService {
     });
   }
 
+  /**
+   * Soft-deletes the placement and reverses the side effects `create`
+   * applied: the submission and candidate drop back to INTERVIEWING/WARM,
+   * the job order's fill count decrements (and its status reverts to ACTIVE
+   * if the placement had pushed it to PLACED), and the client drops back to
+   * WARM — but only if this was its one and only placement, leaving TRADED
+   * intact for a client with any other live one.
+   *
+   * `status` on the placement itself is left untouched — deleting a record
+   * isn't a claim about *why* it didn't work out. A genuine "this placement
+   * fell through" is a separate, deliberate `status: FAILED` transition via
+   * `update`, kept apart from delete on purpose.
+   */
   async remove(id: string) {
-    await this.findOne(id);
-    return this.prisma.placement.delete({ where: { id } });
+    const placement = await this.findOne(id);
+    const submission = await this.prisma.candidateSubmission.findUniqueOrThrow({
+      where: { id: placement.submissionId },
+      include: { jobOrder: true },
+    });
+
+    const deleted = await this.prisma.placement.delete({ where: { id } });
+
+    await this.prisma.candidateSubmission.update({
+      where: { id: submission.id },
+      data: { status: 'INTERVIEWING' },
+    });
+
+    await this.prisma.candidate.update({
+      where: { id: submission.candidateId },
+      data: { status: 'WARM' },
+    });
+
+    const jobOrder = submission.jobOrder;
+    const filledCount = Math.max(0, jobOrder.filledCount - 1);
+    await this.prisma.jobOrder.update({
+      where: { id: jobOrder.id },
+      data: {
+        filledCount,
+        status: jobOrder.status === 'PLACED' && filledCount < jobOrder.openings ? 'ACTIVE' : undefined,
+      },
+    });
+
+    const otherPlacementForClient = await this.prisma.placement.findFirst({
+      where: {
+        id: { not: id },
+        submission: { jobOrder: { clientId: jobOrder.clientId } },
+      },
+    });
+    if (!otherPlacementForClient) {
+      await this.prisma.client.update({
+        where: { id: jobOrder.clientId },
+        data: { status: 'WARM' },
+      });
+    }
+
+    return deleted;
   }
 }
