@@ -28,7 +28,8 @@ import type {
   CreateSpecializationDto,
   ErrorResponse,
   GetSpecializationsParams,
-  SpecializationEntity
+  SpecializationEntity,
+  UpdateSpecializationDto
 } from '../types';
 
 import { customFetch } from '../../fetcher';
@@ -407,3 +408,202 @@ export function useGetSpecialization<TData = Awaited<ReturnType<typeof getSpecia
 
 
 
+export type updateSpecializationResponse200 = {
+  data: SpecializationEntity
+  status: 200
+}
+
+export type updateSpecializationResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type updateSpecializationResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type updateSpecializationResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type updateSpecializationResponseSuccess = (updateSpecializationResponse200) & {
+  headers: Headers;
+};
+export type updateSpecializationResponseError = (updateSpecializationResponse400 | updateSpecializationResponse404 | updateSpecializationResponse500) & {
+  headers: Headers;
+};
+
+export type updateSpecializationResponse = (updateSpecializationResponseSuccess | updateSpecializationResponseError)
+
+export const getUpdateSpecializationUrl = (id: string,) => {
+
+
+
+
+  return `/specializations/${id}`
+}
+
+/**
+ * @summary Rename a specialization (admin, manager only)
+ */
+export const updateSpecialization = async (id: string,
+    updateSpecializationDto: UpdateSpecializationDto, options?: RequestInit): Promise<updateSpecializationResponse> => {
+
+  return customFetch<updateSpecializationResponse>(getUpdateSpecializationUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateSpecializationDto)
+  }
+);}
+
+
+
+
+
+export const getUpdateSpecializationMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSpecialization>>, TError,{id: string;data: UpdateSpecializationDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSpecialization>>, TError,{id: string;data: UpdateSpecializationDto}, TContext> => {
+
+const mutationKey = ['updateSpecialization'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSpecialization>>, {id: string;data: UpdateSpecializationDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateSpecialization(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSpecializationMutationResult = NonNullable<Awaited<ReturnType<typeof updateSpecialization>>>
+    export type UpdateSpecializationMutationBody = UpdateSpecializationDto
+    export type UpdateSpecializationMutationError = ErrorResponse
+
+    /**
+ * @summary Rename a specialization (admin, manager only)
+ */
+export const useUpdateSpecialization = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSpecialization>>, TError,{id: string;data: UpdateSpecializationDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateSpecialization>>,
+        TError,
+        {id: string;data: UpdateSpecializationDto},
+        TContext
+      > => {
+      return useMutation(getUpdateSpecializationMutationOptions(options), queryClient);
+    }
+    export type deleteSpecializationResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteSpecializationResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type deleteSpecializationResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type deleteSpecializationResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type deleteSpecializationResponseSuccess = (deleteSpecializationResponse204) & {
+  headers: Headers;
+};
+export type deleteSpecializationResponseError = (deleteSpecializationResponse400 | deleteSpecializationResponse404 | deleteSpecializationResponse500) & {
+  headers: Headers;
+};
+
+export type deleteSpecializationResponse = (deleteSpecializationResponseSuccess | deleteSpecializationResponseError)
+
+export const getDeleteSpecializationUrl = (id: string,) => {
+
+
+
+
+  return `/specializations/${id}`
+}
+
+/**
+ * @summary Deactivate a specialization — hides it from pickers without touching existing references (admin, manager only)
+ */
+export const deleteSpecialization = async (id: string, options?: RequestInit): Promise<deleteSpecializationResponse> => {
+
+  return customFetch<deleteSpecializationResponse>(getDeleteSpecializationUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteSpecializationMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSpecialization>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteSpecialization>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteSpecialization'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSpecialization>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteSpecialization(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteSpecializationMutationResult = NonNullable<Awaited<ReturnType<typeof deleteSpecialization>>>
+
+    export type DeleteSpecializationMutationError = ErrorResponse
+
+    /**
+ * @summary Deactivate a specialization — hides it from pickers without touching existing references (admin, manager only)
+ */
+export const useDeleteSpecialization = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSpecialization>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteSpecialization>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteSpecializationMutationOptions(options), queryClient);
+    }

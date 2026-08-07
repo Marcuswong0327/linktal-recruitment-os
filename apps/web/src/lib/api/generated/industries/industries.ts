@@ -27,7 +27,8 @@ import type {
 import type {
   CreateIndustryDto,
   ErrorResponse,
-  IndustryEntity
+  IndustryEntity,
+  UpdateIndustryDto
 } from '../types';
 
 import { customFetch } from '../../fetcher';
@@ -269,4 +270,203 @@ export const useCreateIndustry = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getCreateIndustryMutationOptions(options), queryClient);
+    }
+    export type updateIndustryResponse200 = {
+  data: IndustryEntity
+  status: 200
+}
+
+export type updateIndustryResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type updateIndustryResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type updateIndustryResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type updateIndustryResponseSuccess = (updateIndustryResponse200) & {
+  headers: Headers;
+};
+export type updateIndustryResponseError = (updateIndustryResponse400 | updateIndustryResponse404 | updateIndustryResponse500) & {
+  headers: Headers;
+};
+
+export type updateIndustryResponse = (updateIndustryResponseSuccess | updateIndustryResponseError)
+
+export const getUpdateIndustryUrl = (id: string,) => {
+
+
+
+
+  return `/industries/${id}`
+}
+
+/**
+ * @summary Rename an industry (admin, manager only)
+ */
+export const updateIndustry = async (id: string,
+    updateIndustryDto: UpdateIndustryDto, options?: RequestInit): Promise<updateIndustryResponse> => {
+
+  return customFetch<updateIndustryResponse>(getUpdateIndustryUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateIndustryDto)
+  }
+);}
+
+
+
+
+
+export const getUpdateIndustryMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateIndustry>>, TError,{id: string;data: UpdateIndustryDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateIndustry>>, TError,{id: string;data: UpdateIndustryDto}, TContext> => {
+
+const mutationKey = ['updateIndustry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateIndustry>>, {id: string;data: UpdateIndustryDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateIndustry(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateIndustryMutationResult = NonNullable<Awaited<ReturnType<typeof updateIndustry>>>
+    export type UpdateIndustryMutationBody = UpdateIndustryDto
+    export type UpdateIndustryMutationError = ErrorResponse
+
+    /**
+ * @summary Rename an industry (admin, manager only)
+ */
+export const useUpdateIndustry = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateIndustry>>, TError,{id: string;data: UpdateIndustryDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateIndustry>>,
+        TError,
+        {id: string;data: UpdateIndustryDto},
+        TContext
+      > => {
+      return useMutation(getUpdateIndustryMutationOptions(options), queryClient);
+    }
+    export type deleteIndustryResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteIndustryResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type deleteIndustryResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type deleteIndustryResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type deleteIndustryResponseSuccess = (deleteIndustryResponse204) & {
+  headers: Headers;
+};
+export type deleteIndustryResponseError = (deleteIndustryResponse400 | deleteIndustryResponse404 | deleteIndustryResponse500) & {
+  headers: Headers;
+};
+
+export type deleteIndustryResponse = (deleteIndustryResponseSuccess | deleteIndustryResponseError)
+
+export const getDeleteIndustryUrl = (id: string,) => {
+
+
+
+
+  return `/industries/${id}`
+}
+
+/**
+ * @summary Deactivate an industry — hides it from pickers without touching existing references (admin, manager only)
+ */
+export const deleteIndustry = async (id: string, options?: RequestInit): Promise<deleteIndustryResponse> => {
+
+  return customFetch<deleteIndustryResponse>(getDeleteIndustryUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteIndustryMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteIndustry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteIndustry>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteIndustry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteIndustry>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteIndustry(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteIndustryMutationResult = NonNullable<Awaited<ReturnType<typeof deleteIndustry>>>
+
+    export type DeleteIndustryMutationError = ErrorResponse
+
+    /**
+ * @summary Deactivate an industry — hides it from pickers without touching existing references (admin, manager only)
+ */
+export const useDeleteIndustry = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteIndustry>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteIndustry>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteIndustryMutationOptions(options), queryClient);
     }

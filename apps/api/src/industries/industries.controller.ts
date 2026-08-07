@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { IndustriesService } from './industries.service';
 import { CreateIndustryDto } from './dto/create-industry.dto';
+import { UpdateIndustryDto } from './dto/update-industry.dto';
 import { IndustryEntity } from './entities/industry.entity';
 import { RequirePermission } from '../auth/auth.decorators';
 
@@ -28,5 +29,26 @@ export class IndustriesController {
   @ApiResponse({ status: 201, description: 'Industry created (or already existed)', type: IndustryEntity })
   create(@Body() dto: CreateIndustryDto) {
     return this.industries.create(dto);
+  }
+
+  @Patch(':id')
+  @RequirePermission('industry', 'update')
+  @ApiOperation({ operationId: 'updateIndustry', summary: 'Rename an industry (admin, manager only)' })
+  @ApiResponse({ status: 200, description: 'Industry updated', type: IndustryEntity })
+  update(@Param('id') id: string, @Body() dto: UpdateIndustryDto) {
+    return this.industries.update(id, dto);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @RequirePermission('industry', 'delete')
+  @ApiOperation({
+    operationId: 'deleteIndustry',
+    summary:
+      'Deactivate an industry — hides it from pickers without touching existing references (admin, manager only)',
+  })
+  @ApiResponse({ status: 204, description: 'Industry deactivated' })
+  remove(@Param('id') id: string) {
+    return this.industries.deactivate(id);
   }
 }

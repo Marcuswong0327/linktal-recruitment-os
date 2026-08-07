@@ -47,10 +47,11 @@ export class ConsultantEntity implements Omit<Consultant, 'passwordHash'> {
   role?: RoleSummaryEntity | null;
   /**
    * The three arms of this consultant's visibility scope. Each is present only
-   * when the caller holds the matching `consultant_*:read` — omitted entirely
-   * otherwise, not just emptied, since an empty list would read as "no grants",
-   * a materially different statement than "you can't see this". The three
-   * permissions are independent, so a caller can hold one arm and not another.
+   * when the caller holds the matching `consultant_*:read`, or the consultant
+   * is looking at their own record — omitted entirely otherwise, not just
+   * emptied, since an empty list would read as "no grants", a materially
+   * different statement than "you can't see this". The three permissions are
+   * independent, so a caller can hold one arm and not another.
    *
    * Names and ids come as parallel arrays, same pairing as Candidate's
    * `specializations`/`specializationIds`: the names are display-only, the ids

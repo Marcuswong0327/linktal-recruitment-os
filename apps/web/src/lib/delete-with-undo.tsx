@@ -1,4 +1,13 @@
 import { toast } from 'sonner';
+import { Undo2 } from 'lucide-react';
+
+/** Shared action-button contents for every "Undo" toast in the app — icon + label, one definition so they all match. */
+export const undoLabel = (
+  <>
+    <Undo2 />
+    Undo
+  </>
+);
 
 interface DeleteWithUndoOptions {
   /** What the toast calls it, e.g. "candidate" or "3 stakeholders". */
@@ -51,14 +60,16 @@ export function deleteWithUndo({
         onCommitted?.();
         toast.success(`Deleted ${label}`, {
           action: {
-            label: 'Undo',
+            label: undoLabel,
             onClick: () => {
               restoreFn()
                 .then(() => {
                   onUndo?.();
                   toast.success(`Restored ${label}`);
                 })
-                .catch((err) => toast.error(err instanceof Error ? err.message : `Failed to restore ${label}`));
+                .catch((err) =>
+                  toast.error(err instanceof Error ? err.message : `Failed to restore ${label}`),
+                );
             },
           },
         });
@@ -78,7 +89,7 @@ export function deleteWithUndo({
   const toastId = toast(`Deleted ${label}`, {
     duration: graceMs,
     action: {
-      label: 'Undo',
+      label: undoLabel,
       onClick: () => {
         if (committed) return;
         committed = true;

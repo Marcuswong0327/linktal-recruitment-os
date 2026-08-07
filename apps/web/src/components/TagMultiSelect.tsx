@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { Combobox } from '@base-ui/react/combobox';
-import { Check, X } from 'lucide-react';
+import { Pencil, Plus, Trash2, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +11,16 @@ import { Separator } from '@/components/ui/separator';
 export interface TagOption {
   label: string;
   value: string;
+  /**
+   * Groups this tag's color with its ancestors/descendants instead of its
+   * own id — e.g. a Specialization's root category, so "Food" and
+   * "Food - Bakery" render the same color. Defaults to `value` (its own
+   * color) when omitted, which is correct for anything without a hierarchy.
+   */
+  colorKey?: string;
 }
+
+const CREATE_SENTINEL = '__create__';
 
 // Fixed-order categorical palette (--tag-1..8 in globals.css) — NOT the
 // Badge status variants (success/warning/info/destructive). Those are
@@ -45,14 +54,20 @@ function colorFor(value: string): string {
 /** Static, non-interactive pills — same coloring as the editable picker below. Nothing at all when empty. */
 export function TagPills({ options, selected }: { options: TagOption[]; selected: string[] }) {
   if (selected.length === 0) return null;
-  const byId = new Map(options.map((o) => [o.value, o.label]));
+  const byId = new Map(options.map((o) => [o.value, o]));
   return (
     <div className="flex flex-wrap gap-1">
-      {selected.map((value) => (
-        <Badge key={value} className={cn('rounded-md font-normal', colorFor(value))}>
-          {byId.get(value) ?? value}
-        </Badge>
-      ))}
+      {selected.map((value) => {
+        const option = byId.get(value);
+        return (
+          <Badge
+            key={value}
+            className={cn('rounded-md font-normal', colorFor(option?.colorKey ?? value))}
+          >
+            {option?.label ?? value}
+          </Badge>
+        );
+      })}
     </div>
   );
 }
@@ -60,10 +75,37 @@ export function TagPills({ options, selected }: { options: TagOption[]; selected
 interface TagMultiSelectProps {
   title: string;
   options: TagOption[];
+  /**
+   * Subset of `options` offered in the dropdown to pick from — e.g.
+   * Specializations narrowed to whichever Industries a consultant already
+   * holds. `options` itself still resolves the label/color for anything
+   * already `selected`, so a value that's no longer selectable (its parent
+   * industry got dropped) still renders correctly as a chip and can still be
+   * removed — it just can't be picked again. Defaults to `options` when
+   * omitted, i.e. everything is selectable.
+   */
+  selectableOptions?: TagOption[];
   selected: string[];
   onChange: (values: string[]) => void;
   disabled?: boolean;
   triggerClassName?: string;
+  /**
+   * Offers `+ Create "<name>"` when the typed text matches no existing
+   * option — must persist it and return the created (or already-existing)
+   * row, same contract as `CreatableCombobox`'s `onCreate`. Omit to disable
+   * inline creation and keep this a plain picker over a fixed catalog.
+   */
+  onCreate?: (name: string) => Promise<TagOption>;
+  /**
+   * Per-tag "…" menu for managing the underlying catalog row itself — not
+   * just this field's selection. Each action is independently optional, so
+   * e.g. an update-only caller can show Edit without Delete. Omit entirely
+   * to keep tags plain (no menu, no restyle).
+   */
+  tagActions?: {
+    onEdit?: (option: TagOption) => void;
+    onDelete?: (option: TagOption) => void;
+  };
 }
 
 /**
@@ -76,30 +118,94 @@ interface TagMultiSelectProps {
 export function TagMultiSelect({
   title,
   options,
+  selectableOptions,
   selected,
   onChange,
   disabled = false,
   triggerClassName,
+  onCreate,
+  tagActions,
 }: TagMultiSelectProps) {
-  const byId = React.useMemo(() => new Map(options.map((o) => [o.value, o.label])), [options]);
-  const items = React.useMemo(() => options.map((o) => o.value), [options]);
+  // Rows created through this picker before `options`/`selectableOptions`
+  // (owned by the caller's own query) has refetched to include them — merged
+  // in so the new tag renders with its real name immediately instead of a
+  // bare id.
+  const [justCreated, setJustCreated] = React.useState<TagOption[]>([]);
+  const allOptions = React.useMemo(() => {
+    const pending = justCreated.filter((jc) => !options.some((o) => o.value === jc.value));
+    return pending.length ? [...options, ...pending] : options;
+  }, [options, justCreated]);
+  const byId = React.useMemo(() => new Map(allOptions.map((o) => [o.value, o])), [allOptions]);
+
+  // What the dropdown actually offers to pick — narrower than `allOptions`
+  // when the caller passes `selectableOptions`; `byId` above (built from the
+  // full `options`) is what resolves a selected chip's label regardless.
+  const catalog = selectableOptions ?? options;
+  const allSelectable = React.useMemo(() => {
+    const pending = justCreated.filter((jc) => !catalog.some((o) => o.value === jc.value));
+    return pending.length ? [...catalog, ...pending] : catalog;
+  }, [catalog, justCreated]);
+
   const [open, setOpen] = React.useState(false);
+  // The popup's own search text — separate from the closed trigger's tags,
+  // and reset each time the popup opens so it always starts as a fresh
+  // search. Controlled (rather than left to Combobox's own filtering) so a
+  // "+ Create" row can be appended after the real matches.
+  const [inputValue, setInputValue] = React.useState('');
+  const [creating, setCreating] = React.useState(false);
+
+  const trimmed = inputValue.trim();
+  const hasExactMatch = allSelectable.some((o) => o.label.toLowerCase() === trimmed.toLowerCase());
+  const filtered = trimmed
+    ? allSelectable.filter((o) => o.label.toLowerCase().includes(trimmed.toLowerCase()))
+    : allSelectable;
+  const items =
+    onCreate && trimmed && !hasExactMatch
+      ? [...filtered.map((o) => o.value), CREATE_SENTINEL]
+      : filtered.map((o) => o.value);
 
   function remove(value: string) {
     onChange(selected.filter((v) => v !== value));
   }
 
+  async function handleValueChange(next: string[]) {
+    if (next.includes(CREATE_SENTINEL)) {
+      const name = trimmed;
+      if (!name || !onCreate) return;
+      setCreating(true);
+      try {
+        const created = await onCreate(name);
+        setJustCreated((prev) => [...prev, created]);
+        onChange([...selected.filter((v) => v !== CREATE_SENTINEL), created.value]);
+        setInputValue('');
+      } catch {
+        // Caller's own mutation already surfaces the error (toast); just
+        // stop treating this as in flight so the user can retry.
+      } finally {
+        setCreating(false);
+      }
+      return;
+    }
+    onChange(next);
+  }
+
   return (
     <Combobox.Root
       items={items}
+      filter={null} // items are already filtered against inputValue above
       multiple
       value={selected}
-      onValueChange={(next) => onChange(next)}
-      itemToStringLabel={(value) => byId.get(value) ?? value}
-      itemToStringValue={(value) => value}
-      disabled={disabled}
+      onValueChange={handleValueChange}
+      inputValue={inputValue}
+      onInputValueChange={setInputValue}
+      itemToStringLabel={(value: string) => byId.get(value)?.label ?? value}
+      itemToStringValue={(value: string) => value}
+      disabled={disabled || creating}
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setInputValue('');
+      }}
     >
       {/* Absolutely positioned against TableCell (`relative`, no offsets of
           its own) — spans the true cell box regardless of how the wrapper
@@ -127,41 +233,50 @@ export function TagMultiSelect({
           triggerClassName,
         )}
       >
-        {selected.map((value) => (
-          <Badge key={value} className={cn('gap-1 rounded-md pr-1 font-normal', colorFor(value))}>
-            {byId.get(value) ?? value}
-            {!disabled ? (
-              // A <button> here would nest inside Combobox.Trigger's own
-              // <button> — invalid HTML. The browser silently auto-closes
-              // the outer button as soon as it parses the inner one, so the
-              // real DOM (and everything hydration attaches to) ends up
-              // nothing like what React thinks it rendered. role="button" +
-              // manual key handling gets the same semantics without nesting
-              // interactive elements.
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label={`Remove ${byId.get(value) ?? value}`}
-                // Trigger opens on bubble-phase click — stopping it here
-                // keeps "remove this tag" from also opening the picker.
-                onClick={(e) => {
-                  e.stopPropagation();
-                  remove(value);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
+        {selected.map((value) => {
+          const option = byId.get(value) ?? { value, label: value };
+          return (
+            <Badge
+              key={value}
+              className={cn(
+                'gap-1 rounded-md pr-1 font-normal',
+                colorFor(option.colorKey ?? value),
+              )}
+            >
+              {option.label}
+              {!disabled ? (
+                // A <button> here would nest inside Combobox.Trigger's own
+                // <button> — invalid HTML. The browser silently auto-closes
+                // the outer button as soon as it parses the inner one, so the
+                // real DOM (and everything hydration attaches to) ends up
+                // nothing like what React thinks it rendered. role="button" +
+                // manual key handling gets the same semantics without nesting
+                // interactive elements.
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Remove ${option.label}`}
+                  // Trigger opens on bubble-phase click — stopping it here
+                  // keeps "remove this tag" from also opening the picker.
+                  onClick={(e) => {
                     e.stopPropagation();
                     remove(value);
-                  }
-                }}
-                className="cursor-pointer rounded-full opacity-70 outline-none hover:opacity-100"
-              >
-                <X className="size-3" />
-              </span>
-            ) : null}
-          </Badge>
-        ))}
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      remove(value);
+                    }
+                  }}
+                  className="cursor-pointer rounded-full opacity-70 outline-none hover:opacity-100"
+                >
+                  <X className="size-3" />
+                </span>
+              ) : null}
+            </Badge>
+          );
+        })}
       </Combobox.Trigger>
 
       <Combobox.Portal>
@@ -185,24 +300,109 @@ export function TagMultiSelect({
                   child too. Padding directly on Empty itself reserved space
                   even with nothing in it: a permanent ~24px gap between the
                   separator and the first real row. */}
-              <Combobox.Empty className="text-sm text-muted-foreground">
-                <p className="px-3 py-3 text-center">No matches.</p>
+              <Combobox.Empty className="text-sm text-muted-foreground empty:hidden">
+                <p className="px-3 py-3 text-center">
+                  {onCreate ? 'No matches — keep typing to add a new value.' : 'No matches.'}
+                </p>
               </Combobox.Empty>
               <Combobox.List className="max-h-64 overflow-y-auto p-1">
-                {(value: string) => (
-                  <Combobox.Item
-                    key={value}
-                    value={value}
-                    className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-                  >
-                    <Badge className={cn('rounded-md font-normal', colorFor(value))}>
-                      {byId.get(value) ?? value}
-                    </Badge>
-                    <Combobox.ItemIndicator className="ml-auto shrink-0">
-                      <Check className="size-4" />
-                    </Combobox.ItemIndicator>
-                  </Combobox.Item>
-                )}
+                {(value: string) => {
+                  const isCreate = value === CREATE_SENTINEL;
+                  if (isCreate) {
+                    return (
+                      <Combobox.Item
+                        key={value}
+                        value={value}
+                        className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                      >
+                        <Plus className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1 truncate">
+                          Create &quot;{trimmed}&quot;
+                        </span>
+                      </Combobox.Item>
+                    );
+                  }
+                  const listOption = byId.get(value);
+                  const hasTagMenu = tagActions?.onEdit || tagActions?.onDelete;
+                  return (
+                    <Combobox.Item
+                      key={value}
+                      value={value}
+                      className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                    >
+                      {/* No selected-state checkmark here — the trigger's own
+                          chips above already show what's selected. */}
+                      <Badge
+                        className={cn(
+                          'rounded-md font-normal',
+                          colorFor(listOption?.colorKey ?? value),
+                        )}
+                      >
+                        {listOption?.label ?? value}
+                      </Badge>
+                      {hasTagMenu ? (
+                        // Direct icon buttons, not a dropdown — a Menu popup
+                        // nested inside this Combobox's own popup fights it
+                        // for outside-click/dismiss handling (two floating
+                        // layers, each deciding independently whether a click
+                        // landed "outside" itself), so the menu could open
+                        // and immediately get dismissed before a click on it
+                        // registered. Lives on the catalog row here, not the
+                        // trigger's selected chip (which only has the X to
+                        // remove it from this field) — separate targets so
+                        // there's no fat-finger conflict between "remove from
+                        // selection" and "manage the underlying row".
+                        <span className="ml-auto flex shrink-0 items-center gap-0.5">
+                          {tagActions?.onEdit ? (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Edit ${listOption?.label ?? value}`}
+                              // Item selection also fires on click — stop it
+                              // here so this doesn't also toggle the row
+                              // in/out of the selection.
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                tagActions.onEdit!(listOption ?? { value, label: value });
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  tagActions.onEdit!(listOption ?? { value, label: value });
+                                }
+                              }}
+                              className="cursor-pointer rounded-full p-1 text-muted-foreground outline-none hover:bg-accent hover:text-foreground"
+                            >
+                              <Pencil className="size-3.5" />
+                            </span>
+                          ) : null}
+                          {tagActions?.onDelete ? (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Delete ${listOption?.label ?? value}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                tagActions.onDelete!(listOption ?? { value, label: value });
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  tagActions.onDelete!(listOption ?? { value, label: value });
+                                }
+                              }}
+                              className="cursor-pointer rounded-full p-1 text-muted-foreground outline-none hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : null}
+                    </Combobox.Item>
+                  );
+                }}
               </Combobox.List>
             </div>
           </Combobox.Popup>

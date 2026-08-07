@@ -1762,19 +1762,20 @@
             }
           },
           {
-            "name": "status",
+            "name": "statuses",
             "required": false,
             "in": "query",
-            "description": "Filter by status. Defaults to ALL (every status); pass a specific status to narrow.",
+            "description": "Filter by status (one or more). Omit for all statuses.",
             "schema": {
-              "default": "ALL",
-              "type": "string",
-              "enum": [
-                "COLD",
-                "WARM",
-                "TRADED",
-                "ALL"
-              ]
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "TRADED"
+                ]
+              }
             }
           },
           {
@@ -1787,12 +1788,36 @@
             }
           },
           {
+            "name": "industryIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by industry id(s) (one or more, exact match)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "name": "specialization",
             "required": false,
             "in": "query",
             "description": "Filter by specialization (contains, case-insensitive)",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "specializationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by specialization id(s) (one or more, exact match)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -1817,28 +1842,32 @@
             }
           },
           {
-            "name": "consultantId",
+            "name": "consultantIds",
             "required": false,
             "in": "query",
-            "description": "Filter by owning consultant ID (exact match)",
+            "description": "Filter by owning consultant ID(s) (one or more, exact match). '' selects unassigned clients.",
             "schema": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
-            "name": "quality",
+            "name": "qualities",
             "required": false,
             "in": "query",
-            "description": "Filter by lead quality. Defaults to ALL (every quality); pass a specific value to narrow.",
+            "description": "Filter by lead quality (one or more). Omit for all qualities.",
             "schema": {
-              "default": "ALL",
-              "type": "string",
-              "enum": [
-                "LOW",
-                "MEDIUM",
-                "HIGH",
-                "ALL"
-              ]
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "LOW",
+                  "MEDIUM",
+                  "HIGH"
+                ]
+              }
             }
           },
           {
@@ -6214,6 +6243,139 @@
         ]
       }
     },
+    "/industries/{id}": {
+      "patch": {
+        "operationId": "updateIndustry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateIndustryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Industry updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndustryEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rename an industry (admin, manager only)",
+        "tags": [
+          "Industries"
+        ]
+      },
+      "delete": {
+        "operationId": "deleteIndustry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Industry deactivated"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Deactivate an industry — hides it from pickers without touching existing references (admin, manager only)",
+        "tags": [
+          "Industries"
+        ]
+      }
+    },
     "/specializations": {
       "get": {
         "operationId": "getSpecializations",
@@ -6401,6 +6563,137 @@
           }
         ],
         "summary": "Get one specialization by id — resolves a selected id back to a name for a search-driven picker that has since scrolled it out of its results",
+        "tags": [
+          "Specializations"
+        ]
+      },
+      "patch": {
+        "operationId": "updateSpecialization",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSpecializationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Specialization updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecializationEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rename a specialization (admin, manager only)",
+        "tags": [
+          "Specializations"
+        ]
+      },
+      "delete": {
+        "operationId": "deleteSpecialization",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Specialization deactivated"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Deactivate a specialization — hides it from pickers without touching existing references (admin, manager only)",
         "tags": [
           "Specializations"
         ]
@@ -11533,6 +11826,16 @@
           "name"
         ]
       },
+      "UpdateIndustryDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Industry name",
+            "example": "Manufacturing"
+          }
+        }
+      },
       "SpecializationEntity": {
         "type": "object",
         "properties": {
@@ -11603,6 +11906,16 @@
           "name",
           "industryId"
         ]
+      },
+      "UpdateSpecializationDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Specialization name",
+            "example": "Food - Bakery"
+          }
+        }
       },
       "LocationEntity": {
         "type": "object",

@@ -71,7 +71,7 @@ export function JobOrderCombobox({ id, value, onValueChange, jobOrders, disabled
                 className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
               />
             </div>
-            <Combobox.Empty className="px-3 pb-3 text-center text-sm text-muted-foreground">
+            <Combobox.Empty className="px-3 pb-3 text-center text-sm text-muted-foreground empty:hidden">
               No job orders found.
             </Combobox.Empty>
             <Combobox.List className="max-h-64 overflow-y-auto p-1 pt-0">

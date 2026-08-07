@@ -1,0 +1,196 @@
+'use client';
+
+import type { ColumnDef } from '@tanstack/react-table';
+import { ExternalLink } from 'lucide-react';
+
+import { Badge } from '@/components/ui/badge';
+import { ComboboxSelect } from '@/components/ComboboxSelect';
+import { ConsultantAvatar, UNASSIGNED } from '@/components/ConsultantCombobox';
+import { formatDate, qualityOptions, statusOptions, type Company } from './schema';
+
+function initials(name: string) {
+  if (!name) return '?';
+  return name
+    .split(' ')
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+}
+
+/** Up to 2 market locations shown inline, "+N" for the rest — same truncation idea as a tag list. */
+function MarketCell({ locations }: { locations: string[] }) {
+  if (locations.length === 0) return <span className="text-muted-foreground">—</span>;
+  const shown = locations.slice(0, 2);
+  const rest = locations.length - shown.length;
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {shown.map((name) => (
+        <Badge key={name} variant="muted" className="rounded-md font-normal">
+          {name}
+        </Badge>
+      ))}
+      {rest > 0 ? <span className="text-xs text-muted-foreground">+{rest} more</span> : null}
+    </div>
+  );
+}
+
+interface CompanyColumnsOptions {
+  onStatusChange: (company: Company, status: string) => void;
+  onQualityChange: (company: Company, quality: string) => void;
+  /** Resolves a consultantId to a display name — client-side join, the API returns the id only. */
+  consultantName: (id: string | null) => string;
+  /** Row id currently saving an inline change — disables that row's controls. */
+  pendingRowId: string | null;
+  /** Absent when the caller lacks `client:update` — controls render read-only. */
+  canUpdate: boolean;
+  /**
+   * Omits the Consultant column — every row is already scoped to this
+   * consultant's own book (see ClientsService.findAll) and the field is
+   * redacted server-side too, so the column would just repeat their own name
+   * (or nothing) on every row. Same reasoning as Job Orders'
+   * hideConsultantColumn.
+   */
+  hideConsultantColumn?: boolean;
+}
+
+export function getCompanyColumns({
+  onStatusChange,
+  onQualityChange,
+  consultantName,
+  pendingRowId,
+  canUpdate,
+  hideConsultantColumn,
+}: CompanyColumnsOptions): ColumnDef<Company>[] {
+  return [
+    {
+      id: 'companyName',
+      // Not a GetClientsSortBy field — companyName isn't sortable server-side.
+      enableSorting: false,
+      header: 'Company',
+      cell: ({ row }) => {
+        const client = row.original;
+        return (
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+              {initials(client.companyName)}
+            </span>
+            <span className="truncate font-medium text-foreground">{client.companyName}</span>
+            {client.website ? (
+              <a
+                href={client.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Open ${client.companyName}'s website`}
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+              >
+                <ExternalLink className="size-3.5" />
+              </a>
+            ) : null}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'industry',
+      header: 'Industry',
+      enableSorting: false,
+      cell: ({ row }) => <span className="text-muted-foreground">{row.original.industry ?? '—'}</span>,
+    },
+    {
+      accessorKey: 'specialization',
+      header: 'Specialization',
+      enableSorting: false,
+      cell: ({ row }) => <span className="text-muted-foreground">{row.original.specialization ?? '—'}</span>,
+    },
+    {
+      id: 'locations',
+      header: 'Market',
+      enableSorting: false,
+      cell: ({ row }) => <MarketCell locations={row.original.locations} />,
+    },
+    {
+      accessorKey: 'status',
+      header: 'Status',
+      // status isn't a GetClientsSortBy field — exposed as a filter instead.
+      enableSorting: false,
+      meta: { align: 'center', strictMinSize: true },
+      cell: ({ row }) => {
+        const client = row.original;
+        if (!canUpdate) {
+          const current = statusOptions.find((o) => o.value === client.status)!;
+          return <Badge className={current.triggerClassName}>{current.label}</Badge>;
+        }
+        return (
+          <div onClick={(e) => e.stopPropagation()}>
+            <ComboboxSelect
+              title="Status"
+              value={client.status}
+              onValueChange={(v) => onStatusChange(client, v)}
+              options={statusOptions}
+              disabled={pendingRowId === client.id}
+              triggerClassName="mx-auto"
+            />
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'quality',
+      header: 'Quality',
+      meta: { align: 'center', strictMinSize: true },
+      cell: ({ row }) => {
+        const client = row.original;
+        if (!canUpdate) {
+          const current = qualityOptions.find((o) => o.value === client.quality)!;
+          return <Badge className={current.triggerClassName}>{current.label}</Badge>;
+        }
+        return (
+          <div onClick={(e) => e.stopPropagation()}>
+            <ComboboxSelect
+              title="Quality"
+              value={client.quality}
+              onValueChange={(v) => onQualityChange(client, v)}
+              options={qualityOptions}
+              disabled={pendingRowId === client.id}
+              triggerClassName="mx-auto"
+            />
+          </div>
+        );
+      },
+    },
+    ...(hideConsultantColumn
+      ? []
+      : [
+          {
+            accessorKey: 'consultantId',
+            header: 'Consultant',
+            enableSorting: false,
+            cell: ({ row }: { row: { original: Company } }) => {
+              const client = row.original;
+              const consultantId = client.consultantId ?? UNASSIGNED;
+              return (
+                <div className="flex min-w-0 items-center gap-2">
+                  <ConsultantAvatar
+                    consultantId={consultantId}
+                    name={client.consultantId ? consultantName(client.consultantId) : undefined}
+                    size={5}
+                  />
+                  <span className="truncate text-muted-foreground">
+                    {client.consultantId ? consultantName(client.consultantId) : 'Unassigned'}
+                  </span>
+                </div>
+              );
+            },
+          } satisfies ColumnDef<Company>,
+        ]),
+    {
+      accessorKey: 'lastContactedAt',
+      header: 'Last contacted',
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">{formatDate(row.original.lastContactedAt)}</span>
+      ),
+    },
+  ];
+}

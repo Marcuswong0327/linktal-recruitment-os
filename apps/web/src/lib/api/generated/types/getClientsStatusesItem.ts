@@ -6,12 +6,11 @@
  * OpenAPI spec version: 1.0
  */
 
-export type GetClientsStatus = typeof GetClientsStatus[keyof typeof GetClientsStatus];
+export type GetClientsStatusesItem = typeof GetClientsStatusesItem[keyof typeof GetClientsStatusesItem];
 
 
-export const GetClientsStatus = {
+export const GetClientsStatusesItem = {
   COLD: 'COLD',
   WARM: 'WARM',
   TRADED: 'TRADED',
-  ALL: 'ALL',
 } as const;

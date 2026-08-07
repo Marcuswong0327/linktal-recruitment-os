@@ -6,12 +6,11 @@
  * OpenAPI spec version: 1.0
  */
 
-export type GetClientsQuality = typeof GetClientsQuality[keyof typeof GetClientsQuality];
+export type GetClientsQualitiesItem = typeof GetClientsQualitiesItem[keyof typeof GetClientsQualitiesItem];
 
 
-export const GetClientsQuality = {
+export const GetClientsQualitiesItem = {
   LOW: 'LOW',
   MEDIUM: 'MEDIUM',
   HIGH: 'HIGH',
-  ALL: 'ALL',
 } as const;

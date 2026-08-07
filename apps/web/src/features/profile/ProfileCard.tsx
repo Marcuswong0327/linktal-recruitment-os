@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Briefcase, Globe, MapPin, Tag, TriangleAlert } from 'lucide-react';
+import { Briefcase, MapPin, Tag, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -23,8 +23,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Eyebrow, ProfileField } from '@/components/ProfileField';
-import { mockProfile } from '@/config/mock-profile';
+import { Eyebrow, ProfileField, joinScopeNames } from '@/components/ProfileField';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 
 function initials(name: string) {
@@ -139,13 +138,11 @@ export function ProfileCard({
         <Separator />
 
         <CardContent className="flex flex-wrap items-center gap-6">
-          <ProfileField icon={Globe} label="Country" value={mockProfile.country} />
+          <ProfileField icon={Briefcase} label="Industry" value={joinScopeNames(consultant?.industries)} />
           <Separator orientation="vertical" />
-          <ProfileField icon={Briefcase} label="Industry" value={mockProfile.industry} />
+          <ProfileField icon={Tag} label="Specialization" value={joinScopeNames(consultant?.specializations)} />
           <Separator orientation="vertical" />
-          <ProfileField icon={Tag} label="Specialization" value={mockProfile.specialization} />
-          <Separator orientation="vertical" />
-          <ProfileField icon={MapPin} label="City" value={mockProfile.city} />
+          <ProfileField icon={MapPin} label="Locations" value={joinScopeNames(consultant?.locations)} />
         </CardContent>
 
         <Separator />

@@ -1,4 +1,4 @@
-import { Contact, type LucideIcon } from 'lucide-react';
+import { Building2, Contact, type LucideIcon } from 'lucide-react';
 import { navGroups, type RequiredPermission } from '@/config/nav';
 
 export type PageCommand = {
@@ -30,12 +30,19 @@ export type ActionCommand = {
 
 /**
  * Explicit, hand-picked list of "do something" commands (as opposed to plain
- * page navigation) — the GCP/AWS-style "Add a Stakeholder" entries. Only
- * Stakeholders has a working create flow today (Candidates/Job Orders' add
- * buttons are still `disabled` in their tables), so this stays a short list
- * until those ship.
+ * page navigation) — the GCP/AWS-style "Add a Stakeholder" entries.
+ * Companies and Stakeholders have working create flows; Candidates/Job
+ * Orders' add buttons are still `disabled` in their tables, so this stays a
+ * short list until those ship.
  */
 export const actionCommands: ActionCommand[] = [
+  {
+    title: 'Add Company',
+    description: 'Create a new client company',
+    href: '/companies?new=1',
+    icon: Building2,
+    requiredPermission: { resource: 'client', action: 'create' },
+  },
   {
     title: 'Add Stakeholder',
     description: 'Create a new client contact',
