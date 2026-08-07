@@ -1,5 +1,6 @@
 import { downloadAsExcel, splitContactDateTime } from '@/lib/excel-export';
-import { stakeholderFullName, type Stakeholder } from './schema';
+import type { StakeholderEntity } from '@/lib/api/generated/types';
+import { stakeholderFullName } from './columns';
 
 /**
  * Client-side export — the rows are already fetched for the grid, so there's
@@ -7,12 +8,13 @@ import { stakeholderFullName, type Stakeholder } from './schema';
  * "Last Contacted By" (the consultant) are kept as separate columns —
  * exported data must never conflate the org user with the external contact.
  */
-export function exportStakeholdersToExcel(stakeholders: Stakeholder[]) {
+export function exportStakeholdersToExcel(stakeholders: StakeholderEntity[]) {
   const rows = stakeholders.map((s) => {
     const { date, time } = splitContactDateTime(s.lastContactedAt);
     return {
       'Contact Name': stakeholderFullName(s),
       Company: s.companyName ?? '',
+      Coverage: s.coverage.join(', '),
       'Role type': s.roleType ?? '',
       'Job title': s.jobTitle ?? '',
       Email: s.email ?? '',

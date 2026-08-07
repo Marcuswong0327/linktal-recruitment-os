@@ -6,6 +6,7 @@ import { ExternalLink } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ComboboxSelect } from '@/components/ComboboxSelect';
 import { ConsultantAvatar, UNASSIGNED } from '@/components/ConsultantCombobox';
+import { LocationBadgeList } from '@/components/LocationBadgeList';
 import { formatDate, qualityOptions, statusOptions, type Company } from './schema';
 
 function initials(name: string) {
@@ -16,23 +17,6 @@ function initials(name: string) {
     .slice(0, 2)
     .join('')
     .toUpperCase();
-}
-
-/** Up to 2 market locations shown inline, "+N" for the rest — same truncation idea as a tag list. */
-function MarketCell({ locations }: { locations: string[] }) {
-  if (locations.length === 0) return <span className="text-muted-foreground">—</span>;
-  const shown = locations.slice(0, 2);
-  const rest = locations.length - shown.length;
-  return (
-    <div className="flex flex-wrap items-center gap-1">
-      {shown.map((name) => (
-        <Badge key={name} variant="muted" className="rounded-md font-normal">
-          {name}
-        </Badge>
-      ))}
-      {rest > 0 ? <span className="text-xs text-muted-foreground">+{rest} more</span> : null}
-    </div>
-  );
 }
 
 interface CompanyColumnsOptions {
@@ -108,7 +92,7 @@ export function getCompanyColumns({
       id: 'locations',
       header: 'Market',
       enableSorting: false,
-      cell: ({ row }) => <MarketCell locations={row.original.locations} />,
+      cell: ({ row }) => <LocationBadgeList locations={row.original.locations} />,
     },
     {
       accessorKey: 'status',
