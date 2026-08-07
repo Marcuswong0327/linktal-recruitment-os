@@ -1,10 +1,8 @@
 import { redirect } from 'next/navigation';
-import { TriangleAlert } from 'lucide-react';
 import { auth } from '@/auth';
 import { SignInButton } from '@/features/auth/sign-in-button';
+import { SignInError } from '@/features/auth/sign-in-error';
 import { EmailPasswordForm } from '@/features/auth/email-password-form';
-import { AUTH_ERROR_MESSAGES, DEFAULT_AUTH_ERROR_MESSAGE } from '@/features/auth/auth-error-messages';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 
@@ -30,13 +28,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
           </div>
         </div>
 
-        {error && (
-          <Alert variant="destructive" className="w-full">
-            <TriangleAlert />
-            <AlertTitle>Sign-in failed</AlertTitle>
-            <AlertDescription>{AUTH_ERROR_MESSAGES[error] ?? DEFAULT_AUTH_ERROR_MESSAGE}</AlertDescription>
-          </Alert>
-        )}
+        {error && <SignInError error={error} />}
 
         <Card className="w-full">
           <CardContent className="flex flex-col gap-4">
