@@ -1,6 +1,10 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ClientQuality, ClientStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+
+const toArray = ({ value }: { value: unknown }) =>
+  Array.isArray(value) ? value : value === undefined ? value : [value];
 
 /**
  * Columns the list may be sorted by. Deliberately narrow: ID, date fields,
@@ -22,28 +26,6 @@ export enum ClientSortField {
 export enum SortOrder {
   asc = 'asc',
   desc = 'desc',
-}
-
-/**
- * Status filter for the list. Mirrors ClientStatus but adds ALL so callers
- * can opt out of the status filter entirely.
- */
-export enum ClientStatusFilter {
-  COLD = 'COLD',
-  WARM = 'WARM',
-  TRADED = 'TRADED',
-  ALL = 'ALL',
-}
-
-/**
- * Quality filter for the list. Mirrors ClientQuality but adds ALL so callers
- * can opt out of the quality filter entirely.
- */
-export enum ClientQualityFilter {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  ALL = 'ALL',
 }
 
 export class QueryClientsDto {
@@ -83,23 +65,39 @@ export class QueryClientsDto {
   q?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by status. Defaults to ALL (every status); pass a specific status to narrow.',
-    enum: ClientStatusFilter,
-    default: ClientStatusFilter.ALL,
+    description: 'Filter by status (one or more). Omit for all statuses.',
+    enum: ClientStatus,
+    isArray: true,
   })
   @IsOptional()
-  @IsEnum(ClientStatusFilter)
-  status: ClientStatusFilter = ClientStatusFilter.ALL;
+  @Transform(toArray)
+  @IsArray()
+  @IsEnum(ClientStatus, { each: true })
+  statuses?: ClientStatus[];
 
   @ApiPropertyOptional({ description: 'Filter by industry (contains, case-insensitive)' })
   @IsOptional()
   @IsString()
   industry?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by industry id(s) (one or more, exact match)', type: [String] })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  industryIds?: string[];
+
   @ApiPropertyOptional({ description: 'Filter by specialization (contains, case-insensitive)' })
   @IsOptional()
   @IsString()
   specialization?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by specialization id(s) (one or more, exact match)', type: [String] })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  specializationIds?: string[];
 
   @ApiPropertyOptional({
     description:
@@ -120,19 +118,27 @@ export class QueryClientsDto {
   @IsString({ each: true })
   locationIds?: string[];
 
-  @ApiPropertyOptional({ description: 'Filter by owning consultant ID (exact match)' })
-  @IsOptional()
-  @IsString()
-  consultantId?: string;
-
   @ApiPropertyOptional({
-    description: 'Filter by lead quality. Defaults to ALL (every quality); pass a specific value to narrow.',
-    enum: ClientQualityFilter,
-    default: ClientQualityFilter.ALL,
+    description:
+      "Filter by owning consultant ID(s) (one or more, exact match). '' selects unassigned clients.",
+    type: [String],
   })
   @IsOptional()
-  @IsEnum(ClientQualityFilter)
-  quality: ClientQualityFilter = ClientQualityFilter.ALL;
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  consultantIds?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Filter by lead quality (one or more). Omit for all qualities.',
+    enum: ClientQuality,
+    isArray: true,
+  })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsEnum(ClientQuality, { each: true })
+  qualities?: ClientQuality[];
 
   @ApiPropertyOptional({
     description:

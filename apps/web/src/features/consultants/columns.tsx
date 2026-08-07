@@ -68,16 +68,34 @@ interface ConsultantColumnsOptions {
     options: TagOption[];
     /** Absent when the caller lacks `consultant_industry:update` — read-only chips instead of an editable picker. */
     onIndustriesChange?: (user: Consultant, industryIds: string[]) => void;
+    /** Grows the Industry catalog itself (not just this consultant's grants) — present only for `industry:create` (admin, manager). */
+    onCreateIndustry?: (name: string) => Promise<TagOption>;
+    /** Renames the underlying Industry row — present only for `industry:update` (admin, manager). */
+    onEditIndustry?: (option: TagOption) => void;
+    /** Deactivates the underlying Industry row — present only for `industry:delete` (admin, manager). */
+    onDeleteIndustry?: (option: TagOption) => void;
   };
   /**
    * Same gating pattern as `industries`, keyed to `consultant_specialization:read`.
    * Narrows the industry arm rather than granting on its own — see
-   * docs/scope-explained.md §4.
+   * docs/scope-explained.md §4. A specialization grant only means anything as
+   * a narrowing of an industry the consultant already holds (enforced
+   * server-side in `setSpecializations`), so the picker mirrors that: a row
+   * with no industries yet can't be given any specialization, and a row with
+   * some can only add ones under those industries.
    */
   specializations?: {
     options: TagOption[];
+    /** Specialization id → its owning Industry id, for filtering `options` down to a row's own held industries. */
+    industryIdByOption: Record<string, string>;
     /** Absent when the caller lacks `consultant_specialization:update` — read-only chips instead of an editable picker. */
     onSpecializationsChange?: (user: Consultant, specializationIds: string[]) => void;
+    /** Grows the Specialization catalog itself — present only for `specialization:create` (admin, manager). */
+    onCreateSpecialization?: (name: string) => Promise<TagOption>;
+    /** Renames the underlying Specialization row — present only for `specialization:update` (admin, manager). */
+    onEditSpecialization?: (option: TagOption) => void;
+    /** Deactivates the underlying Specialization row — present only for `specialization:delete` (admin, manager). */
+    onDeleteSpecialization?: (option: TagOption) => void;
   };
 }
 
@@ -205,6 +223,12 @@ export function getConsultantColumns({
                   selected={selected}
                   onChange={(ids) => industries.onIndustriesChange!(user, ids)}
                   disabled={disabled}
+                  onCreate={industries.onCreateIndustry}
+                  tagActions={
+                    industries.onEditIndustry || industries.onDeleteIndustry
+                      ? { onEdit: industries.onEditIndustry, onDelete: industries.onDeleteIndustry }
+                      : undefined
+                  }
                 />
               );
             },
@@ -224,15 +248,42 @@ export function getConsultantColumns({
               if (!specializations.onSpecializationsChange) {
                 return <TagPills options={specializations.options} selected={selected} />;
               }
-              const disabled = pendingId === user.id;
-              return (
+              const industryIds = user.industryIds ?? [];
+              const hasNoIndustries = industryIds.length === 0;
+              // Only offer specializations under an industry this row already
+              // holds — mirrors the server-side check in `setSpecializations`.
+              const selectableOptions = specializations.options.filter((o) =>
+                industryIds.includes(specializations.industryIdByOption[o.value]),
+              );
+              const disabled = pendingId === user.id || hasNoIndustries;
+              const picker = (
                 <TagMultiSelect
                   title="Specializations"
                   options={specializations.options}
+                  selectableOptions={selectableOptions}
                   selected={selected}
                   onChange={(ids) => specializations.onSpecializationsChange!(user, ids)}
                   disabled={disabled}
+                  onCreate={specializations.onCreateSpecialization}
+                  tagActions={
+                    specializations.onEditSpecialization || specializations.onDeleteSpecialization
+                      ? {
+                          onEdit: specializations.onEditSpecialization,
+                          onDelete: specializations.onDeleteSpecialization,
+                        }
+                      : undefined
+                  }
                 />
+              );
+              // Native title tooltip rather than the app's Tooltip component
+              // — this is a single row-level hint, not worth the extra
+              // floating-layer machinery used for the Status header's info icon.
+              return hasNoIndustries ? (
+                <span title="Assign an industry first — specializations narrow one, they can't stand alone.">
+                  {picker}
+                </span>
+              ) : (
+                picker
               );
             },
           } satisfies ColumnDef<Consultant>,

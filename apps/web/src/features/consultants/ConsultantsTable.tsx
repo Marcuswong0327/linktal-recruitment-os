@@ -24,6 +24,10 @@ import {
   ContextMenuSubTrigger,
 } from '@/components/ui/context-menu';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+import { RenameDialog } from '@/components/RenameDialog';
+import { deleteWithUndo, undoLabel } from '@/lib/delete-with-undo';
+import type { TagOption } from '@/components/TagMultiSelect';
 import {
   getGetConsultantsQueryKey,
   updateConsultant as updateConsultantRequest,
@@ -32,17 +36,39 @@ import {
   useSetConsultantSpecializations,
   useUpdateConsultant,
 } from '@/lib/api/generated/consultants/consultants';
-import { useGetIndustries } from '@/lib/api/generated/industries/industries';
-import { useGetSpecializations } from '@/lib/api/generated/specializations/specializations';
+import {
+  getGetIndustriesQueryKey,
+  useCreateIndustry,
+  useDeleteIndustry,
+  useGetIndustries,
+  useUpdateIndustry,
+} from '@/lib/api/generated/industries/industries';
+import {
+  getGetSpecializationsQueryKey,
+  useCreateSpecialization,
+  useDeleteSpecialization,
+  useGetSpecializations,
+  useUpdateSpecialization,
+} from '@/lib/api/generated/specializations/specializations';
 import type { UpdateConsultantDto } from '@/lib/api/generated/types';
 import { hasPermission } from '@/lib/auth/permissions';
 import { getConsultantColumns } from './columns';
+import { CreateSpecializationDialog } from './CreateSpecializationDialog';
 import {
   type Consultant,
   type ConsultantRole,
   consultantRoleLabels,
   consultantRoles,
 } from './schema';
+
+type CatalogKind = 'industry' | 'specialization';
+interface CatalogTagTarget {
+  kind: CatalogKind;
+  value: string;
+  label: string;
+  /** Only meaningful for specializations — needed to re-create the row on Undo (see `handleConfirmDelete`). */
+  industryId?: string;
+}
 
 const PAGE_SIZE = 20;
 
@@ -102,6 +128,16 @@ export function ConsultantsTable() {
   const canEditIndustries = hasPermission(session, 'consultant_industry', 'update');
   const canReadSpecializations = hasPermission(session, 'consultant_specialization', 'read');
   const canEditSpecializations = hasPermission(session, 'consultant_specialization', 'update');
+  // Separate from the two above: these gate managing the Industry/
+  // Specialization *catalog* itself (rename, deactivate, grow it inline via
+  // "+ Create") from the same columns' tag pickers — admin + manager only,
+  // per the RBAC matrix (docs/rbac-roles.md §"industry"/"specialization").
+  const canCreateIndustries = hasPermission(session, 'industry', 'create');
+  const canUpdateIndustries = hasPermission(session, 'industry', 'update');
+  const canDeleteIndustries = hasPermission(session, 'industry', 'delete');
+  const canCreateSpecializations = hasPermission(session, 'specialization', 'create');
+  const canUpdateSpecializations = hasPermission(session, 'specialization', 'update');
+  const canDeleteSpecializations = hasPermission(session, 'specialization', 'delete');
 
   const { data, isLoading, isFetching, isError, error } = useGetConsultants(
     { page, pageSize: PAGE_SIZE, q: search, roleName: role, isActive },
@@ -125,9 +161,31 @@ export function ConsultantsTable() {
   const specializationOptions = React.useMemo(
     () =>
       specializationsData?.status === 200
-        ? specializationsData.data.map((s) => ({ value: s.id, label: s.name }))
+        ? specializationsData.data.map((s) => ({
+            value: s.id,
+            label: s.name,
+            // Industry badges have no colorKey, so they color off their own
+            // id — keying specialization color on industryId (not the root
+            // specialization's own id) makes a specialization's badge match
+            // its parent Industry's badge, not just its sibling specializations.
+            colorKey: s.industryId,
+          }))
         : [],
     [specializationsData],
+  );
+  // Full rows (not just {value, label}) — CreateSpecializationDialog needs
+  // industryId/parentId to build the parent-category picker, and the delete
+  // Undo path needs industryId to re-create the exact same row (see
+  // `handleConfirmDelete`).
+  const specializationRows = React.useMemo(
+    () => (specializationsData?.status === 200 ? specializationsData.data : []),
+    [specializationsData],
+  );
+  // Specialization id -> owning Industry id, so the Specializations column
+  // can filter each row's addable options down to its own held industries.
+  const specializationIndustryId = React.useMemo(
+    () => Object.fromEntries(specializationRows.map((s) => [s.id, s.industryId])),
+    [specializationRows],
   );
 
   const updateUser = useUpdateConsultant({
@@ -162,6 +220,134 @@ export function ConsultantsTable() {
       onError: (err) => toast.error(err.message || 'Failed to update specializations'),
     },
   });
+
+  // --- Industry/Specialization catalog management, surfaced inline from the
+  // tag pickers above (the "+ Create" row and each tag's "…" menu) rather
+  // than a separate admin page, since neither catalog has one. Admin/manager
+  // only, per canCreate/canUpdate/canDelete above. ---
+
+  const createIndustryMutation = useCreateIndustry({
+    mutation: { onError: (err) => toast.error(err.message || 'Failed to add industry') },
+  });
+  async function handleCreateIndustry(name: string): Promise<TagOption> {
+    const res = await createIndustryMutation.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add industry');
+    queryClient.invalidateQueries({ queryKey: getGetIndustriesQueryKey() });
+    return { value: res.data.id, label: res.data.name };
+  }
+
+  const createSpecializationMutation = useCreateSpecialization({
+    mutation: { onError: (err) => toast.error(err.message || 'Failed to add specialization') },
+  });
+  // Unlike Industry, a Specialization needs an industryId it can't infer from
+  // just the typed name (see schema.prisma) — the multi-select's "+ Create"
+  // opens CreateSpecializationDialog to collect it, and this promise is what
+  // that dialog eventually resolves or rejects (Cancel/close = reject).
+  const pendingCreateSpecialization = React.useRef<{
+    resolve: (option: TagOption) => void;
+    reject: (err: unknown) => void;
+  } | null>(null);
+  const [createSpecializationDraft, setCreateSpecializationDraft] = React.useState<string | null>(
+    null,
+  );
+  function handleCreateSpecialization(name: string): Promise<TagOption> {
+    return new Promise((resolve, reject) => {
+      pendingCreateSpecialization.current = { resolve, reject };
+      setCreateSpecializationDraft(name);
+    });
+  }
+  function handleCreateSpecializationDialogChange(open: boolean) {
+    if (!open) {
+      // A no-op once the dialog's own submit handler already resolved and
+      // cleared the ref — this only fires the reject path for an actual
+      // Cancel/Esc/backdrop close.
+      pendingCreateSpecialization.current?.reject(new Error('Cancelled'));
+      pendingCreateSpecialization.current = null;
+      setCreateSpecializationDraft(null);
+    }
+  }
+  async function handleSubmitCreateSpecialization(data: {
+    name: string;
+    industryId: string;
+    parentId?: string;
+  }) {
+    const res = await createSpecializationMutation.mutateAsync({ data });
+    if (res.status !== 201) throw new Error('Failed to add specialization');
+    queryClient.invalidateQueries({ queryKey: getGetSpecializationsQueryKey() });
+    pendingCreateSpecialization.current?.resolve({ value: res.data.id, label: res.data.name });
+    pendingCreateSpecialization.current = null;
+    setCreateSpecializationDraft(null);
+  }
+
+  const updateIndustryMutation = useUpdateIndustry({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetIndustriesQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to rename industry'),
+    },
+  });
+  const updateSpecializationMutation = useUpdateSpecialization({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetSpecializationsQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to rename specialization'),
+    },
+  });
+  const [renameTarget, setRenameTarget] = React.useState<CatalogTagTarget | null>(null);
+  function renameCatalogEntry(kind: CatalogKind, id: string, name: string) {
+    return kind === 'industry'
+      ? updateIndustryMutation.mutateAsync({ id, data: { name } })
+      : updateSpecializationMutation.mutateAsync({ id, data: { name } });
+  }
+  async function handleRenameSubmit(value: string) {
+    if (!renameTarget) return;
+    const { kind, value: id, label: previousName } = renameTarget;
+    await renameCatalogEntry(kind, id, value);
+    // The success toast lives here (not in the mutations' onSuccess above) so
+    // it can offer Undo — renaming back to `previousName`, which this same
+    // helper reuses. A second click just renames again, so there's no risk
+    // of an inconsistent state even if Undo is clicked after further edits.
+    toast.success(`Renamed to "${value}"`, {
+      action: {
+        label: undoLabel,
+        onClick: () => {
+          renameCatalogEntry(kind, id, previousName)
+            .then(() => toast.success(`Reverted to "${previousName}"`))
+            .catch((err) =>
+              toast.error(err instanceof Error ? err.message : 'Failed to undo rename'),
+            );
+        },
+      },
+    });
+  }
+
+  const deleteIndustryMutation = useDeleteIndustry();
+  const deleteSpecializationMutation = useDeleteSpecialization();
+  const [deleteTarget, setDeleteTarget] = React.useState<CatalogTagTarget | null>(null);
+  function handleConfirmDelete() {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    const queryKey =
+      target.kind === 'industry' ? getGetIndustriesQueryKey() : getGetSpecializationsQueryKey();
+    deleteWithUndo({
+      label: `${target.kind} "${target.label}"`,
+      deleteFn: () =>
+        target.kind === 'industry'
+          ? deleteIndustryMutation.mutateAsync({ id: target.value })
+          : deleteSpecializationMutation.mutateAsync({ id: target.value }),
+      // Neither catalog has a dedicated restore endpoint — re-adding the same
+      // name reactivates the deactivated row instead (see
+      // IndustriesService.create / SpecializationsService.create), so that
+      // doubles as Undo here.
+      restoreFn: () =>
+        target.kind === 'industry'
+          ? createIndustryMutation.mutateAsync({ data: { name: target.label } })
+          : createSpecializationMutation.mutateAsync({
+              data: { name: target.label, industryId: target.industryId! },
+            }),
+      onCommitted: () => queryClient.invalidateQueries({ queryKey }),
+      onUndo: () => queryClient.invalidateQueries({ queryKey }),
+    });
+  }
 
   const result = data?.status === 200 ? data.data : undefined;
   const users = result?.data ?? [];
@@ -215,16 +401,39 @@ export function ConsultantsTable() {
           ? {
               options: industryOptions,
               onIndustriesChange: canEditIndustries
-                ? (user, industryIds) => setIndustries.mutate({ id: user.id, data: { industryIds } })
+                ? (user, industryIds) =>
+                    setIndustries.mutate({ id: user.id, data: { industryIds } })
+                : undefined,
+              onCreateIndustry: canCreateIndustries ? handleCreateIndustry : undefined,
+              onEditIndustry: canUpdateIndustries
+                ? (option) => setRenameTarget({ kind: 'industry', ...option })
+                : undefined,
+              onDeleteIndustry: canDeleteIndustries
+                ? (option) => setDeleteTarget({ kind: 'industry', ...option })
                 : undefined,
             }
           : undefined,
         specializations: canReadSpecializations
           ? {
               options: specializationOptions,
+              industryIdByOption: specializationIndustryId,
               onSpecializationsChange: canEditSpecializations
                 ? (user, specializationIds) =>
                     setSpecializations.mutate({ id: user.id, data: { specializationIds } })
+                : undefined,
+              onCreateSpecialization: canCreateSpecializations
+                ? handleCreateSpecialization
+                : undefined,
+              onEditSpecialization: canUpdateSpecializations
+                ? (option) => setRenameTarget({ kind: 'specialization', ...option })
+                : undefined,
+              onDeleteSpecialization: canDeleteSpecializations
+                ? (option) =>
+                    setDeleteTarget({
+                      kind: 'specialization',
+                      ...option,
+                      industryId: specializationRows.find((s) => s.id === option.value)?.industryId,
+                    })
                 : undefined,
             }
           : undefined,
@@ -235,12 +444,22 @@ export function ConsultantsTable() {
       updateUser,
       canReadIndustries,
       canEditIndustries,
+      canCreateIndustries,
+      canUpdateIndustries,
+      canDeleteIndustries,
       industryOptions,
       setIndustries,
+      handleCreateIndustry,
       canReadSpecializations,
       canEditSpecializations,
+      canCreateSpecializations,
+      canUpdateSpecializations,
+      canDeleteSpecializations,
       specializationOptions,
+      specializationRows,
+      specializationIndustryId,
       setSpecializations,
+      handleCreateSpecialization,
     ],
   );
 
@@ -253,137 +472,169 @@ export function ConsultantsTable() {
   }
 
   return (
-    <DataGrid
-      columns={columns}
-      data={users}
-      isLoading={isLoading}
-      isFetching={isFetching}
-      searchPlaceholder="Search consultants…"
-      filters={userFilters}
-      emptyState="No consultants yet."
-      getRowId={(user) => user.id}
-      canSelectRow={(user) => user.id !== currentConsultantId}
-      onSelectionChange={setSelectedUsers}
-      enableRowRangeSelect
-      hideSelectColumn
-      toolbar={
-        selectedUsers.length > 0 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button size="lg" disabled={isBulkUpdating}>
-                  {isBulkUpdating ? 'Updating…' : `Bulk actions (${selectedUsers.length})`}
-                  <ChevronDown />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end">
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <Shield />
-                  Change role
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="min-w-48">
-                  {consultantRoles.map((r) => (
+    <>
+      <DataGrid
+        columns={columns}
+        data={users}
+        isLoading={isLoading}
+        isFetching={isFetching}
+        searchPlaceholder="Search consultants…"
+        filters={userFilters}
+        emptyState="No consultants yet."
+        getRowId={(user) => user.id}
+        canSelectRow={(user) => user.id !== currentConsultantId}
+        onSelectionChange={setSelectedUsers}
+        enableRowRangeSelect
+        hideSelectColumn
+        toolbar={
+          selectedUsers.length > 0 ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button size="lg" disabled={isBulkUpdating}>
+                    {isBulkUpdating ? 'Updating…' : `Bulk actions (${selectedUsers.length})`}
+                    <ChevronDown />
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="end">
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Shield />
+                    Change role
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="min-w-48">
+                    {consultantRoles.map((r) => (
+                      <DropdownMenuItem
+                        key={r}
+                        onClick={() =>
+                          handleBulkUpdate(
+                            { roleName: r },
+                            `Role set to ${consultantRoleLabels[r]}`,
+                          )
+                        }
+                      >
+                        <Badge variant={roleFilterVariant[r]} className="rounded-md">
+                          {consultantRoleLabels[r]}
+                        </Badge>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Orbit />
+                    Update status
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="min-w-48">
                     <DropdownMenuItem
-                      key={r}
-                      onClick={() =>
-                        handleBulkUpdate({ roleName: r }, `Role set to ${consultantRoleLabels[r]}`)
-                      }
+                      onClick={() => handleBulkUpdate({ isActive: true }, 'Activated')}
                     >
-                      <Badge variant={roleFilterVariant[r]} className="rounded-md">
-                        {consultantRoleLabels[r]}
+                      <Badge variant="success" className="rounded-md">
+                        Active
                       </Badge>
                     </DropdownMenuItem>
-                  ))}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                  <Orbit />
-                  Update status
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="min-w-48">
-                  <DropdownMenuItem
-                    onClick={() => handleBulkUpdate({ isActive: true }, 'Activated')}
+                    <DropdownMenuItem
+                      onClick={() => handleBulkUpdate({ isActive: false }, 'Deactivated')}
+                    >
+                      <Badge variant="destructive" className="rounded-md">
+                        Inactive
+                      </Badge>
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : undefined
+        }
+        // Unconditional, unlike the toolbar dropdown above — DataGrid only
+        // mounts its right-click listener at all while this is non-null
+        // (see OptionalContextMenu's `if (!content) return children`). Gating
+        // it on selectedUsers.length here would mean the very first right-click
+        // on an unselected row (which selects it and should open this same
+        // menu) fires before the listener exists — selection would update a
+        // few renders later, too late for that native contextmenu event.
+        // Whether it's actually allowed to open is still correctly decided
+        // inside DataGrid, from the row selection the same right-click just
+        // produced.
+        selectionContextMenu={
+          <>
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <Shield />
+                Change role
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="min-w-48">
+                {consultantRoles.map((r) => (
+                  <ContextMenuItem
+                    key={r}
+                    onClick={() =>
+                      handleBulkUpdate({ roleName: r }, `Role set to ${consultantRoleLabels[r]}`)
+                    }
                   >
-                    <Badge variant="success" className="rounded-md">
-                      Active
+                    <Badge variant={roleFilterVariant[r]} className="rounded-md">
+                      {consultantRoleLabels[r]}
                     </Badge>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => handleBulkUpdate({ isActive: false }, 'Deactivated')}
-                  >
-                    <Badge variant="destructive" className="rounded-md">
-                      Inactive
-                    </Badge>
-                  </DropdownMenuItem>
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : undefined
-      }
-      // Unconditional, unlike the toolbar dropdown above — DataGrid only
-      // mounts its right-click listener at all while this is non-null
-      // (see OptionalContextMenu's `if (!content) return children`). Gating
-      // it on selectedUsers.length here would mean the very first right-click
-      // on an unselected row (which selects it and should open this same
-      // menu) fires before the listener exists — selection would update a
-      // few renders later, too late for that native contextmenu event.
-      // Whether it's actually allowed to open is still correctly decided
-      // inside DataGrid, from the row selection the same right-click just
-      // produced.
-      selectionContextMenu={
-        <>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <Shield />
-              Change role
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent className="min-w-48">
-              {consultantRoles.map((r) => (
-                <ContextMenuItem
-                  key={r}
-                  onClick={() =>
-                    handleBulkUpdate({ roleName: r }, `Role set to ${consultantRoleLabels[r]}`)
-                  }
-                >
-                  <Badge variant={roleFilterVariant[r]} className="rounded-md">
-                    {consultantRoleLabels[r]}
+                  </ContextMenuItem>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <Orbit />
+                Update status
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="min-w-48">
+                <ContextMenuItem onClick={() => handleBulkUpdate({ isActive: true }, 'Activated')}>
+                  <Badge variant="success" className="rounded-md">
+                    Active
                   </Badge>
                 </ContextMenuItem>
-              ))}
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-          <ContextMenuSub>
-            <ContextMenuSubTrigger>
-              <Orbit />
-              Update status
-            </ContextMenuSubTrigger>
-            <ContextMenuSubContent className="min-w-48">
-              <ContextMenuItem onClick={() => handleBulkUpdate({ isActive: true }, 'Activated')}>
-                <Badge variant="success" className="rounded-md">
-                      Active
-                    </Badge>
-              </ContextMenuItem>
-              <ContextMenuItem onClick={() => handleBulkUpdate({ isActive: false }, 'Deactivated')}>
-                <Badge variant="destructive" className="rounded-md">
-                      Inactive
-                    </Badge>
-              </ContextMenuItem>
-            </ContextMenuSubContent>
-          </ContextMenuSub>
-        </>
-      }
-      server={{
-        total: result?.total ?? 0,
-        page,
-        pageSize: PAGE_SIZE,
-        pageCount: result?.pageCount ?? 1,
-        onPageChange: setPage,
-        onQueryChange: handleQueryChange,
-      }}
-    />
+                <ContextMenuItem
+                  onClick={() => handleBulkUpdate({ isActive: false }, 'Deactivated')}
+                >
+                  <Badge variant="destructive" className="rounded-md">
+                    Inactive
+                  </Badge>
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          </>
+        }
+        server={{
+          total: result?.total ?? 0,
+          page,
+          pageSize: PAGE_SIZE,
+          pageCount: result?.pageCount ?? 1,
+          onPageChange: setPage,
+          onQueryChange: handleQueryChange,
+        }}
+      />
+
+      <RenameDialog
+        open={renameTarget !== null}
+        onOpenChange={(open) => !open && setRenameTarget(null)}
+        title={`Rename ${renameTarget?.kind ?? ''}`}
+        initialValue={renameTarget?.label ?? ''}
+        onSubmit={handleRenameSubmit}
+      />
+
+      <ConfirmDeleteDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title={`Delete "${deleteTarget?.label}"?`}
+        description="Consultants who already have it keep it. You can undo this from the toast right after."
+        onConfirm={handleConfirmDelete}
+      />
+
+      <CreateSpecializationDialog
+        open={createSpecializationDraft !== null}
+        onOpenChange={handleCreateSpecializationDialogChange}
+        initialName={createSpecializationDraft ?? ''}
+        industries={industryOptions}
+        specializations={specializationRows}
+        onSubmit={handleSubmitCreateSpecialization}
+      />
+    </>
   );
 }

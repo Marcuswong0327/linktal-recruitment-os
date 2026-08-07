@@ -21,7 +21,7 @@ import { redactConsultantField } from '../common/redact-consultant-field';
 import { AuthUser } from '../auth/auth.types';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { ClientQualityFilter, ClientStatusFilter, QueryClientsDto } from './dto/query-clients.dto';
+import { QueryClientsDto } from './dto/query-clients.dto';
 
 // Industry/specialization are FK relations, not scalars — every read needs
 // this to get the resolved name back, and every write needs it to return one
@@ -159,12 +159,12 @@ export class ClientsService {
 
     const where: Prisma.ClientWhereInput = {};
 
-    if (query.status !== ClientStatusFilter.ALL) {
-      where.status = query.status as unknown as Prisma.ClientWhereInput['status'];
+    if (query.statuses?.length) {
+      where.status = { in: query.statuses };
     }
 
-    if (query.quality !== ClientQualityFilter.ALL) {
-      where.quality = query.quality as unknown as Prisma.ClientWhereInput['quality'];
+    if (query.qualities?.length) {
+      where.quality = { in: query.qualities };
     }
 
     // contains/insensitive text filters
@@ -177,12 +177,11 @@ export class ClientsService {
     where.industry = containsName(query.industry);
     where.specialization = containsName(query.specialization);
 
-    if (query.consultantId !== undefined) {
-      // '' is the frontend's "Unassigned" sentinel — maps to a null FK, not a no-op.
-      // Safe to honour for a consultant too: `clientScope` is AND-ed on below,
-      // so filtering *by* another consultant can only ever narrow what this
-      // caller was already allowed to see, never widen it.
-      where.consultantId = query.consultantId === '' ? null : query.consultantId;
+    if (query.industryIds?.length) {
+      where.industryId = { in: query.industryIds };
+    }
+    if (query.specializationIds?.length) {
+      where.specializationId = { in: query.specializationIds };
     }
 
     // Terms of Business is a one-to-many table now, not a `tobSigned` flag —
@@ -197,6 +196,24 @@ export class ClientsService {
     // instead of combining with it (see CandidatesService.findAll for the
     // same idiom already established there).
     const and: Prisma.ClientWhereInput[] = [];
+
+    if (query.consultantIds?.length) {
+      // '' is the frontend's "Unassigned" sentinel — maps to a null FK, not a
+      // real id. Prisma's `in` never matches NULL (SQL semantics), so an OR
+      // arm is needed whenever '' is one of the selected values. Safe to
+      // honour for a consultant too: `clientScope` is AND-ed on below, so
+      // filtering *by* other consultants can only ever narrow what this
+      // caller was already allowed to see, never widen it.
+      const ids = query.consultantIds.filter((id) => id !== '');
+      const includeUnassigned = query.consultantIds.includes('');
+      if (includeUnassigned && ids.length > 0) {
+        and.push({ OR: [{ consultantId: { in: ids } }, { consultantId: null }] });
+      } else if (includeUnassigned) {
+        and.push({ consultantId: null });
+      } else {
+        and.push({ consultantId: { in: ids } });
+      }
+    }
 
     // A client carries a *set* of locations at mixed granularity, so both
     // filters go through the join. Selecting a country matches every client

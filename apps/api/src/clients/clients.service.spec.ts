@@ -1,7 +1,7 @@
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { ClientQualityFilter, ClientStatusFilter, QueryClientsDto, SortOrder } from './dto/query-clients.dto';
+import { QueryClientsDto, SortOrder } from './dto/query-clients.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { AuthUser } from '../auth/auth.types';
@@ -48,8 +48,6 @@ const baseQuery: QueryClientsDto = {
   page: 1,
   pageSize: 20,
   sortOrder: SortOrder.asc,
-  status: ClientStatusFilter.ALL,
-  quality: ClientQualityFilter.ALL,
 };
 
 describe('ClientsService.create', () => {
@@ -293,7 +291,8 @@ describe('ClientsService.update — consultant cannot unassign', () => {
 // Regression coverage for the '' (Unassigned) sentinel bug: `findAll` used to
 // check `if (query.consultantId)`, which is falsy for '', so filtering by
 // "Unassigned" silently returned every client instead of just the unassigned
-// ones.
+// ones. consultantId(s) is now multi-select, so this also covers the mixed
+// "Unassigned + specific ids" OR-arm case.
 describe('ClientsService.findAll — filters', () => {
   function makeService(rows: unknown[] = []) {
     const findMany = jest.fn().mockResolvedValue(rows);
@@ -303,22 +302,30 @@ describe('ClientsService.findAll — filters', () => {
     return { service: new ClientsService(prisma, base), findMany };
   }
 
-  it('does not filter by consultant when consultantId is omitted', async () => {
+  it('does not filter by consultant when consultantIds is omitted', async () => {
     const { service, findMany } = makeService();
     await service.findAll({ ...baseQuery }, makeUser());
-    expect(findMany.mock.calls[0][0].where).not.toHaveProperty('consultantId');
+    expect(findMany.mock.calls[0][0].where.AND).toBeUndefined();
   });
 
   it('maps the "" Unassigned sentinel to a null FK filter, not a no-op', async () => {
     const { service, findMany } = makeService();
-    await service.findAll({ ...baseQuery, consultantId: '' }, makeUser());
-    expect(findMany.mock.calls[0][0].where.consultantId).toBeNull();
+    await service.findAll({ ...baseQuery, consultantIds: [''] }, makeUser());
+    expect(findMany.mock.calls[0][0].where.AND).toContainEqual({ consultantId: null });
   });
 
-  it('filters by the given consultant id', async () => {
+  it('filters by the given consultant id(s)', async () => {
     const { service, findMany } = makeService();
-    await service.findAll({ ...baseQuery, consultantId: 'cons-1' }, makeUser());
-    expect(findMany.mock.calls[0][0].where.consultantId).toBe('cons-1');
+    await service.findAll({ ...baseQuery, consultantIds: ['cons-1', 'cons-2'] }, makeUser());
+    expect(findMany.mock.calls[0][0].where.AND).toContainEqual({ consultantId: { in: ['cons-1', 'cons-2'] } });
+  });
+
+  it('OR-s null in alongside real ids when Unassigned is selected together with specific consultants', async () => {
+    const { service, findMany } = makeService();
+    await service.findAll({ ...baseQuery, consultantIds: ['', 'cons-1'] }, makeUser());
+    expect(findMany.mock.calls[0][0].where.AND).toContainEqual({
+      OR: [{ consultantId: { in: ['cons-1'] } }, { consultantId: null }],
+    });
   });
 
   // TOBs are a one-to-many table now, so "has terms on file" is the existence
@@ -330,6 +337,15 @@ describe('ClientsService.findAll — filters', () => {
 
     await service.findAll({ ...baseQuery, hasTob: false }, makeUser());
     expect(findMany.mock.calls[1][0].where.tobs).toEqual({ none: {} });
+  });
+
+  it('filters by industryIds/specializationIds as exact FK matches, distinct from the free-text industry/specialization filters', async () => {
+    const { service, findMany } = makeService();
+    await service.findAll({ ...baseQuery, industryIds: ['ind1', 'ind2'] }, makeUser());
+    expect(findMany.mock.calls[0][0].where.industryId).toEqual({ in: ['ind1', 'ind2'] });
+
+    await service.findAll({ ...baseQuery, specializationIds: ['spec1'] }, makeUser());
+    expect(findMany.mock.calls[1][0].where.specializationId).toEqual({ in: ['spec1'] });
   });
 
   // A client carries a *set* of locations at mixed granularity, so both
@@ -377,14 +393,14 @@ describe('ClientsService.findAll — consultant role scoping', () => {
 
   // Safe to honour now: the scope is AND-ed on top, so filtering *by* another
   // consultant can only narrow what this caller could already see.
-  it('honours a caller-supplied consultantId as a filter, still under scope', async () => {
+  it('honours a caller-supplied consultantIds filter, still under scope', async () => {
     const { service, findMany } = makeService();
     await service.findAll(
-      { ...baseQuery, consultantId: 'someone-elses-id' },
+      { ...baseQuery, consultantIds: ['someone-elses-id'] },
       makeUser({ roleName: 'consultant', consultantId: 'cons-me', industryIds: ['ind1'] }),
     );
     const where = findMany.mock.calls[0][0].where;
-    expect(where.consultantId).toBe('someone-elses-id');
+    expect(where.AND).toContainEqual({ consultantId: { in: ['someone-elses-id'] } });
     expect(where.AND).toContainEqual(expect.objectContaining({ OR: expect.any(Array) }));
   });
 
