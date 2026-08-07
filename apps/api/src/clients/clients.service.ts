@@ -50,10 +50,6 @@ const CLIENT_INCLUDE = {
   stakeholders: {
     where: { deletedAt: null },
     select: {
-      // A contact's own coverage is the client's third scope arm — see
-      // clientScope in common/scope.ts. Fetched for the single-record check
-      // only, and stripped back out in `toEntity`.
-      coverage: { select: { location: { select: { ancestorIds: true } } } },
       contactHistory: {
         orderBy: { contactedAt: 'desc' },
         take: 1,
@@ -82,7 +78,6 @@ type ClientWithRelations = {
   specialization: { name: string } | null;
   locations: { locationId: string; location: { name: string; ancestorIds: string[] } }[];
   stakeholders: {
-    coverage: { location: { ancestorIds: string[] } }[];
     contactHistory: LatestContactRow[];
   }[];
 };
@@ -291,17 +286,12 @@ export class ClientsService {
     if (!client) {
       throw new NotFoundException(`Client ${id} not found`);
     }
-    // The location arm covers both of the client's routes in: its own market
-    // set, and any live stakeholder's own coverage. `consultantId` short-
-    // circuits all of it — an assigned account is always its owner's to open
-    // (see clientScope).
+    // `consultantId` short-circuits all of it — an assigned account is
+    // always its owner's to open (see clientScope).
     assertInScope(user, {
       consultantId: client.consultantId,
       industryId: client.industryId,
-      locationAncestorIds: [
-        ...client.locations.flatMap((l) => l.location.ancestorIds),
-        ...client.stakeholders.flatMap((s) => s.coverage.flatMap((c) => c.location.ancestorIds)),
-      ],
+      locationAncestorIds: client.locations.flatMap((l) => l.location.ancestorIds),
     });
     return redactConsultantField(toEntity(client), user);
   }
@@ -317,15 +307,18 @@ export class ClientsService {
     return toEntity(client);
   }
 
-  async create(dto: CreateClientDto) {
+  async create(dto: CreateClientDto, user: AuthUser) {
     this.assertHasLocations(dto.locationIds);
-    // A consultant can only be assigned a company they'd reach anyway —
-    // its industry or any of its markets.
+    // A consultant can only be assigned a company they'd reach anyway — its
+    // industry or any of its markets — unless an admin/manager is
+    // deliberately making an exception (see assertConsultantCovers).
     if (dto.consultantId) {
-      await assertConsultantCovers(this.prisma, dto.consultantId, {
-        industryId: dto.industryId,
-        locationIds: dto.locationIds,
-      });
+      await assertConsultantCovers(
+        this.prisma,
+        dto.consultantId,
+        { industryId: dto.industryId, locationIds: dto.locationIds },
+        user.roleName,
+      );
     }
     // displayId is assigned by the DB (Client_displayId_seq default).
     const client = await this.prisma.client.create({
@@ -367,10 +360,15 @@ export class ClientsService {
     // an industry/location-only edit never blocks on this (that's what the
     // auto-clear below is for instead of erroring).
     if ('consultantId' in dto && dto.consultantId) {
-      await assertConsultantCovers(this.prisma, dto.consultantId, {
-        industryId: 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId,
-        locationIds: dto.locationIds ?? existing.locationIds,
-      });
+      await assertConsultantCovers(
+        this.prisma,
+        dto.consultantId,
+        {
+          industryId: 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId,
+          locationIds: dto.locationIds ?? existing.locationIds,
+        },
+        user.roleName,
+      );
     }
 
     let client = await this.prisma.client.update({
@@ -408,37 +406,14 @@ export class ClientsService {
   }
 
   /**
-   * Soft-deletes the client and cascades to its stakeholders, job research,
-   * TOBs, job orders, and the submissions/placements under those job orders.
-   * Sequential soft-deletes on the extended client (each audited); children
-   * first, parent last, so a partial failure stays recoverable via `restore`.
+   * Soft-deletes the client. Cascading to its stakeholders, job research,
+   * TOBs, job orders, and the submissions/placements under those job orders
+   * is handled centrally by the Prisma extension's CASCADE_MAP — see
+   * prisma.extensions.ts — so it fires for this call and for any other path
+   * that soft-deletes a client, not just this one.
    */
   async remove(id: string, user: AuthUser) {
     await this.findOne(id, user);
-
-    const jobOrders = await this.prisma.jobOrder.findMany({
-      where: { clientId: id },
-      select: { id: true },
-    });
-    const jobOrderIds = jobOrders.map((j) => j.id);
-    if (jobOrderIds.length > 0) {
-      const submissions = await this.prisma.candidateSubmission.findMany({
-        where: { jobOrderId: { in: jobOrderIds } },
-        select: { id: true },
-      });
-      const submissionIds = submissions.map((s) => s.id);
-      if (submissionIds.length > 0) {
-        await this.prisma.placement.deleteMany({ where: { submissionId: { in: submissionIds } } });
-        await this.prisma.candidateSubmission.deleteMany({
-          where: { jobOrderId: { in: jobOrderIds } },
-        });
-      }
-      await this.prisma.jobOrder.deleteMany({ where: { clientId: id } });
-    }
-    await this.prisma.stakeholder.deleteMany({ where: { clientId: id } });
-    await this.prisma.clientJobResearch.deleteMany({ where: { clientId: id } });
-    await this.prisma.tob.deleteMany({ where: { clientId: id } });
-
     return this.prisma.client.delete({ where: { id } });
   }
 

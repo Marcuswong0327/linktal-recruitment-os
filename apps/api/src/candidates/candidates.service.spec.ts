@@ -56,7 +56,7 @@ describe('CandidatesService.create', () => {
     const base = {} as unknown as PrismaService;
     const service = new CandidatesService(prisma, base);
 
-    const result = await service.create(makeDto());
+    const result = await service.create(makeDto(), makeUser());
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0].data).not.toHaveProperty('displayId');
@@ -84,7 +84,7 @@ describe('CandidatesService.create', () => {
     const prisma = { candidate: { create } } as unknown as ExtendedPrismaClient;
     const service = new CandidatesService(prisma, {} as unknown as PrismaService);
 
-    await service.create(makeDto({ specializationIds: ['spec1', 'spec2'] }));
+    await service.create(makeDto({ specializationIds: ['spec1', 'spec2'] }), makeUser());
 
     expect(create.mock.calls[0][0].data.specializations).toEqual({
       create: [{ specializationId: 'spec1' }, { specializationId: 'spec2' }],
@@ -92,52 +92,25 @@ describe('CandidatesService.create', () => {
   });
 });
 
-// The extended client rewrites delete()/deleteMany() to soft-deletes, so these
-// specs assert the service issues the right *cascade* calls (children first),
-// not the physical SQL.
-describe('CandidatesService.remove (cascade soft-delete)', () => {
-  function setup(submissionIds: string[]) {
+// Cascading to submissions (and their placements) is no longer this service's
+// job — it's handled centrally by the Prisma extension's CASCADE_MAP for any
+// delete path, not just this one. See prisma.extensions.spec.ts.
+describe('CandidatesService.remove', () => {
+  it('checks scope, then hands off to a plain delete', async () => {
     const prisma = {
       candidate: {
         findUnique: jest.fn().mockResolvedValue(withRelations({ id: 'c1', industryId: 'ind1' })),
         delete: jest.fn().mockResolvedValue({ id: 'c1' }),
       },
-      candidateSubmission: {
-        findMany: jest.fn().mockResolvedValue(submissionIds.map((id) => ({ id }))),
-        deleteMany: jest.fn().mockResolvedValue({ count: submissionIds.length }),
-      },
-      placement: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     };
     const service = new CandidatesService(
       prisma as unknown as ExtendedPrismaClient,
       {} as unknown as PrismaService,
     );
-    return { prisma, service };
-  }
 
-  it('cascades to placements + submissions, then deletes the candidate', async () => {
-    const { prisma, service } = setup(['s1', 's2']);
     await service.remove('c1', makeUser());
 
-    expect(prisma.placement.deleteMany).toHaveBeenCalledWith({
-      where: { submissionId: { in: ['s1', 's2'] } },
-    });
-    expect(prisma.candidateSubmission.deleteMany).toHaveBeenCalledWith({
-      where: { candidateId: 'c1' },
-    });
-    expect(prisma.candidate.delete).toHaveBeenCalledWith({ where: { id: 'c1' } });
-    // parent is removed last
-    const placementOrder = prisma.placement.deleteMany.mock.invocationCallOrder[0];
-    const candidateOrder = prisma.candidate.delete.mock.invocationCallOrder[0];
-    expect(candidateOrder).toBeGreaterThan(placementOrder);
-  });
-
-  it('skips the child cascade when there are no submissions', async () => {
-    const { prisma, service } = setup([]);
-    await service.remove('c1', makeUser());
-
-    expect(prisma.placement.deleteMany).not.toHaveBeenCalled();
-    expect(prisma.candidateSubmission.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.candidate.findUnique).toHaveBeenCalled();
     expect(prisma.candidate.delete).toHaveBeenCalledWith({ where: { id: 'c1' } });
   });
 });
@@ -494,14 +467,20 @@ describe('CandidatesService.create — assignment guard (industry OR location)',
   it('rejects assigning a consultant who covers neither the industry nor the location', async () => {
     const { service, create } = makeService();
     await expect(
-      service.create(makeDto({ industryId: 'ind1', consultantId: 'cons-1' })),
+      service.create(
+        makeDto({ industryId: 'ind1', consultantId: 'cons-1' }),
+        makeUser({ roleName: 'consultant' }),
+      ),
     ).rejects.toMatchObject({ response: { code: 'CONSULTANT_SCOPE_MISMATCH' } });
     expect(create).not.toHaveBeenCalled();
   });
 
   it('allows assigning a consultant whose industry matches', async () => {
     const { service, create } = makeService({ industryIds: ['ind1'] });
-    await service.create(makeDto({ industryId: 'ind1', consultantId: 'cons-1' }));
+    await service.create(
+      makeDto({ industryId: 'ind1', consultantId: 'cons-1' }),
+      makeUser({ roleName: 'consultant' }),
+    );
     expect(create).toHaveBeenCalledTimes(1);
   });
 
@@ -509,13 +488,23 @@ describe('CandidatesService.create — assignment guard (industry OR location)',
     const { service, create } = makeService({ locationIds: ['au'], locationCovers: true });
     await service.create(
       makeDto({ industryId: 'ind1', consultantId: 'cons-1', locationId: 'syd' }),
+      makeUser({ roleName: 'consultant' }),
     );
     expect(create).toHaveBeenCalledTimes(1);
   });
 
   it('skips the guard entirely when no consultant is being assigned', async () => {
     const { service, create } = makeService();
-    await service.create(makeDto());
+    await service.create(makeDto(), makeUser());
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets admin assign a consultant who covers neither the industry nor the location', async () => {
+    const { service, create } = makeService();
+    await service.create(
+      makeDto({ industryId: 'ind1', consultantId: 'cons-1' }),
+      makeUser({ roleName: 'admin' }),
+    );
     expect(create).toHaveBeenCalledTimes(1);
   });
 });

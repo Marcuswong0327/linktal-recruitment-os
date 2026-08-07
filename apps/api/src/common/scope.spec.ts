@@ -78,10 +78,11 @@ describe('the no-grants short-circuit', () => {
     expect(jobResearchScope(user)).toEqual({ consultantId: 'me' });
   });
 
-  it('collapses Stakeholder to match-nothing, since it has no owner', () => {
-    // Stakeholder is the one entity with no `consultantId` — contacts belong to
-    // a client, not a recruiter — so there is no ownership arm to fall back to.
-    expect(stakeholderScope(noGrants())).toEqual({ id: { in: [] } });
+  it('collapses Stakeholder the same way its client does, since it delegates entirely', () => {
+    // Stakeholder is the one entity with no `consultantId` of its own — but it
+    // no longer needs one, since it inherits its client's scope wholesale.
+    const user = noGrants();
+    expect(stakeholderScope(user)).toEqual({ client: { consultantId: 'me' } });
   });
 
   it('does not fire when only one axis is empty — a grant on either counts as configured', () => {
@@ -102,34 +103,22 @@ describe('the ownership arm', () => {
     }
   });
 
-  it('is absent from Stakeholder entirely', () => {
-    const arms = (stakeholderScope(makeUser()) as { OR: unknown[] }).OR;
-    expect(arms).toHaveLength(2);
-    expect(JSON.stringify(arms)).not.toContain('consultantId');
+  // Stakeholder has no `consultantId` of its own, but the ownership arm still
+  // reaches it — nested one level down, through the client it delegates to.
+  it('reaches Stakeholder through its client delegation, not directly', () => {
+    const scope = stakeholderScope(makeUser()) as { client: { OR: unknown[] } };
+    expect(scope.client.OR[0]).toEqual({ consultantId: 'me' });
   });
 });
 
 describe('clientScope', () => {
-  it('has four arms: owned, industry, own market, and a contact’s coverage', () => {
+  it('has three arms: owned, industry, and own market', () => {
     const scope = clientScope(makeUser());
     expect(scope.OR).toEqual([
       { consultantId: 'me' },
       { industryId: { in: ['ind1'] } },
       { locations: { some: { location: { ancestorIds: { hasSome: ['nsw'] } } } } },
-      {
-        stakeholders: {
-          some: { deletedAt: null, coverage: { some: { location: { ancestorIds: { hasSome: ['nsw'] } } } } },
-        },
-      },
     ]);
-  });
-
-  // The extended client's soft-delete rewrite intercepts top-level calls, not a
-  // nested relation filter — so a removed contact would otherwise keep granting
-  // access to their employer forever.
-  it('excludes soft-deleted stakeholders from the coverage arm explicitly', () => {
-    const arms = clientScope(makeUser()).OR as unknown as { stakeholders: { some: object } }[];
-    expect(arms[3].stakeholders.some).toHaveProperty('deletedAt', null);
   });
 });
 
@@ -159,11 +148,17 @@ describe('where each entity reaches its industry from', () => {
     });
   });
 
-  it('reads it via the client for JobOrder, JobResearch and Stakeholder', () => {
+  it('reads it via the client for JobOrder and JobResearch', () => {
     const viaClient = { client: { industryId: { in: ['ind1'] } } };
     expect((jobOrderScope(makeUser()).OR as unknown[])[1]).toEqual(viaClient);
     expect((jobResearchScope(makeUser()).OR as unknown[])[1]).toEqual(viaClient);
-    expect((stakeholderScope(makeUser()).OR as unknown[])[0]).toEqual(viaClient);
+  });
+
+  // Stakeholder doesn't have its own via-client arm the way JobOrder/JobResearch
+  // do — it delegates its *entire* scope to clientScope, industry included.
+  it('delegates entirely for Stakeholder, rather than restating a via-client arm', () => {
+    const user = makeUser();
+    expect(stakeholderScope(user)).toEqual({ client: clientScope(user) });
   });
 });
 
@@ -176,9 +171,11 @@ describe('where each entity reaches its location from', () => {
     expect((jobResearchScope(makeUser()).OR as unknown[])[2]).toEqual(under);
   });
 
-  it('uses a join for Client (a market set) and Stakeholder (a coverage set)', () => {
+  // Stakeholder's own `coverage` set no longer factors into its location arm at
+  // all — it inherits the client's market set through the same delegation
+  // tested above, not a join on its own coverage.
+  it('uses a join for Client (a market set)', () => {
     expect((clientScope(makeUser()).OR as unknown[])[2]).toEqual({ locations: { some: under } });
-    expect((stakeholderScope(makeUser()).OR as unknown[])[1]).toEqual({ coverage: { some: under } });
   });
 
   // A grant covers the granted node plus every descendant, matched through the
@@ -421,6 +418,25 @@ describe('assertConsultantCovers', () => {
       assertConsultantCovers(prisma, 'c1', { industryId: 'ind1', locationIds: [] }),
     ).resolves.toBeUndefined();
   });
+
+  it('lets admin/manager override a mismatch without even reading the grants', async () => {
+    const prisma = makeGrantedPrisma({}); // holds nothing
+    const record = { industryId: 'ind2', locationIds: ['kl'] };
+    await expect(assertConsultantCovers(prisma, 'c1', record, 'admin')).resolves.toBeUndefined();
+    await expect(assertConsultantCovers(prisma, 'c1', record, 'manager')).resolves.toBeUndefined();
+    expect(prisma.consultantIndustry.findMany).not.toHaveBeenCalled();
+  });
+
+  it('still enforces the guard for every other role, including consultant/researcher', async () => {
+    const prisma = makeGrantedPrisma({});
+    const record = { industryId: 'ind2', locationIds: ['kl'] };
+    await expect(assertConsultantCovers(prisma, 'c1', record, 'consultant')).rejects.toThrow(
+      BadRequestException,
+    );
+    await expect(assertConsultantCovers(prisma, 'c1', record, 'researcher')).rejects.toThrow(
+      BadRequestException,
+    );
+  });
 });
 
 describe('assertConsultantCoversJobOrder', () => {
@@ -462,6 +478,15 @@ describe('assertConsultantCoversJobOrder', () => {
       'cl1',
       'sydney',
     );
+    expect(clientFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('lets admin/manager override a mismatch without reading the client at all', async () => {
+    const clientFindUnique = jest.fn();
+    const prisma = makeGrantedPrisma({}, { client: { findUnique: clientFindUnique } });
+    await expect(
+      assertConsultantCoversJobOrder(prisma, 'c1', 'cl1', 'sydney', 'admin'),
+    ).resolves.toBeUndefined();
     expect(clientFindUnique).not.toHaveBeenCalled();
   });
 });

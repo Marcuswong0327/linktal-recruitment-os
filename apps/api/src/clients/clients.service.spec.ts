@@ -39,10 +39,6 @@ function marketNode(id: string, name: string, ancestorIds: string[]) {
   return { locationId: id, location: { name, ancestorIds } };
 }
 
-/** A live stakeholder whose own coverage reaches the given ancestor paths. */
-function stakeholderCovering(...ancestorIds: string[][]) {
-  return { coverage: ancestorIds.map((ids) => ({ location: { ancestorIds: ids } })), contactHistory: [] };
-}
 
 const baseQuery: QueryClientsDto = {
   page: 1,
@@ -59,7 +55,7 @@ describe('ClientsService.create', () => {
     const base = {} as unknown as PrismaService;
     const service = new ClientsService(prisma, base);
 
-    const result = await service.create(makeDto());
+    const result = await service.create(makeDto(), makeUser());
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0].data).not.toHaveProperty('displayId');
@@ -83,7 +79,7 @@ describe('ClientsService.create', () => {
     const prisma = { client: { create } } as unknown as ExtendedPrismaClient;
     const service = new ClientsService(prisma, {} as unknown as PrismaService);
 
-    await service.create(makeDto({ locationIds: ['syd', 'bne'] }));
+    await service.create(makeDto({ locationIds: ['syd', 'bne'] }), makeUser());
 
     expect(create.mock.calls[0][0].data.locations).toEqual({
       create: [{ locationId: 'syd' }, { locationId: 'bne' }],
@@ -100,32 +96,24 @@ describe('ClientsService.create', () => {
     const prisma = { client: { create } } as unknown as ExtendedPrismaClient;
     const service = new ClientsService(prisma, {} as unknown as PrismaService);
 
-    await expect(service.create(makeDto({ locationIds: [] }))).rejects.toMatchObject({
+    await expect(service.create(makeDto({ locationIds: [] }), makeUser())).rejects.toMatchObject({
       response: { code: 'CLIENT_LOCATION_REQUIRED' },
     });
     expect(create).not.toHaveBeenCalled();
   });
 });
 
-describe('ClientsService.remove (cascade soft-delete)', () => {
-  it('cascades to job orders + their submissions/placements, stakeholders, research and TOBs', async () => {
+// Cascading to stakeholders/job orders/research/TOBs (and their own
+// submissions/placements) is no longer this service's job — it's handled
+// centrally by the Prisma extension's CASCADE_MAP for any delete path, not
+// just this one. See prisma.extensions.spec.ts for that coverage.
+describe('ClientsService.remove', () => {
+  it('checks scope, then hands off to a plain delete', async () => {
     const prisma = {
       client: {
         findUnique: jest.fn().mockResolvedValue(withRelations({ id: 'cl1', companyName: 'Acme' })),
         delete: jest.fn().mockResolvedValue({ id: 'cl1' }),
       },
-      jobOrder: {
-        findMany: jest.fn().mockResolvedValue([{ id: 'j1' }]),
-        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
-      },
-      candidateSubmission: {
-        findMany: jest.fn().mockResolvedValue([{ id: 's1' }]),
-        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
-      },
-      placement: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      stakeholder: { deleteMany: jest.fn().mockResolvedValue({ count: 2 }) },
-      clientJobResearch: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      tob: { deleteMany: jest.fn().mockResolvedValue({ count: 1 }) },
     };
     const service = new ClientsService(
       prisma as unknown as ExtendedPrismaClient,
@@ -134,21 +122,8 @@ describe('ClientsService.remove (cascade soft-delete)', () => {
 
     await service.remove('cl1', makeUser());
 
-    expect(prisma.placement.deleteMany).toHaveBeenCalledWith({
-      where: { submissionId: { in: ['s1'] } },
-    });
-    expect(prisma.candidateSubmission.deleteMany).toHaveBeenCalledWith({
-      where: { jobOrderId: { in: ['j1'] } },
-    });
-    expect(prisma.jobOrder.deleteMany).toHaveBeenCalledWith({ where: { clientId: 'cl1' } });
-    expect(prisma.stakeholder.deleteMany).toHaveBeenCalledWith({ where: { clientId: 'cl1' } });
-    expect(prisma.clientJobResearch.deleteMany).toHaveBeenCalledWith({ where: { clientId: 'cl1' } });
-    expect(prisma.tob.deleteMany).toHaveBeenCalledWith({ where: { clientId: 'cl1' } });
+    expect(prisma.client.findUnique).toHaveBeenCalled();
     expect(prisma.client.delete).toHaveBeenCalledWith({ where: { id: 'cl1' } });
-    // client (parent) removed after its job orders
-    expect(prisma.client.delete.mock.invocationCallOrder[0]).toBeGreaterThan(
-      prisma.jobOrder.deleteMany.mock.invocationCallOrder[0],
-    );
   });
 });
 
@@ -431,31 +406,9 @@ describe('ClientsService.findAll — consultant role scoping', () => {
           { consultantId: 'cons-me' }, // ownership wins outright
           { industryId: { in: ['ind1', 'ind2'] } },
           { locations: { some: { location: { ancestorIds: { hasSome: ['nsw'] } } } } },
-          // third arm — reachable through a contact who covers my patch
-          {
-            stakeholders: {
-              some: {
-                deletedAt: null,
-                coverage: { some: { location: { ancestorIds: { hasSome: ['nsw'] } } } },
-              },
-            },
-          },
         ],
       },
     ]);
-  });
-
-  // A removed contact must stop granting visibility to their employer. The
-  // extended client's soft-delete rewrite only intercepts top-level calls,
-  // not this nested relation filter, so the arm carries its own guard.
-  it('excludes soft-deleted stakeholders from the third arm', async () => {
-    const { service, findMany } = makeService();
-    await service.findAll(
-      { ...baseQuery },
-      makeUser({ roleName: 'consultant', consultantId: 'cons-me', locationIds: ['nsw'] }),
-    );
-    const scope = findMany.mock.calls[0][0].where.AND.find((c: Record<string, unknown>) => 'OR' in c);
-    expect(scope.OR[3].stakeholders.some.deletedAt).toBeNull();
   });
 
   // Zero grants means "not configured", never "sees everything" — but an
@@ -489,7 +442,6 @@ describe('ClientsService.findOne — job scope', () => {
         id: 'cl1',
         industryId: 'finance',
         locations: [marketNode('perth', 'Perth', ['perth', 'wa', 'au'])],
-        stakeholders: [stakeholderCovering(['perth', 'wa', 'au'])],
       }),
     );
     await expect(
@@ -520,44 +472,22 @@ describe('ClientsService.findOne — job scope', () => {
     ).resolves.toMatchObject({ id: 'cl1' });
   });
 
-  // The third arm, and the reason it exists: this Brisbane company is out of
-  // scope on both its own industry and its own market, but its national
-  // account manager covers Sydney — so the contact was already reachable, and
-  // the company they work for must be too.
-  it("allows a scoped consultant on a stakeholder's own coverage alone", async () => {
+  // A stakeholder's own coverage used to be a fourth arm on the client itself
+  // (a Brisbane company reachable through a Sydney-covering contact). That's
+  // gone — a stakeholder now inherits the client's visibility, not the other
+  // way around, so a client out of scope on its own industry and market stays
+  // out of scope regardless of what any of its contacts cover.
+  it("no longer lets a stakeholder's own coverage rescue an out-of-scope client", async () => {
     const { service } = makeService(
       withRelations({
         id: 'cl1',
         industryId: 'finance',
         locations: [marketNode('brisbane', 'Brisbane', ['brisbane', 'qld', 'au'])],
-        stakeholders: [stakeholderCovering(['sydney', 'nsw', 'au'])],
       }),
     );
     await expect(
       service.findOne('cl1', makeUser({ roleName: 'consultant', industryIds: ['tech'], locationIds: ['nsw'] })),
-    ).resolves.toMatchObject({ id: 'cl1' });
-  });
-
-  // The arm asks "is there *any* live contact covering my patch", so deleting
-  // one of several changes nothing — CLIENT_INCLUDE filters the deleted one
-  // out and the remaining contacts still satisfy it. Access only lapses when
-  // the last covering contact goes (the case below).
-  it('stays visible when one of several covering stakeholders is deleted', async () => {
-    const { service } = makeService(
-      withRelations({
-        id: 'cl1',
-        industryId: 'finance',
-        locations: [marketNode('brisbane', 'Brisbane', ['brisbane', 'qld', 'au'])],
-        // the deleted one is already filtered out by the include; these are what's left
-        stakeholders: [
-          stakeholderCovering(['sydney', 'nsw', 'au']),
-          stakeholderCovering(['newcastle', 'nsw', 'au']),
-        ],
-      }),
-    );
-    await expect(
-      service.findOne('cl1', makeUser({ roleName: 'consultant', industryIds: ['tech'], locationIds: ['nsw'] })),
-    ).resolves.toMatchObject({ id: 'cl1' });
+    ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
   });
 
   // Ownership short-circuits every arm: an account someone was deliberately
@@ -638,21 +568,27 @@ describe('ClientsService.create — assignment guard (industry OR location)', ()
 
   it('allows creating with no consultant assigned at all', async () => {
     const { service, create } = makeService();
-    await service.create(makeDto());
+    await service.create(makeDto(), makeUser({ roleName: 'consultant' }));
     expect(create).toHaveBeenCalledTimes(1);
   });
 
   it('rejects assigning a consultant who covers neither the industry nor the market', async () => {
     const { service, create } = makeService(); // holds nothing
     await expect(
-      service.create(makeDto({ industryId: 'ind1', consultantId: 'cons-1' })),
+      service.create(
+        makeDto({ industryId: 'ind1', consultantId: 'cons-1' }),
+        makeUser({ roleName: 'consultant' }),
+      ),
     ).rejects.toMatchObject({ response: { code: 'CONSULTANT_SCOPE_MISMATCH' } });
     expect(create).not.toHaveBeenCalled();
   });
 
   it('allows assigning a consultant whose industry matches', async () => {
     const { service, create } = makeService({ industryIds: ['ind1'] });
-    await service.create(makeDto({ industryId: 'ind1', consultantId: 'cons-1' }));
+    await service.create(
+      makeDto({ industryId: 'ind1', consultantId: 'cons-1' }),
+      makeUser({ roleName: 'consultant' }),
+    );
     expect(create).toHaveBeenCalledTimes(1);
   });
 
@@ -662,6 +598,7 @@ describe('ClientsService.create — assignment guard (industry OR location)', ()
     const { service, create } = makeService({ locationIds: ['au'], locationCovers: true });
     await service.create(
       makeDto({ industryId: 'ind1', consultantId: 'cons-1', locationIds: ['syd'] }),
+      makeUser({ roleName: 'consultant' }),
     );
     expect(create).toHaveBeenCalledTimes(1);
   });
@@ -672,10 +609,29 @@ describe('ClientsService.create — assignment guard (industry OR location)', ()
       .location;
     await service.create(
       makeDto({ industryId: 'ind1', consultantId: 'cons-1', locationIds: ['syd', 'bne'] }),
+      makeUser({ roleName: 'consultant' }),
     );
     expect(prismaLocation.count).toHaveBeenCalledWith({
       where: { id: { in: ['syd', 'bne'] }, ancestorIds: { hasSome: ['au'] } },
     });
+  });
+
+  it('lets admin assign a consultant who covers neither the industry nor the market', async () => {
+    const { service, create } = makeService(); // holds nothing
+    await service.create(
+      makeDto({ industryId: 'ind1', consultantId: 'cons-1' }),
+      makeUser({ roleName: 'admin' }),
+    );
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets manager assign a consultant who covers neither the industry nor the market', async () => {
+    const { service, create } = makeService(); // holds nothing
+    await service.create(
+      makeDto({ industryId: 'ind1', consultantId: 'cons-1' }),
+      makeUser({ roleName: 'manager' }),
+    );
+    expect(create).toHaveBeenCalledTimes(1);
   });
 });
 

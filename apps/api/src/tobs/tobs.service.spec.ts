@@ -33,7 +33,6 @@ function makeClient(overrides: Record<string, unknown> = {}) {
     industryId: 'ind1',
     consultantId: null,
     locations: [],
-    stakeholders: [],
     ...overrides,
   };
 }
@@ -215,18 +214,16 @@ describe('TobsService.findOne', () => {
 
   // Same four arms as ClientsService.findOne — including the one that reaches a
   // company through a contact's own coverage rather than the company's market.
-  it('lets a stakeholder’s coverage carry the client, and the TOB with it', async () => {
-    const { service } = setup(
-      makeClient({
-        industryId: 'other',
-        stakeholders: [{ coverage: [{ location: { ancestorIds: ['syd', 'nsw', 'au'] } }] }],
-      }),
-    );
-    const result = await service.findOne(
-      't1',
-      makeUser({ roleName: 'consultant', industryIds: ['ind1'], locationIds: ['nsw'] }),
-    );
-    expect(result).toMatchObject({ id: 't1', companyName: 'Acme Corp' });
+  // A stakeholder's own coverage used to carry the client (and the TOB with
+  // it) even when the client's own industry/market didn't match — that arm
+  // is gone, since stakeholders now inherit the client's visibility instead
+  // of the other way around. TOB visibility follows the client's own arms
+  // only.
+  it("no longer lets a stakeholder's coverage rescue an out-of-scope client's TOB", async () => {
+    const { service } = setup(makeClient({ industryId: 'other' }));
+    await expect(
+      service.findOne('t1', makeUser({ roleName: 'consultant', industryIds: ['ind1'], locationIds: ['nsw'] })),
+    ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
   });
 
   it('never leaks the scope-only client fields into the response', async () => {

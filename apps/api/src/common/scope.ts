@@ -98,8 +98,6 @@ function hasNoGrants(user: AuthUser): boolean {
   return user.industryIds.length === 0 && user.locationIds.length === 0;
 }
 
-const MATCH_NOTHING: Prisma.ClientWhereInput = { id: { in: [] } };
-
 // ---------------------------------------------------------------------------
 // Per-entity `where` fragments
 // ---------------------------------------------------------------------------
@@ -120,54 +118,32 @@ const MATCH_NOTHING: Prisma.ClientWhereInput = { id: { in: [] } };
  * getting a 403 on it, and watching one vanish the moment its industry is
  * retagged.
  *
- * `MATCH_NOTHING` therefore survives only for a caller with no grants *and* no
- * assignments — the genuinely unconfigured case.
- *
  * Stakeholder is the one entity with no ownership arm, because it has no
- * `consultantId`: contacts belong to a client, not to a recruiter.
+ * `consultantId`: contacts belong to a client, not to a recruiter — see
+ * `stakeholderScope` below, which delegates to its client entirely.
  */
 function ownedBy(user: AuthUser): { consultantId: string } {
   return { consultantId: user.consultantId };
 }
 
-/**
- * Clients carry one more arm than the rest: a company is also reachable
- * through a *contact* who covers the consultant's patch, even when the
- * company's own market sits outside it — the counterpart to the Stakeholder
- * asymmetry below. Without it the two rules disagree: a Sydney-scoped
- * consultant could open a Brisbane client's national account manager but got a
- * 403 on the company that person works for, which is a dangling reference
- * rather than a privacy boundary.
- *
- * Soft-deleted stakeholders are excluded explicitly, because the extended
- * client's soft-delete rewrite intercepts top-level calls, not a nested
- * relation filter, so a removed contact would otherwise keep granting access.
- * The test is "does *any* live contact cover my patch", so deleting one of
- * several changes nothing — access lapses only with the last one.
- */
 export function clientScope(user: AuthUser): Prisma.ClientWhereInput {
   const owned = ownedBy(user);
   if (hasNoGrants(user)) return owned;
   return {
-    OR: [
-      owned,
-      industryArm(user, false),
-      { locations: { some: locationIsUnder(user.locationIds) } },
-      { stakeholders: { some: { deletedAt: null, coverage: { some: locationIsUnder(user.locationIds) } } } },
-    ],
+    OR: [owned, industryArm(user, false), { locations: { some: locationIsUnder(user.locationIds) } }],
   };
 }
 
 /**
  * A TOB carries no scope fields of its own — no industry, no location, no
  * `consultantId`. It's a commercial document belonging to a company, so it's
- * visible exactly when that company is, all four of `clientScope`'s arms
- * included. Delegating rather than restating them also means the
- * stakeholder-coverage arm can't drift out of sync here later.
+ * visible exactly when that company is, every one of `clientScope`'s arms
+ * included. Delegating rather than restating them means this can't drift out
+ * of sync later. Stakeholder delegates the same way, immediately below.
  *
- * Soft-deleted clients need no explicit exclusion (unlike the nested
- * stakeholder filter in `clientScope`): `ClientsService.remove` soft-deletes a
- * client's TOBs alongside it, so the extended client's top-level rewrite has
+ * Soft-deleted clients need no explicit exclusion: `ClientsService.remove`
+ * soft-deletes a client's TOBs alongside it (via the cascade in
+ * prisma.extensions.ts), so the extended client's top-level rewrite has
  * already dropped them before this relation filter is reached.
  */
 export function tobScope(user: AuthUser): Prisma.TobWhereInput {
@@ -205,20 +181,20 @@ export function jobResearchScope(user: AuthUser): Prisma.ClientJobResearchWhereI
 }
 
 /**
- * Stakeholders are the one asymmetry, and it's deliberate: they're matched on
- * **their own coverage set**, not on where their employer sits. A Brisbane
- * client's national account manager whose coverage includes Sydney is
- * reachable by a Sydney-scoped consultant — that's the person you'd actually
- * call about a Sydney role.
+ * A stakeholder is visible exactly when its client is — no ownership arm of
+ * its own (it has no `consultantId`; contacts belong to a client, not to a
+ * recruiter), and no independent coverage check either. `coverage` is kept
+ * purely as descriptive routing data (who to call about which patch), not a
+ * scope gate.
+ *
+ * This used to be the one asymmetry: a stakeholder matched on its *own*
+ * coverage, independent of its employer, so a Brisbane client's Sydney-
+ * covering contact was reachable by a Sydney consultant even when the
+ * Brisbane client itself wasn't. That's deliberately gone — once a client is
+ * visible (by any arm), every one of its live contacts is too, full stop.
  */
 export function stakeholderScope(user: AuthUser): Prisma.StakeholderWhereInput {
-  if (hasNoGrants(user)) return MATCH_NOTHING as Prisma.StakeholderWhereInput;
-  return {
-    OR: [
-      industryArm(user, true) as Prisma.StakeholderWhereInput,
-      { coverage: { some: locationIsUnder(user.locationIds) } },
-    ],
-  };
+  return { client: clientScope(user) };
 }
 
 // ---------------------------------------------------------------------------
@@ -319,16 +295,32 @@ export async function consultantCovers(
   return covered > 0;
 }
 
+/** Admin/manager act as the org's dispatchers — see `assertConsultantCovers`. */
+function canOverrideScopeMismatch(assignerRole: string | null | undefined): boolean {
+  return assignerRole === 'admin' || assignerRole === 'manager';
+}
+
 /**
  * Call with a null/undefined `consultantId` (clearing an assignment) to skip —
  * there's nothing to validate when unassigning.
+ *
+ * `assignerRole` lets admin/manager override this deliberately: ownership is
+ * the top-priority arm in every scope function above (see `ownedBy`), so a
+ * consultant assigned outside their own grants still sees the record — the
+ * guard exists to stop a *consultant* handing themselves or a peer something
+ * that then vanishes from their own list by accident, not to stop admin/
+ * manager making a deliberate exception. Omit `assignerRole` (or pass any
+ * other role) to keep the guard active, which is what every consultant-
+ * initiated assignment does.
  */
 export async function assertConsultantCovers(
   prisma: ExtendedPrismaClient,
   consultantId: string | null | undefined,
   record: OwnableRecord,
+  assignerRole?: string | null,
 ): Promise<void> {
   if (!consultantId) return;
+  if (canOverrideScopeMismatch(assignerRole)) return;
   if (await consultantCovers(prisma, consultantId, record)) return;
   throw new BadRequestException({
     code: 'CONSULTANT_SCOPE_MISMATCH',
@@ -346,8 +338,10 @@ export async function assertConsultantCoversJobOrder(
   consultantId: string | null | undefined,
   clientId: string,
   locationId: string | null | undefined,
+  assignerRole?: string | null,
 ): Promise<void> {
   if (!consultantId) return;
+  if (canOverrideScopeMismatch(assignerRole)) return;
   const client = await prisma.client.findUnique({
     where: { id: clientId },
     select: { industryId: true },

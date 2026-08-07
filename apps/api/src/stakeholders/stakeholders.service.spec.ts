@@ -38,6 +38,12 @@ function withRelations(row: Record<string, unknown> = {}) {
   };
 }
 
+/** A client as STAKEHOLDER_INCLUDE now pulls it through — everything the (fully
+ * inherited) job-scope check reads. `locations` entries are `{ location: { ancestorIds } }`. */
+function clientRelation(overrides: Record<string, unknown> = {}) {
+  return { companyName: 'Acme', industryId: 'ind1', consultantId: null, locations: [], ...overrides };
+}
+
 /**
  * Base client stub: the StakeholderRoleType catalog upsert, plus the JobTitle
  * *read* the keyword classifier needs (titles arrive as ids, classification
@@ -170,58 +176,64 @@ describe('StakeholdersService.create', () => {
 
 // A scoped consultant must not be able to attach a contact to a company they
 // can't reach — the row would be written into someone else's book and vanish
-// from the author's own list. Both of stakeholderScope's arms count, so the
-// check can't just ask "is the client in my patch?".
+// from the author's own list. This is now just "can the caller see the
+// client" — coverage has no bearing on it (see stakeholderScope in
+// common/scope.ts, which now delegates entirely to clientScope).
 describe('StakeholdersService.create — destination scope', () => {
-  function setup(industryId: string | null, locationRows: { ancestorIds: string[] }[] = []) {
+  function setup(client: Record<string, unknown> | null) {
     const create = jest.fn().mockResolvedValue(withRelations({ id: 's1' }));
-    const clientFindUnique = jest
-      .fn()
-      .mockResolvedValue(industryId === null ? null : { industryId });
-    const locationFindMany = jest.fn().mockResolvedValue(locationRows);
+    const clientFindUnique = jest.fn().mockResolvedValue(client);
     const prisma = {
       stakeholder: { create },
       client: { findUnique: clientFindUnique },
-      location: { findMany: locationFindMany },
     } as unknown as ExtendedPrismaClient;
     return {
       service: new StakeholdersService(prisma, makeBase().base),
       create,
       clientFindUnique,
-      locationFindMany,
     };
   }
 
   const scoped = (overrides: Partial<AuthUser> = {}) =>
     makeUser({ roleName: 'consultant', industryIds: ['ind1'], ...overrides });
 
-  it('rejects a company outside the patch when no coverage rescues it', async () => {
-    const { service, create } = setup('other');
+  it('rejects a company outside the patch', async () => {
+    const { service, create } = setup(clientRelation({ industryId: 'other' }));
     await expect(service.create({ clientId: 'cl1' }, scoped())).rejects.toThrow(ForbiddenException);
     expect(create).not.toHaveBeenCalled();
   });
 
   it('allows it when the client industry matches', async () => {
-    const { service, create } = setup('ind1');
+    const { service, create } = setup(clientRelation({ industryId: 'ind1' }));
     await service.create({ clientId: 'cl1' }, scoped());
     expect(create).toHaveBeenCalledTimes(1);
   });
 
-  // The asymmetry, on the write path: the contact's own coverage carries them
-  // in even though their employer's industry is not the consultant's.
-  it("allows an out-of-industry company when the contact's own coverage is in patch", async () => {
-    const { service, create, locationFindMany } = setup('other', [
-      { ancestorIds: ['syd', 'nsw', 'au'] },
-    ]);
-    await service.create(
-      { clientId: 'cl1', coverageLocationIds: ['syd'] },
-      scoped({ locationIds: ['nsw'] }),
+  it("allows it when the client's own location matches, even out of industry", async () => {
+    const { service, create } = setup(
+      clientRelation({ industryId: 'other', locations: [{ location: { ancestorIds: ['syd', 'nsw', 'au'] } }] }),
     );
+    await service.create({ clientId: 'cl1' }, scoped({ locationIds: ['nsw'] }));
     expect(create).toHaveBeenCalledTimes(1);
-    expect(locationFindMany).toHaveBeenCalledWith({
-      where: { id: { in: ['syd'] } },
-      select: { ancestorIds: true },
-    });
+  });
+
+  // The old asymmetry is gone: a contact's own coverage no longer rescues an
+  // out-of-scope client the way it used to.
+  it("no longer lets the contact's own coverage rescue an out-of-scope client", async () => {
+    const { service, create } = setup(clientRelation({ industryId: 'other' }));
+    await expect(
+      service.create(
+        { clientId: 'cl1', coverageLocationIds: ['syd'] },
+        scoped({ locationIds: ['nsw'] }),
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('allows it when the caller already owns the client, regardless of grants', async () => {
+    const { service, create } = setup(clientRelation({ industryId: 'other', consultantId: 'me' }));
+    await service.create({ clientId: 'cl1' }, scoped({ industryIds: [] }));
+    expect(create).toHaveBeenCalledTimes(1);
   });
 
   it('404s on a client that does not exist', async () => {
@@ -230,38 +242,27 @@ describe('StakeholdersService.create — destination scope', () => {
   });
 
   it('runs no extra queries for an unscoped role', async () => {
-    const { service, clientFindUnique, locationFindMany } = setup('other');
+    const { service, clientFindUnique } = setup(clientRelation({ industryId: 'other' }));
     await service.create({ clientId: 'cl1' }, makeUser({ roleName: 'manager' }));
     expect(clientFindUnique).not.toHaveBeenCalled();
-    expect(locationFindMany).not.toHaveBeenCalled();
   });
 });
 
 describe('StakeholdersService.update — re-parenting', () => {
-  function setup(existingCoverageIds: string[] = []) {
+  function setup() {
     const findUnique = jest.fn().mockResolvedValue(
-      withRelations({
-        id: 's1',
-        client: { companyName: 'Acme', industryId: 'ind1' },
-        coverage: existingCoverageIds.map((locationId) => ({
-          locationId,
-          location: { name: locationId, ancestorIds: [locationId] },
-        })),
-      }),
+      withRelations({ id: 's1', client: clientRelation({ industryId: 'ind1' }) }),
     );
     const update = jest.fn().mockResolvedValue(withRelations({ id: 's1' }));
-    const clientFindUnique = jest.fn().mockResolvedValue({ industryId: 'other' });
-    const locationFindMany = jest.fn().mockResolvedValue([]);
+    const clientFindUnique = jest.fn().mockResolvedValue(clientRelation({ industryId: 'other' }));
     const prisma = {
       stakeholder: { findUnique, update },
       client: { findUnique: clientFindUnique },
-      location: { findMany: locationFindMany },
     } as unknown as ExtendedPrismaClient;
     return {
       service: new StakeholdersService(prisma, makeBase().base),
       update,
       clientFindUnique,
-      locationFindMany,
     };
   }
 
@@ -273,23 +274,11 @@ describe('StakeholdersService.update — re-parenting', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  // Falls back to the coverage already on the row, so a bare re-parent is
-  // judged on what the record will actually look like afterwards.
-  it('reuses the existing coverage when the re-parent does not restate it', async () => {
-    const { service, locationFindMany } = setup(['syd']);
-    await service
-      .update('s1', { clientId: 'cl2' }, makeUser({ roleName: 'consultant', industryIds: ['ind1'] }))
-      .catch(() => undefined);
-    expect(locationFindMany).toHaveBeenCalledWith({
-      where: { id: { in: ['syd'] } },
-      select: { ancestorIds: true },
-    });
-  });
-
   // Deliberate: correcting a contact's territory is note-keeping, even when the
-  // correction moves them out of the author's own patch.
+  // correction moves them out of the author's own patch — and coverage no
+  // longer factors into the destination check either way.
   it('does not re-check a coverage-only edit', async () => {
-    const { service, clientFindUnique, update } = setup(['syd']);
+    const { service, clientFindUnique, update } = setup();
     await service.update(
       's1',
       { coverageLocationIds: ['bne'] },
@@ -300,9 +289,8 @@ describe('StakeholdersService.update — re-parenting', () => {
   });
 });
 
-// visible = (industry via parent Client) OR (the stakeholder's OWN coverage).
-// The second arm is the deliberate asymmetry: a Brisbane client's national
-// account manager covering Sydney is reachable by a Sydney-scoped consultant.
+// A stakeholder is now visible exactly when its client is — stakeholderScope
+// is `{ client: clientScope(user) }`, full stop. No separate coverage arm.
 describe('StakeholdersService.findAll — scope', () => {
   function setup() {
     const findMany = jest.fn().mockResolvedValue([]);
@@ -316,25 +304,35 @@ describe('StakeholdersService.findAll — scope', () => {
     const { findMany, service } = setup();
     await service.findAll(
       baseQuery({ q: 'jane' }),
-      makeUser({ roleName: 'consultant', industryIds: ['ind1'], locationIds: ['nsw'] }),
+      makeUser({
+        roleName: 'consultant',
+        consultantId: 'me',
+        industryIds: ['ind1'],
+        locationIds: ['nsw'],
+      }),
     );
     const where = findMany.mock.calls[0][0].where;
     expect(where.AND).toEqual([
       { OR: expect.any(Array) },
       {
-        OR: [
-          { client: { industryId: { in: ['ind1'] } } },
-          { coverage: { some: { location: { ancestorIds: { hasSome: ['nsw'] } } } } },
-        ],
+        client: {
+          OR: [
+            { consultantId: 'me' },
+            { industryId: { in: ['ind1'] } },
+            { locations: { some: { location: { ancestorIds: { hasSome: ['nsw'] } } } } },
+          ],
+        },
       },
     ]);
   });
 
-  // Zero grants means "not configured", never "sees everything".
-  it('matches nothing for a consultant with no grants at all', async () => {
+  // Zero grants collapses to the ownership arm alone (via the client), not to
+  // match-nothing — a consultant with no grants who directly owns a client
+  // still sees its stakeholders, same as they'd see the client itself.
+  it('falls back to the client owner’s own book for a consultant with no grants at all', async () => {
     const { findMany, service } = setup();
-    await service.findAll(baseQuery(), makeUser({ roleName: 'consultant' }));
-    expect(findMany.mock.calls[0][0].where.AND).toContainEqual({ id: { in: [] } });
+    await service.findAll(baseQuery(), makeUser({ roleName: 'consultant', consultantId: 'me' }));
+    expect(findMany.mock.calls[0][0].where.AND).toContainEqual({ client: { consultantId: 'me' } });
   });
 
   it('does not scope non-consultant roles', async () => {
@@ -355,8 +353,10 @@ describe('StakeholdersService.findOne — job scope', () => {
     const { service } = makeService(
       withRelations({
         id: 's1',
-        client: { companyName: 'Acme', industryId: 'finance' },
-        coverage: [{ locationId: 'perth', location: { name: 'Perth', ancestorIds: ['perth', 'wa', 'au'] } }],
+        client: clientRelation({
+          industryId: 'finance',
+          locations: [{ location: { ancestorIds: ['perth', 'wa', 'au'] } }],
+        }),
       }),
     );
     await expect(
@@ -366,21 +366,21 @@ describe('StakeholdersService.findOne — job scope', () => {
 
   it("allows a scoped consultant on the parent Client's industry alone", async () => {
     const { service } = makeService(
-      withRelations({ id: 's1', client: { companyName: 'Acme', industryId: 'tech' } }),
+      withRelations({ id: 's1', client: clientRelation({ industryId: 'tech' }) }),
     );
     await expect(
       service.findOne('s1', makeUser({ roleName: 'consultant', industryIds: ['tech'] })),
     ).resolves.toMatchObject({ id: 's1' });
   });
 
-  // The asymmetry, pinned down: the client sits in Brisbane and its industry
-  // is out of scope, but this contact's own coverage reaches into NSW.
-  it("allows a scoped consultant on the stakeholder's own coverage, not the client's location", async () => {
+  it("allows a scoped consultant on the parent Client's own location alone", async () => {
     const { service } = makeService(
       withRelations({
         id: 's1',
-        client: { companyName: 'Acme', industryId: 'finance' },
-        coverage: [{ locationId: 'sydney', location: { name: 'Sydney', ancestorIds: ['sydney', 'nsw', 'au'] } }],
+        client: clientRelation({
+          industryId: 'finance',
+          locations: [{ location: { ancestorIds: ['sydney', 'nsw', 'au'] } }],
+        }),
       }),
     );
     await expect(
@@ -388,9 +388,42 @@ describe('StakeholdersService.findOne — job scope', () => {
     ).resolves.toMatchObject({ id: 's1' });
   });
 
+  // A stakeholder's own coverage no longer factors into its own visibility at
+  // all — only the client's industry/location/ownership do.
+  it("no longer lets the stakeholder's own coverage rescue an out-of-scope client", async () => {
+    const { service } = makeService(
+      withRelations({
+        id: 's1',
+        client: clientRelation({
+          industryId: 'finance',
+          locations: [{ location: { ancestorIds: ['brisbane', 'qld', 'au'] } }],
+        }),
+        coverage: [{ locationId: 'sydney', location: { name: 'Sydney', ancestorIds: ['sydney', 'nsw', 'au'] } }],
+      }),
+    );
+    await expect(
+      service.findOne('s1', makeUser({ roleName: 'consultant', industryIds: ['tech'], locationIds: ['nsw'] })),
+    ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
+  });
+
+  // A consultant with zero grants who directly owns the client can now see
+  // its stakeholders too — the ownership arm reaches through the client,
+  // where before Stakeholder had no ownership arm to fall back to at all.
+  it('allows a scoped consultant with no grants through the client’s own ownership', async () => {
+    const { service } = makeService(
+      withRelations({
+        id: 's1',
+        client: clientRelation({ industryId: 'finance', consultantId: 'me' }),
+      }),
+    );
+    await expect(
+      service.findOne('s1', makeUser({ roleName: 'consultant', consultantId: 'me' })),
+    ).resolves.toMatchObject({ id: 's1' });
+  });
+
   it('never restricts non-consultant roles', async () => {
     const { service } = makeService(
-      withRelations({ id: 's1', client: { companyName: 'Acme', industryId: 'finance' } }),
+      withRelations({ id: 's1', client: clientRelation({ industryId: 'finance' }) }),
     );
     await expect(
       service.findOne('s1', makeUser({ roleName: 'admin' })),

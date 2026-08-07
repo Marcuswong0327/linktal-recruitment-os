@@ -219,18 +219,18 @@ stakeholders · **10** job orders · **11** TOBs · **6** research rows.
 
 ### Which arm actually let them in — clients
 
-| Consultant | via industry+spec | via location | via a contact | **Total** |
-|---|---|---|---|---|
-| Daniel Kee | 83 | 1,527 | 0 | 1,610 |
-| Wong Yuen Xing | 83 | 1,527 | 0 | 1,610 |
-| Woanru Lim | **0** | 1,527 | 0 | 1,527 |
-| Karen Lin | 400 | 1,343 | 0 | 1,459 |
-| Eve Goh | 335 | 1,343 | 0 | 1,373 |
-| Joshua Fang | 192 | 1,343 | 0 | 1,343 |
-| Zhao Hao Teoh | 399 | **3** | 0 | 402 |
-| Kim Chan | 192 | 186 | 0 | 401 |
+| Consultant | via industry+spec | via location | **Total** |
+|---|---|---|---|
+| Daniel Kee | 83 | 1,527 | 1,610 |
+| Wong Yuen Xing | 83 | 1,527 | 1,610 |
+| Woanru Lim | **0** | 1,527 | 1,527 |
+| Karen Lin | 400 | 1,343 | 1,459 |
+| Eve Goh | 335 | 1,343 | 1,373 |
+| Joshua Fang | 192 | 1,343 | 1,343 |
+| Zhao Hao Teoh | 399 | **3** | 402 |
+| Kim Chan | 192 | 186 | 401 |
 
-Four things that table shows:
+Three things that table shows:
 
 1. **Location dominates for almost everyone.** Six of eight get most of their
    list from geography.
@@ -238,7 +238,13 @@ Four things that table shows:
    0 candidates in the whole database. Everything he sees is location.
 3. **Zhao Hao Teoh is the mirror image** — Melbourne has 3 clients, so he's
    almost entirely industry.
-4. **The contact arm adds nothing to anybody.** See §6.
+
+> A client used to carry a fourth arm — reachable through a contact who
+> covered the consultant's patch even when the company's own market didn't.
+> It measured **0 for all 8 consultants** (every stakeholder's coverage was
+> set equal to their client's own location, so it never reached anywhere the
+> location arm didn't already) and has since been removed in favour of
+> straightforward inheritance — see §6.
 
 ### A data artifact worth knowing
 
@@ -254,8 +260,8 @@ these numbers a lot.
 
 ## 6. Per-entity rules
 
-Five entities carry a `consultantId` and get the ownership arm. Stakeholder is
-the exception.
+Four entities carry a `consultantId` and get the ownership arm. Stakeholder and
+Tob don't — both delegate entirely to their parent Client instead.
 
 ```mermaid
 flowchart TD
@@ -266,7 +272,9 @@ flowchart TD
     subgraph VIA["Reach industry through their Client"]
         JO["JobOrder<br/>+ its OWN location"]
         JR["ClientJobResearch<br/>+ its OWN location"]
-        ST["Stakeholder<br/>+ its OWN coverage set"]
+    end
+    subgraph DEL["Fully delegate to their Client"]
+        ST["Stakeholder<br/>coverage is descriptive only"]
         TB["Tob<br/>no scope fields at all"]
     end
     CL --> JO
@@ -277,35 +285,45 @@ flowchart TD
 
 | Entity | Ownership arm | Industry from | Location from |
 |---|---|---|---|
-| **Client** | ✅ | its own | its own market set + **any live contact's coverage** |
+| **Client** | ✅ | its own | its own market set |
 | **Candidate** | ✅ | its own | its own single node |
 | **JobOrder** | ✅ | its Client | its own node (nullable) |
 | **ClientJobResearch** | ✅ | its Client | its own node (nullable) |
-| **Stakeholder** | ❌ none | its Client | **its own coverage, not its client's** |
-| **Tob** | ❌ none | — | visible exactly when its Client is |
+| **Stakeholder** | ❌ none | its Client | its Client's — visible exactly when its Client is |
+| **Tob** | ❌ none | its Client | its Client's — visible exactly when its Client is |
 
-### The two asymmetries, and why they exist
+### Stakeholder used to be an asymmetry — it isn't anymore
 
-**Stakeholders match on their own coverage.** A Brisbane company's national
-account manager whose coverage includes Sydney is reachable by a Sydney-scoped
-consultant — because that's the person you'd actually ring about a Sydney role.
+**Stakeholders used to match on their own coverage**, independent of their
+employer: a Brisbane company's national account manager whose coverage
+included Sydney was reachable by a Sydney-scoped consultant, on the theory
+that's the person you'd actually ring about a Sydney role. Clients carried a
+matching fourth arm as the counterpart — reachable through such a contact even
+when the company's own market didn't match — so the two rules wouldn't
+disagree with each other.
 
-**Clients get a fourth arm as the counterpart.** A company is reachable through
-a contact who covers your patch, even when the company's own market doesn't.
-Without it the two rules disagree: you could open a Brisbane client's national
-account manager but get a 403 on the company they work for. That's a dangling
-reference, not a privacy boundary.
+**Both are gone.** `stakeholderScope` is now `{ client: clientScope(user) }` —
+identical to `tobScope` — so a stakeholder is visible exactly when its client
+is, full stop. `coverage` remains on the row (who to call about which patch),
+but it's descriptive data now, not a scope gate. This was a deliberate
+simplification, not a bug fix: the old fourth arm measured **0 clients for all
+8 consultants** the whole time (the importer set every stakeholder's coverage
+equal to their client's own location, so it never reached anywhere the
+location arm didn't already reach) — there was no real behavior it was
+protecting once removed.
 
-> **Today that fourth arm adds nothing — 0 clients for all 8 consultants.** The
-> importer set every stakeholder's coverage equal to their client's own
-> location, so it never reaches anywhere the location arm didn't already. It
-> starts mattering the moment someone edits a contact to cover somewhere their
-> employer isn't.
+One side effect worth knowing: a consultant with **zero grants** who directly
+owns a client (via assignment) can now see that client's stakeholders too.
+Previously they couldn't — Stakeholder had no ownership arm of its own and the
+old coverage-only check ignored `hasNoGrants`'s ownership short-circuit
+entirely. That was the same class of bug §7's Karen Lin walkthrough describes
+for `GET /clients` (an assigned account whose own list hid it) — this closes
+the equivalent gap for stakeholders.
 
-**TOBs delegate entirely** — `tobScope` is literally `{ client: clientScope }`.
-A TOB is a commercial document belonging to a company, so it's visible exactly
-when that company is, all four arms included. Restating the arms here would let
-them drift apart.
+**TOBs still delegate entirely** — `tobScope` is `{ client: clientScope(user) }`,
+unchanged. A TOB is a commercial document belonging to a company, so it's
+visible exactly when that company is. Restating the arms here would let them
+drift apart; Stakeholder now follows the identical pattern.
 
 ### Required vs. optional
 
@@ -315,7 +333,7 @@ them drift apart.
 | Candidate | **required** | **required** |
 | JobOrder | via client | optional |
 | ClientJobResearch | via client | optional |
-| Stakeholder | via client | coverage optional in the DB |
+| Stakeholder | via client | via client (its own `coverage` no longer scope-relevant) |
 
 **A blank field makes a record harder to see, not easier** — the arm has nothing
 to match on, so that route in closes. A job order with no location is reachable
@@ -350,7 +368,7 @@ She opens JO-0007, a role at **Bakers Maison Australia**.
 |---|---|---|
 | Can she see the job order? | ✅ | owned + client industry + Sydney |
 | Can she see the client? | ✅ | Manufacturing + Sydney |
-| Can she see its contacts? | ✅ | their coverage is Sydney |
+| Can she see its contacts? | ✅ | follows the client (Manufacturing + Sydney) |
 | Can she see its TOB? | ✅ | follows the client |
 | Can she see the submitted candidates? | ✅ | Sydney |
 
@@ -415,26 +433,39 @@ country-level grant should be a deliberate choice, not a default.
 
 ## 8. Assignment
 
-**Assignment must agree with visibility.** A record can only be assigned to a
-consultant who would reach it anyway — the same `industry OR location` test.
-Otherwise you'd hand someone an account their own list then hides.
+**Assignment must agree with visibility — for a consultant assigning it.** A
+record can only be assigned to a consultant who would reach it anyway — the
+same `industry OR location` test. Otherwise you'd hand someone an account
+their own list then hides.
 
 ```mermaid
 flowchart TD
-    A["PATCH /clients/:id — set consultantId to X"] --> B{"Does X hold its industry?"}
-    B -- yes --> OK["assigned"]
+    A["PATCH /clients/:id — set consultantId to X"] --> Z{"Is the caller admin/manager?"}
+    Z -- yes --> OK["assigned — deliberate override"]
+    Z -- no --> B{"Does X hold its industry?"}
+    B -- yes --> OK2["assigned"]
     B -- no --> C{"Does X cover any of its markets?"}
-    C -- yes --> OK
+    C -- yes --> OK2
     C -- no --> ERR["400 CONSULTANT_SCOPE_MISMATCH"]
 ```
 
 Locations compare through `ancestorIds`, so a COUNTRY grant qualifies its holder
 for a CITY-tagged record, same as everywhere else.
 
+**Admin and manager bypass the guard entirely.** Ownership is already the
+top-priority arm in every scope function (`ownedBy` sits above the no-grants
+short-circuit) — once assigned, the record is visible to its new owner
+regardless of grants. The guard exists to stop a *consultant* handing
+themselves or a peer an account that then silently vanishes from their own
+list, not to stop admin/manager making a deliberate cross-scope exception
+(e.g. a one-off account outside anyone's usual patch). Every consultant- or
+researcher-initiated assignment still goes through the full check.
+
 **Stakeholder coverage is deliberately excluded from this guard** — a client has
 no contacts at the moment it's created, so the check would be unenforceable on
-`create` and inconsistent with `update`. Coverage grants *visibility*, not
-*ownership*.
+`create` and inconsistent with `update`. It's also moot now that a
+stakeholder's visibility is fully inherited from its client (§6) — there's no
+separate "ownership" of a contact to guard in the first place.
 
 ### Who can assign
 
@@ -513,51 +544,60 @@ The layer guards the front door, not the passengers. Some includes carry a
 hand-written `deletedAt: null` because someone remembered to add it. A single
 linked record (like `submission.candidate`) can't have one at all.
 
-### Path A — deleted through the app
+### Cascading is centralized now — Path A and Path B are the same path
 
-| You delete | Also deleted | Left behind |
+This used to be two different stories: `ClientsService.remove` (and
+`CandidatesService.remove`, `JobOrdersService.remove`) each hand-wrote their
+own cascade, so anything that didn't call one of those three methods — a
+script, the importer, another service, a raw Prisma call — orphaned every
+child underneath.
+
+**That's fixed at the root.** The cascade now lives in the Prisma extension
+itself (`prisma.extensions.ts`, `CASCADE_MAP`), which intercepts every
+`delete`/`deleteMany` on a soft-delete model regardless of who calls it. Client
+→ JobOrder → CandidateSubmission → Placement, and Candidate → CandidateSubmission
+→ Placement, all cascade automatically off a single soft-delete, walked
+recursively. The three service methods are now one line each
+(`return this.prisma.<model>.delete({ where: { id } })`) — the cascade isn't
+their code anymore, it's a property of the delete itself.
+
+| You delete | Cascades to | Still left behind |
 |---|---|---|
-| **Client** | stakeholders, job orders, TOBs, research, submissions, placements | ⚠️ interviews · ⚠️ candidates stuck at `PLACED` |
-| **Stakeholder** | nothing | ⚠️ client's "last contacted" date stays but its notes/type/by go blank · ⚠️ **if it was the last contact covering your patch, the client leaves your list** |
-| **Candidate** | their submissions and placements | ⚠️ interviews · ⚠️ job order's filled count stays inflated |
-| **Job order** | its submissions and placements | ⚠️ interviews · ⚠️ candidates stuck at `PLACED` |
-| **Placement** | nothing | ⚠️ candidate stays `PLACED`, submission stays `PLACED`, job order stays counted as filled, client stays `TRADED` |
+| **Client** | stakeholders, job research, TOBs, job orders, and (through those) their submissions and placements | ⚠️ interviews (gap #3, §10) · ⚠️ cascaded placements don't reverse their side effects — see below |
+| **Stakeholder** | nothing (it has no children) | ⚠️ client's "last contacted" date stays but its notes/type/by go blank |
+| **Candidate** | their submissions, and (through those) their placements | ⚠️ interviews · ⚠️ cascaded placements don't reverse their side effects |
+| **Job order** | its submissions, and (through those) their placements | ⚠️ interviews · ⚠️ cascaded placements don't reverse their side effects |
+| **Placement**, deleted directly (`DELETE /placements/:id`) | nothing (no children) | *(nothing — see below)* |
 
-### Path B — deleted any other way
+**One distinction survives the fix: side effects vs. orphans.** The cascade
+map only stamps `deletedAt` on children — it doesn't know that a Placement
+carries business side effects (candidate → `PLACED`, job order `filledCount`,
+client → `TRADED`). Reversing those is application logic that lives in
+`PlacementsService.remove`, not in the generic cascade. So:
 
-The cascade is a sequence of statements written by hand inside
-`ClientsService.remove`. **Anything that doesn't call that method doesn't get
-it** — a script, the importer, raw SQL.
+- Deleting a Placement **directly** (`DELETE /placements/:id`) reverses all
+  three side effects (§ below).
+- Deleting a **Client or Job Order** that has placements underneath cascades
+  the placements to `deletedAt` (no orphan — they won't show up in a
+  placements list) but does **not** touch the candidate's status, the job
+  order's fill count, or the client's `TRADED` flag on any *other* affected
+  record. A candidate placed through a job order that gets deleted this way
+  stays `PLACED`.
 
-```
-DELETE /clients/:id                  a script doing client.delete()
-───────────────────                  ─────────────────────────────
-placements    → deleted              placements    → live
-submissions   → deleted              submissions   → live
-job orders    → deleted              job orders    → live  ← 2 rows, still listed
-stakeholders  → deleted              stakeholders  → live  ← 4 rows, still listed
-TOBs          → deleted              TOBs          → live  ← 1 row,  still listed
-research      → deleted              research      → live  ← 4 rows, still listed
-client        → deleted              client        → deleted
-```
+That asymmetry (orphan-free, but side-effect-stale) is now the actual state,
+in place of the old orphan problem. Worth deciding whether cascaded placement
+deletes should also run the reversal — flagged as a new open item in §10.
 
-Both columns are the same client — CLI-000439 "Hakka" — run in a rolled-back
-transaction.
+### Reversing a Placement
 
-The same candidate, deleted two ways:
-
-```
-CandidatesService.remove()        raw delete on the candidate row
-──────────────────────────        ────────────────────────────────
-candidate   → deletedAt ✓          candidate   → deletedAt ✓
-submissions → deletedAt ✓          submissions → still live ✗
-placements  → deletedAt ✓          placements  → still live ✗
-
-JO-0003 pipeline:                  JO-0003 pipeline:
-  Edward Lewis                       Amandeep Singh  ← leaked
-  Kwin Inacio                        Edward Lewis
-                                     Kwin Inacio
-```
+Deleting a Placement directly reverses what `create` applied: the submission
+and candidate drop back to `INTERVIEWING`/`WARM`, the job order's fill count
+decrements (and its status reverts to `ACTIVE` if the placement had pushed it
+to `PLACED`), and the client drops back to `WARM` — but only if this was its
+one and only placement, leaving `TRADED` intact for a client with any other
+live one. The placement's own `status` field is left untouched by delete —
+deleting isn't a claim about *why* it didn't work out. A genuine "this fell
+through" is a separate, deliberate `status: FAILED` transition via `update`.
 
 ### When is a deleted thing still visible?
 
@@ -565,8 +605,8 @@ JO-0003 pipeline:                  JO-0003 pipeline:
 |---|---|
 | Row fetched directly by a list or by ID | ✅ hidden |
 | Row's name pulled in through a parent's `include` | ❌ **still shows**, unless that include carries its own `deletedAt: null` |
-| Deleted via the app's delete method | ✅ children go too |
-| Deleted via script, importer, or SQL | ❌ children survive as orphans |
+| Any Prisma `delete`/`deleteMany` on a soft-delete model, from any call site | ✅ children cascade (the fix above) |
+| A genuine raw SQL `DELETE` issued outside Prisma entirely | ❌ still bypasses everything — the extension only intercepts Prisma calls |
 | Parent deleted without the cascade, child fetched from its own list | ❌ **child still shows** |
 
 ### Cases that cannot happen
@@ -583,23 +623,43 @@ of the above is what *will* happen, not what has.
 
 ## 10. Known gaps
 
-Open items as of 2026-08-03, in rough order of consequence.
+Open items, in rough order of consequence. Originally logged 2026-08-03;
+updated 2026-08-08 as items got resolved.
 
 | # | Gap | Status |
 |---|---|---|
-| 1 | **`submissions`, `interviews` and `placements` have no scoping at all.** Those three services never receive the logged-in user. Every consultant can list every submission, interview and placement in the system, including for clients and candidates they can't otherwise see. Only 4 submissions exist today, so nothing is exposed yet. | Not fixed |
-| 2 | **The client delete cascade lives in a service method**, so any other path orphans children (§9, Path B). Moving it to database `onDelete` rules would make the two columns identical. | Not fixed |
-| 3 | **Interviews are never cleaned up** by any cascade. 0 rows today, so nothing is broken yet. | Not fixed |
-| 4 | **Placement side effects are never reversed** — deleting one leaves the candidate marked `PLACED` and the job order counted as filled. | Not fixed |
-| 5 | **The specialization gate is on and cuts client lists by up to two-thirds** (§4). Whether that's intended, and whether to backfill candidate tags, is undecided. | Open decision |
+| 1 | **`submissions`, `interviews` and `placements` have no scoping at all.** Those three services never receive the logged-in user. Every consultant can list every submission, interview and placement in the system, including for clients and candidates they can't otherwise see. Only 4 submissions exist today, so nothing is exposed yet. Also the gate for whether a submission should grant implicit visibility into its candidate (§6-adjacent — a candidate isn't owned by a job order the way a stakeholder is owned by a client, so this can't just mirror that fix; leaning toward *not* granting implicit visibility, requiring the candidate to already be visible before a submission can link them). | Deferred |
+| 2 | ~~The client delete cascade lives in a service method, so any other path orphans children.~~ **Fixed** — moved into the Prisma extension's `CASCADE_MAP` (§9), so it fires for any delete path, not just the three service methods. | Fixed |
+| 3 | **Interviews are never cleaned up** by any cascade. 0 rows today, so nothing is broken yet. | Deferred |
+| 4 | ~~Placement side effects are never reversed on delete.~~ **Fixed** for direct deletes (`DELETE /placements/:id`) — see §9. **Still open** for placements that get soft-deleted via a Client/JobOrder cascade (§9's "side effects vs. orphans" note) — those stamp `deletedAt` but don't reverse the candidate/job-order/client state. | Partially fixed |
+| 5 | **The specialization gate is on and cuts client lists by up to two-thirds** (§4). Whether that's intended, and whether to backfill candidate tags, is undecided. Confirmed as working as designed — each entity gates on its own tag only, never a related entity's, so there's no cross-entity leak to worry about; the backfill question is a data decision, not a bug. | Open decision |
 | 6 | **No client, candidate or research row has an owner.** Every number in §5 is pure coverage. | Open decision |
-| 7 | **Every Australian candidate is recorded as Sydney** (§5). Likely a source-data gap. | Open decision |
+| 7 | **Every Australian candidate is recorded as Sydney** (§5). Likely a source-data gap — deliberately not being chased for now. | Ignored for now |
+| 8 | **Cascaded placement deletes don't reverse side effects** (see gap #4's second half). Deciding whether a Client/JobOrder cascade should also run the same reversal `PlacementsService.remove` does, or whether that's acceptable as "the record's gone, its downstream status is a separate concern." | Open decision |
 
 Confirmed as intended, for the record:
 
 - Country-level grants for Daniel Kee and Wong Yuen Xing → both see all 3,960 candidates.
 - Industry and location combine as **OR**, not AND.
 - Clients reach consultants through industry/location, not through assignment alone.
+- A candidate's own specialization gates their own visibility only — a
+  client's specialization tag has no bearing on any candidate's visibility,
+  and vice versa. No cross-entity matching exists, or is planned.
+- Job orders stay single-owner (one `consultantId`, no many-to-many). What
+  looks like "multiple consultants on one job order" is really independent
+  consultants each owning different candidates submitted to it — see gap #1.
+
+Resolved since 2026-08-03 (see §6, §8, §9 for the mechanics):
+
+- Stakeholder visibility now fully inherits from its client — the old
+  own-coverage asymmetry (and the client's matching fourth arm) is gone.
+- Admin/manager can now deliberately assign a client, candidate, or job order
+  outside a consultant's own grants — `assertConsultantCovers` accepts an
+  `assignerRole` that bypasses `CONSULTANT_SCOPE_MISMATCH` for those two roles
+  only.
+- Delete cascades are centralized in the Prisma extension, closing the
+  "any path that isn't the service method orphans children" hole.
+- Deleting a Placement directly now reverses its side effects.
 
 ---
 
