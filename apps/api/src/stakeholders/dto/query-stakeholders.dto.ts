@@ -25,6 +25,17 @@ export enum SortOrder {
   desc = 'desc',
 }
 
+/**
+ * String tokens for Stakeholder.isAccurate's three states — mirrors the
+ * frontend's own `accuracyValue`/`parseAccuracyValue` convention (columns.tsx),
+ * since `true`/`false` aren't valid TS enum member names.
+ */
+export enum AccuracyFilter {
+  Accurate = 'true',
+  Inaccurate = 'false',
+  Unchecked = 'unchecked',
+}
+
 export class QueryStakeholdersDto {
   @ApiPropertyOptional({ description: 'Page number (1-based)', minimum: 1, default: 1 })
   @IsOptional()
@@ -98,4 +109,27 @@ export class QueryStakeholdersDto {
   @IsArray()
   @IsString({ each: true })
   jobTitleIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      "Filter by Location id(s) matched against a stakeholder's own coverage (not its client's location). Selecting a country or state matches every stakeholder whose coverage sits beneath it, via the ancestor path — same semantics as Client.locationIds.",
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @IsArray()
+  @IsString({ each: true })
+  locationIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      "Filter by verification state (one or more): 'true' (Accurate), 'false' (Inaccurate), 'unchecked' (not yet verified). Omit for all.",
+    enum: AccuracyFilter,
+    isArray: true,
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @IsArray()
+  @IsEnum(AccuracyFilter, { each: true })
+  accuracy?: AccuracyFilter[];
 }

@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { GetStakeholdersAccuracyItem } from './getStakeholdersAccuracyItem';
 import type { GetStakeholdersSortBy } from './getStakeholdersSortBy';
 import type { GetStakeholdersSortOrder } from './getStakeholdersSortOrder';
 
@@ -49,4 +50,12 @@ roleTypeIds?: string[];
  * Filter by JobTitle id(s)
  */
 jobTitleIds?: string[];
+/**
+ * Filter by Location id(s) matched against a stakeholder's own coverage (not its client's location). Selecting a country or state matches every stakeholder whose coverage sits beneath it, via the ancestor path — same semantics as Client.locationIds.
+ */
+locationIds?: string[];
+/**
+ * Filter by verification state (one or more): 'true' (Accurate), 'false' (Inaccurate), 'unchecked' (not yet verified). Omit for all.
+ */
+accuracy?: GetStakeholdersAccuracyItem[];
 };

@@ -7,7 +7,7 @@ import { assertInScope, isScoped, stakeholderScope } from '../common/scope';
 import { AuthUser } from '../auth/auth.types';
 import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
 import { UpdateStakeholderDto } from './dto/update-stakeholder.dto';
-import { QueryStakeholdersDto } from './dto/query-stakeholders.dto';
+import { AccuracyFilter, QueryStakeholdersDto } from './dto/query-stakeholders.dto';
 import { CreateStakeholderContactHistoryDto } from './dto/create-stakeholder-contact-history.dto';
 import { classifyJobTitle } from './role-type-classifier';
 
@@ -161,6 +161,25 @@ export class StakeholdersService {
           { mobile: { contains: q, mode: Prisma.QueryMode.insensitive } },
         ],
       });
+    }
+
+    // Matched against the stakeholder's OWN coverage, not its client's
+    // location — same ancestor-path semantics as Client.locationIds.
+    // Selecting a country/state matches every stakeholder whose coverage
+    // sits beneath it.
+    if (query.locationIds?.length) {
+      and.push({ coverage: { some: { location: { ancestorIds: { hasSome: query.locationIds } } } } });
+    }
+
+    // isAccurate is nullable (three states) — 'unchecked' means null, which
+    // Prisma's `in` never matches (SQL NULL semantics), so each selected
+    // token becomes its own OR arm rather than a single `in` filter.
+    if (query.accuracy?.length) {
+      const accuracyConditions: Prisma.StakeholderWhereInput[] = [];
+      if (query.accuracy.includes(AccuracyFilter.Accurate)) accuracyConditions.push({ isAccurate: true });
+      if (query.accuracy.includes(AccuracyFilter.Inaccurate)) accuracyConditions.push({ isAccurate: false });
+      if (query.accuracy.includes(AccuracyFilter.Unchecked)) accuracyConditions.push({ isAccurate: null });
+      and.push({ OR: accuracyConditions });
     }
 
     if (isScoped(user)) {
@@ -334,13 +353,14 @@ export class StakeholdersService {
   }
 
   /**
-   * Logs a contact and bumps the denormalized lastContactedAt on both the
-   * stakeholder and its client — but only if this contact is newer than
-   * what's already stored. A consultant backdating a contact (logging a call
-   * from last week) shouldn't clobber a more recent one someone else already
-   * logged. contactedById always comes from the caller's own session (never
-   * the request body) — a contact can only ever be attributed to whoever is
-   * actually submitting it.
+   * Logs a contact and bumps the denormalized lastContactedAt (both the
+   * stakeholder and its client) and lastContactedById (stakeholder only —
+   * Client has no such column, only lastContactedAt) — but only if this
+   * contact is newer than what's already stored. A consultant backdating a
+   * contact (logging a call from last week) shouldn't clobber a more recent
+   * one someone else already logged. contactedById always comes from the
+   * caller's own session (never the request body) — a contact can only ever
+   * be attributed to whoever is actually submitting it.
    */
   async addContactHistory(id: string, dto: CreateStakeholderContactHistoryDto, consultantId: string) {
     const stakeholder = await this.base.stakeholder.findUnique({
@@ -364,7 +384,10 @@ export class StakeholdersService {
     });
 
     if (!stakeholder.lastContactedAt || contactedAt > stakeholder.lastContactedAt) {
-      await this.prisma.stakeholder.update({ where: { id }, data: { lastContactedAt: contactedAt } });
+      await this.prisma.stakeholder.update({
+        where: { id },
+        data: { lastContactedAt: contactedAt, lastContactedById: consultantId },
+      });
 
       const client = await this.base.client.findUnique({
         where: { id: stakeholder.clientId },

@@ -95,6 +95,7 @@ export * from './getRolesParams';
 export * from './getRolesSortBy';
 export * from './getRolesSortOrder';
 export * from './getStakeholderRoleTypesParams';
+export * from './getStakeholdersAccuracyItem';
 export * from './getStakeholdersParams';
 export * from './getStakeholdersSortBy';
 export * from './getStakeholdersSortOrder';
