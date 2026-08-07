@@ -95,7 +95,7 @@ export function ComboboxSelect({
             </div>
             <Separator />
             <div className="bg-black/5 dark:bg-black/20">
-              <Combobox.Empty className="text-sm text-muted-foreground">
+              <Combobox.Empty className="text-sm text-muted-foreground empty:hidden">
                 <p className="px-3 py-3 text-center">No matches.</p>
               </Combobox.Empty>
               <Combobox.List className="max-h-64 overflow-y-auto p-1">

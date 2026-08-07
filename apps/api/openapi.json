@@ -1556,19 +1556,20 @@
             }
           },
           {
-            "name": "status",
+            "name": "statuses",
             "required": false,
             "in": "query",
-            "description": "Filter by status. Defaults to ALL (every status); pass a specific status to narrow.",
+            "description": "Filter by status (one or more). Omit for all statuses.",
             "schema": {
-              "default": "ALL",
-              "type": "string",
-              "enum": [
-                "COLD",
-                "WARM",
-                "TRADED",
-                "ALL"
-              ]
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "TRADED"
+                ]
+              }
             }
           },
           {
@@ -1581,12 +1582,36 @@
             }
           },
           {
+            "name": "industryIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by industry id(s) (one or more, exact match)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "name": "specialization",
             "required": false,
             "in": "query",
             "description": "Filter by specialization (contains, case-insensitive)",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "specializationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by specialization id(s) (one or more, exact match)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -1611,28 +1636,32 @@
             }
           },
           {
-            "name": "consultantId",
+            "name": "consultantIds",
             "required": false,
             "in": "query",
-            "description": "Filter by owning consultant ID (exact match)",
+            "description": "Filter by owning consultant ID(s) (one or more, exact match). '' selects unassigned clients.",
             "schema": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
-            "name": "quality",
+            "name": "qualities",
             "required": false,
             "in": "query",
-            "description": "Filter by lead quality. Defaults to ALL (every quality); pass a specific value to narrow.",
+            "description": "Filter by lead quality (one or more). Omit for all qualities.",
             "schema": {
-              "default": "ALL",
-              "type": "string",
-              "enum": [
-                "LOW",
-                "MEDIUM",
-                "HIGH",
-                "ALL"
-              ]
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "LOW",
+                  "MEDIUM",
+                  "HIGH"
+                ]
+              }
             }
           },
           {

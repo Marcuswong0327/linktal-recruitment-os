@@ -8,6 +8,7 @@ import {
   Mail,
   SquareCheck,
   BriefcaseBusiness,
+  Building2,
   MessageSquare,
   FileText,
   UsersRound,
@@ -51,6 +52,7 @@ export const navGroups: NavGroup[] = [
   {
     label: 'OPERATIONS',
     items: [
+      { title: 'Companies', href: '/companies', icon: Building2 },
       { title: 'Stakeholders', href: '/stakeholders', icon: Contact },
       { title: 'Job Orders', href: '/job-orders', icon: BookA },
       { title: 'Candidates', href: '/candidates', icon: UsersRound },

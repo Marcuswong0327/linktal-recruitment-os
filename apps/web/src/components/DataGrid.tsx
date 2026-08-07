@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -72,6 +73,21 @@ export interface DataGridFilter {
    * behavior are unchanged — only where the trigger appears moves.
    */
   inHeader?: boolean;
+  /**
+   * Resolves a selected value to its display label, for the "Filters
+   * applied" summary row. Falls back to looking the value up in `options`
+   * when omitted — only needed for filters whose values aren't a static list
+   * (e.g. a server-searched `render` filter like a location or consultant
+   * combobox).
+   */
+  labelFor?: (value: string) => string;
+  /**
+   * Fully custom chip body for a selected value in the "Filters applied"
+   * row — e.g. a consultant's avatar + name instead of plain text. Overrides
+   * `labelFor`/`options` for that value; still wrapped in the same
+   * removable chip shell (rounded pill + trailing ✕).
+   */
+  chipContent?: (value: string) => React.ReactNode;
 }
 
 /** Per-column presentation hints, set via `meta` on a ColumnDef. */
@@ -844,7 +860,7 @@ export function DataGrid<TData>({
         </div>
         {toolbar ? <div className="flex items-center gap-2">{toolbar}</div> : null}
       </div>
-      {(filters ?? []).filter((filter) => !filter.inHeader).length > 0 || isFiltered ? (
+      {(filters ?? []).filter((filter) => !filter.inHeader).length > 0 ? (
         <div className="flex flex-wrap items-center gap-2">
           {(filters ?? [])
             .filter((filter) => !filter.inHeader)
@@ -872,16 +888,68 @@ export function DataGrid<TData>({
               />
             );
           })}
-          {isFiltered ? (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="inline-flex items-center gap-1.5 rounded-sm px-1 text-sm text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
-            >
-              <X className="size-4" />
-              Clear
-            </button>
+        </div>
+      ) : null}
+      {/* Summary row of every currently-active filter (header or toolbar) plus
+          the global search term, each independently clearable — separate from
+          the filter *pickers* above, which only cover non-inHeader filters. */}
+      {isFiltered ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Filters applied:</span>
+          {(filters ?? []).flatMap((filter) => {
+            const column = table.getColumn(filter.columnId);
+            if (!column) return [];
+            const selected = (column.getFilterValue() as string[]) ?? [];
+            if (selected.length === 0) return [];
+            const removeValue = (value: string) => {
+              const next = selected.filter((v) => v !== value);
+              column.setFilterValue(next.length ? next : undefined);
+            };
+            return selected.map((value) => {
+              const option = filter.options?.find((o) => o.value === value);
+              const label = filter.labelFor ? filter.labelFor(value) : (option?.label ?? value);
+              return (
+                <Badge
+                  key={`${filter.columnId}-${value}`}
+                  variant={option?.variant ?? 'secondary'}
+                  className="gap-1 rounded-md py-1 pr-1 font-normal"
+                >
+                  <span className="text-muted-foreground">{filter.title}:</span>
+                  {filter.chipContent ? filter.chipContent(value) : label}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${filter.title} filter: ${label}`}
+                    onClick={() => removeValue(value)}
+                    className="rounded-full opacity-70 outline-none hover:opacity-100"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              );
+            });
+          })}
+          {globalFilter ? (
+            <Badge variant="secondary" className="gap-1 rounded-md pr-1 font-normal">
+              <span className="text-muted-foreground">Search:</span>
+              {globalFilter}
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setGlobalFilter('')}
+                className="rounded-full opacity-70 outline-none hover:opacity-100"
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
           ) : null}
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="inline-flex items-center gap-1.5 rounded-sm px-1 text-sm text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
+          >
+            <X className="size-4" />
+            Clear all
+          </button>
         </div>
       ) : null}
       {/* Grid */}

@@ -300,7 +300,7 @@ export function TagMultiSelect({
                   child too. Padding directly on Empty itself reserved space
                   even with nothing in it: a permanent ~24px gap between the
                   separator and the first real row. */}
-              <Combobox.Empty className="text-sm text-muted-foreground">
+              <Combobox.Empty className="text-sm text-muted-foreground empty:hidden">
                 <p className="px-3 py-3 text-center">
                   {onCreate ? 'No matches — keep typing to add a new value.' : 'No matches.'}
                 </p>
