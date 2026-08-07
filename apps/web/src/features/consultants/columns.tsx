@@ -4,6 +4,8 @@ import type { ColumnDef } from '@tanstack/react-table';
 import { Info } from 'lucide-react';
 
 import { ComboboxSelect } from '@/components/ComboboxSelect';
+import { LocationBadgeList } from '@/components/LocationBadgeList';
+import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
 import { TagMultiSelect, TagPills, type TagOption } from '@/components/TagMultiSelect';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -38,18 +40,30 @@ const roleOptions = consultantRoles.map((value) => ({
   label: consultantRoleLabels[value],
   triggerClassName: consultantRoleTriggerClassName[value],
 }));
-const statusOptions = [
-  {
-    value: 'true',
-    label: 'Active',
-    triggerClassName: 'border-success/30 bg-success/10 text-success',
-  },
-  {
-    value: 'false',
-    label: 'Inactive',
-    triggerClassName: 'border-destructive/30 bg-destructive/10 text-destructive',
-  },
-];
+const activeStatusOption = {
+  value: 'true',
+  label: 'Active',
+  triggerClassName: 'border-success/30 bg-success/10 text-success',
+};
+const inactiveStatusOption = {
+  value: 'false',
+  label: 'Inactive',
+  triggerClassName: 'border-destructive/30 bg-destructive/10 text-destructive',
+};
+// Same underlying value ('false') as inactiveStatusOption — this is a display
+// override for a row whose `pendingApproval` flag is still set, not a third
+// value of `isActive`. Selecting either one still just sets isActive=false;
+// the difference is purely which label/color a false row gets, so a fresh
+// self-registration reads as "needs a decision" rather than "already
+// handled, offboarded". The flag itself flips off server-side the moment an
+// admin acts on isActive (either direction) — see the Prisma model's doc
+// comment — so toggling Active then back to Inactive correctly lands on
+// plain "Inactive", not "Pending approval" again.
+const pendingStatusOption = {
+  value: 'false',
+  label: 'Pending approval',
+  triggerClassName: 'border-warning/30 bg-warning/10 text-warning',
+};
 
 interface ConsultantColumnsOptions {
   /** Editing a row while its mutation is in flight — disables that row's controls. */
@@ -97,6 +111,17 @@ interface ConsultantColumnsOptions {
     /** Deactivates the underlying Specialization row — present only for `specialization:delete` (admin, manager). */
     onDeleteSpecialization?: (option: TagOption) => void;
   };
+  /**
+   * Same gating pattern as `industries`/`specializations`, keyed to
+   * `consultant_location:read` — this consultant's patch, at any level. No
+   * catalog options here (Location is a ~2k-node searched tree, not an
+   * in-memory list), so unlike the two above there's no create/rename/delete
+   * affordance — Location is admin-only and never hand-typed.
+   */
+  locations?: {
+    /** Absent when the caller lacks `consultant_location:update` — read-only badges instead of an editable picker. */
+    onLocationsChange?: (user: Consultant, locationIds: string[]) => void;
+  };
 }
 
 export function getConsultantColumns({
@@ -106,6 +131,7 @@ export function getConsultantColumns({
   onStatusChange,
   industries,
   specializations,
+  locations,
 }: ConsultantColumnsOptions): ColumnDef<Consultant>[] {
   return [
     {
@@ -168,7 +194,8 @@ export function getConsultantColumns({
             />
             <TooltipContent>
               Active consultants can sign in and access the app; inactive consultants are blocked
-              from signing in.
+              from signing in. A row marked "Pending approval" has never signed in — approve it by
+              switching to Active, or leave it if it should be rejected.
             </TooltipContent>
           </Tooltip>
         </span>
@@ -176,12 +203,16 @@ export function getConsultantColumns({
       cell: ({ row }) => {
         const user = row.original;
         const disabled = isSelf(user) || pendingId === user.id;
+        const options = [
+          activeStatusOption,
+          user.pendingApproval ? pendingStatusOption : inactiveStatusOption,
+        ];
         return (
           <ComboboxSelect
             title="Status"
             value={String(user.isActive)}
             onValueChange={(v) => onStatusChange(user, v === 'true')}
-            options={statusOptions}
+            options={options}
             disabled={disabled}
             triggerClassName="mx-auto"
           />
@@ -284,6 +315,46 @@ export function getConsultantColumns({
                 </span>
               ) : (
                 picker
+              );
+            },
+          } satisfies ColumnDef<Consultant>,
+        ]
+      : []),
+    ...(locations
+      ? [
+          {
+            id: 'locations',
+            header: 'Locations',
+            size: 220,
+            enableSorting: false,
+            cell: ({ row }: { row: { original: Consultant } }) => {
+              const user = row.original;
+              const names = user.locations ?? [];
+              if (!locations.onLocationsChange) {
+                return <LocationBadgeList locations={names} />;
+              }
+              const ids = user.locationIds ?? [];
+              // No `level` for a row's already-assigned locations — the API
+              // returns name+id only, not the badge-worthy level (see
+              // LocationOption's own doc comment). It backfills the moment a
+              // location is re-picked from a live search result.
+              const selected: LocationOption[] = ids.map((id, i) => ({
+                id,
+                name: names[i] ?? id,
+              }));
+              const disabled = pendingId === user.id;
+              return (
+                <LocationMultiSelect
+                  selected={selected}
+                  onChange={(next) =>
+                    locations.onLocationsChange!(
+                      user,
+                      next.map((l) => l.id),
+                    )
+                  }
+                  disabled={disabled}
+                  placeholder="No locations"
+                />
               );
             },
           } satisfies ColumnDef<Consultant>,

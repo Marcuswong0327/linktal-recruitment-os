@@ -41,4 +41,16 @@ roleName?: string;
  * Filter by active flag
  */
 isActive?: boolean;
+/**
+ * Filter by assigned industry id(s) (one or more, exact match)
+ */
+industryIds?: string[];
+/**
+ * Filter by assigned specialization id(s) (one or more, exact match)
+ */
+specializationIds?: string[];
+/**
+ * Filter by assigned Location id(s). Selecting a country or state matches every consultant whose patch sits beneath it, via the ancestor path.
+ */
+locationIds?: string[];
 };

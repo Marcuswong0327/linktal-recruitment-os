@@ -27,6 +27,9 @@ function prismaWith(consultantRow: ReturnType<typeof consultant> | null) {
   return {
     consultant: {
       findUnique: jest.fn().mockResolvedValue(consultantRow),
+      // stampLastLogin's write — the value doesn't matter to these tests,
+      // just that the mock exists so the call doesn't throw.
+      update: jest.fn().mockResolvedValue(consultantRow),
     },
   } as unknown as PrismaService;
 }
@@ -109,7 +112,9 @@ describe('RbacService', () => {
         }),
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.consultant.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ isActive: false }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ isActive: false, pendingApproval: true }),
+        }),
       );
       // Gap 2: the self-registration is audited (auth path is on the base client).
       expect(prisma.auditLog.create).toHaveBeenCalledWith(
@@ -189,6 +194,7 @@ describe('RbacService', () => {
           // No azureId match and no email match → just-in-time provision.
           findUnique: jest.fn().mockResolvedValue(null),
           create: jest.fn().mockResolvedValue(created),
+          update: jest.fn().mockResolvedValue(created),
         },
         role: { findUnique: jest.fn().mockResolvedValue(viewerRole) },
         auditLog: { create: jest.fn().mockResolvedValue({}) },

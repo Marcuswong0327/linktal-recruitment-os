@@ -37,6 +37,13 @@ export interface ConsultantEntity {
   /** @nullable */
   roleId: string | null;
   isActive: boolean;
+  /** True only for a brand-new email+password signup awaiting its first admin decision. Cleared the first time an admin sets isActive (either direction) — see the Prisma model doc comment. */
+  pendingApproval: boolean;
+  /**
+     * Stamped on a completed sign-in only (not token refresh). General "last signed in" telemetry.
+     * @nullable
+     */
+  lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
   /** @nullable */

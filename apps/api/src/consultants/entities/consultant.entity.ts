@@ -41,6 +41,19 @@ export class ConsultantEntity implements Omit<Consultant, 'passwordHash'> {
   reportsToId!: string | null;
   @ApiProperty({ type: String, nullable: true }) roleId!: string | null;
   @ApiProperty({ example: true }) isActive!: boolean;
+  @ApiProperty({
+    example: false,
+    description:
+      'True only for a brand-new email+password signup awaiting its first admin decision. Cleared the first time an admin sets isActive (either direction) — see the Prisma model doc comment.',
+  })
+  pendingApproval!: boolean;
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description: 'Stamped on a completed sign-in only (not token refresh). General "last signed in" telemetry.',
+  })
+  lastLoginAt!: Date | null;
   @ApiProperty() createdAt!: Date;
   @ApiProperty() updatedAt!: Date;
   @ApiPropertyOptional({ type: RoleSummaryEntity, nullable: true })

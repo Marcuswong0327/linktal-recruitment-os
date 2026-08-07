@@ -161,11 +161,25 @@ model Consultant {
   reportsTo     Consultant?  @relation("ConsultantHierarchy", fields: [reportsToId], references: [id], onDelete: SetNull)
   directReports Consultant[] @relation("ConsultantHierarchy")
 
-  roleId    String?
-  role      Role?    @relation(fields: [roleId], references: [id])
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  roleId          String?
+  role            Role?     @relation(fields: [roleId], references: [id])
+  isActive        Boolean   @default(true)
+  // True only for a brand-new email+password signup, from the moment
+  // RbacService.registerWithPassword creates it (see that method's own
+  // isActive=false branch). Cleared to false the first time an admin acts on
+  // this row's activation status via ConsultantsController#update — in
+  // *either* direction — so it means "awaiting its first admin decision", not
+  // "currently inactive". A row an admin approved and later re-deactivated
+  // (offboarding) is not pending; a row nobody has touched yet is. Never true
+  // for Azure-provisioned or workbook-imported rows — see the two call sites.
+  pendingApproval Boolean   @default(false)
+  // Stamped only on a real completed sign-in (RbacService.resolveUser /
+  // verifyPassword) — never on token refresh. General "last signed in"
+  // telemetry; deliberately NOT part of the pendingApproval signal above (an
+  // approved-then-reversed row would misreport pending if it were).
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   clients             Client[]
   jobOrders           JobOrder[]
