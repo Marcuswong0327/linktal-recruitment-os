@@ -3,7 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Contact, CornerDownLeft, Phone, Trash2 } from 'lucide-react';
+import { ArrowLeft, Contact, CornerDownLeft, MapPin, Phone, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -27,8 +27,12 @@ import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
+import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
 import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
+import { UrlField } from '@/components/UrlField';
 import { PageLayout } from '@/components/app-shell/PageLayout';
+import { useIsMac } from '@/hooks/use-is-mac';
+import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shortcut';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
@@ -49,8 +53,7 @@ import type {
   StakeholderEntity,
   UpdateStakeholderDto,
 } from '@/lib/api/generated/types';
-import { accuracyOptions, accuracyValue, formatDate, roleTypeStyle } from './columns';
-import { stakeholderFullName } from './schema';
+import { accuracyOptions, accuracyValue, formatDate, roleTypeStyle, stakeholderFullName } from './columns';
 
 function initials(name: string) {
   if (!name) return '?';
@@ -127,8 +130,19 @@ function StakeholderEditForm({
   const [mobile, setMobile] = React.useState(stakeholder.mobile ?? '');
   const [isAccurate, setIsAccurate] = React.useState<boolean | null>(stakeholder.isAccurate);
   const [inaccurateReason, setInaccurateReason] = React.useState(stakeholder.inaccurateReason ?? '');
+  // Seeded by zipping the two parallel arrays the entity returns — `coverage`
+  // (resolved names) and `coverageLocationIds` (the ids backing them) are
+  // guaranteed same-order same-length by the backend (see
+  // stakeholders.service.ts). `level` is unknown until this session re-picks
+  // it via search — see LocationMultiSelect's own doc comment.
+  const [coverage, setCoverage] = React.useState<LocationOption[]>(() =>
+    stakeholder.coverageLocationIds.map((id, i) => ({ id, name: stakeholder.coverage[i] ?? id })),
+  );
   const [loggingContact, setLoggingContact] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
+
+  const coverageIdsKey = (ids: string[]) => [...ids].sort().join(',');
+  const initialCoverageKey = coverageIdsKey(stakeholder.coverageLocationIds);
 
   const isDirty =
     firstName !== (stakeholder.firstName ?? '') ||
@@ -139,7 +153,8 @@ function StakeholderEditForm({
     email !== (stakeholder.email ?? '') ||
     mobile !== (stakeholder.mobile ?? '') ||
     isAccurate !== stakeholder.isAccurate ||
-    inaccurateReason !== (stakeholder.inaccurateReason ?? '');
+    inaccurateReason !== (stakeholder.inaccurateReason ?? '') ||
+    coverageIdsKey(coverage.map((c) => c.id)) !== initialCoverageKey;
 
   const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty && canEdit);
 
@@ -202,6 +217,10 @@ function StakeholderEditForm({
     },
   });
 
+  const formRef = React.useRef<HTMLFormElement>(null);
+  const isMac = useIsMac();
+  useSaveShortcut(() => formRef.current?.requestSubmit(), canEdit && isDirty && !updateStakeholder.isPending);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const data: UpdateStakeholderDto = {
@@ -214,6 +233,7 @@ function StakeholderEditForm({
       mobile: mobile || undefined,
       isAccurate: isAccurate ?? undefined,
       inaccurateReason: inaccurateReason || undefined,
+      coverageLocationIds: coverage.map((c) => c.id),
     };
     updateStakeholder.mutate({ id: stakeholder.id, data });
   }
@@ -317,9 +337,14 @@ function StakeholderEditForm({
                     <>
                       Save changes
                       {isDirty ? (
-                        <Kbd className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground">
-                          <CornerDownLeft className="size-2.5" />
-                        </Kbd>
+                        <span className="flex items-center gap-0.5">
+                          <Kbd className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground">
+                            {isMac ? '⌘' : 'Ctrl'}
+                          </Kbd>
+                          <Kbd className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground">
+                            <CornerDownLeft className="size-2.5" />
+                          </Kbd>
+                        </span>
                       ) : null}
                     </>
                   )}
@@ -330,7 +355,13 @@ function StakeholderEditForm({
         </div>
       </div>
 
-      <form id="stakeholder-form" onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <form
+        id="stakeholder-form"
+        ref={formRef}
+        onSubmit={handleSubmit}
+        onKeyDown={blockImplicitEnterSubmit}
+        className="flex flex-col gap-5"
+      >
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="flex flex-col gap-5 lg:col-span-2">
             <Card>
@@ -399,14 +430,7 @@ function StakeholderEditForm({
                   <Input id="mobile" value={mobile} onChange={(e) => setMobile(e.target.value)} disabled={!canEdit} />
                 </FormField>
                 <FormField label="LinkedIn URL" htmlFor="linkedinUrl">
-                  <Input
-                    id="linkedinUrl"
-                    type="url"
-                    placeholder="https://…"
-                    value={linkedinUrl}
-                    onChange={(e) => setLinkedinUrl(e.target.value)}
-                    disabled={!canEdit}
-                  />
+                  <UrlField id="linkedinUrl" value={linkedinUrl} onChange={setLinkedinUrl} disabled={!canEdit} />
                 </FormField>
               </CardContent>
             </Card>
@@ -422,11 +446,7 @@ function StakeholderEditForm({
                     id="isAccurate"
                     value={isAccurate === null ? 'unchecked' : String(isAccurate)}
                     onValueChange={(v) => setIsAccurate(v === 'unchecked' ? null : v === 'true')}
-                    options={[
-                      { value: 'unchecked', label: 'Unchecked' },
-                      { value: 'true', label: 'Accurate' },
-                      { value: 'false', label: 'Inaccurate' },
-                    ]}
+                    options={accuracyOptions}
                     disabled={!canEdit}
                   />
                 </FormField>
@@ -446,6 +466,23 @@ function StakeholderEditForm({
           </div>
 
           <div className="flex flex-col gap-5">
+            <Card>
+              <CardHeader className="border-b">
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="size-4 text-muted-foreground" />
+                  Coverage
+                </CardTitle>
+                <CardDescription>
+                  Which places this contact covers. A broader pick (a whole state or country) automatically covers
+                  everywhere inside it. Determines which consultants can see this contact — independent of where the
+                  client itself sits.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <LocationMultiSelect selected={coverage} onChange={setCoverage} disabled={!canEdit} />
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader className="border-b">
                 <CardTitle>Last contact</CardTitle>

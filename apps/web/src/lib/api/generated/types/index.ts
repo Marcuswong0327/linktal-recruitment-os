@@ -100,6 +100,7 @@ export * from './getRolesSortBy';
 export * from './getRolesSortOrder';
 export * from './getSpecializationsParams';
 export * from './getStakeholderRoleTypesParams';
+export * from './getStakeholdersAccuracyItem';
 export * from './getStakeholdersParams';
 export * from './getStakeholdersSortBy';
 export * from './getStakeholdersSortOrder';

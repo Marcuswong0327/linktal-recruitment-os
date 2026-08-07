@@ -8,7 +8,6 @@ import {
   Building2,
   Contact,
   CornerDownLeft,
-  ExternalLink,
   FileText,
   MapPin,
   Plus,
@@ -40,7 +39,10 @@ import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
+import { UrlField } from '@/components/UrlField';
 import { PageLayout } from '@/components/app-shell/PageLayout';
+import { useIsMac } from '@/hooks/use-is-mac';
+import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shortcut';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import {
@@ -75,43 +77,6 @@ function initials(name: string) {
     .slice(0, 2)
     .join('')
     .toUpperCase();
-}
-
-/** A URL `Input` plus an "open in new tab" affordance once a value is set — same treatment as the Company table's website icon. */
-function UrlField({
-  id,
-  value,
-  onChange,
-  disabled,
-}: {
-  id: string;
-  value: string;
-  onChange: (value: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <Input
-        id={id}
-        type="url"
-        placeholder="https://…"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={disabled}
-      />
-      {value ? (
-        <a
-          href={value}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Open link in a new tab"
-          className="shrink-0 text-muted-foreground hover:text-foreground"
-        >
-          <ExternalLink className="size-4" />
-        </a>
-      ) : null}
-    </div>
-  );
 }
 
 export function CompanyDetail({
@@ -263,6 +228,10 @@ function CompanyEditForm({
   const deleteCompany = useDeleteClient();
   const restoreCompany = useRestoreClient();
 
+  const formRef = React.useRef<HTMLFormElement>(null);
+  const isMac = useIsMac();
+  useSaveShortcut(() => formRef.current?.requestSubmit(), canEdit && isDirty && !updateCompany.isPending);
+
   const { data: stakeholdersData } = useGetStakeholders({ clientId: company.id, pageSize: 50 });
   const stakeholders = stakeholdersData?.status === 200 ? stakeholdersData.data.data : [];
 
@@ -386,9 +355,14 @@ function CompanyEditForm({
                     <>
                       Save changes
                       {isDirty ? (
-                        <Kbd className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground">
-                          <CornerDownLeft className="size-2.5" />
-                        </Kbd>
+                        <span className="flex items-center gap-0.5">
+                          <Kbd className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground">
+                            {isMac ? '⌘' : 'Ctrl'}
+                          </Kbd>
+                          <Kbd className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground">
+                            <CornerDownLeft className="size-2.5" />
+                          </Kbd>
+                        </span>
                       ) : null}
                     </>
                   )}
@@ -399,7 +373,13 @@ function CompanyEditForm({
         </div>
       </div>
 
-      <form id="company-form" onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <form
+        id="company-form"
+        ref={formRef}
+        onSubmit={handleSubmit}
+        onKeyDown={blockImplicitEnterSubmit}
+        className="flex flex-col gap-5"
+      >
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="flex flex-col gap-5 lg:col-span-2">
             <Card>
