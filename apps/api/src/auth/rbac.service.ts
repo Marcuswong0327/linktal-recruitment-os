@@ -52,6 +52,7 @@ export class RbacService {
   async resolveUser(claims: TokenClaims): Promise<AuthUser> {
     const consultant = await this.findOrProvision(claims);
     this.assertActive(consultant);
+    await this.stampLastLogin(consultant.id);
     return this.toAuthUser(consultant);
   }
 
@@ -111,6 +112,7 @@ export class RbacService {
       });
       await this.logProvisioning('UPDATE', linked.id, 'password-link');
       this.assertActive(linked);
+      await this.stampLastLogin(linked.id);
       return this.toAuthUser(linked);
     }
 
@@ -121,6 +123,7 @@ export class RbacService {
         passwordHash,
         roleId: (await this.roleByName(DEFAULT_ROLE))?.id,
         isActive: false,
+        pendingApproval: true,
       },
       'password-registration',
     );
@@ -148,6 +151,7 @@ export class RbacService {
     if (!(await bcrypt.compare(password, consultant.passwordHash))) throw invalid();
 
     this.assertActive(consultant);
+    await this.stampLastLogin(consultant.id);
     return this.toAuthUser(consultant);
   }
 
@@ -164,6 +168,21 @@ export class RbacService {
         message: 'This account has been deactivated',
       });
     }
+  }
+
+  /**
+   * Only called from a path that actually mints a session (Azure sign-in,
+   * password login, or the password-link that immediately returns one) —
+   * never on token refresh (`resolveById`) and never from
+   * `registerWithPassword`'s brand-new-signup branch, which is rejected
+   * before a session exists. Fire-and-forget from the caller's perspective;
+   * awaited here only so a failure surfaces instead of racing the response.
+   */
+  private stampLastLogin(consultantId: string) {
+    return this.prisma.consultant.update({
+      where: { id: consultantId },
+      data: { lastLoginAt: new Date() },
+    });
   }
 
   private async findOrProvision(claims: TokenClaims): Promise<ConsultantWithRole> {
@@ -221,6 +240,7 @@ export class RbacService {
       passwordHash?: string;
       roleId?: string | null;
       isActive?: boolean;
+      pendingApproval?: boolean;
     },
     source: string,
   ): Promise<ConsultantWithRole> {

@@ -83,6 +83,8 @@ export function useConsultantLookup(
         reportsToId: null,
         roleId: null,
         isActive: true,
+        pendingApproval: false,
+        lastLoginAt: null,
         createdAt: '',
         updatedAt: '',
       } satisfies ConsultantEntity,

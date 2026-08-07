@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
-import { ChevronDown, Orbit, Shield } from 'lucide-react';
+import { ChevronDown, MapPin, Orbit, Shield } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,14 +25,16 @@ import {
 } from '@/components/ui/context-menu';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+import { LEVEL_LABEL, LocationFilterButton } from '@/components/LocationMultiSelect';
 import { RenameDialog } from '@/components/RenameDialog';
 import { deleteWithUndo, undoLabel } from '@/lib/delete-with-undo';
-import type { TagOption } from '@/components/TagMultiSelect';
+import { TagFilterButton, type TagOption } from '@/components/TagMultiSelect';
 import {
   getGetConsultantsQueryKey,
   updateConsultant as updateConsultantRequest,
   useGetConsultants,
   useSetConsultantIndustries,
+  useSetConsultantLocations,
   useSetConsultantSpecializations,
   useUpdateConsultant,
 } from '@/lib/api/generated/consultants/consultants';
@@ -50,7 +52,7 @@ import {
   useGetSpecializations,
   useUpdateSpecialization,
 } from '@/lib/api/generated/specializations/specializations';
-import type { UpdateConsultantDto } from '@/lib/api/generated/types';
+import type { LocationEntity, UpdateConsultantDto } from '@/lib/api/generated/types';
 import { hasPermission } from '@/lib/auth/permissions';
 import { getConsultantColumns } from './columns';
 import { CreateSpecializationDialog } from './CreateSpecializationDialog';
@@ -87,7 +89,7 @@ const roleFilterVariant: Record<
   viewer: 'muted',
 };
 
-const userFilters: DataGridFilter[] = [
+const roleStatusFilters: DataGridFilter[] = [
   {
     columnId: 'roleName',
     title: 'Role',
@@ -97,6 +99,7 @@ const userFilters: DataGridFilter[] = [
       label: consultantRoleLabels[value],
       variant: roleFilterVariant[value],
     })),
+    inHeader: true,
   },
   {
     columnId: 'isActive',
@@ -106,6 +109,7 @@ const userFilters: DataGridFilter[] = [
       { value: 'true', label: 'Active', variant: 'success' },
       { value: 'false', label: 'Inactive', variant: 'destructive' },
     ],
+    inHeader: true,
   },
 ];
 
@@ -116,6 +120,27 @@ export function ConsultantsTable() {
   const [search, setSearch] = React.useState<string | undefined>();
   const [role, setRole] = React.useState<string | undefined>();
   const [isActive, setIsActive] = React.useState<boolean | undefined>();
+  const [industryFilterIds, setIndustryFilterIds] = React.useState<string[] | undefined>();
+  const [specializationFilterIds, setSpecializationFilterIds] = React.useState<
+    string[] | undefined
+  >();
+  const [locationFilterIds, setLocationFilterIds] = React.useState<string[] | undefined>();
+  // Name/level for the Locations filter's currently selected ids — the API
+  // only returns these alongside a live search result, not by id, so this is
+  // seeded as the user searches (see LocationFilterButton's onResolve) and
+  // only needs to cover whatever's selected in this session. Same pattern as
+  // Companies' marketInfoById.
+  const [locationInfoById, setLocationInfoById] = React.useState<
+    Map<string, { name: string; level: LocationEntity['level'] }>
+  >(new Map());
+  const resolveLocationInfo = React.useCallback(
+    (id: string, name: string, level: LocationEntity['level']) => {
+      setLocationInfoById((prev) =>
+        prev.get(id)?.name === name ? prev : new Map(prev).set(id, { name, level }),
+      );
+    },
+    [],
+  );
   const [selectedUsers, setSelectedUsers] = React.useState<Consultant[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
 
@@ -128,6 +153,8 @@ export function ConsultantsTable() {
   const canEditIndustries = hasPermission(session, 'consultant_industry', 'update');
   const canReadSpecializations = hasPermission(session, 'consultant_specialization', 'read');
   const canEditSpecializations = hasPermission(session, 'consultant_specialization', 'update');
+  const canReadLocations = hasPermission(session, 'consultant_location', 'read');
+  const canEditLocations = hasPermission(session, 'consultant_location', 'update');
   // Separate from the two above: these gate managing the Industry/
   // Specialization *catalog* itself (rename, deactivate, grow it inline via
   // "+ Create") from the same columns' tag pickers — admin + manager only,
@@ -140,7 +167,16 @@ export function ConsultantsTable() {
   const canDeleteSpecializations = hasPermission(session, 'specialization', 'delete');
 
   const { data, isLoading, isFetching, isError, error } = useGetConsultants(
-    { page, pageSize: PAGE_SIZE, q: search, roleName: role, isActive },
+    {
+      page,
+      pageSize: PAGE_SIZE,
+      q: search,
+      roleName: role,
+      isActive,
+      industryIds: industryFilterIds,
+      specializationIds: specializationFilterIds,
+      locationIds: locationFilterIds,
+    },
     { query: { placeholderData: keepPreviousData } },
   );
 
@@ -188,6 +224,113 @@ export function ConsultantsTable() {
     [specializationRows],
   );
 
+  const userFilters: DataGridFilter[] = React.useMemo(
+    () => [
+      ...roleStatusFilters,
+      ...(canReadIndustries
+        ? [
+            {
+              columnId: 'industries',
+              title: 'Industries',
+              options: industryOptions,
+              inHeader: true,
+              // Searchable Combobox, not the plain checkbox list — the
+              // Industry catalog is short-ish but this keeps it consistent
+              // with Specializations below, which genuinely needs it.
+              render: ({
+                selected,
+                onChange,
+              }: {
+                selected: string[];
+                onChange: (values: string[]) => void;
+              }) => (
+                <TagFilterButton
+                  selected={selected}
+                  onChange={onChange}
+                  options={industryOptions}
+                  title="Industries"
+                />
+              ),
+            },
+          ]
+        : []),
+      ...(canReadSpecializations
+        ? [
+            {
+              columnId: 'specializations',
+              title: 'Specializations',
+              options: specializationOptions,
+              inHeader: true,
+              // Specialization is a ~774-row catalog — scanning an unfiltered
+              // checkbox list doesn't scale, so this swaps in the same
+              // searchable Combobox the inline tag picker itself uses.
+              render: ({
+                selected,
+                onChange,
+              }: {
+                selected: string[];
+                onChange: (values: string[]) => void;
+              }) => (
+                <TagFilterButton
+                  selected={selected}
+                  onChange={onChange}
+                  options={specializationOptions}
+                  title="Specializations"
+                />
+              ),
+            },
+          ]
+        : []),
+      ...(canReadLocations
+        ? [
+            {
+              columnId: 'locations',
+              title: 'Locations',
+              inHeader: true,
+              render: ({
+                selected,
+                onChange,
+              }: {
+                selected: string[];
+                onChange: (values: string[]) => void;
+              }) => (
+                <LocationFilterButton
+                  selected={selected}
+                  onChange={onChange}
+                  onResolve={resolveLocationInfo}
+                  title="Locations"
+                />
+              ),
+              labelFor: (id: string) => locationInfoById.get(id)?.name ?? id,
+              chipContent: (id: string) => {
+                const info = locationInfoById.get(id);
+                return (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="size-3" />
+                    {info?.name ?? id}
+                    {info ? (
+                      <span className="text-[10px] tracking-wide opacity-70 uppercase">
+                        {LEVEL_LABEL[info.level]}
+                      </span>
+                    ) : null}
+                  </span>
+                );
+              },
+            },
+          ]
+        : []),
+    ],
+    [
+      canReadIndustries,
+      industryOptions,
+      canReadSpecializations,
+      specializationOptions,
+      canReadLocations,
+      locationInfoById,
+      resolveLocationInfo,
+    ],
+  );
+
   const updateUser = useUpdateConsultant({
     mutation: {
       onSuccess: (_data, variables) => {
@@ -218,6 +361,16 @@ export function ConsultantsTable() {
         toast.success('Specializations updated');
       },
       onError: (err) => toast.error(err.message || 'Failed to update specializations'),
+    },
+  });
+
+  const setLocations = useSetConsultantLocations({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetConsultantsQueryKey() });
+        toast.success('Locations updated');
+      },
+      onError: (err) => toast.error(err.message || 'Failed to update locations'),
     },
   });
 
@@ -357,16 +510,24 @@ export function ConsultantsTable() {
       ? (setIndustries.variables?.id ?? null)
       : setSpecializations.isPending
         ? (setSpecializations.variables?.id ?? null)
-        : null;
+        : setLocations.isPending
+          ? (setLocations.variables?.id ?? null)
+          : null;
 
   function handleQueryChange({ search, columnFilters }: DataGridQuery) {
-    const roleFilter = columnFilters.find((f) => f.id === 'roleName')?.value as
-      string[] | undefined;
-    const statusFilter = columnFilters.find((f) => f.id === 'isActive')?.value as
-      string[] | undefined;
+    const valueOf = (columnId: string) =>
+      columnFilters.find((f) => f.id === columnId)?.value as string[] | undefined;
+    const roleFilter = valueOf('roleName');
+    const statusFilter = valueOf('isActive');
+    const industryFilter = valueOf('industries');
+    const specializationFilter = valueOf('specializations');
+    const locationFilter = valueOf('locations');
     setSearch(search.trim() || undefined);
     setRole(roleFilter?.[0]);
     setIsActive(statusFilter?.[0] === undefined ? undefined : statusFilter[0] === 'true');
+    setIndustryFilterIds(industryFilter?.length ? industryFilter : undefined);
+    setSpecializationFilterIds(specializationFilter?.length ? specializationFilter : undefined);
+    setLocationFilterIds(locationFilter?.length ? locationFilter : undefined);
     setPage(1);
   }
 
@@ -437,6 +598,13 @@ export function ConsultantsTable() {
                 : undefined,
             }
           : undefined,
+        locations: canReadLocations
+          ? {
+              onLocationsChange: canEditLocations
+                ? (user, locationIds) => setLocations.mutate({ id: user.id, data: { locationIds } })
+                : undefined,
+            }
+          : undefined,
       }),
     [
       pendingId,
@@ -460,6 +628,9 @@ export function ConsultantsTable() {
       specializationIndustryId,
       setSpecializations,
       handleCreateSpecialization,
+      canReadLocations,
+      canEditLocations,
+      setLocations,
     ],
   );
 

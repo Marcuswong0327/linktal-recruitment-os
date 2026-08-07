@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { Combobox } from '@base-ui/react/combobox';
-import { Pencil, Plus, Trash2, X } from 'lucide-react';
+import { Check, ListFilter, Pencil, Plus, Trash2, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -405,6 +405,94 @@ export function TagMultiSelect({
                 }}
               </Combobox.List>
             </div>
+          </Combobox.Popup>
+        </Combobox.Positioner>
+      </Combobox.Portal>
+    </Combobox.Root>
+  );
+}
+
+export interface TagFilterButtonProps {
+  /** Currently selected option values — multi-select. */
+  selected: string[];
+  onChange: (values: string[]) => void;
+  options: TagOption[];
+  title?: string;
+}
+
+/**
+ * Compact icon-button variant of `TagMultiSelect` for a `DataGridFilter`
+ * header slot — same searchable catalog list (Combobox filters by label as
+ * you type), matching `DataGridFacetedFilter`'s `compact` trigger look
+ * instead of its plain unfiltered checkbox list. For a catalog too long to
+ * scan by eye (e.g. the ~774-row Specialization list) — same reasoning as
+ * `ConsultantFilterButton`/`LocationFilterButton`. The list itself is capped
+ * at `max-h-64` regardless of where the trigger sits, so it never runs off
+ * the bottom of the viewport.
+ */
+export function TagFilterButton({
+  selected,
+  onChange,
+  options,
+  title = 'Filter',
+}: TagFilterButtonProps) {
+  const byId = React.useMemo(() => new Map(options.map((o) => [o.value, o])), [options]);
+  const items = React.useMemo(() => options.map((o) => o.value), [options]);
+
+  return (
+    <Combobox.Root
+      items={items}
+      multiple
+      value={selected}
+      onValueChange={onChange}
+      itemToStringLabel={(value: string) => byId.get(value)?.label ?? value}
+      itemToStringValue={(value: string) => value}
+    >
+      <Combobox.Trigger
+        aria-label={`Filter ${title}`}
+        title={`Filter ${title}`}
+        onClick={(e) => e.stopPropagation()}
+        className={cn(
+          'inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground',
+          selected.length > 0 && 'text-primary',
+        )}
+      >
+        <ListFilter className={cn('size-4', selected.length === 0 && 'opacity-60')} />
+      </Combobox.Trigger>
+
+      <Combobox.Portal>
+        <Combobox.Positioner align="start" sideOffset={4} className="isolate z-50">
+          <Combobox.Popup className="w-64 max-w-(--available-width) origin-(--transform-origin) overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/5 duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 dark:ring-foreground/10">
+            <div className="p-1.5">
+              <Combobox.Input
+                placeholder={`Search ${title.toLowerCase()}…`}
+                className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
+              />
+            </div>
+            <Combobox.Empty className="px-3 pb-3 text-center text-sm text-muted-foreground empty:hidden">
+              No matches.
+            </Combobox.Empty>
+            <Combobox.List className="max-h-64 overflow-y-auto p-1 pt-0">
+              {(value: string) => {
+                const option = byId.get(value);
+                return (
+                  <Combobox.Item
+                    key={value}
+                    value={value}
+                    className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                  >
+                    <Badge
+                      className={cn('rounded-md font-normal', colorFor(option?.colorKey ?? value))}
+                    >
+                      {option?.label ?? value}
+                    </Badge>
+                    <Combobox.ItemIndicator className="ml-auto shrink-0">
+                      <Check className="size-4" />
+                    </Combobox.ItemIndicator>
+                  </Combobox.Item>
+                );
+              }}
+            </Combobox.List>
           </Combobox.Popup>
         </Combobox.Positioner>
       </Combobox.Portal>

@@ -4997,6 +4997,42 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "industryIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by assigned industry id(s) (one or more, exact match)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "specializationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by assigned specialization id(s) (one or more, exact match)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by assigned Location id(s). Selecting a country or state matches every consultant whose patch sits beneath it, via the ancestor path.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         ],
         "responses": {
@@ -11355,6 +11391,17 @@
             "type": "boolean",
             "example": true
           },
+          "pendingApproval": {
+            "type": "boolean",
+            "example": false,
+            "description": "True only for a brand-new email+password signup awaiting its first admin decision. Cleared the first time an admin sets isActive (either direction) — see the Prisma model doc comment."
+          },
+          "lastLoginAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "description": "Stamped on a completed sign-in only (not token refresh). General \"last signed in\" telemetry."
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -11426,6 +11473,8 @@
           "reportsToId",
           "roleId",
           "isActive",
+          "pendingApproval",
+          "lastLoginAt",
           "createdAt",
           "updatedAt"
         ]

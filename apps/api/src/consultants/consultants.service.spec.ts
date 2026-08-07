@@ -168,6 +168,41 @@ describe('ConsultantsService', () => {
       await service.update('co1', { fullName: 'New Name' }, actor('admin'));
       expect(prisma.consultant.update).toHaveBeenCalledTimes(1);
     });
+
+    it('clears pendingApproval when an admin sets isActive, regardless of direction', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue({
+        id: 'co1',
+        isActive: false,
+        role: { name: 'viewer' },
+      });
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      // Approve (false -> true) ...
+      await service.update('co1', { isActive: true }, actor('admin'));
+      expect(prisma.consultant.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ isActive: true, pendingApproval: false }) }),
+      );
+
+      // ... then flip back to inactive (a deliberate reversal, not the
+      // original pending state) — must clear pendingApproval again, not
+      // leave the row reading "Pending approval" a second time.
+      await service.update('co1', { isActive: false }, actor('admin'));
+      expect(prisma.consultant.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ isActive: false, pendingApproval: false }) }),
+      );
+    });
+
+    it('does not touch pendingApproval when isActive is left unchanged', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue({ id: 'co1', role: { name: 'viewer' } });
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await service.update('co1', { fullName: 'New Name' }, actor('admin'));
+      expect(prisma.consultant.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.not.objectContaining({ pendingApproval: expect.anything() }) }),
+      );
+    });
   });
 
   describe('remove', () => {

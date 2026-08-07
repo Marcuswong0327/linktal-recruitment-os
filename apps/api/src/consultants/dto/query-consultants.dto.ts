@@ -1,6 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+
+const toArray = ({ value }: { value: unknown }) => (Array.isArray(value) ? value : value === undefined ? value : [value]);
 
 /**
  * Columns the list may be sorted by. Deliberately narrow: ID, name, email, and
@@ -68,4 +70,29 @@ export class QueryConsultantsDto {
   @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value))
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({ description: 'Filter by assigned industry id(s) (one or more, exact match)', type: [String] })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  industryIds?: string[];
+
+  @ApiPropertyOptional({ description: 'Filter by assigned specialization id(s) (one or more, exact match)', type: [String] })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  specializationIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      "Filter by assigned Location id(s). Selecting a country or state matches every consultant whose patch sits beneath it, via the ancestor path.",
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  locationIds?: string[];
 }

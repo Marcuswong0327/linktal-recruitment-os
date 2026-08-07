@@ -117,6 +117,20 @@ export class ConsultantsService {
       where.isActive = query.isActive;
     }
 
+    if (query.industryIds?.length) {
+      where.industries = { some: { industryId: { in: query.industryIds } } };
+    }
+
+    if (query.specializationIds?.length) {
+      where.specializations = { some: { specializationId: { in: query.specializationIds } } };
+    }
+
+    if (query.locationIds?.length) {
+      // Same ancestor-path trick as ClientsService — selecting a country or
+      // state matches every consultant whose patch sits at or beneath it.
+      where.locations = { some: { location: { ancestorIds: { hasSome: query.locationIds } } } };
+    }
+
     if (q) {
       where.OR = [
         { fullName: { contains: q, mode: Prisma.QueryMode.insensitive } },
@@ -249,6 +263,12 @@ export class ConsultantsService {
     const { roleName: _roleName, roleId: _roleId, ...rest } = dto;
     const data: Prisma.ConsultantUncheckedUpdateInput = { ...rest };
     if (changesRole) data.roleId = roleId ?? null;
+    // An admin acting on isActive — in either direction — is the "decision"
+    // pendingApproval is waiting for. Flip it off here rather than requiring
+    // a separate "approve" endpoint: toggling the same Status control a
+    // second time (e.g. Active then back to Inactive) must not read as
+    // "still pending" again — see Consultant.pendingApproval's doc comment.
+    if (dto.isActive !== undefined) data.pendingApproval = false;
 
     const updated = await this.prisma.consultant.update({ where: { id }, data, include: withRole, omit: omitSecrets });
     return toEntity(updated, actor);
