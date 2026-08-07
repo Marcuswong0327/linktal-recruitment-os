@@ -12,11 +12,10 @@ import { PageHeader } from '@/components/app-shell/PageLayout';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { useGetIndustries } from '@/lib/api/generated/industries/industries';
 import { useGetSpecializations } from '@/lib/api/generated/specializations/specializations';
-import { useGetCandidateRoleTypes } from '@/lib/api/generated/candidate-role-types/candidate-role-types';
+import { useGetJobRoleTypes } from '@/lib/api/generated/job-role-types/job-role-types';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import { AdvancedSearchInput } from './AdvancedSearchInput';
 import { CandidatesTable } from './CandidatesTable';
-import { SavedSearchesMenu } from './SavedSearchesMenu';
 import { parseQueryLanguage, QUERY_LANGUAGE_HELP } from './parseQueryLanguage';
 import { type CandidateFilterState, useCandidateSearch } from './useCandidateSearch';
 
@@ -49,7 +48,7 @@ export function CandidateSearchGate({ canCreate, canDelete }: { canCreate: boole
   const selectableIndustries = isConsultant
     ? industries.filter((i) => scopedIndustryIds.includes(i.id))
     : industries;
-  const { data: roleTypesData } = useGetCandidateRoleTypes();
+  const { data: roleTypesData } = useGetJobRoleTypes();
   const roleTypes = roleTypesData?.status === 200 ? roleTypesData.data : [];
   const { data: specializationsData } = useGetSpecializations();
   const specializations = specializationsData?.status === 200 ? specializationsData.data : [];
@@ -104,13 +103,6 @@ export function CandidateSearchGate({ canCreate, canDelete }: { canCreate: boole
       <PageHeader
         title="Search Candidates"
         description="Start by searching or filtering to find the right candidates."
-        actions={
-          <SavedSearchesMenu
-            currentFilters={search.filters}
-            hasActiveQuery={search.hasActiveQuery}
-            onApply={(filters) => search.applyFilters(filters)}
-          />
-        }
       />
 
       <div className="grid gap-4 rounded-xl border border-border bg-card p-4 sm:grid-cols-3">

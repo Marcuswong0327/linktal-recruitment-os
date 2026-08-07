@@ -27,6 +27,7 @@ const VALUE_COLOR_CLASS: Record<NonNullable<ResolvedClause['valueColor']>, strin
   warning: 'text-warning',
   destructive: 'text-destructive',
   success: 'text-success',
+  muted: 'text-muted-foreground',
   recognized: 'text-primary',
 };
 

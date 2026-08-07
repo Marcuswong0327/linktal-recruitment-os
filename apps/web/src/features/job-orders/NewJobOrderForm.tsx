@@ -8,17 +8,18 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ClientCombobox } from '@/components/ClientCombobox';
 import { ConsultantCombobox } from '@/components/ConsultantCombobox';
+import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { PageLayout } from '@/components/app-shell/PageLayout';
 import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import { getGetJobOrdersQueryKey, useCreateJobOrder } from '@/lib/api/generated/job-orders/job-orders';
+import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
 import type { CreateJobOrderDto } from '@/lib/api/generated/types';
 import {
   type JobOrderQuality,
@@ -46,7 +47,16 @@ export function NewJobOrderForm() {
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
 
-  const [jobTitle, setJobTitle] = React.useState('');
+  const [jobTitleId, setJobTitleId] = React.useState('');
+  const { data: jobTitleData } = useGetJobTitles({ take: 200 });
+  const jobTitles = jobTitleData?.status === 200 ? jobTitleData.data : [];
+  const createJobTitle = useCreateJobTitle();
+  async function handleCreateJobTitle(name: string) {
+    const res = await createJobTitle.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add job title');
+    return res.data;
+  }
+
   const [clientId, setClientId] = React.useState('');
   // Industry-first: a Job Order has no industry of its own, only via its
   // Client — no client picked yet (or one with no industry tagged) means no
@@ -58,14 +68,9 @@ export function NewJobOrderForm() {
         (c) => c.industryIds === undefined || c.industryIds.includes(selectedClientIndustryId),
       );
   const [consultantId, setConsultantId] = React.useState('');
-  const [department, setDepartment] = React.useState('');
-  const [city, setCity] = React.useState('');
-  const [suburb, setSuburb] = React.useState('');
   const [status, setStatus] = React.useState<JobOrderStatus>('ACTIVE');
   const [quality, setQuality] = React.useState<JobOrderQuality>('MEDIUM');
   const [priorityLevel, setPriorityLevel] = React.useState('2');
-  const [isReplacement, setIsReplacement] = React.useState(false);
-  const [isCollaborated, setIsCollaborated] = React.useState(false);
   const [salaryMin, setSalaryMin] = React.useState('');
   const [salaryMax, setSalaryMax] = React.useState('');
   const [salaryCurrency, setSalaryCurrency] = React.useState('AUD');
@@ -88,17 +93,12 @@ export function NewJobOrderForm() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const dto: CreateJobOrderDto = {
-      jobTitle,
+      jobTitleId: jobTitleId || undefined,
       clientId,
       consultantId: consultantId || undefined,
-      department: department || undefined,
-      city: city || undefined,
-      suburb: suburb || undefined,
       status,
       quality,
       priorityLevel: priorityLevel === '' ? undefined : Number(priorityLevel),
-      isReplacement,
-      isCollaborated,
       salaryMin: salaryMin === '' ? undefined : Number(salaryMin),
       salaryMax: salaryMax === '' ? undefined : Number(salaryMax),
       salaryCurrency: salaryCurrency || undefined,
@@ -109,7 +109,7 @@ export function NewJobOrderForm() {
     createJobOrder.mutate({ data: dto });
   }
 
-  const canSubmit = jobTitle.trim() !== '' && clientId !== '';
+  const canSubmit = clientId !== '';
 
   return (
     <PageLayout className="overflow-auto">
@@ -155,13 +155,18 @@ export function NewJobOrderForm() {
                 <CardDescription>Position, client and assignment.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Role" htmlFor="jobTitle" required>
-                  <Input
+                <FormField
+                  label="Role"
+                  htmlFor="jobTitle"
+                  description="The client's own words for the role."
+                >
+                  <CreatableCombobox
                     id="jobTitle"
-                    value={jobTitle}
-                    onChange={(e) => setJobTitle(e.target.value)}
+                    value={jobTitleId}
+                    onValueChange={setJobTitleId}
+                    options={jobTitles}
+                    onCreate={handleCreateJobTitle}
                     placeholder="e.g. Production Manager"
-                    autoFocus
                   />
                 </FormField>
                 <FormField label="Client" htmlFor="clientId" required>
@@ -183,15 +188,6 @@ export function NewJobOrderForm() {
                     consultants={availableConsultants}
                     disabled={!selectedClientIndustryId}
                   />
-                </FormField>
-                <FormField label="Department" htmlFor="department">
-                  <Input id="department" value={department} onChange={(e) => setDepartment(e.target.value)} />
-                </FormField>
-                <FormField label="City" htmlFor="city">
-                  <Input id="city" value={city} onChange={(e) => setCity(e.target.value)} />
-                </FormField>
-                <FormField label="Suburb" htmlFor="suburb">
-                  <Input id="suburb" value={suburb} onChange={(e) => setSuburb(e.target.value)} />
                 </FormField>
                 <FormField label="Status" htmlFor="status">
                   <EnumSelect
@@ -218,22 +214,6 @@ export function NewJobOrderForm() {
                     placeholder="Not set"
                   />
                 </FormField>
-                <label htmlFor="isReplacement" className="flex items-center gap-2 pt-6 text-sm">
-                  <Checkbox
-                    id="isReplacement"
-                    checked={isReplacement}
-                    onCheckedChange={(checked) => setIsReplacement(!!checked)}
-                  />
-                  Replacement job order
-                </label>
-                <label htmlFor="isCollaborated" className="flex items-center gap-2 pt-6 text-sm">
-                  <Checkbox
-                    id="isCollaborated"
-                    checked={isCollaborated}
-                    onCheckedChange={(checked) => setIsCollaborated(!!checked)}
-                  />
-                  Collaborated (split-desk)
-                </label>
               </CardContent>
             </Card>
 

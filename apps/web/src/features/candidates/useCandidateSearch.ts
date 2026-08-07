@@ -60,7 +60,7 @@ export interface FilterChip {
   label: string;
   remove: () => void;
   /** Semantic color for chips with an established one elsewhere (e.g. Status's temperature scale) — plain `secondary` otherwise. */
-  variant?: 'info' | 'warning' | 'destructive' | 'success';
+  variant?: 'info' | 'warning' | 'destructive' | 'success' | 'muted';
 }
 
 /** Resolves an id back to a display name for chip labels — supplied by the caller, which already has these lists loaded for the dropdowns. */
