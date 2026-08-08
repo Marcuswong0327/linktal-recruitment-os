@@ -45,6 +45,11 @@ import {
   LocationMultiSelect,
   type LocationOption,
 } from '@/components/LocationMultiSelect';
+import {
+  SpecializationCombobox,
+  SpecializationFilterButton,
+  type SpecializationOption,
+} from '@/components/SpecializationPicker';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import {
   deleteClient,
@@ -60,7 +65,6 @@ import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@
 import {
   getGetSpecializationsQueryKey,
   useCreateSpecialization,
-  useGetSpecializations,
 } from '@/lib/api/generated/specializations/specializations';
 import { GetClientsSortBy } from '@/lib/api/generated/types/getClientsSortBy';
 import type {
@@ -144,6 +148,15 @@ export function CompaniesTable({
   const [industryIds, setIndustryIds] = React.useState<string[] | undefined>();
   const [specializationIds, setSpecializationIds] = React.useState<string[] | undefined>();
   const [locationIds, setLocationIds] = React.useState<string[] | undefined>();
+  // Name for the Specialization filter's currently selected ids — same
+  // reasoning/pattern as marketInfoById below (the search-driven
+  // SpecializationFilterButton only resolves names for what it's fetched).
+  const [specializationInfoById, setSpecializationInfoById] = React.useState<Map<string, string>>(
+    new Map(),
+  );
+  const resolveSpecializationInfo = React.useCallback((id: string, name: string) => {
+    setSpecializationInfoById((prev) => (prev.get(id) === name ? prev : new Map(prev).set(id, name)));
+  }, []);
   // Name/level for the Market filter's currently selected location ids — the
   // API only returns these alongside a live search result, not by id, so
   // this is seeded as the user searches (see LocationFilterButton's
@@ -197,8 +210,10 @@ export function CompaniesTable({
   );
   const { data: industryData } = useGetIndustries();
   const industries = industryData?.status === 200 ? industryData.data : [];
-  const { data: specializationData } = useGetSpecializations();
-  const specializations = specializationData?.status === 200 ? specializationData.data : [];
+  // Specialization (775+ rows) is deliberately NOT fetched eagerly here —
+  // both the header filter and the create-form field are now
+  // SpecializationPicker components that search `GET /specializations`
+  // server-side instead.
 
   const createIndustry = useCreateIndustry({
     mutation: {
@@ -220,17 +235,29 @@ export function CompaniesTable({
   });
 
   const industryFilterOptions = React.useMemo(() => industries.map((i) => ({ value: i.id, label: i.name })), [industries]);
-  const specializationFilterOptions = React.useMemo(
-    () => specializations.map((s) => ({ value: s.id, label: s.name })),
-    [specializations],
-  );
 
   const companyFilters: DataGridFilter[] = React.useMemo(
     () => [
       { columnId: 'status', title: 'Status', options: statusOptions, inHeader: true },
       { columnId: 'quality', title: 'Quality', options: qualityOptions, inHeader: true },
       { columnId: 'industry', title: 'Industry', options: industryFilterOptions, inHeader: true },
-      { columnId: 'specialization', title: 'Specialization', options: specializationFilterOptions, inHeader: true },
+      {
+        columnId: 'specialization',
+        title: 'Specialization',
+        inHeader: true,
+        // Specialization is a ~775-row catalog — server-searched
+        // (GET /specializations?q=&take=) rather than an eagerly-fetched
+        // checkbox list, same as the Consultants page.
+        render: ({ selected, onChange }: { selected: string[]; onChange: (values: string[]) => void }) => (
+          <SpecializationFilterButton
+            selected={selected}
+            onChange={onChange}
+            onResolve={resolveSpecializationInfo}
+            title="Specialization"
+          />
+        ),
+        labelFor: (id: string) => specializationInfoById.get(id) ?? id,
+      },
       {
         columnId: 'locations',
         title: 'Market',
@@ -279,7 +306,8 @@ export function CompaniesTable({
       marketInfoById,
       resolveMarketInfo,
       industryFilterOptions,
-      specializationFilterOptions,
+      specializationInfoById,
+      resolveSpecializationInfo,
     ],
   );
 
@@ -574,7 +602,6 @@ export function CompaniesTable({
               description="Add a new client company."
               industries={industries}
               onCreateIndustry={handleCreateIndustry}
-              specializations={specializations}
               onCreateSpecialization={async (name, industryId) => {
                 const res = await createSpecialization.mutateAsync({ data: { name, industryId } });
                 if (res.status !== 201) throw new Error('Failed to add specialization');
@@ -598,7 +625,6 @@ function CompanyForm({
   description,
   industries,
   onCreateIndustry,
-  specializations,
   onCreateSpecialization,
   consultants,
   isSaving,
@@ -609,8 +635,7 @@ function CompanyForm({
   description: string;
   industries: { id: string; name: string }[];
   onCreateIndustry: (name: string) => Promise<{ id: string; name: string }>;
-  specializations: { id: string; name: string; industryId: string }[];
-  onCreateSpecialization: (name: string, industryId: string) => Promise<{ id: string; name: string }>;
+  onCreateSpecialization: (name: string, industryId: string) => Promise<SpecializationOption>;
   consultants: ConsultantEntity[];
   isSaving: boolean;
   onSave: (values: CompanyFormValues) => void;
@@ -629,11 +654,6 @@ function CompanyForm({
   const [status, setStatus] = React.useState<ClientStatus>('COLD');
   const [quality, setQuality] = React.useState<ClientQuality>('MEDIUM');
   const [consultantId, setConsultantId] = React.useState('');
-
-  const availableSpecializations = React.useMemo(
-    () => (industryId ? specializations.filter((s) => s.industryId === industryId) : []),
-    [specializations, industryId],
-  );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -682,12 +702,11 @@ function CompanyForm({
           htmlFor="company-specialization"
           description={!industryId ? 'Pick an industry first' : undefined}
         >
-          <CreatableCombobox
+          <SpecializationCombobox
             id="company-specialization"
-            title="Specialization"
             value={specializationId}
             onValueChange={setSpecializationId}
-            options={availableSpecializations}
+            industryId={industryId || undefined}
             onCreate={(name) => onCreateSpecialization(name, industryId)}
             disabled={!industryId}
             clearable

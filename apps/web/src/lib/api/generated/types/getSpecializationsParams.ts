@@ -12,9 +12,13 @@ export type GetSpecializationsParams = {
  */
 q?: string;
 /**
- * Maximum rows to return, for a search-driven picker that asks for a page matching what's been typed. Omit for the full catalog (775+ rows) — existing pickers (candidate/consultant specialization editors) rely on getting everything back, so this only limits when a caller opts in.
+ * Maximum rows to return, for a search-driven picker that asks for a page matching what's been typed. Omit for the full catalog (775+ rows) — a search-driven picker opts into the capped/filtered form explicitly.
  * @minimum 1
  * @maximum 200
  */
 take?: number;
+/**
+ * Narrow to specialization(s) under one or more industries (exact match on Specialization.industryId) — e.g. a picker only offering specializations under industries a consultant already holds, or under the industry chosen elsewhere in the same form.
+ */
+industryIds?: string[];
 };

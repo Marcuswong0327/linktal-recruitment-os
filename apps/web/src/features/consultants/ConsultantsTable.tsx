@@ -28,6 +28,10 @@ import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { LEVEL_LABEL, LocationFilterButton } from '@/components/LocationMultiSelect';
 import { RenameDialog } from '@/components/RenameDialog';
 import { deleteWithUndo, undoLabel } from '@/lib/delete-with-undo';
+import {
+  SpecializationFilterButton,
+  type SpecializationOption,
+} from '@/components/SpecializationPicker';
 import { TagFilterButton, type TagOption } from '@/components/TagMultiSelect';
 import {
   getGetConsultantsQueryKey,
@@ -49,7 +53,6 @@ import {
   getGetSpecializationsQueryKey,
   useCreateSpecialization,
   useDeleteSpecialization,
-  useGetSpecializations,
   useUpdateSpecialization,
 } from '@/lib/api/generated/specializations/specializations';
 import type { LocationEntity, UpdateConsultantDto } from '@/lib/api/generated/types';
@@ -125,6 +128,16 @@ export function ConsultantsTable() {
     string[] | undefined
   >();
   const [locationFilterIds, setLocationFilterIds] = React.useState<string[] | undefined>();
+  // Name for the Specializations filter's currently selected ids — same
+  // reasoning and pattern as locationInfoById below (the search-driven
+  // SpecializationFilterButton only resolves names for whatever it's
+  // actually fetched, not the full catalog).
+  const [specializationInfoById, setSpecializationInfoById] = React.useState<Map<string, string>>(
+    new Map(),
+  );
+  const resolveSpecializationInfo = React.useCallback((id: string, name: string) => {
+    setSpecializationInfoById((prev) => (prev.get(id) === name ? prev : new Map(prev).set(id, name)));
+  }, []);
   // Name/level for the Locations filter's currently selected ids — the API
   // only returns these alongside a live search result, not by id, so this is
   // seeded as the user searches (see LocationFilterButton's onResolve) and
@@ -191,38 +204,13 @@ export function ConsultantsTable() {
     [industriesData],
   );
 
-  const { data: specializationsData } = useGetSpecializations(undefined, {
-    query: { enabled: canReadSpecializations },
-  });
-  const specializationOptions = React.useMemo(
-    () =>
-      specializationsData?.status === 200
-        ? specializationsData.data.map((s) => ({
-            value: s.id,
-            label: s.name,
-            // Industry badges have no colorKey, so they color off their own
-            // id — keying specialization color on industryId (not the root
-            // specialization's own id) makes a specialization's badge match
-            // its parent Industry's badge, not just its sibling specializations.
-            colorKey: s.industryId,
-          }))
-        : [],
-    [specializationsData],
-  );
-  // Full rows (not just {value, label}) — CreateSpecializationDialog needs
-  // industryId/parentId to build the parent-category picker, and the delete
-  // Undo path needs industryId to re-create the exact same row (see
-  // `handleConfirmDelete`).
-  const specializationRows = React.useMemo(
-    () => (specializationsData?.status === 200 ? specializationsData.data : []),
-    [specializationsData],
-  );
-  // Specialization id -> owning Industry id, so the Specializations column
-  // can filter each row's addable options down to its own held industries.
-  const specializationIndustryId = React.useMemo(
-    () => Object.fromEntries(specializationRows.map((s) => [s.id, s.industryId])),
-    [specializationRows],
-  );
+  // Specialization (775+ rows) is deliberately NOT fetched eagerly here —
+  // every consumer (the inline column editor, its header filter, and
+  // CreateSpecializationDialog's parent-category picker) is now a
+  // SpecializationPicker component that searches `GET /specializations`
+  // server-side instead. See specializationInfoById below for the small
+  // per-id name cache that replaces what the old full-catalog fetch used to
+  // resolve for free.
 
   const userFilters: DataGridFilter[] = React.useMemo(
     () => [
@@ -259,11 +247,10 @@ export function ConsultantsTable() {
             {
               columnId: 'specializations',
               title: 'Specializations',
-              options: specializationOptions,
               inHeader: true,
               // Specialization is a ~774-row catalog — scanning an unfiltered
-              // checkbox list doesn't scale, so this swaps in the same
-              // searchable Combobox the inline tag picker itself uses.
+              // checkbox list doesn't scale, so this is server-searched
+              // (GET /specializations?q=&take=), same as the inline picker.
               render: ({
                 selected,
                 onChange,
@@ -271,13 +258,14 @@ export function ConsultantsTable() {
                 selected: string[];
                 onChange: (values: string[]) => void;
               }) => (
-                <TagFilterButton
+                <SpecializationFilterButton
                   selected={selected}
                   onChange={onChange}
-                  options={specializationOptions}
+                  onResolve={resolveSpecializationInfo}
                   title="Specializations"
                 />
               ),
+              labelFor: (id: string) => specializationInfoById.get(id) ?? id,
             },
           ]
         : []),
@@ -324,7 +312,8 @@ export function ConsultantsTable() {
       canReadIndustries,
       industryOptions,
       canReadSpecializations,
-      specializationOptions,
+      specializationInfoById,
+      resolveSpecializationInfo,
       canReadLocations,
       locationInfoById,
       resolveLocationInfo,
@@ -397,13 +386,13 @@ export function ConsultantsTable() {
   // opens CreateSpecializationDialog to collect it, and this promise is what
   // that dialog eventually resolves or rejects (Cancel/close = reject).
   const pendingCreateSpecialization = React.useRef<{
-    resolve: (option: TagOption) => void;
+    resolve: (option: SpecializationOption) => void;
     reject: (err: unknown) => void;
   } | null>(null);
   const [createSpecializationDraft, setCreateSpecializationDraft] = React.useState<string | null>(
     null,
   );
-  function handleCreateSpecialization(name: string): Promise<TagOption> {
+  function handleCreateSpecialization(name: string): Promise<SpecializationOption> {
     return new Promise((resolve, reject) => {
       pendingCreateSpecialization.current = { resolve, reject };
       setCreateSpecializationDraft(name);
@@ -427,7 +416,11 @@ export function ConsultantsTable() {
     const res = await createSpecializationMutation.mutateAsync({ data });
     if (res.status !== 201) throw new Error('Failed to add specialization');
     queryClient.invalidateQueries({ queryKey: getGetSpecializationsQueryKey() });
-    pendingCreateSpecialization.current?.resolve({ value: res.data.id, label: res.data.name });
+    pendingCreateSpecialization.current?.resolve({
+      id: res.data.id,
+      name: res.data.name,
+      industryId: res.data.industryId,
+    });
     pendingCreateSpecialization.current = null;
     setCreateSpecializationDraft(null);
   }
@@ -481,6 +474,13 @@ export function ConsultantsTable() {
     setDeleteTarget(null);
     const queryKey =
       target.kind === 'industry' ? getGetIndustriesQueryKey() : getGetSpecializationsQueryKey();
+    // Specialization's industryId is only known when SpecializationMultiSelect
+    // happened to have resolved it (a search result or a fresh create) — see
+    // SpecializationOption's own doc comment. Recreating a deleted row needs
+    // it, so a delete without it falls back to deleteWithUndo's "delayed"
+    // mode (no restoreFn — the delete itself waits out the grace window
+    // instead of committing immediately), which needs no industryId to undo.
+    const canRestore = target.kind === 'industry' || target.industryId != null;
     deleteWithUndo({
       label: `${target.kind} "${target.label}"`,
       deleteFn: () =>
@@ -491,12 +491,14 @@ export function ConsultantsTable() {
       // name reactivates the deactivated row instead (see
       // IndustriesService.create / SpecializationsService.create), so that
       // doubles as Undo here.
-      restoreFn: () =>
-        target.kind === 'industry'
-          ? createIndustryMutation.mutateAsync({ data: { name: target.label } })
-          : createSpecializationMutation.mutateAsync({
-              data: { name: target.label, industryId: target.industryId! },
-            }),
+      restoreFn: canRestore
+        ? () =>
+            target.kind === 'industry'
+              ? createIndustryMutation.mutateAsync({ data: { name: target.label } })
+              : createSpecializationMutation.mutateAsync({
+                  data: { name: target.label, industryId: target.industryId! },
+                })
+        : undefined,
       onCommitted: () => queryClient.invalidateQueries({ queryKey }),
       onUndo: () => queryClient.invalidateQueries({ queryKey }),
     });
@@ -576,8 +578,6 @@ export function ConsultantsTable() {
           : undefined,
         specializations: canReadSpecializations
           ? {
-              options: specializationOptions,
-              industryIdByOption: specializationIndustryId,
               onSpecializationsChange: canEditSpecializations
                 ? (user, specializationIds) =>
                     setSpecializations.mutate({ id: user.id, data: { specializationIds } })
@@ -586,14 +586,21 @@ export function ConsultantsTable() {
                 ? handleCreateSpecialization
                 : undefined,
               onEditSpecialization: canUpdateSpecializations
-                ? (option) => setRenameTarget({ kind: 'specialization', ...option })
+                ? (option) =>
+                    setRenameTarget({
+                      kind: 'specialization',
+                      value: option.id,
+                      label: option.name,
+                      industryId: option.industryId,
+                    })
                 : undefined,
               onDeleteSpecialization: canDeleteSpecializations
                 ? (option) =>
                     setDeleteTarget({
                       kind: 'specialization',
-                      ...option,
-                      industryId: specializationRows.find((s) => s.id === option.value)?.industryId,
+                      value: option.id,
+                      label: option.name,
+                      industryId: option.industryId,
                     })
                 : undefined,
             }
@@ -623,9 +630,6 @@ export function ConsultantsTable() {
       canCreateSpecializations,
       canUpdateSpecializations,
       canDeleteSpecializations,
-      specializationOptions,
-      specializationRows,
-      specializationIndustryId,
       setSpecializations,
       handleCreateSpecialization,
       canReadLocations,
@@ -803,7 +807,6 @@ export function ConsultantsTable() {
         onOpenChange={handleCreateSpecializationDialogChange}
         initialName={createSpecializationDraft ?? ''}
         industries={industryOptions}
-        specializations={specializationRows}
         onSubmit={handleSubmitCreateSpecialization}
       />
     </>

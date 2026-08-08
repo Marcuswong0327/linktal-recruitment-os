@@ -6,6 +6,11 @@ import { Info } from 'lucide-react';
 import { ComboboxSelect } from '@/components/ComboboxSelect';
 import { LocationBadgeList } from '@/components/LocationBadgeList';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
+import {
+  SpecializationBadgeList,
+  SpecializationMultiSelect,
+  type SpecializationOption,
+} from '@/components/SpecializationPicker';
 import { TagMultiSelect, TagPills, type TagOption } from '@/components/TagMultiSelect';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -96,20 +101,19 @@ interface ConsultantColumnsOptions {
    * a narrowing of an industry the consultant already holds (enforced
    * server-side in `setSpecializations`), so the picker mirrors that: a row
    * with no industries yet can't be given any specialization, and a row with
-   * some can only add ones under those industries.
+   * some can only add ones under those industries — enforced here by passing
+   * the row's own `industryIds` into `SpecializationMultiSelect`'s search
+   * (server-narrowed), not by filtering a client-side catalog.
    */
   specializations?: {
-    options: TagOption[];
-    /** Specialization id → its owning Industry id, for filtering `options` down to a row's own held industries. */
-    industryIdByOption: Record<string, string>;
     /** Absent when the caller lacks `consultant_specialization:update` — read-only chips instead of an editable picker. */
     onSpecializationsChange?: (user: Consultant, specializationIds: string[]) => void;
     /** Grows the Specialization catalog itself — present only for `specialization:create` (admin, manager). */
-    onCreateSpecialization?: (name: string) => Promise<TagOption>;
+    onCreateSpecialization?: (name: string) => Promise<SpecializationOption>;
     /** Renames the underlying Specialization row — present only for `specialization:update` (admin, manager). */
-    onEditSpecialization?: (option: TagOption) => void;
+    onEditSpecialization?: (option: SpecializationOption) => void;
     /** Deactivates the underlying Specialization row — present only for `specialization:delete` (admin, manager). */
-    onDeleteSpecialization?: (option: TagOption) => void;
+    onDeleteSpecialization?: (option: SpecializationOption) => void;
   };
   /**
    * Same gating pattern as `industries`/`specializations`, keyed to
@@ -276,23 +280,23 @@ export function getConsultantColumns({
             cell: ({ row }: { row: { original: Consultant } }) => {
               const user = row.original;
               const selected = user.specializationIds ?? [];
+              const names = user.specializations ?? [];
               if (!specializations.onSpecializationsChange) {
-                return <TagPills options={specializations.options} selected={selected} />;
+                return <SpecializationBadgeList ids={selected} names={names} />;
               }
               const industryIds = user.industryIds ?? [];
               const hasNoIndustries = industryIds.length === 0;
-              // Only offer specializations under an industry this row already
-              // holds — mirrors the server-side check in `setSpecializations`.
-              const selectableOptions = specializations.options.filter((o) =>
-                industryIds.includes(specializations.industryIdByOption[o.value]),
-              );
               const disabled = pendingId === user.id || hasNoIndustries;
               const picker = (
-                <TagMultiSelect
+                <SpecializationMultiSelect
                   title="Specializations"
-                  options={specializations.options}
-                  selectableOptions={selectableOptions}
                   selected={selected}
+                  selectedLabels={names}
+                  // Only offer specializations under an industry this row
+                  // already holds — mirrors the server-side check in
+                  // `setSpecializations`, now enforced by the search itself
+                  // rather than a client-side catalog filter.
+                  industryIds={industryIds}
                   onChange={(ids) => specializations.onSpecializationsChange!(user, ids)}
                   disabled={disabled}
                   onCreate={specializations.onCreateSpecialization}
