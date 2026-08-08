@@ -13,21 +13,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { EnumSelect } from '@/components/EnumSelect';
-
-interface SpecializationRow {
-  id: string;
-  name: string;
-  industryId: string;
-  parentId: string | null;
-}
+import { SpecializationCombobox } from '@/components/SpecializationPicker';
 
 interface CreateSpecializationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialName: string;
   industries: { value: string; label: string }[];
-  /** Full catalog (not just this field's options) — filtered by the chosen industry to build the parent-category picker. */
-  specializations: SpecializationRow[];
   onSubmit: (data: { name: string; industryId: string; parentId?: string }) => Promise<void>;
 }
 
@@ -44,7 +36,6 @@ export function CreateSpecializationDialog({
   onOpenChange,
   initialName,
   industries,
-  specializations,
   onSubmit,
 }: CreateSpecializationDialogProps) {
   const [name, setName] = React.useState(initialName);
@@ -59,14 +50,6 @@ export function CreateSpecializationDialog({
       setParentId('');
     }
   }, [open, initialName]);
-
-  const parentOptions = React.useMemo(
-    () =>
-      specializations
-        .filter((s) => s.industryId === industryId)
-        .map((s) => ({ value: s.id, label: s.name })),
-    [specializations, industryId],
-  );
 
   // Switching industry invalidates whatever parent was picked under the old one.
   React.useEffect(() => {
@@ -124,13 +107,14 @@ export function CreateSpecializationDialog({
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="create-spec-parent">Parent category (optional)</Label>
-              <EnumSelect
+              <SpecializationCombobox
                 id="create-spec-parent"
                 value={parentId}
                 onValueChange={setParentId}
-                options={parentOptions}
+                industryId={industryId || undefined}
                 placeholder={industryId ? 'None — top-level category' : 'Pick an industry first'}
                 disabled={submitting || !industryId}
+                clearable
               />
             </div>
           </div>

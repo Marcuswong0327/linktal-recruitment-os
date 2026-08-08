@@ -39,6 +39,7 @@ import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
+import { SpecializationCombobox } from '@/components/SpecializationPicker';
 import { UrlField } from '@/components/UrlField';
 import { PageLayout } from '@/components/app-shell/PageLayout';
 import { useIsMac } from '@/hooks/use-is-mac';
@@ -62,7 +63,6 @@ import {
 import {
   getGetSpecializationsQueryKey,
   useCreateSpecialization,
-  useGetSpecializations,
 } from '@/lib/api/generated/specializations/specializations';
 import { useGetStakeholders } from '@/lib/api/generated/stakeholders/stakeholders';
 import { getGetTobsQueryKey, useCreateTob, useGetTobs } from '@/lib/api/generated/tobs/tobs';
@@ -194,12 +194,6 @@ function CompanyEditForm({
     return res.data;
   }
 
-  const { data: specializationData } = useGetSpecializations();
-  const specializations = specializationData?.status === 200 ? specializationData.data : [];
-  const availableSpecializations = React.useMemo(
-    () => specializations.filter((s) => s.industryId === industryId),
-    [specializations, industryId],
-  );
   const createSpecialization = useCreateSpecialization({
     mutation: {
       onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetSpecializationsQueryKey() }),
@@ -420,12 +414,12 @@ function CompanyEditForm({
                   htmlFor="specialization"
                   description={!industryId ? 'Pick an industry first' : undefined}
                 >
-                  <CreatableCombobox
+                  <SpecializationCombobox
                     id="specialization"
-                    title="Specialization"
                     value={specializationId}
+                    label={company.specialization ?? undefined}
                     onValueChange={setSpecializationId}
-                    options={availableSpecializations}
+                    industryId={industryId || undefined}
                     onCreate={handleCreateSpecialization}
                     disabled={!canEdit || !industryId}
                     clearable

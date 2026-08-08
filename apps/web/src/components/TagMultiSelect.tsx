@@ -45,7 +45,7 @@ const TAG_CLASSES = [
  * Specialization catalog) — the palette is capped at 8 hues because more
  * than that stops being reliably distinguishable (see the dataviz skill).
  */
-function colorFor(value: string): string {
+export function colorFor(value: string): string {
   let hash = 0;
   for (let i = 0; i < value.length; i++) hash = (hash * 31 + value.charCodeAt(i)) | 0;
   return TAG_CLASSES[Math.abs(hash) % TAG_CLASSES.length];

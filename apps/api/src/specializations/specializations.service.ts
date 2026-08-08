@@ -11,16 +11,18 @@ export class SpecializationsService {
 
   /**
    * Active specializations only — inactive ones (the "hide from picker"
-   * toggle — see `deactivate`) stay out of the list. `q`/`take` are both
-   * optional and unset by default — existing callers (the candidate and
-   * consultant specialization editors) ask for no params and get the full
-   * 775+ row catalog, same as before this DTO existed. A search-driven
-   * picker opts into the capped/filtered form explicitly.
+   * toggle — see `deactivate`) stay out of the list. `q`/`take`/`industryIds`
+   * are all optional and unset by default — a caller that omits every param
+   * gets the full 775+ row catalog. A search-driven picker opts into the
+   * capped/filtered/narrowed form explicitly.
    */
   findAll(query: QuerySpecializationsDto = {}) {
     const where: Prisma.SpecializationWhereInput = { isActive: true };
     if (query.q) {
       where.name = { contains: query.q, mode: Prisma.QueryMode.insensitive };
+    }
+    if (query.industryIds?.length) {
+      where.industryId = { in: query.industryIds };
     }
     return this.prisma.specialization.findMany({
       where,
