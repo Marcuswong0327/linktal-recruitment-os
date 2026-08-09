@@ -300,7 +300,8 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
       makeUser(),
     );
 
-    expect(findMany.mock.calls[0][0].orderBy).toEqual({ status: SortOrder.asc });
+    // `id` tags along as a tiebreaker on every sort — see CandidatesService.
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([{ status: SortOrder.asc }, { id: 'asc' }]);
   });
 
   it('produces an empty where when no filters are given', async () => {
