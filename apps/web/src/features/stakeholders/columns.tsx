@@ -2,12 +2,13 @@
 
 import type * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { ExternalLink, Phone } from 'lucide-react';
+import { Phone } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ComboboxSelect } from '@/components/ComboboxSelect';
 import { ConsultantAvatar } from '@/components/ConsultantCombobox';
+import { ContactMethodsCell } from '@/components/ContactMethodsCell';
 import { CreatableCombobox, type CreatableComboboxOption } from '@/components/CreatableCombobox';
 import { LocationBadgeList } from '@/components/LocationBadgeList';
 import type { StakeholderEntity } from '@/lib/api/generated/types';
@@ -136,20 +137,6 @@ export function getStakeholderColumns({
               {initials(name)}
             </span>
             <span className="truncate font-medium text-foreground">{name || 'Unnamed contact'}</span>
-            {stakeholder.linkedinUrl ? (
-              // No brand icon in lucide-react (removed for licensing) — a
-              // plain external-link glyph reads fine at this size.
-              <a
-                href={stakeholder.linkedinUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Open ${name || 'this contact'}'s LinkedIn profile`}
-                className="shrink-0 text-muted-foreground hover:text-foreground"
-              >
-                <ExternalLink className="size-3.5" />
-              </a>
-            ) : null}
           </div>
         );
       },
@@ -212,16 +199,19 @@ export function getStakeholderColumns({
       cell: ({ row }) => <span className="text-muted-foreground">{row.original.jobTitle ?? '—'}</span>,
     },
     {
-      accessorKey: 'email',
-      header: 'Email',
+      id: 'contact',
+      header: 'Contact',
+      // Email/Mobile/LinkedIn aren't independently sortable server-side
+      // (StakeholderSortField) — same reasoning as Coverage/Role type above.
       enableSorting: false,
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.email ?? '—'}</span>,
-    },
-    {
-      accessorKey: 'mobile',
-      header: 'Mobile',
-      enableSorting: false,
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.mobile ?? '—'}</span>,
+      meta: { align: 'center', strictMinSize: true },
+      cell: ({ row }) => (
+        <ContactMethodsCell
+          email={row.original.email}
+          mobile={row.original.mobile}
+          linkedinUrl={row.original.linkedinUrl}
+        />
+      ),
     },
     {
       accessorKey: 'isAccurate',

@@ -2,9 +2,8 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
-import { Copy } from 'lucide-react';
-import { toast } from 'sonner';
 
+import { ContactMethodsCell } from '@/components/ContactMethodsCell';
 import { cn } from '@/lib/utils';
 import { CandidateStatusCell } from './StatusCell';
 import { candidateFullName, contactRecencyClassName, formatRelativeContact, type Candidate } from './schema';
@@ -14,13 +13,6 @@ function MutedCell({ value, className }: { value: string | null; className?: str
     <span title={value || undefined} className={cn('text-muted-foreground', className)}>
       {value || '—'}
     </span>
-  );
-}
-
-function copyToClipboard(value: string, label: string) {
-  navigator.clipboard.writeText(value).then(
-    () => toast.success(`${label} copied`),
-    () => toast.error(`Couldn't copy ${label.toLowerCase()}`),
   );
 }
 
@@ -94,29 +86,22 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     },
   },
   {
-    accessorKey: 'mobile',
-    header: 'Mobile',
+    id: 'contact',
+    header: 'Contact',
+    // Email/Mobile/LinkedIn/Seek aren't independently sortable server-side
+    // (see CandidateSortField) — same shape and reasoning as Stakeholders'
+    // Contact column (minus Seek, which has no Stakeholder equivalent).
     enableSorting: false,
-    size: 130,
-    cell: ({ row }) => {
-      const mobile = row.original.mobile;
-      if (!mobile) return <span className="text-muted-foreground">—</span>;
-      return (
-        <button
-          type="button"
-          data-no-row-drag
-          onClick={(e) => {
-            e.stopPropagation();
-            copyToClipboard(mobile, 'Mobile number');
-          }}
-          title="Copy mobile number"
-          className="group -ml-1.5 flex items-center gap-1 rounded-md px-1.5 py-1 text-sm text-foreground transition-colors hover:bg-accent hover:text-primary"
-        >
-          <span className="truncate">{mobile}</span>
-          <Copy className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
-        </button>
-      );
-    },
+    size: 140,
+    meta: { align: 'center' },
+    cell: ({ row }) => (
+      <ContactMethodsCell
+        email={row.original.email}
+        mobile={row.original.mobile}
+        linkedinUrl={row.original.linkedinUrl}
+        seekUrl={row.original.seekTalentUrl}
+      />
+    ),
   },
   {
     accessorKey: 'location',
