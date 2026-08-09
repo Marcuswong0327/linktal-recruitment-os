@@ -158,6 +158,11 @@ export function ConsultantsTable() {
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
 
   const currentConsultantId = session?.user?.consultantId;
+  // Admins are exempt from the self-lockout on Role/Status (see
+  // getConsultantColumns' `isAdmin` doc comment) — the API still blocks the
+  // actually-unsafe self-edits (deactivating/de-admin-ing yourself, or
+  // demoting the last active admin).
+  const isAdmin = session?.user?.roleName === 'admin';
   // Column is present at all only when the caller can see assigned
   // industries; editable within that only when they can also change them —
   // matches the API omitting `industries`/`industryIds` entirely (not just
@@ -556,6 +561,7 @@ export function ConsultantsTable() {
       getConsultantColumns({
         pendingId,
         isSelf: (user: Consultant) => user.id === currentConsultantId,
+        isAdmin,
         onRoleChange: (user, newRole: ConsultantRole) =>
           updateUser.mutate({ id: user.id, data: { roleName: newRole } }),
         onStatusChange: (user, newIsActive) =>
@@ -616,6 +622,7 @@ export function ConsultantsTable() {
     [
       pendingId,
       currentConsultantId,
+      isAdmin,
       updateUser,
       canReadIndustries,
       canEditIndustries,

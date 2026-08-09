@@ -332,7 +332,11 @@ export class ConsultantsService {
    * `update()` above: that method is hardcoded admin-only regardless of what
    * the permission system grants, which would silently break "manager can
    * assign" — this has its own, different escalation rules instead:
-   *  - An admin can assign to anyone except themselves.
+   *  - An admin can assign to anyone, including themselves — unlike `update`'s
+   *    role/status self-lockout, a scope grant can't itself lock an admin out
+   *    of anything (admin/manager/finance/researcher are unrestricted
+   *    regardless of grants, see the SCOPING note in schema.prisma), so
+   *    there's nothing unsafe to guard against here.
    *  - A manager can assign to themselves, other managers, or consultants,
    *    but never to an admin account.
    */
@@ -504,7 +508,7 @@ export class ConsultantsService {
 
   /**
    * The escalation rules shared by all three scope-assignment endpoints:
-   *  - An admin can assign to anyone except themselves.
+   *  - An admin can assign to anyone, including themselves.
    *  - A manager can assign to themselves, other managers, or consultants,
    *    but never to an admin account.
    *
@@ -520,12 +524,6 @@ export class ConsultantsService {
       throw new NotFoundException(`Consultant ${id} not found`);
     }
 
-    if (this.isAdmin(actor) && id === actor.consultantId) {
-      throw new BadRequestException({
-        code: 'CANNOT_MODIFY_SELF',
-        message: `Admins cannot assign ${noun} to their own account.`,
-      });
-    }
     if (!this.isAdmin(actor) && target.role?.name === ADMIN_ROLE) {
       throw new ForbiddenException({
         code: 'FORBIDDEN',

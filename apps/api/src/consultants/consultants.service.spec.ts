@@ -363,15 +363,16 @@ describe('ConsultantsService', () => {
       };
     }
 
-    it('blocks an admin from assigning industries to their own account', async () => {
+    it('lets an admin assign industries to their own account', async () => {
       const prisma = makePrisma();
       prisma.consultant.findUnique.mockResolvedValue(makeTarget('admin', { id: 'actor' }));
+      prisma.industry.findMany.mockResolvedValue([{ id: 'ind1', isActive: true }]);
       const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
 
-      await expect(
-        service.setIndustries('actor', ['ind1'], actor('admin')),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      expect(prisma.consultantIndustry.create).not.toHaveBeenCalled();
+      await service.setIndustries('actor', ['ind1'], actor('admin'));
+      expect(prisma.consultantIndustry.create).toHaveBeenCalledWith({
+        data: { consultantId: 'actor', industryId: 'ind1' },
+      });
     });
 
     it('lets an admin assign industries to anyone else', async () => {

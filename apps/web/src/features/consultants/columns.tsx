@@ -73,8 +73,15 @@ const pendingStatusOption = {
 interface ConsultantColumnsOptions {
   /** Editing a row while its mutation is in flight — disables that row's controls. */
   pendingId: string | null;
-  /** Self-lockout: the signed-in user can't change their own role/status. */
+  /**
+   * Self-lockout: a non-admin signed-in user can't change their own
+   * role/status. Admins are exempt — they can switch their own role/status
+   * same as anybody else's; the API still guards the actually-unsafe cases
+   * (deactivating or de-admin-ing yourself, or removing the last active
+   * admin) with `CANNOT_MODIFY_SELF`/409 (see `ConsultantsService.update`).
+   */
   isSelf: (user: Consultant) => boolean;
+  isAdmin: boolean;
   onRoleChange: (user: Consultant, role: ConsultantRole) => void;
   onStatusChange: (user: Consultant, isActive: boolean) => void;
   /**
@@ -131,6 +138,7 @@ interface ConsultantColumnsOptions {
 export function getConsultantColumns({
   pendingId,
   isSelf,
+  isAdmin,
   onRoleChange,
   onStatusChange,
   industries,
@@ -167,7 +175,7 @@ export function getConsultantColumns({
       meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => {
         const user = row.original;
-        const disabled = isSelf(user) || pendingId === user.id;
+        const disabled = (isSelf(user) && !isAdmin) || pendingId === user.id;
         return (
           <ComboboxSelect
             title="Role"
@@ -206,7 +214,7 @@ export function getConsultantColumns({
       ),
       cell: ({ row }) => {
         const user = row.original;
-        const disabled = isSelf(user) || pendingId === user.id;
+        const disabled = (isSelf(user) && !isAdmin) || pendingId === user.id;
         const options = [
           activeStatusOption,
           user.pendingApproval ? pendingStatusOption : inactiveStatusOption,
