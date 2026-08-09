@@ -56,11 +56,11 @@ export const navGroups: NavGroup[] = [
       { title: 'Stakeholders', href: '/stakeholders', icon: Contact },
       { title: 'Job Orders', href: '/job-orders', icon: BookA },
       { title: 'Candidates', href: '/candidates', icon: UsersRound },
-      { title: 'Submissions', href: '/submissions', icon: FileText, disabled: true },
-      { title: 'Interviews', href: '/interviews', icon: MessageSquare, disabled: true },
-      { title: 'Placements', href: '/placements', icon: BriefcaseBusiness, disabled: true },
-      { title: 'Tasks', href: '/tasks', icon: SquareCheck, disabled: true },
-      { title: 'Inbox', href: '/inbox', icon: Mail, disabled: true },
+      { title: 'Submissions', href: '/submissions', icon: FileText, disabled: true, hidden: true },
+      { title: 'Interviews', href: '/interviews', icon: MessageSquare, disabled: true, hidden: true },
+      { title: 'Placements', href: '/placements', icon: BriefcaseBusiness, disabled: true, hidden: true },
+      { title: 'Tasks', href: '/tasks', icon: SquareCheck, disabled: true, hidden: true },
+      { title: 'Inbox', href: '/inbox', icon: Mail, disabled: true, hidden: true },
     ],
   },
   {
@@ -72,7 +72,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { title: 'Consultants', href: '/consultants', icon: Users },
       { title: 'Roles', href: '/roles', icon: ShieldCheck },
-      { title: 'Settings', href: '/settings', icon: Cog, disabled: true },
+      { title: 'Settings', href: '/settings', icon: Cog, disabled: true, hidden: true },
       {
         title: 'Activity Log',
         href: '/activity-log',
