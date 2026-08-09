@@ -233,11 +233,20 @@ export class CandidatesService {
     // denormalized column — see CandidatesService doc), so an ascending sort
     // needs nulls pushed to the end; otherwise every never-contacted
     // candidate would flood the front of an "oldest contact first" list.
-    const orderBy: Prisma.CandidateOrderByWithRelationInput = !sortBy
-      ? { createdAt: 'desc' }
-      : sortBy === 'lastContactedAt'
-        ? { lastContactedAt: { sort: sortOrder, nulls: 'last' } }
-        : { [sortBy]: sortOrder };
+    // `id` is appended as a tiebreaker on every sort — the primary column
+    // alone routinely ties (most rows share the same imported `createdAt`,
+    // and `lastContactedAt` is null for the vast majority), and Postgres
+    // doesn't guarantee a stable order across separate paginated queries for
+    // tied rows. Without it, paging (or infinite-scroll's page-by-page
+    // accumulation) can silently return the same row twice or skip one.
+    const orderBy: Prisma.CandidateOrderByWithRelationInput[] = [
+      !sortBy
+        ? { createdAt: 'desc' }
+        : sortBy === 'lastContactedAt'
+          ? { lastContactedAt: { sort: sortOrder, nulls: 'last' } }
+          : { [sortBy]: sortOrder },
+      { id: 'asc' },
+    ];
 
     // Parallel, not $transaction: these two reads don't need one consistent
     // DB snapshot, and running them concurrently instead of sequentially

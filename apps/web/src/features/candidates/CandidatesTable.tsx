@@ -15,10 +15,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { DataGrid, type DataGridQuery } from '@/components/DataGrid';
 import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
+import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import {
   deleteCandidate as deleteCandidateRequest,
@@ -37,7 +37,10 @@ import { CandidateRowActions } from './CandidateRowActions';
 import { exportCandidatesToExcel } from './exportToExcel';
 import type { useCandidateSearch } from './useCandidateSearch';
 
-const PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
+// Batch size fetched per infinite-scroll page — no longer user-selectable
+// now that there's no "page" to apply it to; just how many rows load per
+// scroll-triggered fetch.
+const PAGE_SIZE = 50;
 // Hard ceiling on "select all matching" — export/bulk-action targets stay
 // bounded even if a filter combination is barely narrowed at all (e.g. no
 // filters, the full 3,960-row table).
@@ -92,7 +95,6 @@ export function CandidatesTable({
     [canDelete, canUpdate],
   );
   const [page, setPage] = React.useState(1);
-  const [pageSize, setPageSize] = React.useState<(typeof PAGE_SIZE_OPTIONS)[number]>(20);
   const [selectedCandidates, setSelectedCandidates] = React.useState<Candidate[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
@@ -109,7 +111,7 @@ export function CandidatesTable({
   React.useEffect(() => setPage(1), [search.queryParams]);
 
   const { data, isLoading, isFetching, isError, error } = useGetCandidates(
-    { page, pageSize, ...search.queryParams },
+    { page, pageSize: PAGE_SIZE, ...search.queryParams },
     // Keep the previous page's rows while the next one loads (no flash).
     { query: { placeholderData: keepPreviousData } },
   );
@@ -123,7 +125,7 @@ export function CandidatesTable({
   // customFetch throws on non-2xx, so a resolved query is always the 200
   // envelope; the guard is for TypeScript's discriminated union.
   const result = data?.status === 200 ? data.data : undefined;
-  const candidates = result?.data ?? [];
+  const candidates = useInfinitePages(result?.data, page, isFetching);
   const total = result?.total ?? 0;
 
   function handleSelectionChange(rows: Candidate[]) {
@@ -248,14 +250,14 @@ export function CandidatesTable({
   const isConsultant = session?.user?.roleName === 'consultant';
   const scopeGrants =
     (session?.user?.industryIds?.length ?? 0) + (session?.user?.locationIds?.length ?? 0) + (session?.user?.specializationIds?.length ?? 0);
-  const allPageRowsSelected = selectedCandidates.length > 0 && selectedCandidates.length === candidates.length;
+  const allLoadedRowsSelected = selectedCandidates.length > 0 && selectedCandidates.length === candidates.length;
 
   return (
     <>
-      {allPageRowsSelected && !selectAllMode && total > candidates.length ? (
+      {allLoadedRowsSelected && !selectAllMode && total > candidates.length ? (
         <div className="flex items-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-4 py-2 text-sm">
           <span>
-            All {candidates.length} on this page are selected.
+            All {candidates.length} loaded so far are selected.
           </span>
           <button
             type="button"
@@ -298,10 +300,12 @@ export function CandidatesTable({
         server={{
           total,
           page,
-          pageSize,
+          pageSize: PAGE_SIZE,
           pageCount: result?.pageCount ?? 1,
           onPageChange: setPage,
           onQueryChange: handleQueryChange,
+          infiniteScroll: true,
+          isFetchingNextPage: isFetching && page > 1,
         }}
         emptyState={
           total === 0 && search.hasActiveFilters ? (
@@ -323,23 +327,6 @@ export function CandidatesTable({
           ) : (
             'No candidates yet.'
           )
-        }
-        footerActions={
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <span>Rows per page</span>
-            <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v) as (typeof PAGE_SIZE_OPTIONS)[number])}>
-              <SelectTrigger className="h-7 w-16">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PAGE_SIZE_OPTIONS.map((size) => (
-                  <SelectItem key={size} value={String(size)}>
-                    {size}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
         }
         toolbar={
           selectedCandidates.length > 0 ? (

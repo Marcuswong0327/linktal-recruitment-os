@@ -208,12 +208,20 @@ export class StakeholdersService {
     // lastContactedAt is null for stakeholders with no contact history yet —
     // "nulls: last" keeps those at the bottom regardless of sort direction
     // (mirrors Client.lastContactedAt's ordering).
-    const orderBy: Prisma.StakeholderOrderByWithRelationInput =
+    // `id` is appended as a tiebreaker on every sort — the primary column
+    // alone routinely ties (most stakeholders share `lastContactedAt: null`,
+    // and any other sortable field can tie too), and Postgres doesn't
+    // guarantee a stable order across separate paginated queries for tied
+    // rows. Without it, paging (or infinite-scroll's page-by-page
+    // accumulation) can silently return the same row twice or skip one.
+    const orderBy: Prisma.StakeholderOrderByWithRelationInput[] = [
       sortBy === 'lastContactedAt'
         ? { lastContactedAt: { sort: sortOrder, nulls: 'last' } }
         : sortBy
           ? { [sortBy]: sortOrder }
-          : { createdAt: 'desc' };
+          : { createdAt: 'desc' },
+      { id: 'asc' },
+    ];
 
     // Parallel, not $transaction: these two reads don't need one consistent
     // DB snapshot, and running them concurrently instead of sequentially

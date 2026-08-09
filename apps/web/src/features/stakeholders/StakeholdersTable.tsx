@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
 import { CheckCheck, ChevronDown, Download, MapPin, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -45,6 +45,7 @@ import {
   type LocationOption,
 } from '@/components/LocationMultiSelect';
 import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
+import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
@@ -75,7 +76,7 @@ import type {
 import { accuracyOptions, getStakeholderColumns, stakeholderFullName } from './columns';
 import { exportStakeholdersToExcel } from './exportToExcel';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50;
 
 // Shared palette for Role type coloring — the filter dropdown (Badge
 // `variant`) and the Role type cell/form pickers (raw `triggerClassName`,
@@ -176,18 +177,24 @@ export function StakeholdersTable({
     }
   }, [searchParams, router]);
 
-  const { data, isLoading, isFetching, isError, error } = useGetStakeholders({
-    page,
-    pageSize: PAGE_SIZE,
-    q: search,
-    roleTypeIds,
-    accuracy,
-    locationIds,
-    sortBy,
-    sortOrder,
-  });
+  const { data, isLoading, isFetching, isError, error } = useGetStakeholders(
+    {
+      page,
+      pageSize: PAGE_SIZE,
+      q: search,
+      roleTypeIds,
+      accuracy,
+      locationIds,
+      sortBy,
+      sortOrder,
+    },
+    // Keep the previous page's rows while the next one loads — infinite
+    // scroll otherwise flashes the whole list back to a loading skeleton
+    // every time the sentinel row requests another batch.
+    { query: { placeholderData: keepPreviousData } },
+  );
   const result = data?.status === 200 ? data.data : undefined;
-  const stakeholders = result?.data ?? [];
+  const stakeholders = useInfinitePages(result?.data, page, isFetching);
 
   // Full roster for the Company picker — pageSize is capped at 100
   // server-side (query-clients.dto.ts), same known limitation as the
@@ -561,6 +568,8 @@ export function StakeholdersTable({
           pageCount: result?.pageCount ?? 1,
           onPageChange: setPage,
           onQueryChange: handleQueryChange,
+          infiniteScroll: true,
+          isFetchingNextPage: isFetching && page > 1,
         }}
       />
 

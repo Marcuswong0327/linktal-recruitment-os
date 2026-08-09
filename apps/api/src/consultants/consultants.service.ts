@@ -139,9 +139,15 @@ export class ConsultantsService {
       ];
     }
 
-    const orderBy: Prisma.ConsultantOrderByWithRelationInput = sortBy
-      ? { [sortBy]: sortOrder }
-      : { createdAt: 'desc' };
+    // `id` is appended as a tiebreaker on every sort — the primary column
+    // alone routinely ties, and Postgres doesn't guarantee a stable order
+    // across separate paginated queries for tied rows. Without it, paging
+    // (or infinite-scroll's page-by-page accumulation) can silently return
+    // the same row twice or skip one.
+    const orderBy: Prisma.ConsultantOrderByWithRelationInput[] = [
+      sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+      { id: 'asc' },
+    ];
 
     // Parallel, not $transaction: these two reads don't need one consistent
     // DB snapshot, and running them concurrently instead of sequentially

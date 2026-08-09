@@ -4,7 +4,7 @@ import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
-import { useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
 import { ChevronDown, Download, MapPin, Plus, Tag, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -50,6 +50,7 @@ import {
   SpecializationFilterButton,
   type SpecializationOption,
 } from '@/components/SpecializationPicker';
+import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import {
   deleteClient,
@@ -79,7 +80,7 @@ import { getCompanyColumns } from './columns';
 import { exportCompaniesToExcel } from './exportToExcel';
 import { qualityOptions, statusOptions, type ClientQuality, type ClientStatus, type Company } from './schema';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50;
 
 /** Editable fields shared by the create sheet. Editing an existing company happens on its detail page. */
 interface CompanyFormValues {
@@ -184,21 +185,27 @@ export function CompaniesTable({
     }
   }, [searchParams, router]);
 
-  const { data, isLoading, isFetching, isError, error } = useGetClients({
-    page,
-    pageSize: PAGE_SIZE,
-    q: search,
-    statuses,
-    qualities,
-    consultantIds,
-    industryIds,
-    specializationIds,
-    locationIds,
-    sortBy,
-    sortOrder,
-  });
+  const { data, isLoading, isFetching, isError, error } = useGetClients(
+    {
+      page,
+      pageSize: PAGE_SIZE,
+      q: search,
+      statuses,
+      qualities,
+      consultantIds,
+      industryIds,
+      specializationIds,
+      locationIds,
+      sortBy,
+      sortOrder,
+    },
+    // Keep the previous page's rows while the next one loads — infinite
+    // scroll otherwise flashes the whole list back to a loading skeleton
+    // every time the sentinel row requests another batch.
+    { query: { placeholderData: keepPreviousData } },
+  );
   const result = data?.status === 200 ? data.data : undefined;
-  const companies = result?.data ?? [];
+  const companies = useInfinitePages(result?.data, page, isFetching);
 
   // pageSize is capped at 100 server-side (query-consultants.dto.ts) — same
   // known limitation as every other consultant lookup in this app.
@@ -583,6 +590,8 @@ export function CompaniesTable({
           pageCount: result?.pageCount ?? 1,
           onPageChange: setPage,
           onQueryChange: handleQueryChange,
+          infiniteScroll: true,
+          isFetchingNextPage: isFetching && page > 1,
         }}
       />
 

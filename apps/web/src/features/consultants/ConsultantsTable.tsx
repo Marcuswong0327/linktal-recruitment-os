@@ -33,6 +33,7 @@ import {
   type SpecializationOption,
 } from '@/components/SpecializationPicker';
 import { TagFilterButton, type TagOption } from '@/components/TagMultiSelect';
+import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import {
   getGetConsultantsQueryKey,
   updateConsultant as updateConsultantRequest,
@@ -75,7 +76,7 @@ interface CatalogTagTarget {
   industryId?: string;
 }
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50;
 
 // Badge variants for the filter dropdown pills — a close approximation of
 // the select trigger palette in columns.tsx (Badge has a fixed variant set,
@@ -510,7 +511,7 @@ export function ConsultantsTable() {
   }
 
   const result = data?.status === 200 ? data.data : undefined;
-  const users = result?.data ?? [];
+  const users = useInfinitePages(result?.data, page, isFetching);
   const pendingId = updateUser.isPending
     ? (updateUser.variables?.id ?? null)
     : setIndustries.isPending
@@ -790,6 +791,8 @@ export function ConsultantsTable() {
           pageCount: result?.pageCount ?? 1,
           onPageChange: setPage,
           onQueryChange: handleQueryChange,
+          infiniteScroll: true,
+          isFetchingNextPage: isFetching && page > 1,
         }}
       />
 

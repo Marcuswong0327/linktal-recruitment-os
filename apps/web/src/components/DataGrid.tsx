@@ -319,9 +319,27 @@ export function DataGrid<TData>({
   // reference every time, which re-fires the onSelectionChange effect below,
   // which updates the caller's state, which re-renders this component with
   // (possibly) another new `data` reference — an infinite loop.
+  //
+  // In `server.infiniteScroll` mode `data` is the accumulated rows loaded so
+  // far (see that prop's doc) — it grows every time the caller appends
+  // another batch, which is a `data` reference change like any other but
+  // shouldn't drop a selection made on already-loaded rows. Detected as a
+  // pure append (every previously-loaded row, in order, is still a prefix of
+  // the new array) rather than gated on `infiniteScroll` alone, so a filter/
+  // sort/search change — which replaces the set outright even in infinite
+  // mode — still clears it.
+  const prevDataRef = React.useRef(data);
   React.useEffect(() => {
+    const prev = prevDataRef.current;
+    prevDataRef.current = data;
+    const isAppend =
+      server?.infiniteScroll &&
+      getRowId &&
+      data.length >= prev.length &&
+      prev.every((row, i) => getRowId(row) === getRowId(data[i]));
+    if (isAppend) return;
     setRowSelection((prev) => (Object.keys(prev).length === 0 ? prev : {}));
-  }, [data, setRowSelection]);
+  }, [data, setRowSelection, server?.infiniteScroll, getRowId]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
 
   // In server mode, report query state upward (debounced so typing in the
