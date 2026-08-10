@@ -116,80 +116,88 @@ export function LocationMultiSelect({
         if (next) setInputValue('');
       }}
     >
-      {/* Absolutely positioned against TableCell (`relative`, no offsets of
-          its own) — same full-cell overlay pattern as TagMultiSelect/
-          ComboboxSelect, so clicking anywhere in the cell's empty space (not
-          just directly on the trigger's own shrink-wrapped box) opens the
-          picker. Trigger is a real <button> internally, so it can't wrap
-          another one; this catcher instead sits *behind* it (earlier in the
-          DOM, both `relative`), giving the whole field a click target while a
-          chip's own X (inside Trigger) still gets first claim. Opens by
-          dispatching a real click on the Trigger itself (via triggerRef)
-          rather than a controlled `open` prop on Combobox.Root — controlling
-          `open` from here used to also leave it controlled for every other
-          interaction (typing, selecting, Escape), and that extra React-state
-          round-trip landed one render behind Base UI's own position sync,
-          flashing the popup at a stale position on first open. */}
-      <button
-        type="button"
-        tabIndex={-1}
-        aria-hidden
-        disabled={disabled}
-        onClick={() => triggerRef.current?.click()}
-        className={cn(
-          'absolute inset-0 rounded-2xl outline-none transition-colors disabled:pointer-events-none',
-          !disabled && 'hover:bg-accent/50',
-          open && 'bg-accent/50',
-        )}
-      />
-      <Combobox.Trigger
-        ref={triggerRef}
-        id={id}
-        aria-label={selected.length === 0 ? placeholder : undefined}
-        className={cn(
-          'relative flex min-h-9 w-full flex-wrap items-center gap-1 rounded-2xl border border-transparent bg-input/50 px-2 py-1.5 text-left outline-none disabled:pointer-events-none disabled:opacity-50',
-          triggerClassName,
-        )}
-      >
-        {selected.length === 0 ? (
-          <span className="pointer-events-none text-sm text-muted-foreground">{placeholder}</span>
-        ) : (
-          selected.map((option) => (
-            <Badge key={option.id} className="gap-1 rounded-md pr-1 font-normal">
-              {option.name}
-              {option.level ? (
-                <span className="text-[10px] tracking-wide text-muted-foreground uppercase">
-                  {LEVEL_LABEL[option.level]}
-                </span>
-              ) : null}
-              {!disabled ? (
-                // role="button" (not a nested <button>) — this sits inside
-                // Combobox.Trigger's own <button>, and nested interactive
-                // elements break hydration (same reasoning as TagMultiSelect).
-                <span
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Remove ${option.name}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    remove(option.id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
+      {/* `relative` wrapper owned by this component (not the caller) — the
+          catcher below is `absolute inset-0` and needs a same-size positioned
+          ancestor to size against. Without one, `inset-0` falls back to the
+          nearest positioned ancestor up the tree, which outside a
+          (`relative`) TableCell is easily the whole page shell
+          (`SidebarInset`), ballooning the invisible hover/click target over
+          everything below it. */}
+      <div className="relative">
+        {/* Same full-cell overlay pattern as TagMultiSelect/ComboboxSelect —
+            clicking anywhere in the field's empty space (not just directly on
+            the trigger's own shrink-wrapped box) opens the picker. Trigger is
+            a real <button> internally, so it can't wrap another one; this
+            catcher instead sits *behind* it (earlier in the DOM), giving the
+            whole field a click target while a chip's own X (inside Trigger)
+            still gets first claim. Opens by dispatching a real click on the
+            Trigger itself (via triggerRef) rather than a controlled `open`
+            prop on Combobox.Root — controlling `open` from here used to also
+            leave it controlled for every other interaction (typing,
+            selecting, Escape), and that extra React-state round-trip landed
+            one render behind Base UI's own position sync, flashing the popup
+            at a stale position on first open. */}
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden
+          disabled={disabled}
+          onClick={() => triggerRef.current?.click()}
+          className={cn(
+            'absolute inset-0 rounded-2xl outline-none transition-colors disabled:pointer-events-none',
+            !disabled && 'hover:bg-accent/50',
+            open && 'bg-accent/50',
+          )}
+        />
+        <Combobox.Trigger
+          ref={triggerRef}
+          id={id}
+          aria-label={selected.length === 0 ? placeholder : undefined}
+          className={cn(
+            'relative flex min-h-9 w-full flex-wrap items-center gap-1 rounded-2xl border border-transparent bg-input/50 px-2 py-1.5 text-left outline-none disabled:pointer-events-none disabled:opacity-50',
+            triggerClassName,
+          )}
+        >
+          {selected.length === 0 ? (
+            <span className="pointer-events-none text-sm text-muted-foreground">{placeholder}</span>
+          ) : (
+            selected.map((option) => (
+              <Badge key={option.id} className="gap-1 rounded-md pr-1 font-normal">
+                {option.name}
+                {option.level ? (
+                  <span className="text-[10px] tracking-wide text-muted-foreground uppercase">
+                    {LEVEL_LABEL[option.level]}
+                  </span>
+                ) : null}
+                {!disabled ? (
+                  // role="button" (not a nested <button>) — this sits inside
+                  // Combobox.Trigger's own <button>, and nested interactive
+                  // elements break hydration (same reasoning as TagMultiSelect).
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Remove ${option.name}`}
+                    onClick={(e) => {
                       e.stopPropagation();
                       remove(option.id);
-                    }
-                  }}
-                  className="cursor-pointer rounded-full opacity-70 outline-none hover:opacity-100"
-                >
-                  <X className="size-3" />
-                </span>
-              ) : null}
-            </Badge>
-          ))
-        )}
-      </Combobox.Trigger>
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        remove(option.id);
+                      }
+                    }}
+                    className="cursor-pointer rounded-full opacity-70 outline-none hover:opacity-100"
+                  >
+                    <X className="size-3" />
+                  </span>
+                ) : null}
+              </Badge>
+            ))
+          )}
+        </Combobox.Trigger>
+      </div>
 
       <Combobox.Portal>
         <Combobox.Positioner align="start" sideOffset={4} className="isolate z-50">
