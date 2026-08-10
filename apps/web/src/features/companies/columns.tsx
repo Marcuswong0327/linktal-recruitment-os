@@ -5,7 +5,6 @@ import { ExternalLink } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { ComboboxSelect } from '@/components/ComboboxSelect';
-import { ConsultantAvatar, UNASSIGNED } from '@/components/ConsultantCombobox';
 import { LocationBadgeList } from '@/components/LocationBadgeList';
 import { formatDate, qualityOptions, statusOptions, type Company } from './schema';
 
@@ -41,10 +40,8 @@ interface CompanyColumnsOptions {
 export function getCompanyColumns({
   onStatusChange,
   onQualityChange,
-  consultantName,
   pendingRowId,
   canUpdate,
-  hideConsultantColumn,
 }: CompanyColumnsOptions): ColumnDef<Company>[] {
   return [
     {
@@ -144,37 +141,10 @@ export function getCompanyColumns({
         );
       },
     },
-    ...(hideConsultantColumn
-      ? []
-      : [
-          {
-            accessorKey: 'consultantId',
-            header: 'Consultant',
-            enableSorting: false,
-            cell: ({ row }: { row: { original: Company } }) => {
-              const client = row.original;
-              const consultantId = client.consultantId ?? UNASSIGNED;
-              return (
-                <div className="flex min-w-0 items-center gap-2">
-                  <ConsultantAvatar
-                    consultantId={consultantId}
-                    name={client.consultantId ? consultantName(client.consultantId) : undefined}
-                    size={5}
-                  />
-                  <span className="truncate text-muted-foreground">
-                    {client.consultantId ? consultantName(client.consultantId) : 'Unassigned'}
-                  </span>
-                </div>
-              );
-            },
-          } satisfies ColumnDef<Company>,
-        ]),
     {
       accessorKey: 'lastContactedAt',
       header: 'Last contacted',
-      cell: ({ row }) => (
-        <span className="text-muted-foreground">{formatDate(row.original.lastContactedAt)}</span>
-      ),
+      cell: ({ row }) => <span className="text-muted-foreground">{formatDate(row.original.lastContactedAt)}</span>,
     },
   ];
 }
