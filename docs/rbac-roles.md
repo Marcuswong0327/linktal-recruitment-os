@@ -312,7 +312,10 @@ Assigning scope to a consultant is **not** folded into the general
 grants, see the next section) — these are dedicated endpoints with their own
 escalation rule, so managers can use them:
 
-- **Admin** can assign to anyone **except themselves** (`400 CANNOT_MODIFY_SELF`).
+- **Admin** can assign to anyone, **including themselves** — unlike the
+  role/status self-lockout below, a scope grant can't lock an admin out of
+  anything (admin is unrestricted by scope regardless of grants), so there's
+  nothing to guard against here.
 - **Manager** can assign to **themselves**, to **other managers**, or to
   **consultants** — but **never to an admin account** (`403 FORBIDDEN`). A
   deliberate carve-out from the general escalation guard elsewhere.
@@ -370,7 +373,7 @@ Managing a consultant is **admin-only IAM**, even though managers hold the
   their own role away from admin via these endpoints (`400 CANNOT_MODIFY_SELF`).
 - **Last-admin protection:** no one can demote or deactivate the **final active
   admin** (`409`). At least one active admin always exists.
-- **Not settable via the API:** `displayId` (DB sequence `consultant-####`) and
+- **Not settable via the API:** `displayId` (DB sequence `CST-000###`) and
   `azureId` (set by auth on login-link).
 
 > The web "Consultants" admin page and the Activity Log are gated to the **admin

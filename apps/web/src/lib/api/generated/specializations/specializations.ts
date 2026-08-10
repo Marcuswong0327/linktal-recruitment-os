@@ -27,7 +27,9 @@ import type {
 import type {
   CreateSpecializationDto,
   ErrorResponse,
-  SpecializationEntity
+  GetSpecializationsParams,
+  SpecializationEntity,
+  UpdateSpecializationDto
 } from '../types';
 
 import { customFetch } from '../../fetcher';
@@ -76,20 +78,35 @@ export type getSpecializationsResponseError = (getSpecializationsResponse400 | g
 
 export type getSpecializationsResponse = (getSpecializationsResponseSuccess | getSpecializationsResponseError)
 
-export const getGetSpecializationsUrl = () => {
+export const getGetSpecializationsUrl = (params?: GetSpecializationsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["industryIds"];
 
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
-  return `/specializations`
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/specializations?${stringifiedParams}` : `/specializations`
 }
 
 /**
- * @summary List active specializations
+ * @summary List active specializations (optionally searched/capped)
  */
-export const getSpecializations = async ( options?: RequestInit): Promise<getSpecializationsResponse> => {
+export const getSpecializations = async (params?: GetSpecializationsParams, options?: RequestInit): Promise<getSpecializationsResponse> => {
 
-  return customFetch<getSpecializationsResponse>(getGetSpecializationsUrl(),
+  return customFetch<getSpecializationsResponse>(getGetSpecializationsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -102,23 +119,23 @@ export const getSpecializations = async ( options?: RequestInit): Promise<getSpe
 
 
 
-export const getGetSpecializationsQueryKey = () => {
+export const getGetSpecializationsQueryKey = (params?: GetSpecializationsParams,) => {
     return [
-    `/specializations`
+    `/specializations`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetSpecializationsQueryOptions = <TData = Awaited<ReturnType<typeof getSpecializations>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecializations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetSpecializationsQueryOptions = <TData = Awaited<ReturnType<typeof getSpecializations>>, TError = ErrorResponse>(params?: GetSpecializationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecializations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetSpecializationsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetSpecializationsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSpecializations>>> = ({ signal }) => getSpecializations({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSpecializations>>> = ({ signal }) => getSpecializations(params, { signal, ...requestOptions });
 
 
 
@@ -132,7 +149,7 @@ export type GetSpecializationsQueryError = ErrorResponse
 
 
 export function useGetSpecializations<TData = Awaited<ReturnType<typeof getSpecializations>>, TError = ErrorResponse>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecializations>>, TError, TData>> & Pick<
+ params: undefined |  GetSpecializationsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecializations>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getSpecializations>>,
           TError,
@@ -142,7 +159,7 @@ export function useGetSpecializations<TData = Awaited<ReturnType<typeof getSpeci
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetSpecializations<TData = Awaited<ReturnType<typeof getSpecializations>>, TError = ErrorResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecializations>>, TError, TData>> & Pick<
+ params?: GetSpecializationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecializations>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getSpecializations>>,
           TError,
@@ -152,19 +169,19 @@ export function useGetSpecializations<TData = Awaited<ReturnType<typeof getSpeci
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetSpecializations<TData = Awaited<ReturnType<typeof getSpecializations>>, TError = ErrorResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecializations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ params?: GetSpecializationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecializations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary List active specializations
+ * @summary List active specializations (optionally searched/capped)
  */
 
 export function useGetSpecializations<TData = Awaited<ReturnType<typeof getSpecializations>>, TError = ErrorResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecializations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ params?: GetSpecializationsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecializations>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetSpecializationsQueryOptions(options)
+  const queryOptions = getGetSpecializationsQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -269,4 +286,332 @@ export const useCreateSpecialization = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getCreateSpecializationMutationOptions(options), queryClient);
+    }
+    export type getSpecializationResponse200 = {
+  data: SpecializationEntity
+  status: 200
+}
+
+export type getSpecializationResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getSpecializationResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type getSpecializationResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getSpecializationResponseSuccess = (getSpecializationResponse200) & {
+  headers: Headers;
+};
+export type getSpecializationResponseError = (getSpecializationResponse400 | getSpecializationResponse404 | getSpecializationResponse500) & {
+  headers: Headers;
+};
+
+export type getSpecializationResponse = (getSpecializationResponseSuccess | getSpecializationResponseError)
+
+export const getGetSpecializationUrl = (id: string,) => {
+
+
+
+
+  return `/specializations/${id}`
+}
+
+/**
+ * @summary Get one specialization by id — resolves a selected id back to a name for a search-driven picker that has since scrolled it out of its results
+ */
+export const getSpecialization = async (id: string, options?: RequestInit): Promise<getSpecializationResponse> => {
+
+  return customFetch<getSpecializationResponse>(getGetSpecializationUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSpecializationQueryKey = (id: string,) => {
+    return [
+    `/specializations/${id}`
+    ] as const;
+    }
+
+
+export const getGetSpecializationQueryOptions = <TData = Awaited<ReturnType<typeof getSpecialization>>, TError = ErrorResponse>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecialization>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSpecializationQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSpecialization>>> = ({ signal }) => getSpecialization(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSpecialization>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetSpecializationQueryResult = NonNullable<Awaited<ReturnType<typeof getSpecialization>>>
+export type GetSpecializationQueryError = ErrorResponse
+
+
+export function useGetSpecialization<TData = Awaited<ReturnType<typeof getSpecialization>>, TError = ErrorResponse>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecialization>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSpecialization>>,
+          TError,
+          Awaited<ReturnType<typeof getSpecialization>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetSpecialization<TData = Awaited<ReturnType<typeof getSpecialization>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecialization>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSpecialization>>,
+          TError,
+          Awaited<ReturnType<typeof getSpecialization>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetSpecialization<TData = Awaited<ReturnType<typeof getSpecialization>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecialization>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get one specialization by id — resolves a selected id back to a name for a search-driven picker that has since scrolled it out of its results
+ */
+
+export function useGetSpecialization<TData = Awaited<ReturnType<typeof getSpecialization>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSpecialization>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetSpecializationQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type updateSpecializationResponse200 = {
+  data: SpecializationEntity
+  status: 200
+}
+
+export type updateSpecializationResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type updateSpecializationResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type updateSpecializationResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type updateSpecializationResponseSuccess = (updateSpecializationResponse200) & {
+  headers: Headers;
+};
+export type updateSpecializationResponseError = (updateSpecializationResponse400 | updateSpecializationResponse404 | updateSpecializationResponse500) & {
+  headers: Headers;
+};
+
+export type updateSpecializationResponse = (updateSpecializationResponseSuccess | updateSpecializationResponseError)
+
+export const getUpdateSpecializationUrl = (id: string,) => {
+
+
+
+
+  return `/specializations/${id}`
+}
+
+/**
+ * @summary Rename a specialization (admin, manager only)
+ */
+export const updateSpecialization = async (id: string,
+    updateSpecializationDto: UpdateSpecializationDto, options?: RequestInit): Promise<updateSpecializationResponse> => {
+
+  return customFetch<updateSpecializationResponse>(getUpdateSpecializationUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateSpecializationDto)
+  }
+);}
+
+
+
+
+
+export const getUpdateSpecializationMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSpecialization>>, TError,{id: string;data: UpdateSpecializationDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSpecialization>>, TError,{id: string;data: UpdateSpecializationDto}, TContext> => {
+
+const mutationKey = ['updateSpecialization'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSpecialization>>, {id: string;data: UpdateSpecializationDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateSpecialization(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSpecializationMutationResult = NonNullable<Awaited<ReturnType<typeof updateSpecialization>>>
+    export type UpdateSpecializationMutationBody = UpdateSpecializationDto
+    export type UpdateSpecializationMutationError = ErrorResponse
+
+    /**
+ * @summary Rename a specialization (admin, manager only)
+ */
+export const useUpdateSpecialization = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSpecialization>>, TError,{id: string;data: UpdateSpecializationDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateSpecialization>>,
+        TError,
+        {id: string;data: UpdateSpecializationDto},
+        TContext
+      > => {
+      return useMutation(getUpdateSpecializationMutationOptions(options), queryClient);
+    }
+    export type deleteSpecializationResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteSpecializationResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type deleteSpecializationResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type deleteSpecializationResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type deleteSpecializationResponseSuccess = (deleteSpecializationResponse204) & {
+  headers: Headers;
+};
+export type deleteSpecializationResponseError = (deleteSpecializationResponse400 | deleteSpecializationResponse404 | deleteSpecializationResponse500) & {
+  headers: Headers;
+};
+
+export type deleteSpecializationResponse = (deleteSpecializationResponseSuccess | deleteSpecializationResponseError)
+
+export const getDeleteSpecializationUrl = (id: string,) => {
+
+
+
+
+  return `/specializations/${id}`
+}
+
+/**
+ * @summary Deactivate a specialization — hides it from pickers without touching existing references (admin, manager only)
+ */
+export const deleteSpecialization = async (id: string, options?: RequestInit): Promise<deleteSpecializationResponse> => {
+
+  return customFetch<deleteSpecializationResponse>(getDeleteSpecializationUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteSpecializationMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSpecialization>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteSpecialization>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteSpecialization'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSpecialization>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteSpecialization(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteSpecializationMutationResult = NonNullable<Awaited<ReturnType<typeof deleteSpecialization>>>
+
+    export type DeleteSpecializationMutationError = ErrorResponse
+
+    /**
+ * @summary Deactivate a specialization — hides it from pickers without touching existing references (admin, manager only)
+ */
+export const useDeleteSpecialization = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSpecialization>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteSpecialization>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteSpecializationMutationOptions(options), queryClient);
     }

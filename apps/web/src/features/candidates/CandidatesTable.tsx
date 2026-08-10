@@ -1,8 +1,9 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { ChevronDown, Download, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, Download, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
@@ -14,120 +15,62 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { DataGrid, type DataGridQuery } from '@/components/DataGrid';
-import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
-import { DateRangeFilter } from '@/components/DateRangeFilter';
-import { TagListFilter } from '@/components/TagListFilter';
-import { TextFilter } from '@/components/TextFilter';
-import { EnumSelect } from '@/components/EnumSelect';
-import { FormField } from '@/components/FormField';
-import { useConsultantLookup } from '@/components/ConsultantCombobox';
-import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
+import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import {
   deleteCandidate as deleteCandidateRequest,
+  getCandidates,
   getGetCandidatesQueryKey,
   restoreCandidate as restoreCandidateRequest,
   updateCandidate as updateCandidateRequest,
-  useAddCandidateContactHistory,
   useGetCandidates,
-  useUpdateCandidate,
 } from '@/lib/api/generated/candidates/candidates';
-import type {
-  ConsultantEntity,
-  CreateCandidateContactHistoryDto,
-  GetCandidatesSortBy,
-  UpdateCandidateDto,
-} from '@/lib/api/generated/types';
-import type { ColumnDef } from '@tanstack/react-table';
-import {
-  candidateFullName,
-  type Candidate,
-  type CandidateStatus,
-  candidateStatuses,
-  candidateStatusLabels,
-  candidateStatusVariants,
-  candidateStatusTriggerClassName,
-} from './schema';
+import type { ConsultantEntity, GetCandidatesSortBy, UpdateCandidateDto } from '@/lib/api/generated/types';
+import { type Candidate, candidateStatuses, candidateStatusLabels, candidateStatusVariants } from './schema';
 import { candidateColumns } from './columns';
-import { CandidateRowActions } from './CandidateRowActions';
 import { exportCandidatesToExcel } from './exportToExcel';
-import { placementStatusLabels, submissionStatusLabels, type useCandidateSearch } from './useCandidateSearch';
+import type { useCandidateSearch } from './useCandidateSearch';
 
-const statusOptions = candidateStatuses.map((value) => ({
-  value,
-  label: candidateStatusLabels[value],
-  variant: candidateStatusVariants[value],
-  triggerClassName: candidateStatusTriggerClassName[value],
-}));
-
-const submissionStatusOptions = Object.entries(submissionStatusLabels).map(([value, label]) => ({ value, label }));
-const placementStatusOptions = Object.entries(placementStatusLabels).map(([value, label]) => ({ value, label }));
-
-const PAGE_SIZE = 20;
-
-/** Editable fields for the row edit drawer — a quick-edit subset mirroring the table's columns. Location isn't editable here (needs a Location picker) — full profile lives on the detail page. */
-interface CandidateFormValues {
-  firstName: string | null;
-  lastName: string | null;
-  currentRole: string | null;
-  currentCompany: string | null;
-  status: CandidateStatus;
-}
+// Batch size fetched per infinite-scroll page — no longer user-selectable
+// now that there's no "page" to apply it to; just how many rows load per
+// scroll-triggered fetch.
+const PAGE_SIZE = 50;
+// Hard ceiling on "select all matching" — export/bulk-action targets stay
+// bounded even if a filter combination is barely narrowed at all (e.g. no
+// filters, the full 3,960-row table).
+const SELECT_ALL_CAP = 5000;
 
 export function CandidatesTable({
   canCreate = true,
   canDelete = true,
+  canUpdate = true,
   search,
   consultants,
 }: {
   canCreate?: boolean;
   canDelete?: boolean;
-  /** Filter/search state lifted into the search-gate parent — shared with its top dropdowns and Active Filters chips. */
+  /** Gates the bulk status menu — calls candidate:update. A read-only role (viewer) sees the row but not the write affordances. */
+  canUpdate?: boolean;
+  /** Filter/search state lifted into the search-gate parent — shared with its top filter row and Active Filters chips. */
   search: ReturnType<typeof useCandidateSearch>;
-  /** Fetched once by the parent (also needed there for the query-language and chip labels) — avoids fetching it twice. */
+  /** Fetched once by the parent (also needed there for chip labels) — avoids fetching it twice. */
   consultants: ConsultantEntity[];
 }) {
   const { data: session } = useSession();
-  // A scoped consultant already only ever sees/searches candidates within
-  // their own industries — filtering by another consultant's name would
-  // just return nothing extra, and this app has no browsing-other-consultants
-  // affordance elsewhere either (same reasoning as the Companies/Job Orders
-  // consultant column being hidden for this role).
-  const isConsultant = session?.user?.roleName === 'consultant';
+  const router = useRouter();
   const queryClient = useQueryClient();
-  const [loggingContactFor, setLoggingContactFor] = React.useState<Candidate | null>(null);
 
-  // Log-a-contact is always available (backend enforces candidate:update);
-  // delete inside the row is gated by canDelete.
-  const columns = React.useMemo<ColumnDef<Candidate>[]>(
-    () => [
-      ...candidateColumns,
-      {
-        id: 'actions',
-        header: '',
-        size: canDelete ? 88 : 56,
-        enableSorting: false,
-        meta: { align: 'center' },
-        cell: ({ row }) => (
-          <CandidateRowActions
-            candidate={row.original}
-            canDelete={canDelete}
-            onLogContact={setLoggingContactFor}
-          />
-        ),
-      },
-    ],
-    [canDelete],
-  );
   const [page, setPage] = React.useState(1);
-  const [editing, setEditing] = React.useState<Candidate | null>(null);
   const [selectedCandidates, setSelectedCandidates] = React.useState<Candidate[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
+  // Selection is normally page-scoped (see DataGrid's onSelectionChange doc)
+  // — this flips on once the user explicitly asks to extend it to every row
+  // matching the current filters, not just what's rendered on this page.
+  const [selectAllMode, setSelectAllMode] = React.useState(false);
+  const [isSelectingAll, setIsSelectingAll] = React.useState(false);
 
   // The search-gate's filter state is the single source of truth for query
   // params; reset to page 1 whenever it actually changes (queryParams is
@@ -141,42 +84,66 @@ export function CandidatesTable({
     { query: { placeholderData: keepPreviousData } },
   );
 
-  // Candidate.consultantId is a raw ID (not server-resolved, same convention
-  // as Client.consultantId) — resolved client-side for the export column.
-  const { labelFor: consultantLabelFor } = useConsultantLookup(consultants);
-
-  const updateCandidate = useUpdateCandidate({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
-        toast.success('Saved changes');
-        setEditing(null);
-      },
-      onError: (err) => toast.error(err.message || 'Failed to update candidate'),
-    },
-  });
+  const consultantById = React.useMemo(() => new Map(consultants.map((c) => [c.id, c.fullName])), [consultants]);
+  const consultantLabelFor = React.useCallback(
+    (consultantId: string) => consultantById.get(consultantId) ?? 'Unassigned',
+    [consultantById],
+  );
 
   // customFetch throws on non-2xx, so a resolved query is always the 200
   // envelope; the guard is for TypeScript's discriminated union.
   const result = data?.status === 200 ? data.data : undefined;
-  const candidates = result?.data ?? [];
+  const candidates = useInfinitePages(result?.data, page, isFetching);
+  const total = result?.total ?? 0;
 
-  // Search/status/etc. are driven by the lifted `search` state (and its own
-  // toolbar filters below), not by DataGrid's built-in search box or column
-  // filters — this only ever sees column-header sort clicks.
+  function handleSelectionChange(rows: Candidate[]) {
+    setSelectedCandidates(rows);
+    // Any manual change to the page's own checkboxes (including clearing
+    // them) drops out of "every matching row" mode — it's specific to this
+    // page's selection again.
+    if (selectAllMode) setSelectAllMode(false);
+  }
+
+  async function handleSelectAllMatching() {
+    setIsSelectingAll(true);
+    const capped = Math.min(total, SELECT_ALL_CAP);
+    const fetchPageSize = 100;
+    const pageCount = Math.ceil(capped / fetchPageSize);
+    // Concurrency-limited rather than one request per page — pageSize barely
+    // affects latency (measured ~120-140ms regardless of 20 vs 100 rows), so
+    // batching a handful of requests in flight at once is the actual lever.
+    const CONCURRENCY = 5;
+    const all: Candidate[] = [];
+    for (let batchStart = 1; batchStart <= pageCount; batchStart += CONCURRENCY) {
+      const batch = Array.from({ length: Math.min(CONCURRENCY, pageCount - batchStart + 1) }, (_, i) => batchStart + i);
+      const results = await Promise.all(
+        batch.map((p) => getCandidates({ page: p, pageSize: fetchPageSize, ...search.queryParams })),
+      );
+      for (const res of results) {
+        if (res.status === 200) all.push(...res.data.data);
+      }
+    }
+    setSelectedCandidates(all.slice(0, capped));
+    setSelectAllMode(true);
+    setIsSelectingAll(false);
+  }
+
+  function handleClearSelection() {
+    setSelectedCandidates([]);
+    setSelectAllMode(false);
+  }
+
+  // Search/status/etc. are driven by the lifted `search` state (and the
+  // search-gate's filter row above it), not by DataGrid's built-in search
+  // box — this only ever sees column-header sort clicks.
   function handleQueryChange({ sorting }: DataGridQuery) {
     const sort = sorting[0];
     search.set('sortBy', sort ? (sort.id as GetCandidatesSortBy) : undefined);
     search.set('sortOrder', sort ? (sort.desc ? 'desc' : 'asc') : undefined);
   }
 
-  function handleSave(values: CandidateFormValues) {
-    if (!editing) return;
-    updateCandidate.mutate({ id: editing.id, data: values as unknown as UpdateCandidateDto });
-  }
-
-  // Bypasses the useUpdateCandidate hook (which only tracks one in-flight call
-  // at a time) — bulk fires several concurrent requests, and we want a single
+  // Bypasses a single-mutation hook (which only tracks one in-flight call at
+  // a time) — bulk fires several concurrent requests, and we want a single
   // summary toast, not one per row.
   async function handleBulkUpdate(data: UpdateCandidateDto, actionLabel: string) {
     setIsBulkUpdating(true);
@@ -187,37 +154,11 @@ export function CandidatesTable({
     if (succeeded > 0) toast.success(`${actionLabel} for ${succeeded} candidate${succeeded === 1 ? '' : 's'}`);
     if (failed > 0) toast.error(`Failed for ${failed} candidate${failed === 1 ? '' : 's'}`);
     setIsBulkUpdating(false);
-    setSelectedCandidates([]);
+    handleClearSelection();
   }
 
   function handleExport() {
     exportCandidatesToExcel(selectedCandidates, consultantLabelFor);
-  }
-
-  const addContactHistory = useAddCandidateContactHistory({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
-        toast.success('Contact logged');
-        setLoggingContactFor(null);
-      },
-      onError: (err) => toast.error(err.message || 'Failed to log contact'),
-    },
-  });
-
-  function handleLogContact(values: LogContactValues) {
-    if (!loggingContactFor) return;
-    // Generated DTO has `notes` as optional (undefined), not nullable — the
-    // sheet emits `null` for "cleared", so build the payload without the key
-    // entirely rather than sending an invalid `null`.
-    addContactHistory.mutate({
-      id: loggingContactFor.id,
-      data: {
-        contactType: values.contactType,
-        contactedAt: values.contactedAt,
-        ...(values.notes ? { notes: values.notes } : {}),
-      } as unknown as CreateCandidateContactHistoryDto,
-    });
   }
 
   function handleBulkDelete() {
@@ -241,85 +182,96 @@ export function CandidatesTable({
       onCommitted: invalidate,
       onUndo: invalidate,
     });
-    setSelectedCandidates([]);
+    handleClearSelection();
   }
 
   if (isError) {
     return <p className="text-sm text-destructive">Failed to load candidates: {error?.message ?? 'Unknown error'}</p>;
   }
 
+  const isConsultant = session?.user?.roleName === 'consultant';
+  const scopeGrants =
+    (session?.user?.industryIds?.length ?? 0) +
+    (session?.user?.locationIds?.length ?? 0) +
+    (session?.user?.specializationIds?.length ?? 0);
+  const allLoadedRowsSelected = selectedCandidates.length > 0 && selectedCandidates.length === candidates.length;
+
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        <DataGridFacetedFilter
-          title="Status"
-          options={statusOptions}
-          selected={search.filters.statuses}
-          onChange={(values) => search.set('statuses', values as CandidateStatus[])}
-        />
-        <TextFilter
-          title="Location"
-          value={search.filters.location}
-          onChange={(value) => search.set('location', value)}
-          placeholder="City or country…"
-        />
-        <TagListFilter
-          title="Skills"
-          values={search.filters.skills}
-          onChange={(values) => search.set('skills', values)}
-          placeholder="Type a skill, Enter to add…"
-        />
-        {!isConsultant ? (
-          <DataGridFacetedFilter
-            title="Consultant"
-            options={consultants.map((c) => ({ value: c.id, label: c.fullName }))}
-            selected={search.filters.consultantIds}
-            onChange={(values) => search.set('consultantIds', values)}
-          />
-        ) : null}
-        <DataGridFacetedFilter
-          title="Submission status"
-          options={submissionStatusOptions}
-          selected={search.filters.submissionStatuses}
-          onChange={(values) => search.set('submissionStatuses', values as typeof search.filters.submissionStatuses)}
-        />
-        <DataGridFacetedFilter
-          title="Placement status"
-          options={placementStatusOptions}
-          selected={search.filters.placementStatuses}
-          onChange={(values) => search.set('placementStatuses', values as typeof search.filters.placementStatuses)}
-        />
-        <DateRangeFilter
-          title="Last contacted"
-          from={search.filters.lastContactedFrom}
-          to={search.filters.lastContactedTo}
-          onChange={({ from, to }) => {
-            search.set('lastContactedFrom', from);
-            search.set('lastContactedTo', to);
-          }}
-        />
-      </div>
+      {allLoadedRowsSelected && !selectAllMode && total > candidates.length ? (
+        <div className="flex items-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-4 py-2 text-sm">
+          <span>All {candidates.length} loaded so far are selected.</span>
+          <button
+            type="button"
+            onClick={handleSelectAllMatching}
+            disabled={isSelectingAll}
+            className="font-medium text-primary hover:underline disabled:opacity-60"
+          >
+            {isSelectingAll
+              ? 'Selecting…'
+              : `Select all ${Math.min(total, SELECT_ALL_CAP).toLocaleString()} matching${total > SELECT_ALL_CAP ? ` (capped at ${SELECT_ALL_CAP.toLocaleString()})` : ''}`}
+          </button>
+        </div>
+      ) : null}
+      {selectAllMode ? (
+        <div className="flex items-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-4 py-2 text-sm">
+          <span className="font-medium">
+            {selectedCandidates.length.toLocaleString()} candidates selected (every match)
+          </span>
+          <button type="button" onClick={handleClearSelection} className="text-muted-foreground hover:text-foreground">
+            Clear selection
+          </button>
+        </div>
+      ) : null}
 
       <DataGrid
-        columns={columns}
+        columns={candidateColumns}
         data={candidates}
         isLoading={isLoading}
         isFetching={isFetching}
         hideSearch
-        onRowClick={setEditing}
+        onRowClick={(candidate) => router.push(`/candidates/${candidate.id}`)}
+        // This page has search bar + filter row + Active Filters chrome
+        // above the grid, taller in total than a simple single-table page —
+        // it should scroll as one normal page, not have the grid stretch to
+        // fill leftover viewport height and clip itself internally. See
+        // DataGrid's fillHeight doc.
+        fillHeight={false}
         enableRowRangeSelect
         hideSelectColumn
         getRowId={(c) => c.id}
-        onSelectionChange={setSelectedCandidates}
+        onSelectionChange={handleSelectionChange}
         server={{
-          total: result?.total ?? 0,
+          total,
           page,
           pageSize: PAGE_SIZE,
           pageCount: result?.pageCount ?? 1,
           onPageChange: setPage,
           onQueryChange: handleQueryChange,
+          infiniteScroll: true,
+          isFetchingNextPage: isFetching && page > 1,
         }}
-        emptyState="No candidates yet. Add one to start building your pipeline."
+        emptyState={
+          total === 0 && search.hasActiveFilters ? (
+            <div className="flex flex-col items-center gap-1.5 py-4 text-center">
+              <p className="font-medium">No candidates match these filters.</p>
+              {search.filters.specializationIds.length > 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Specialization is only tagged on ~5% of candidates — try removing it from Active Filters above.
+                </p>
+              ) : isConsultant && scopeGrants === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  You don&apos;t have any industry, location or specialization grants configured — you&apos;ll only see
+                  candidates directly assigned to you until that&apos;s set up.
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">Try removing a filter from Active Filters above.</p>
+              )}
+            </div>
+          ) : (
+            'No candidates yet.'
+          )
+        }
         toolbar={
           selectedCandidates.length > 0 ? (
             <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
@@ -346,136 +298,41 @@ export function CandidatesTable({
                 onConfirm={handleBulkDelete}
               />
 
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button size="lg" disabled={isBulkUpdating}>
-                      {isBulkUpdating ? 'Updating…' : `Bulk actions (${selectedCandidates.length})`}
-                      <ChevronDown />
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="end">
-                  {candidateStatuses.map((s) => (
-                    <DropdownMenuItem
-                      key={s}
-                      onClick={() => handleBulkUpdate({ status: s }, `Marked ${candidateStatusLabels[s]}`)}
-                    >
-                      <Badge variant={candidateStatusVariants[s]}>{candidateStatusLabels[s]}</Badge>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {canUpdate ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button size="lg" disabled={isBulkUpdating}>
+                        {isBulkUpdating ? 'Updating…' : `Bulk actions (${selectedCandidates.length})`}
+                        <ChevronDown />
+                      </Button>
+                    }
+                  />
+                  <DropdownMenuContent align="end">
+                    {candidateStatuses.map((s) => (
+                      <DropdownMenuItem
+                        key={s}
+                        onClick={() => handleBulkUpdate({ status: s }, `Marked ${candidateStatusLabels[s]}`)}
+                      >
+                        <Badge variant={candidateStatusVariants[s]}>{candidateStatusLabels[s]}</Badge>
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
             </div>
           ) : (
             <Button
               size="lg"
-              // disabled={!canCreate}
               disabled={true}
-              title={canCreate ? undefined : "You don't have permission to add candidates"}
+              title={canCreate ? 'Coming soon' : "You don't have permission to add candidates"}
               className="animate-in fade-in-0 duration-200"
             >
-              <Plus />
               Add Candidate
             </Button>
           )
         }
       />
-
-      <Sheet open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
-        <SheetContent className="w-full sm:max-w-md">
-          {editing ? (
-            <CandidateForm
-              key={editing.id}
-              candidate={editing}
-              isSaving={updateCandidate.isPending}
-              onSave={handleSave}
-              onCancel={() => setEditing(null)}
-            />
-          ) : null}
-        </SheetContent>
-      </Sheet>
-
-      <LogContactSheet
-        open={loggingContactFor !== null}
-        onOpenChange={(open) => !open && setLoggingContactFor(null)}
-        subjectLabel={loggingContactFor ? candidateFullName(loggingContactFor) || 'this candidate' : ''}
-        isSaving={addContactHistory.isPending}
-        onSave={handleLogContact}
-      />
     </>
-  );
-}
-
-/** Row edit drawer — a quick-edit subset of the candidate's fields; the full profile lives on the detail page. */
-function CandidateForm({
-  candidate,
-  isSaving,
-  onSave,
-  onCancel,
-}: {
-  candidate: Candidate;
-  isSaving: boolean;
-  onSave: (values: CandidateFormValues) => void;
-  onCancel: () => void;
-}) {
-  const [firstName, setFirstName] = React.useState(candidate.firstName ?? '');
-  const [lastName, setLastName] = React.useState(candidate.lastName ?? '');
-  const [currentRole, setCurrentRole] = React.useState(candidate.currentRole ?? '');
-  const [currentCompany, setCurrentCompany] = React.useState(candidate.currentCompany ?? '');
-  const [status, setStatus] = React.useState<CandidateStatus>(candidate.status);
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    onSave({
-      firstName: firstName || null,
-      lastName: lastName || null,
-      currentRole: currentRole || null,
-      currentCompany: currentCompany || null,
-      status,
-    });
-  }
-
-  const displayName = candidateFullName(candidate) || 'this candidate';
-
-  return (
-    <form onSubmit={handleSubmit} className="flex h-full flex-col">
-      <SheetHeader>
-        <SheetTitle>Edit candidate</SheetTitle>
-        <SheetDescription>Update {displayName}’s profile.</SheetDescription>
-      </SheetHeader>
-
-      <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
-        <FormField label="First name" htmlFor="candidate-first-name">
-          <Input id="candidate-first-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-        </FormField>
-        <FormField label="Last name" htmlFor="candidate-last-name">
-          <Input id="candidate-last-name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
-        </FormField>
-        <FormField label="Current title" htmlFor="candidate-role">
-          <Input id="candidate-role" value={currentRole} onChange={(e) => setCurrentRole(e.target.value)} />
-        </FormField>
-        <FormField label="Current company" htmlFor="candidate-company">
-          <Input id="candidate-company" value={currentCompany} onChange={(e) => setCurrentCompany(e.target.value)} />
-        </FormField>
-        <FormField label="Status" htmlFor="candidate-status">
-          <EnumSelect
-            id="candidate-status"
-            value={status}
-            onValueChange={(v) => setStatus(v as CandidateStatus)}
-            options={statusOptions}
-          />
-        </FormField>
-      </div>
-
-      <SheetFooter className="flex-row justify-end">
-        <Button type="button" variant="outline" size="lg" onClick={onCancel} disabled={isSaving}>
-          Cancel
-        </Button>
-        <Button type="submit" size="lg" disabled={isSaving}>
-          {isSaving ? 'Saving…' : 'Save changes'}
-        </Button>
-      </SheetFooter>
-    </form>
   );
 }

@@ -3,9 +3,9 @@
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
-import { CheckCheck, ChevronDown, Download, Plus, Trash2 } from 'lucide-react';
+import { CheckCheck, ChevronDown, Download, MapPin, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -38,33 +38,45 @@ import { CreatableCombobox, type CreatableComboboxOption } from '@/components/Cr
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
+import {
+  LEVEL_LABEL,
+  LocationFilterButton,
+  LocationMultiSelect,
+  type LocationOption,
+} from '@/components/LocationMultiSelect';
 import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
+import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { useGetClients } from '@/lib/api/generated/clients/clients';
-import { useCreateStakeholderRoleType } from '@/lib/api/generated/stakeholder-role-types/stakeholder-role-types';
-import type { ClientEntity } from '@/lib/api/generated/types';
+import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
 import {
-  createJobTitle,
   deleteStakeholder,
-  STAKEHOLDERS_QUERY_KEY,
+  getGetStakeholdersQueryKey,
   updateStakeholder,
   useAddStakeholderContactHistory,
   useCreateStakeholder,
-  useGetJobTitles,
-  useGetStakeholderRoleTypesFull,
   useGetStakeholders,
   useUpdateStakeholder,
-} from './api';
-import { getStakeholderColumns } from './columns';
-import { exportStakeholdersToExcel } from './exportToExcel';
+} from '@/lib/api/generated/stakeholders/stakeholders';
 import {
-  stakeholderFullName,
-  StakeholderSortField,
-  type SortOrder,
-  type Stakeholder,
-} from './schema';
+  useCreateStakeholderRoleType,
+  useGetStakeholderRoleTypes,
+} from '@/lib/api/generated/stakeholder-role-types/stakeholder-role-types';
+import { GetStakeholdersSortBy } from '@/lib/api/generated/types/getStakeholdersSortBy';
+import type {
+  ClientEntity,
+  CreateStakeholderContactHistoryDto,
+  CreateStakeholderDto,
+  GetStakeholdersAccuracyItem,
+  GetStakeholdersSortOrder,
+  LocationEntity,
+  StakeholderEntity,
+  UpdateStakeholderDto,
+} from '@/lib/api/generated/types';
+import { accuracyOptions, getStakeholderColumns, stakeholderFullName } from './columns';
+import { exportStakeholdersToExcel } from './exportToExcel';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50;
 
 // Shared palette for Role type coloring — the filter dropdown (Badge
 // `variant`) and the Role type cell/form pickers (raw `triggerClassName`,
@@ -98,22 +110,24 @@ interface StakeholderFormValues {
   linkedinUrl: string;
   email: string;
   mobile: string;
+  coverage: LocationOption[];
   isAccurate: boolean | null;
   inaccurateReason: string;
 }
 
-function buildStakeholderPayload(values: StakeholderFormValues) {
+function buildStakeholderPayload(values: StakeholderFormValues): CreateStakeholderDto {
   return {
     clientId: values.clientId,
-    firstName: values.firstName || null,
-    lastName: values.lastName || null,
-    jobTitleId: values.jobTitleId || null,
-    roleTypeId: values.roleTypeId || null,
-    linkedinUrl: values.linkedinUrl || null,
-    email: values.email || null,
-    mobile: values.mobile || null,
-    isAccurate: values.isAccurate,
-    inaccurateReason: values.inaccurateReason || null,
+    firstName: values.firstName || undefined,
+    lastName: values.lastName || undefined,
+    jobTitleId: values.jobTitleId || undefined,
+    roleTypeId: values.roleTypeId || undefined,
+    linkedinUrl: values.linkedinUrl || undefined,
+    email: values.email || undefined,
+    mobile: values.mobile || undefined,
+    coverageLocationIds: values.coverage.map((c) => c.id),
+    isAccurate: values.isAccurate ?? undefined,
+    inaccurateReason: values.inaccurateReason || undefined,
   };
 }
 
@@ -132,13 +146,26 @@ export function StakeholdersTable({
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
   const [roleTypeIds, setRoleTypeIds] = React.useState<string[] | undefined>();
-  const [sortBy, setSortBy] = React.useState<StakeholderSortField | undefined>();
-  const [sortOrder, setSortOrder] = React.useState<SortOrder>('desc');
-  const [selected, setSelected] = React.useState<Stakeholder[]>([]);
+  const [accuracy, setAccuracy] = React.useState<GetStakeholdersAccuracyItem[] | undefined>();
+  const [locationIds, setLocationIds] = React.useState<string[] | undefined>();
+  // Name/level for the Coverage filter's currently selected location ids —
+  // the API only returns these alongside a live search result, not by id, so
+  // this is seeded as the user searches (see LocationFilterButton's
+  // onResolve) and only needs to cover whatever's selected in this session.
+  // Same pattern as Companies' marketInfoById.
+  const [coverageInfoById, setCoverageInfoById] = React.useState<
+    Map<string, { name: string; level: LocationEntity['level'] }>
+  >(new Map());
+  const resolveCoverageInfo = React.useCallback((id: string, name: string, level: LocationEntity['level']) => {
+    setCoverageInfoById((prev) => (prev.get(id)?.name === name ? prev : new Map(prev).set(id, { name, level })));
+  }, []);
+  const [sortBy, setSortBy] = React.useState<GetStakeholdersSortBy | undefined>();
+  const [sortOrder, setSortOrder] = React.useState<GetStakeholdersSortOrder>('desc');
+  const [selected, setSelected] = React.useState<StakeholderEntity[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
-  const [loggingContactFor, setLoggingContactFor] = React.useState<Stakeholder | null>(null);
+  const [loggingContactFor, setLoggingContactFor] = React.useState<StakeholderEntity | null>(null);
 
   // Opened via the global command palette's "Add a Stakeholder" action
   // (`/stakeholders?new=1`) — strip the param immediately so refresh/back
@@ -150,16 +177,24 @@ export function StakeholdersTable({
     }
   }, [searchParams, router]);
 
-  const { data, isLoading, isFetching, isError, error } = useGetStakeholders({
-    page,
-    pageSize: PAGE_SIZE,
-    q: search,
-    roleTypeIds,
-    sortBy,
-    sortOrder,
-  });
+  const { data, isLoading, isFetching, isError, error } = useGetStakeholders(
+    {
+      page,
+      pageSize: PAGE_SIZE,
+      q: search,
+      roleTypeIds,
+      accuracy,
+      locationIds,
+      sortBy,
+      sortOrder,
+    },
+    // Keep the previous page's rows while the next one loads — infinite
+    // scroll otherwise flashes the whole list back to a loading skeleton
+    // every time the sentinel row requests another batch.
+    { query: { placeholderData: keepPreviousData } },
+  );
   const result = data?.status === 200 ? data.data : undefined;
-  const stakeholders = result?.data ?? [];
+  const stakeholders = useInfinitePages(result?.data, page, isFetching);
 
   // Full roster for the Company picker — pageSize is capped at 100
   // server-side (query-clients.dto.ts), same known limitation as the
@@ -167,7 +202,7 @@ export function StakeholdersTable({
   const { data: clientsData } = useGetClients({ pageSize: 100 });
   const clients: ClientEntity[] = clientsData?.status === 200 ? clientsData.data.data : [];
 
-  const { data: roleTypeData } = useGetStakeholderRoleTypesFull();
+  const { data: roleTypeData } = useGetStakeholderRoleTypes({ take: 200 });
   const roleTypeRows = roleTypeData?.status === 200 ? roleTypeData.data : [];
   const roleTypeOptions = React.useMemo(
     () =>
@@ -179,7 +214,7 @@ export function StakeholdersTable({
     [roleTypeRows],
   );
 
-  const { data: jobTitleData } = useGetJobTitles();
+  const { data: jobTitleData } = useGetJobTitles({ take: 200 });
   const jobTitleRows = jobTitleData?.status === 200 ? jobTitleData.data : [];
   const jobTitleOptions = React.useMemo(
     () => jobTitleRows.map((j) => ({ id: j.id, name: j.name })),
@@ -191,19 +226,56 @@ export function StakeholdersTable({
       {
         columnId: 'roleType',
         title: 'Role type',
-        // Same treatment as Consultants' Role/Status filters: single-select
-        // with a colored badge per option. Role types are a user-grown
-        // catalog rather than a fixed enum, so there's no fixed semantic
-        // color per value — cycle the palette by position instead.
+        // Same treatment as Companies/Job Orders' header filters: a compact
+        // icon button inside the column header instead of a toolbar pill.
+        // Single-select with a colored badge per option — Role types are a
+        // user-grown catalog rather than a fixed enum, so there's no fixed
+        // semantic color per value — cycle the palette by position instead.
         single: true,
+        inHeader: true,
         options: roleTypeRows.map((r, i) => ({
           value: r.id,
           label: r.name,
           variant: roleTypeStyle(i).variant,
         })),
       },
+      {
+        columnId: 'isAccurate',
+        title: 'Accuracy',
+        // Multi-select (unlike Role type) — filtering for both "Inaccurate"
+        // and "Unchecked" at once (i.e. "not confirmed accurate") is a
+        // reasonable thing to want.
+        inHeader: true,
+        options: accuracyOptions.map((o) => ({ value: o.value, label: o.label, variant: o.variant })),
+      },
+      {
+        columnId: 'coverage',
+        title: 'Coverage',
+        inHeader: true,
+        render: ({ selected, onChange }: { selected: string[]; onChange: (values: string[]) => void }) => (
+          <LocationFilterButton
+            selected={selected}
+            onChange={onChange}
+            onResolve={resolveCoverageInfo}
+            title="Coverage"
+          />
+        ),
+        labelFor: (id: string) => coverageInfoById.get(id)?.name ?? id,
+        chipContent: (id: string) => {
+          const info = coverageInfoById.get(id);
+          return (
+            <span className="flex items-center gap-1">
+              <MapPin className="size-3" />
+              {info?.name ?? id}
+              {info ? (
+                <span className="text-[10px] tracking-wide opacity-70 uppercase">{LEVEL_LABEL[info.level]}</span>
+              ) : null}
+            </span>
+          );
+        },
+      },
     ],
-    [roleTypeRows],
+    [roleTypeRows, coverageInfoById, resolveCoverageInfo],
   );
 
   const createRoleType = useCreateStakeholderRoleType({
@@ -219,62 +291,80 @@ export function StakeholdersTable({
     return res.data;
   }
 
+  const createJobTitle = useCreateJobTitle();
   async function handleCreateJobTitle(name: string) {
-    const res = await createJobTitle(name);
+    const res = await createJobTitle.mutateAsync({ data: { name } });
     if (res.status !== 201) throw new Error('Failed to add job title');
     queryClient.invalidateQueries({ queryKey: ['/job-titles'] });
     return res.data;
   }
 
   const createStakeholderMutation = useCreateStakeholder({
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: STAKEHOLDERS_QUERY_KEY });
-      toast.success('Stakeholder added');
-      setCreating(false);
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
+        toast.success('Stakeholder added');
+        setCreating(false);
+      },
+      onError: (err) => toast.error(err.message || 'Failed to add stakeholder'),
     },
-    onError: (err) => toast.error(err.message || 'Failed to add stakeholder'),
   });
 
   const updateStakeholderMutation = useUpdateStakeholder({
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: STAKEHOLDERS_QUERY_KEY });
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
+      },
+      onError: (err) => toast.error(err.message || 'Failed to update stakeholder'),
     },
-    onError: (err) => toast.error(err.message || 'Failed to update stakeholder'),
   });
   const pendingRowId = updateStakeholderMutation.isPending
     ? (updateStakeholderMutation.variables?.id ?? null)
     : null;
 
   const addContactHistory = useAddStakeholderContactHistory({
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: STAKEHOLDERS_QUERY_KEY });
-      toast.success('Contact logged');
-      setLoggingContactFor(null);
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
+        toast.success('Contact logged');
+        setLoggingContactFor(null);
+      },
+      onError: (err) => toast.error(err.message || 'Failed to log contact'),
     },
-    onError: (err) => toast.error(err.message || 'Failed to log contact'),
   });
 
   function handleQueryChange({ search, sorting, columnFilters }: DataGridQuery) {
     const roleTypeFilter = columnFilters.find((f) => f.id === 'roleType')?.value as
       string[] | undefined;
+    const accuracyFilter = columnFilters.find((f) => f.id === 'isAccurate')?.value as
+      string[] | undefined;
+    const coverageFilter = columnFilters.find((f) => f.id === 'coverage')?.value as
+      string[] | undefined;
     const sort = sorting[0];
     const sortField =
-      sort && sort.id in StakeholderSortField ? (sort.id as StakeholderSortField) : undefined;
+      sort && sort.id in GetStakeholdersSortBy ? (sort.id as GetStakeholdersSortBy) : undefined;
     setSearch(search.trim() || undefined);
     setRoleTypeIds(roleTypeFilter);
+    setAccuracy(accuracyFilter?.length ? (accuracyFilter as GetStakeholdersAccuracyItem[]) : undefined);
+    setLocationIds(coverageFilter?.length ? coverageFilter : undefined);
     setSortBy(sortField);
     setSortOrder(sort?.desc ? 'desc' : 'asc');
     setPage(1);
   }
 
   function handleCreate(values: StakeholderFormValues) {
-    createStakeholderMutation.mutate(buildStakeholderPayload(values));
+    createStakeholderMutation.mutate({ data: buildStakeholderPayload(values) });
   }
 
   const handleRoleTypeChange = React.useCallback(
-    (stakeholder: Stakeholder, roleTypeId: string) => {
+    (stakeholder: StakeholderEntity, roleTypeId: string) => {
       updateStakeholderMutation.mutate(
-        { id: stakeholder.id, data: { roleTypeId: roleTypeId || null } },
+        // Explicit `null` clears the role type back to "Uncategorized" — the
+        // generated DTO types this field as `string | undefined` (undefined
+        // means "leave alone" server-side), so a cast is needed to send the
+        // clearing value at all. Same reasoning as the
+        // `CreateStakeholderContactHistoryDto` cast in StakeholderDetail.tsx.
+        { id: stakeholder.id, data: { roleTypeId: roleTypeId || null } as UpdateStakeholderDto },
         { onSuccess: () => toast.success('Role type updated') },
       );
     },
@@ -282,9 +372,9 @@ export function StakeholdersTable({
   );
 
   const handleAccuracyChange = React.useCallback(
-    (stakeholder: Stakeholder, isAccurate: boolean | null) => {
+    (stakeholder: StakeholderEntity, isAccurate: boolean | null) => {
       updateStakeholderMutation.mutate(
-        { id: stakeholder.id, data: { isAccurate } },
+        { id: stakeholder.id, data: { isAccurate } as UpdateStakeholderDto },
         { onSuccess: () => toast.success('Details accuracy updated') },
       );
     },
@@ -299,7 +389,7 @@ export function StakeholdersTable({
         contactType: values.contactType,
         contactedAt: values.contactedAt,
         ...(values.notes ? { notes: values.notes } : {}),
-      },
+      } as unknown as CreateStakeholderContactHistoryDto,
     });
   }
 
@@ -309,11 +399,11 @@ export function StakeholdersTable({
   async function handleBulkSetAccuracy(isAccurate: boolean | null) {
     setIsBulkUpdating(true);
     const results = await Promise.allSettled(
-      selected.map((s) => updateStakeholder(s.id, { isAccurate })),
+      selected.map((s) => updateStakeholder(s.id, { isAccurate } as UpdateStakeholderDto)),
     );
     const failed = results.filter((r) => r.status === 'rejected').length;
     const succeeded = results.length - failed;
-    queryClient.invalidateQueries({ queryKey: STAKEHOLDERS_QUERY_KEY });
+    queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
     const label = isAccurate === null ? 'Unchecked' : isAccurate ? 'Accurate' : 'Inaccurate';
     if (succeeded > 0)
       toast.success(`Marked ${succeeded} stakeholder${succeeded === 1 ? '' : 's'} as ${label}`);
@@ -336,8 +426,8 @@ export function StakeholdersTable({
         const failed = results.filter((r) => r.status === 'rejected').length;
         if (failed > 0) toast.error(`Failed to delete ${failed} of ${toDelete.length} stakeholders`);
       },
-      onCommitted: () => queryClient.invalidateQueries({ queryKey: STAKEHOLDERS_QUERY_KEY }),
-      onUndo: () => queryClient.invalidateQueries({ queryKey: STAKEHOLDERS_QUERY_KEY }),
+      onCommitted: () => queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() }),
+      onUndo: () => queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() }),
     });
     setSelected([]);
   }
@@ -478,6 +568,8 @@ export function StakeholdersTable({
           pageCount: result?.pageCount ?? 1,
           onPageChange: setPage,
           onQueryChange: handleQueryChange,
+          infiniteScroll: true,
+          isFetchingNextPage: isFetching && page > 1,
         }}
       />
 
@@ -551,6 +643,7 @@ function StakeholderForm({
   const [linkedinUrl, setLinkedinUrl] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [mobile, setMobile] = React.useState('');
+  const [coverage, setCoverage] = React.useState<LocationOption[]>([]);
   const [isAccurate, setIsAccurate] = React.useState<boolean | null>(null);
   const [inaccurateReason, setInaccurateReason] = React.useState('');
 
@@ -565,6 +658,7 @@ function StakeholderForm({
       linkedinUrl,
       email,
       mobile,
+      coverage,
       isAccurate,
       inaccurateReason,
     });
@@ -615,6 +709,13 @@ function StakeholderForm({
           <Input id="stakeholder-mobile" value={mobile} onChange={(e) => setMobile(e.target.value)} />
         </FormField>
         <FormField
+          label="Coverage"
+          htmlFor="stakeholder-coverage"
+          description="Which places this contact covers. Optional — can be set later from their detail page."
+        >
+          <LocationMultiSelect id="stakeholder-coverage" selected={coverage} onChange={setCoverage} />
+        </FormField>
+        <FormField
           label="Details accurate"
           htmlFor="stakeholder-accurate"
           description="Whether these contact details have been verified."
@@ -623,11 +724,7 @@ function StakeholderForm({
             id="stakeholder-accurate"
             value={isAccurate === null ? 'unchecked' : String(isAccurate)}
             onValueChange={(v) => setIsAccurate(v === 'unchecked' ? null : v === 'true')}
-            options={[
-              { value: 'unchecked', label: 'Unchecked' },
-              { value: 'true', label: 'Accurate' },
-              { value: 'false', label: 'Inaccurate' },
-            ]}
+            options={accuracyOptions}
           />
         </FormField>
         {isAccurate === false ? (

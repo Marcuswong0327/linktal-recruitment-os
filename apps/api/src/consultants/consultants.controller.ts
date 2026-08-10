@@ -82,7 +82,7 @@ export class ConsultantsController {
 
   @Get('by-display-id/:displayId')
   @RequirePermission('consultant', 'read')
-  @ApiOperation({ operationId: 'getConsultantByDisplayId', summary: 'Get consultant by display ID (consultant-XXXX)' })
+  @ApiOperation({ operationId: 'getConsultantByDisplayId', summary: 'Get consultant by display ID (CST-XXXX)' })
   @ApiResponse({ status: 200, description: 'Consultant found', type: ConsultantEntity })
   findByDisplayId(@Param('displayId') displayId: string, @CurrentUser() user: AuthUser) {
     return this.consultants.findByDisplayId(displayId, user);

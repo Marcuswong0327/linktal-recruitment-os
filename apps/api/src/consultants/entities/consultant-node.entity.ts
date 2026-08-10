@@ -14,7 +14,7 @@ import { ApiProperty } from '@nestjs/swagger';
  */
 export class ConsultantNodeEntity {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'consultant-0002' }) displayId!: string;
+  @ApiProperty({ example: 'CST-000002' }) displayId!: string;
   @ApiProperty({ example: 'Daniel Kee' }) fullName!: string;
   @ApiProperty({
     type: String,

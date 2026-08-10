@@ -54,6 +54,7 @@ export type ConsultantNode = {
 };
 
 type ConsultantWithScope = {
+  id: string;
   industries: { industryId: string; industry: { name: string } }[];
   specializations: { specializationId: string; specialization: { name: string } }[];
   locations: { locationId: string; location: { name: string } }[];
@@ -63,25 +64,30 @@ type ConsultantWithScope = {
  * Strips the raw join rows into parallel name/id arrays per arm, dropping any
  * arm the caller can't read entirely (not just emptying it — an empty list
  * would read as "no grants", which is a materially different statement about a
- * consultant than "you can't see this").
+ * consultant than "you can't see this"). A consultant can always read their
+ * own arms regardless of the `consultant_*:read` permissions — same "assigned
+ * record is always visible to its owner" rule the scope resolver applies
+ * elsewhere (see docs/scope-explained.md) — since this is their own data, not
+ * someone else's.
  */
 function toEntity<T extends ConsultantWithScope>(consultant: T, actor: AuthUser) {
   const { industries, specializations, locations, ...rest } = consultant;
+  const isSelf = consultant.id === actor.consultantId;
   return {
     ...rest,
-    ...(actor.permissions.has(CONSULTANT_INDUSTRY_READ)
+    ...(isSelf || actor.permissions.has(CONSULTANT_INDUSTRY_READ)
       ? {
           industries: industries.map((ci) => ci.industry.name),
           industryIds: industries.map((ci) => ci.industryId),
         }
       : {}),
-    ...(actor.permissions.has(CONSULTANT_SPECIALIZATION_READ)
+    ...(isSelf || actor.permissions.has(CONSULTANT_SPECIALIZATION_READ)
       ? {
           specializations: specializations.map((cs) => cs.specialization.name),
           specializationIds: specializations.map((cs) => cs.specializationId),
         }
       : {}),
-    ...(actor.permissions.has(CONSULTANT_LOCATION_READ)
+    ...(isSelf || actor.permissions.has(CONSULTANT_LOCATION_READ)
       ? {
           locations: locations.map((cl) => cl.location.name),
           locationIds: locations.map((cl) => cl.locationId),
@@ -111,6 +117,20 @@ export class ConsultantsService {
       where.isActive = query.isActive;
     }
 
+    if (query.industryIds?.length) {
+      where.industries = { some: { industryId: { in: query.industryIds } } };
+    }
+
+    if (query.specializationIds?.length) {
+      where.specializations = { some: { specializationId: { in: query.specializationIds } } };
+    }
+
+    if (query.locationIds?.length) {
+      // Same ancestor-path trick as ClientsService — selecting a country or
+      // state matches every consultant whose patch sits at or beneath it.
+      where.locations = { some: { location: { ancestorIds: { hasSome: query.locationIds } } } };
+    }
+
     if (q) {
       where.OR = [
         { fullName: { contains: q, mode: Prisma.QueryMode.insensitive } },
@@ -119,9 +139,15 @@ export class ConsultantsService {
       ];
     }
 
-    const orderBy: Prisma.ConsultantOrderByWithRelationInput = sortBy
-      ? { [sortBy]: sortOrder }
-      : { createdAt: 'desc' };
+    // `id` is appended as a tiebreaker on every sort — the primary column
+    // alone routinely ties, and Postgres doesn't guarantee a stable order
+    // across separate paginated queries for tied rows. Without it, paging
+    // (or infinite-scroll's page-by-page accumulation) can silently return
+    // the same row twice or skip one.
+    const orderBy: Prisma.ConsultantOrderByWithRelationInput[] = [
+      sortBy ? { [sortBy]: sortOrder } : { createdAt: 'desc' },
+      { id: 'asc' },
+    ];
 
     // Parallel, not $transaction: these two reads don't need one consistent
     // DB snapshot, and running them concurrently instead of sequentially
@@ -243,6 +269,12 @@ export class ConsultantsService {
     const { roleName: _roleName, roleId: _roleId, ...rest } = dto;
     const data: Prisma.ConsultantUncheckedUpdateInput = { ...rest };
     if (changesRole) data.roleId = roleId ?? null;
+    // An admin acting on isActive — in either direction — is the "decision"
+    // pendingApproval is waiting for. Flip it off here rather than requiring
+    // a separate "approve" endpoint: toggling the same Status control a
+    // second time (e.g. Active then back to Inactive) must not read as
+    // "still pending" again — see Consultant.pendingApproval's doc comment.
+    if (dto.isActive !== undefined) data.pendingApproval = false;
 
     const updated = await this.prisma.consultant.update({ where: { id }, data, include: withRole, omit: omitSecrets });
     return toEntity(updated, actor);
@@ -306,7 +338,11 @@ export class ConsultantsService {
    * `update()` above: that method is hardcoded admin-only regardless of what
    * the permission system grants, which would silently break "manager can
    * assign" — this has its own, different escalation rules instead:
-   *  - An admin can assign to anyone except themselves.
+   *  - An admin can assign to anyone, including themselves — unlike `update`'s
+   *    role/status self-lockout, a scope grant can't itself lock an admin out
+   *    of anything (admin/manager/finance/researcher are unrestricted
+   *    regardless of grants, see the SCOPING note in schema.prisma), so
+   *    there's nothing unsafe to guard against here.
    *  - A manager can assign to themselves, other managers, or consultants,
    *    but never to an admin account.
    */
@@ -356,6 +392,14 @@ export class ConsultantsService {
    * child ("Food Meat", "Food Bakery", ...) through `ancestorIds`, so this
    * list stays short and coarse.
    *
+   * A specialization grant only means anything as a narrowing of an industry
+   * grant the consultant already holds (schema.prisma's wildcard rule: "if a
+   * consultant lists specific children under a parent they hold..."), so this
+   * rejects outright if they hold no industries yet, and rejects any
+   * specialization whose own industry isn't one of their current
+   * `ConsultantIndustry` rows — a specialization grant can never dangle
+   * without the industry it narrows.
+   *
    * Same escalation rules and full-set-replace shape as `setIndustries`; no
    * assignment cascade, since nothing is assigned by specialization.
    */
@@ -364,11 +408,33 @@ export class ConsultantsService {
 
     const uniqueIds = Array.from(new Set(specializationIds));
     if (uniqueIds.length > 0) {
+      const grantedIndustries = await this.prisma.consultantIndustry.findMany({
+        where: { consultantId: id },
+        select: { industryId: true },
+      });
+      const grantedIndustryIds = new Set(grantedIndustries.map((g) => g.industryId));
+      if (grantedIndustryIds.size === 0) {
+        throw new BadRequestException({
+          code: 'NO_INDUSTRIES_ASSIGNED',
+          message: 'Assign at least one industry before adding specializations.',
+        });
+      }
+
       const specializations = await this.prisma.specialization.findMany({
         where: { id: { in: uniqueIds } },
-        select: { id: true, isActive: true },
+        select: { id: true, isActive: true, industryId: true },
       });
       this.assertScopeIdsValid(uniqueIds, specializations, 'specialization');
+
+      const outOfIndustry = specializations.filter((s) => !grantedIndustryIds.has(s.industryId));
+      if (outOfIndustry.length > 0) {
+        throw new BadRequestException({
+          code: 'SPECIALIZATION_INDUSTRY_MISMATCH',
+          message: `Specialization id(s) not under an industry this consultant holds: ${outOfIndustry
+            .map((s) => s.id)
+            .join(', ')}`,
+        });
+      }
     }
 
     const current = await this.prisma.consultantSpecialization.findMany({
@@ -448,7 +514,7 @@ export class ConsultantsService {
 
   /**
    * The escalation rules shared by all three scope-assignment endpoints:
-   *  - An admin can assign to anyone except themselves.
+   *  - An admin can assign to anyone, including themselves.
    *  - A manager can assign to themselves, other managers, or consultants,
    *    but never to an admin account.
    *
@@ -464,12 +530,6 @@ export class ConsultantsService {
       throw new NotFoundException(`Consultant ${id} not found`);
     }
 
-    if (this.isAdmin(actor) && id === actor.consultantId) {
-      throw new BadRequestException({
-        code: 'CANNOT_MODIFY_SELF',
-        message: `Admins cannot assign ${noun} to their own account.`,
-      });
-    }
     if (!this.isAdmin(actor) && target.role?.name === ADMIN_ROLE) {
       throw new ForbiddenException({
         code: 'FORBIDDEN',

@@ -85,7 +85,7 @@ export const getGetStakeholdersUrl = (params?: GetStakeholdersParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["clientIds","roleTypeIds","jobTitleIds"];
+    const explodeParameters = ["clientIds","roleTypeIds","jobTitleIds","locationIds","accuracy"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
@@ -328,7 +328,7 @@ export const getGetStakeholderByDisplayIdUrl = (displayId: string,) => {
 }
 
 /**
- * @summary Get stakeholder by display ID (Stake-XXXX)
+ * @summary Get stakeholder by display ID (STK-XXXX)
  */
 export const getStakeholderByDisplayId = async (displayId: string, options?: RequestInit): Promise<getStakeholderByDisplayIdResponse> => {
 
@@ -399,7 +399,7 @@ export function useGetStakeholderByDisplayId<TData = Awaited<ReturnType<typeof g
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Get stakeholder by display ID (Stake-XXXX)
+ * @summary Get stakeholder by display ID (STK-XXXX)
  */
 
 export function useGetStakeholderByDisplayId<TData = Awaited<ReturnType<typeof getStakeholderByDisplayId>>, TError = ErrorResponse>(

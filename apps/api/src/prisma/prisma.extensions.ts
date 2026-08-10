@@ -35,6 +35,31 @@ const SOFT_DELETE_MODELS = new Set([
 // actually sees and diffs each row — see ConsultantsService.setIndustries.
 const AUDITED_MODELS = new Set([...SOFT_DELETE_MODELS, 'Consultant', 'Role', 'Permission', 'ConsultantIndustry']);
 
+/**
+ * What soft-deleting a row on the left also soft-deletes, and the FK that
+ * points back at it. Applied here — inside the interception layer — rather
+ * than as per-service code, so cascading is a property of "this row got
+ * soft-deleted" regardless of which path did it: the API, a script, the
+ * importer, or a raw Prisma call. Previously this cascade only existed inside
+ * ClientsService.remove/CandidatesService.remove/JobOrdersService.remove, so
+ * any other path (Path B in docs/scope-explained.md §9) orphaned children.
+ *
+ * Walked recursively, so Client → JobOrder → CandidateSubmission → Placement
+ * all cascade off a single Client delete. Interview is deliberately absent —
+ * no cascade path reaches it today (docs/scope-explained.md §10, gap #3).
+ */
+const CASCADE_MAP: Record<string, { model: string; fk: string }[]> = {
+  Client: [
+    { model: 'JobOrder', fk: 'clientId' },
+    { model: 'Stakeholder', fk: 'clientId' },
+    { model: 'ClientJobResearch', fk: 'clientId' },
+    { model: 'Tob', fk: 'clientId' },
+  ],
+  JobOrder: [{ model: 'CandidateSubmission', fk: 'jobOrderId' }],
+  Candidate: [{ model: 'CandidateSubmission', fk: 'candidateId' }],
+  CandidateSubmission: [{ model: 'Placement', fk: 'submissionId' }],
+};
+
 const READ_MANY_OPS = new Set([
   'findMany',
   'findFirst',
@@ -194,6 +219,39 @@ async function writeAudit(
   });
 }
 
+/**
+ * Soft-deletes every row under `parentIds` per `CASCADE_MAP`, recursing into
+ * grandchildren. Writes its own bulk SOFT_DELETE audit entry per child model
+ * (`metadata.cascade: true`), separate from the parent's own audit entry, so
+ * each cascaded row's trail says *why* it went — not just that it did.
+ */
+async function cascadeSoftDelete(base: PrismaClient, model: string, parentIds: string[]): Promise<void> {
+  const children = CASCADE_MAP[model];
+  if (!children || parentIds.length === 0) return;
+
+  for (const { model: childModel, fk } of children) {
+    const del = delegateFor(base, childModel);
+    const rows: { id: string }[] = await del.findMany({
+      where: { [fk]: { in: parentIds }, deletedAt: null },
+      select: { id: true },
+    });
+    if (rows.length === 0) continue;
+
+    const childIds = rows.map((r) => r.id);
+    const stamp = { deletedAt: new Date(), deletedById: RequestContext.getActorId() ?? null };
+    await del.updateMany({ where: { id: { in: childIds } }, data: stamp });
+    await writeAudit(base, {
+      action: 'SOFT_DELETE',
+      entityType: childModel,
+      entityId: '(bulk)',
+      changes: { deletedAt: { from: null, to: toJson(stamp.deletedAt) } },
+      metadata: { cascadedFrom: { model, ids: parentIds }, count: childIds.length },
+    });
+
+    await cascadeSoftDelete(base, childModel, childIds);
+  }
+}
+
 export function createDbExtension(base: PrismaClient) {
   return Prisma.defineExtension({
     name: 'soft-delete-audit',
@@ -234,13 +292,22 @@ export function createDbExtension(base: PrismaClient) {
               entityId: updated.id,
               changes: { deletedAt: { from: null, to: toJson(stamp.deletedAt) } },
             });
+            await cascadeSoftDelete(base, model, [updated.id]);
             return updated;
           }
           if (isSoftDelete && operation === 'deleteMany') {
             const del = delegateFor(base, model);
+            // Ids are needed up front (updateMany doesn't return the rows it
+            // touched) so the cascade below knows exactly which parents to
+            // walk from.
+            const targetRows: { id: string }[] = await del.findMany({
+              where: { ...(a.where ?? {}), deletedAt: null },
+              select: { id: true },
+            });
+            const targetIds = targetRows.map((r) => r.id);
             const stamp = { deletedAt: new Date(), deletedById: RequestContext.getActorId() ?? null };
             const result = await del.updateMany({
-              where: { ...(a.where ?? {}), deletedAt: null },
+              where: { id: { in: targetIds } },
               data: stamp,
             });
             await writeAudit(base, {
@@ -250,6 +317,7 @@ export function createDbExtension(base: PrismaClient) {
               changes: { deletedAt: { from: null, to: toJson(stamp.deletedAt) } },
               metadata: { cascade: true, count: result.count, where: toJson(a.where ?? null) },
             });
+            await cascadeSoftDelete(base, model, targetIds);
             return result;
           }
 

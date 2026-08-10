@@ -72,8 +72,8 @@ export class JobOrdersController {
   @RequirePermission('job_order', 'create')
   @ApiOperation({ operationId: 'createJobOrder', summary: 'Create a new job order' })
   @ApiResponse({ status: 201, description: 'Job order created', type: JobOrderEntity })
-  create(@Body() dto: CreateJobOrderDto) {
-    return this.jobOrders.create(dto);
+  create(@Body() dto: CreateJobOrderDto, @CurrentUser() user: AuthUser) {
+    return this.jobOrders.create(dto, user);
   }
 
   @Patch(':id')

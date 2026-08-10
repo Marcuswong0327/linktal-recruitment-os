@@ -16,7 +16,7 @@ import { Tob } from '@prisma/client';
  */
 export class TobEntity implements Omit<Tob, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'TOB-0001' }) displayId!: string;
+  @ApiProperty({ example: 'TOB-000001' }) displayId!: string;
   @ApiProperty() clientId!: string;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved client company name' })
   companyName!: string | null;

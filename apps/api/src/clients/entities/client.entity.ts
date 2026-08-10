@@ -26,7 +26,7 @@ import { Client, ClientQuality, ClientStatus, Prisma } from '@prisma/client';
  */
 export class ClientEntity implements Omit<Client, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'Client-0001' }) displayId!: string;
+  @ApiProperty({ example: 'CLI-000001' }) displayId!: string;
   @ApiProperty({ example: 'Acme Corp' }) companyName!: string;
   @ApiProperty({ description: 'Required — the industry arm of the scope resolver relies on it' })
   industryId!: string;

@@ -7,7 +7,7 @@ import { assertInScope, isScoped, stakeholderScope } from '../common/scope';
 import { AuthUser } from '../auth/auth.types';
 import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
 import { UpdateStakeholderDto } from './dto/update-stakeholder.dto';
-import { QueryStakeholdersDto } from './dto/query-stakeholders.dto';
+import { AccuracyFilter, QueryStakeholdersDto } from './dto/query-stakeholders.dto';
 import { CreateStakeholderContactHistoryDto } from './dto/create-stakeholder-contact-history.dto';
 import { classifyJobTitle } from './role-type-classifier';
 
@@ -26,13 +26,23 @@ import { classifyJobTitle } from './role-type-classifier';
 // `toEntity`, since StakeholderEntity documents them as `string | null` rather
 // than the nested objects Prisma would otherwise return.
 //
-// `coverage` is the stakeholder's own territory set, matched independently of
-// where their client sits — see common/scope.ts.
+// `coverage` is the stakeholder's own territory set — display-only routing
+// data now (who to call about which patch). It used to be a scope arm in its
+// own right; see the `stakeholderScope` comment in common/scope.ts for why
+// that changed to full inheritance from the client.
 const STAKEHOLDER_INCLUDE = {
-  // industryId is fetched alongside companyName purely for the job-scope check
-  // below (Stakeholder has no industry of its own) — stripped back out in
+  // industryId/consultantId/locations are fetched alongside companyName
+  // purely for the job-scope check below (a stakeholder has no scope fields
+  // of its own — it inherits its client's entirely) — stripped back out in
   // `toEntity`, never part of the API response.
-  client: { select: { companyName: true, industryId: true } },
+  client: {
+    select: {
+      companyName: true,
+      industryId: true,
+      consultantId: true,
+      locations: { select: { location: { select: { ancestorIds: true } } } },
+    },
+  },
   jobTitle: { select: { name: true } },
   stakeholderRoleType: { select: { name: true } },
   coverage: { select: { locationId: true, location: { select: { name: true, ancestorIds: true } } } },
@@ -49,7 +59,12 @@ const STAKEHOLDER_INCLUDE = {
 } satisfies Prisma.StakeholderInclude;
 
 type StakeholderWithRelations = {
-  client: { companyName: string; industryId: string | null } | null;
+  client: {
+    companyName: string;
+    industryId: string | null;
+    consultantId: string | null;
+    locations: { location: { ancestorIds: string[] } }[];
+  } | null;
   jobTitle: { name: string } | null;
   stakeholderRoleType: { name: string } | null;
   coverage: { locationId: string; location: { name: string; ancestorIds: string[] } }[];
@@ -163,6 +178,25 @@ export class StakeholdersService {
       });
     }
 
+    // Matched against the stakeholder's OWN coverage, not its client's
+    // location — same ancestor-path semantics as Client.locationIds.
+    // Selecting a country/state matches every stakeholder whose coverage
+    // sits beneath it.
+    if (query.locationIds?.length) {
+      and.push({ coverage: { some: { location: { ancestorIds: { hasSome: query.locationIds } } } } });
+    }
+
+    // isAccurate is nullable (three states) — 'unchecked' means null, which
+    // Prisma's `in` never matches (SQL NULL semantics), so each selected
+    // token becomes its own OR arm rather than a single `in` filter.
+    if (query.accuracy?.length) {
+      const accuracyConditions: Prisma.StakeholderWhereInput[] = [];
+      if (query.accuracy.includes(AccuracyFilter.Accurate)) accuracyConditions.push({ isAccurate: true });
+      if (query.accuracy.includes(AccuracyFilter.Inaccurate)) accuracyConditions.push({ isAccurate: false });
+      if (query.accuracy.includes(AccuracyFilter.Unchecked)) accuracyConditions.push({ isAccurate: null });
+      and.push({ OR: accuracyConditions });
+    }
+
     if (isScoped(user)) {
       and.push(stakeholderScope(user));
     }
@@ -174,12 +208,20 @@ export class StakeholdersService {
     // lastContactedAt is null for stakeholders with no contact history yet —
     // "nulls: last" keeps those at the bottom regardless of sort direction
     // (mirrors Client.lastContactedAt's ordering).
-    const orderBy: Prisma.StakeholderOrderByWithRelationInput =
+    // `id` is appended as a tiebreaker on every sort — the primary column
+    // alone routinely ties (most stakeholders share `lastContactedAt: null`,
+    // and any other sortable field can tie too), and Postgres doesn't
+    // guarantee a stable order across separate paginated queries for tied
+    // rows. Without it, paging (or infinite-scroll's page-by-page
+    // accumulation) can silently return the same row twice or skip one.
+    const orderBy: Prisma.StakeholderOrderByWithRelationInput[] = [
       sortBy === 'lastContactedAt'
         ? { lastContactedAt: { sort: sortOrder, nulls: 'last' } }
         : sortBy
           ? { [sortBy]: sortOrder }
-          : { createdAt: 'desc' };
+          : { createdAt: 'desc' },
+      { id: 'asc' },
+    ];
 
     // Parallel, not $transaction: these two reads don't need one consistent
     // DB snapshot, and running them concurrently instead of sequentially
@@ -206,10 +248,12 @@ export class StakeholdersService {
     if (!stakeholder) {
       throw new NotFoundException(`Stakeholder ${id} not found`);
     }
-    // Matched on the stakeholder's OWN coverage, not the client's location.
+    // Inherited entirely from the client — its industry, its own locations,
+    // and its ownership. The stakeholder's own `coverage` no longer matters.
     assertInScope(user, {
       industryId: stakeholder.client?.industryId ?? null,
-      locationAncestorIds: stakeholder.coverage.flatMap((c) => c.location.ancestorIds),
+      locationAncestorIds: stakeholder.client?.locations.flatMap((l) => l.location.ancestorIds) ?? [],
+      consultantId: stakeholder.client?.consultantId ?? null,
     });
     return toEntity(stakeholder);
   }
@@ -226,48 +270,37 @@ export class StakeholdersService {
   }
 
   /**
-   * Would the record this write produces still be visible to its author?
+   * Would the client this stakeholder belongs to be visible to its author?
+   * Now that a stakeholder's visibility is entirely inherited from its client
+   * (see `stakeholderScope`), that's the whole check — `coverage` has no
+   * bearing on it, only on where the contact is described as working.
    *
-   * Both of `stakeholderScope`'s arms, checked together: the parent client's
-   * industry, and the contact's own coverage. Checking only the client would
-   * reject the very case the coverage asymmetry exists for — a Sydney
-   * consultant logging a Sydney-covering contact at a Brisbane company in an
-   * industry they don't hold. That contact is legitimately theirs.
-   *
-   * Without this, create had no scope check at all: a consultant could attach a
-   * contact to any company in the system, and the row would vanish from their
-   * own list the moment it was written.
-   *
-   * The DTO carries bare location ids, but matching needs their `ancestorIds`
-   * (a grant covers the granted node plus every descendant), hence the second
-   * read.
+   * Without this, create had no scope check at all: a consultant could attach
+   * a contact to any company in the system, and the row would vanish from
+   * their own list the moment it was written.
    */
-  private async assertResultInScope(
-    clientId: string,
-    coverageLocationIds: string[] | undefined,
-    user: AuthUser,
-  ): Promise<void> {
+  private async assertResultInScope(clientId: string, user: AuthUser): Promise<void> {
     if (!isScoped(user)) return;
-    const [client, locations] = await Promise.all([
-      this.prisma.client.findUnique({ where: { id: clientId }, select: { industryId: true } }),
-      coverageLocationIds?.length
-        ? this.prisma.location.findMany({
-            where: { id: { in: coverageLocationIds } },
-            select: { ancestorIds: true },
-          })
-        : Promise.resolve([]),
-    ]);
+    const client = await this.prisma.client.findUnique({
+      where: { id: clientId },
+      select: {
+        industryId: true,
+        consultantId: true,
+        locations: { select: { location: { select: { ancestorIds: true } } } },
+      },
+    });
     if (!client) {
       throw new NotFoundException(`Client ${clientId} not found`);
     }
     assertInScope(user, {
       industryId: client.industryId,
-      locationAncestorIds: locations.flatMap((l) => l.ancestorIds),
+      locationAncestorIds: client.locations.flatMap((l) => l.location.ancestorIds),
+      consultantId: client.consultantId,
     });
   }
 
   async create(dto: CreateStakeholderDto, user: AuthUser) {
-    await this.assertResultInScope(dto.clientId, dto.coverageLocationIds, user);
+    await this.assertResultInScope(dto.clientId, user);
     const { coverageLocationIds, roleTypeId, ...scalars } = dto;
     const data: Prisma.StakeholderUncheckedCreateInput = { ...scalars };
     // An explicit role type always wins; otherwise derive one from the title.
@@ -285,22 +318,16 @@ export class StakeholdersService {
   }
 
   async update(id: string, dto: UpdateStakeholderDto, user: AuthUser) {
-    const existing = await this.findOne(id, user);
+    // Existence + scope check only — its return value isn't needed now that
+    // re-parenting no longer falls back to the current coverage list.
+    await this.findOne(id, user);
 
-    // Re-parenting only. A coverage-only edit is deliberately *not* re-checked:
-    // correcting a contact's territory is honest note-keeping, and if the
-    // correction happens to move them out of the author's patch, that's the
-    // scope rule working rather than an error — the record stays fully visible
-    // to admins, managers and whoever does cover the new patch. Moving the
-    // contact onto a *company* the author can't see is a different act: it
-    // writes into someone else's book, so the destination is checked with
-    // whichever coverage the row will end up carrying.
+    // Re-parenting only. A coverage-only edit needs no re-check — coverage no
+    // longer has any bearing on visibility. Moving the contact onto a
+    // *company* the author can't see is the only act that matters: it writes
+    // into someone else's book, so the destination client is what's checked.
     if (dto.clientId !== undefined) {
-      await this.assertResultInScope(
-        dto.clientId,
-        dto.coverageLocationIds ?? existing.coverageLocationIds,
-        user,
-      );
+      await this.assertResultInScope(dto.clientId, user);
     }
 
     const { coverageLocationIds, roleTypeId, ...scalars } = dto;
@@ -334,13 +361,14 @@ export class StakeholdersService {
   }
 
   /**
-   * Logs a contact and bumps the denormalized lastContactedAt on both the
-   * stakeholder and its client — but only if this contact is newer than
-   * what's already stored. A consultant backdating a contact (logging a call
-   * from last week) shouldn't clobber a more recent one someone else already
-   * logged. contactedById always comes from the caller's own session (never
-   * the request body) — a contact can only ever be attributed to whoever is
-   * actually submitting it.
+   * Logs a contact and bumps the denormalized lastContactedAt (both the
+   * stakeholder and its client) and lastContactedById (stakeholder only —
+   * Client has no such column, only lastContactedAt) — but only if this
+   * contact is newer than what's already stored. A consultant backdating a
+   * contact (logging a call from last week) shouldn't clobber a more recent
+   * one someone else already logged. contactedById always comes from the
+   * caller's own session (never the request body) — a contact can only ever
+   * be attributed to whoever is actually submitting it.
    */
   async addContactHistory(id: string, dto: CreateStakeholderContactHistoryDto, consultantId: string) {
     const stakeholder = await this.base.stakeholder.findUnique({
@@ -364,7 +392,10 @@ export class StakeholdersService {
     });
 
     if (!stakeholder.lastContactedAt || contactedAt > stakeholder.lastContactedAt) {
-      await this.prisma.stakeholder.update({ where: { id }, data: { lastContactedAt: contactedAt } });
+      await this.prisma.stakeholder.update({
+        where: { id },
+        data: { lastContactedAt: contactedAt, lastContactedById: consultantId },
+      });
 
       const client = await this.base.client.findUnique({
         where: { id: stakeholder.clientId },

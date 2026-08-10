@@ -31,7 +31,7 @@ export class ClientsController {
   @RequirePermission('client', 'read')
   @ApiOperation({
     operationId: 'getClientByDisplayId',
-    summary: 'Get client by display ID (Client-XXXX)',
+    summary: 'Get client by display ID (CLI-XXXX)',
   })
   @ApiResponse({ status: 200, description: 'Client found', type: ClientEntity })
   findByDisplayId(@Param('displayId') displayId: string) {
@@ -50,8 +50,8 @@ export class ClientsController {
   @RequirePermission('client', 'create')
   @ApiOperation({ operationId: 'createClient', summary: 'Create a new client' })
   @ApiResponse({ status: 201, description: 'Client created', type: ClientEntity })
-  create(@Body() dto: CreateClientDto) {
-    return this.clients.create(dto);
+  create(@Body() dto: CreateClientDto, @CurrentUser() user: AuthUser) {
+    return this.clients.create(dto, user);
   }
 
   @Patch(':id')

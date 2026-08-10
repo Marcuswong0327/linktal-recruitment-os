@@ -24,7 +24,27 @@ import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { QueryCandidatesDto } from './dto/query-candidates.dto';
 import { CreateCandidateContactHistoryDto } from './dto/create-candidate-contact-history.dto';
+import { QueryCandidateFacetsDto } from './dto/query-candidate-facets.dto';
 import { AddCandidateNoteDto, CandidateNoteDto, UpdateCandidateNoteDto } from './dto/candidate-note.dto';
+
+/** The subset of QueryCandidatesDto that `buildWhere` actually reads — shared with QueryCandidateFacetsDto, which omits pagination/sort/jobRoleTypeIds but still satisfies this structurally. */
+type CandidateFilterFields = Pick<
+  QueryCandidatesDto,
+  | 'q'
+  | 'statuses'
+  | 'industryIds'
+  | 'jobRoleTypeIds'
+  | 'specializationIds'
+  | 'consultantIds'
+  | 'submissionStatuses'
+  | 'placementStatuses'
+  | 'locationIds'
+  | 'location'
+  | 'currentCompany'
+  | 'currentRole'
+  | 'lastContactedFrom'
+  | 'lastContactedTo'
+>;
 
 // lastContactedAt is a plain scalar column (see schema.prisma) — denormalized
 // for sorting, same reasoning as Client/Stakeholder.lastContactedAt. The rest
@@ -44,6 +64,7 @@ const CANDIDATE_INCLUDE = {
       category: true,
       conversationSummary: true,
       outreachCampaignNotes: true,
+      contactedAt: true,
       contactedBy: { select: { fullName: true } },
     },
   },
@@ -62,6 +83,7 @@ type CandidateWithRelations = {
     category: string | null;
     conversationSummary: string | null;
     outreachCampaignNotes: string | null;
+    contactedAt: Date;
     contactedBy: { fullName: string } | null;
   }[];
   industry: { name: string } | null;
@@ -87,6 +109,13 @@ function toEntity<T extends CandidateWithRelations>(candidate: T) {
     // separate fields now, distinguished by `category`.
     lastContactNotes: latest?.conversationSummary ?? latest?.outreachCampaignNotes ?? null,
     lastContactedBy: latest?.contactedBy?.fullName ?? null,
+    // Resolved live from the same latest-contact row as the fields above —
+    // deliberately kept separate from the denormalized `lastContactedAt`
+    // column (which only reflects contacts logged through this API; imported
+    // history never backfilled it). A UI showing a date must draw from
+    // exactly the field it also sorts/filters by, or a row can display "3
+    // months ago" while a "3+ months" filter silently excludes it.
+    lastContactDate: latest?.contactedAt ?? null,
   };
 }
 
@@ -104,8 +133,21 @@ export class CandidatesService {
     private readonly base: PrismaService,
   ) {}
 
-  async findAll(query: QueryCandidatesDto, user: AuthUser) {
-    const { page, pageSize, sortBy, sortOrder, q } = query;
+  /**
+   * Shared by `findAll` and `jobRoleTypeFacets` — every list/count/facet read
+   * against Candidate applies the same filters and scope, just with a
+   * different set of rows selected out of the result. `omit` drops one
+   * condition from the AND list: facets pass `jobRoleTypeIds` so a facet
+   * count answers "how many if I added this on top of everything else",
+   * not "how many after I've already applied it" (which would make every
+   * count 0 or the current total).
+   */
+  private buildWhere(
+    query: CandidateFilterFields,
+    user: AuthUser,
+    omit: { jobRoleTypeIds?: boolean } = {},
+  ): Prisma.CandidateWhereInput {
+    const { q } = query;
 
     // Built as an AND-ed list of independent conditions rather than
     // assigning fields onto one `where` object, since a condition here needs
@@ -115,7 +157,9 @@ export class CandidatesService {
 
     if (query.statuses?.length) and.push({ status: { in: query.statuses } });
     if (query.industryIds?.length) and.push({ industryId: { in: query.industryIds } });
-    if (query.jobRoleTypeIds?.length) and.push({ jobRoleTypeId: { in: query.jobRoleTypeIds } });
+    if (!omit.jobRoleTypeIds && query.jobRoleTypeIds?.length) {
+      and.push({ jobRoleTypeId: { in: query.jobRoleTypeIds } });
+    }
     if (query.specializationIds?.length) {
       and.push({ specializations: { some: { specializationId: { in: query.specializationIds } } } });
     }
@@ -174,14 +218,35 @@ export class CandidatesService {
       });
     }
 
-    const where: Prisma.CandidateWhereInput = and.length > 0 ? { AND: and } : {};
+    return and.length > 0 ? { AND: and } : {};
+  }
+
+  async findAll(query: QueryCandidatesDto, user: AuthUser) {
+    const { page, pageSize, sortBy, sortOrder } = query;
+    const where = this.buildWhere(query, user);
 
     // status sorts by Postgres's native enum ordinal (COLD < WARM < PLACED <
     // UNS, per the declaration order in schema.prisma) — no CASE expression
     // needed, `ORDER BY "status"` already gives the temperature order.
-    const orderBy: Prisma.CandidateOrderByWithRelationInput = sortBy
-      ? { [sortBy]: sortOrder }
-      : { createdAt: 'desc' };
+    // lastContactedAt is nullable (see schema.prisma) and most rows don't
+    // have it populated yet (imported contact history never backfilled the
+    // denormalized column — see CandidatesService doc), so an ascending sort
+    // needs nulls pushed to the end; otherwise every never-contacted
+    // candidate would flood the front of an "oldest contact first" list.
+    // `id` is appended as a tiebreaker on every sort — the primary column
+    // alone routinely ties (most rows share the same imported `createdAt`,
+    // and `lastContactedAt` is null for the vast majority), and Postgres
+    // doesn't guarantee a stable order across separate paginated queries for
+    // tied rows. Without it, paging (or infinite-scroll's page-by-page
+    // accumulation) can silently return the same row twice or skip one.
+    const orderBy: Prisma.CandidateOrderByWithRelationInput[] = [
+      !sortBy
+        ? { createdAt: 'desc' }
+        : sortBy === 'lastContactedAt'
+          ? { lastContactedAt: { sort: sortOrder, nulls: 'last' } }
+          : { [sortBy]: sortOrder },
+      { id: 'asc' },
+    ];
 
     // Parallel, not $transaction: these two reads don't need one consistent
     // DB snapshot, and running them concurrently instead of sequentially
@@ -198,6 +263,33 @@ export class CandidatesService {
     ]);
 
     return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
+  }
+
+  /**
+   * How many candidates match the current filters *for each Role Type* —
+   * powers the "Fitter (793)" style counts next to the primary search
+   * filter. `jobRoleTypeIds` itself is excluded from the where clause (see
+   * `buildWhere`'s `omit` doc) so picking one option doesn't zero out the
+   * rest. Nulls (the 0.6% with no role type set) are dropped — nothing to
+   * facet on.
+   */
+  async jobRoleTypeFacets(query: QueryCandidateFacetsDto, user: AuthUser) {
+    const where = this.buildWhere(query, user, { jobRoleTypeIds: true });
+    const grouped = await this.prisma.candidate.groupBy({
+      by: ['jobRoleTypeId'],
+      where: { ...where, jobRoleTypeId: { not: null } },
+      _count: true,
+      orderBy: { _count: { jobRoleTypeId: 'desc' } },
+    });
+    const ids = grouped.map((g) => g.jobRoleTypeId).filter((id): id is string => id !== null);
+    const roleTypes = await this.base.jobRoleType.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(roleTypes.map((r) => [r.id, r.name]));
+    return grouped
+      .filter((g) => g.jobRoleTypeId && nameById.has(g.jobRoleTypeId))
+      .map((g) => ({ id: g.jobRoleTypeId as string, name: nameById.get(g.jobRoleTypeId as string)!, count: g._count }));
   }
 
   async findOne(id: string, user: AuthUser) {
@@ -229,14 +321,17 @@ export class CandidatesService {
     return toEntity(candidate);
   }
 
-  async create(dto: CreateCandidateDto) {
+  async create(dto: CreateCandidateDto, user: AuthUser) {
     // A consultant can only be assigned a candidate they'd reach anyway —
-    // their industry or their location.
+    // their industry or their location — unless an admin/manager is
+    // deliberately making an exception (see assertConsultantCovers).
     if (dto.consultantId) {
-      await assertConsultantCovers(this.prisma, dto.consultantId, {
-        industryId: dto.industryId ?? null,
-        locationIds: dto.locationId ? [dto.locationId] : [],
-      });
+      await assertConsultantCovers(
+        this.prisma,
+        dto.consultantId,
+        { industryId: dto.industryId ?? null, locationIds: dto.locationId ? [dto.locationId] : [] },
+        user.roleName,
+      );
     }
     // displayId is assigned by the DB (Candidate_displayId_seq default).
     const candidate = await this.prisma.candidate.create({
@@ -259,10 +354,15 @@ export class CandidatesService {
     // auto-clear below is for instead of erroring).
     if ('consultantId' in dto && dto.consultantId) {
       const effectiveLocationId = 'locationId' in dto ? dto.locationId : existing.locationId;
-      await assertConsultantCovers(this.prisma, dto.consultantId, {
-        industryId: 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId,
-        locationIds: effectiveLocationId ? [effectiveLocationId] : [],
-      });
+      await assertConsultantCovers(
+        this.prisma,
+        dto.consultantId,
+        {
+          industryId: 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId,
+          locationIds: effectiveLocationId ? [effectiveLocationId] : [],
+        },
+        user.roleName,
+      );
     }
 
     let candidate = await this.prisma.candidate.update({
@@ -299,23 +399,12 @@ export class CandidatesService {
   }
 
   /**
-   * Soft-deletes the candidate and cascades to its submissions + their
-   * placements. Runs as sequential soft-deletes on the extended client (each
-   * op is audited); not wrapped in an interactive transaction because the
-   * audit extension writes outside it. A partial failure is recoverable via
-   * `restore` — children are removed before the parent.
+   * Soft-deletes the candidate. Cascading to its submissions and their
+   * placements is handled centrally by the Prisma extension's CASCADE_MAP —
+   * see prisma.extensions.ts.
    */
   async remove(id: string, user: AuthUser) {
     await this.findOne(id, user);
-    const submissions = await this.prisma.candidateSubmission.findMany({
-      where: { candidateId: id },
-      select: { id: true },
-    });
-    const submissionIds = submissions.map((s) => s.id);
-    if (submissionIds.length > 0) {
-      await this.prisma.placement.deleteMany({ where: { submissionId: { in: submissionIds } } });
-      await this.prisma.candidateSubmission.deleteMany({ where: { candidateId: id } });
-    }
     return this.prisma.candidate.delete({ where: { id } });
   }
 

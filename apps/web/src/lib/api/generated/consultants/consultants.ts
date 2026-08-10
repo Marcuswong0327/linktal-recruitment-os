@@ -89,6 +89,14 @@ export const getGetConsultantsUrl = (params?: GetConsultantsParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["industryIds","specializationIds","locationIds"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
 
     if (value !== undefined) {
       normalizedParams.append(key, value === null ? 'null' : String(value))
@@ -673,7 +681,7 @@ export const getGetConsultantByDisplayIdUrl = (displayId: string,) => {
 }
 
 /**
- * @summary Get consultant by display ID (consultant-XXXX)
+ * @summary Get consultant by display ID (CST-XXXX)
  */
 export const getConsultantByDisplayId = async (displayId: string, options?: RequestInit): Promise<getConsultantByDisplayIdResponse> => {
 
@@ -744,7 +752,7 @@ export function useGetConsultantByDisplayId<TData = Awaited<ReturnType<typeof ge
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Get consultant by display ID (consultant-XXXX)
+ * @summary Get consultant by display ID (CST-XXXX)
  */
 
 export function useGetConsultantByDisplayId<TData = Awaited<ReturnType<typeof getConsultantByDisplayId>>, TError = ErrorResponse>(

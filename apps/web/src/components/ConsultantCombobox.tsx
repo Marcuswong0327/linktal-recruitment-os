@@ -2,7 +2,7 @@
 
 import { useMemo, useCallback } from 'react';
 import { Combobox } from '@base-ui/react/combobox';
-import { Check, ChevronDown, UserRound } from 'lucide-react';
+import { Check, ChevronDown, ListFilter, UserRound } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import type { ConsultantEntity } from '@/lib/api/generated/types';
@@ -83,6 +83,8 @@ export function useConsultantLookup(
         reportsToId: null,
         roleId: null,
         isActive: true,
+        pendingApproval: false,
+        lastLoginAt: null,
         createdAt: '',
         updatedAt: '',
       } satisfies ConsultantEntity,
@@ -138,7 +140,7 @@ export function ConsultantComboboxPopup({ byId, labelFor, footer, anchor }: Cons
               className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
             />
           </div>
-          <Combobox.Empty className="px-3 pb-3 text-center text-sm text-muted-foreground">
+          <Combobox.Empty className="px-3 pb-3 text-center text-sm text-muted-foreground empty:hidden">
             No consultants found.
           </Combobox.Empty>
           <Combobox.List className="max-h-64 overflow-y-auto p-1 pt-0">
@@ -234,6 +236,55 @@ export function ConsultantCombobox({
         </Combobox.Icon>
       </Combobox.Trigger>
 
+      <ConsultantComboboxPopup byId={byId} labelFor={labelFor} />
+    </Combobox.Root>
+  );
+}
+
+export interface ConsultantFilterButtonProps {
+  /** Currently selected consultant ids — multi-select. */
+  selected: string[];
+  onChange: (values: string[]) => void;
+  consultants: ConsultantEntity[];
+  title?: string;
+}
+
+/**
+ * Compact icon-button variant of `ConsultantCombobox` for a `DataGridFilter`
+ * header slot — same searchable, avatar-rowed popup as the field picker,
+ * matching `DataGridFacetedFilter`'s `compact` trigger look instead of a
+ * full-width field. Multi-select: matches any of the selected consultants.
+ * `UNASSIGNED` ('') is a selectable item too (see `useConsultantLookup`), so
+ * it can be combined with real ids to mean "these consultants, or none".
+ */
+export function ConsultantFilterButton({
+  selected,
+  onChange,
+  consultants,
+  title = 'Consultant',
+}: ConsultantFilterButtonProps) {
+  const { byId, items, labelFor, searchTextFor } = useConsultantLookup(consultants);
+
+  return (
+    <Combobox.Root
+      items={items}
+      multiple
+      value={selected}
+      onValueChange={onChange}
+      itemToStringLabel={searchTextFor}
+      itemToStringValue={(consultantId: string) => consultantId}
+    >
+      <Combobox.Trigger
+        aria-label={`Filter ${title}`}
+        title={`Filter ${title}`}
+        onClick={(e) => e.stopPropagation()}
+        className={cn(
+          'inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground',
+          selected.length > 0 && 'text-primary',
+        )}
+      >
+        <ListFilter className={cn('size-4', selected.length === 0 && 'opacity-60')} />
+      </Combobox.Trigger>
       <ConsultantComboboxPopup byId={byId} labelFor={labelFor} />
     </Combobox.Root>
   );

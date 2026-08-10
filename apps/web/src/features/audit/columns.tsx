@@ -8,7 +8,7 @@ import {
   type AuditLog,
   auditActionLabels,
   auditActionVariants,
-  summarizeChanges,
+  summarizeResolvedChanges,
 } from './schema';
 
 const dateFormatter = new Intl.DateTimeFormat('en-GB', {
@@ -61,15 +61,25 @@ export const auditColumns: ColumnDef<AuditLog>[] = [
   },
   {
     accessorKey: 'entityType',
-    header: 'Entity',
-    size: 240,
+    // "Entity" is schema vocabulary — an admin thinks in terms of the actual
+    // record (a candidate, a client), not database jargon.
+    header: 'Record',
+    size: 220,
     cell: ({ row }) => {
-      const { entityType, entityLabel, entityId } = row.original;
+      const { entityTypeLabel, entityLabel, entityId, entityDeleted } = row.original;
+      // Lead with the resolved name — "Jane Doe (Candidate)" reads more
+      // naturally than "Candidate — Jane Doe", and the type is still there
+      // for anyone scanning by kind. entityLabel is null only when nothing
+      // (not even the diff's own fields) could be resolved — a raw
+      // placeholder like "(unknown)" is never shown as if it were a name.
+      const name = entityLabel ?? `A ${entityTypeLabel.toLowerCase()} record`;
       return (
-        // Full id in the tooltip for support/debugging; label for humans.
         <span className="block truncate" title={entityId}>
-          <span className="font-medium text-foreground">{entityType}</span>{' '}
-          <span className="text-muted-foreground">{entityLabel ?? entityId}</span>
+          <span className="font-medium text-foreground">{name}</span>{' '}
+          <span className="text-muted-foreground">({entityTypeLabel})</span>
+          {/* "archived", not "deleted": the flag is a soft delete, and the
+              Action column reserves "Deleted" for the irreversible one. */}
+          {entityDeleted ? <span className="ml-1 text-warning">· archived</span> : null}
         </span>
       );
     },
@@ -79,7 +89,7 @@ export const auditColumns: ColumnDef<AuditLog>[] = [
     header: 'Changes',
     enableSorting: false,
     cell: ({ row }) => {
-      const summary = summarizeChanges(row.original.changes);
+      const summary = summarizeResolvedChanges(row.original.resolvedChanges);
       return (
         <span className={cn('block truncate text-sm text-muted-foreground')} title={summary}>
           {summary}

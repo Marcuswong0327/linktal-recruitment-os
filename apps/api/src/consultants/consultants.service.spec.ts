@@ -168,6 +168,41 @@ describe('ConsultantsService', () => {
       await service.update('co1', { fullName: 'New Name' }, actor('admin'));
       expect(prisma.consultant.update).toHaveBeenCalledTimes(1);
     });
+
+    it('clears pendingApproval when an admin sets isActive, regardless of direction', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue({
+        id: 'co1',
+        isActive: false,
+        role: { name: 'viewer' },
+      });
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      // Approve (false -> true) ...
+      await service.update('co1', { isActive: true }, actor('admin'));
+      expect(prisma.consultant.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ isActive: true, pendingApproval: false }) }),
+      );
+
+      // ... then flip back to inactive (a deliberate reversal, not the
+      // original pending state) — must clear pendingApproval again, not
+      // leave the row reading "Pending approval" a second time.
+      await service.update('co1', { isActive: false }, actor('admin'));
+      expect(prisma.consultant.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ isActive: false, pendingApproval: false }) }),
+      );
+    });
+
+    it('does not touch pendingApproval when isActive is left unchanged', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue({ id: 'co1', role: { name: 'viewer' } });
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await service.update('co1', { fullName: 'New Name' }, actor('admin'));
+      expect(prisma.consultant.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.not.objectContaining({ pendingApproval: expect.anything() }) }),
+      );
+    });
   });
 
   describe('remove', () => {
@@ -300,6 +335,9 @@ describe('ConsultantsService', () => {
         id: 'actor',
         isActive: true,
         role: { name: 'admin' },
+        industries: [],
+        specializations: [],
+        locations: [],
       });
       const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
 
@@ -316,6 +354,8 @@ describe('ConsultantsService', () => {
         id: 'co1',
         role: { name: roleName },
         industries: [],
+        specializations: [],
+        locations: [],
         isActive: true,
         email: 'target@linktal.com',
         fullName: 'Target',
@@ -323,15 +363,16 @@ describe('ConsultantsService', () => {
       };
     }
 
-    it('blocks an admin from assigning industries to their own account', async () => {
+    it('lets an admin assign industries to their own account', async () => {
       const prisma = makePrisma();
       prisma.consultant.findUnique.mockResolvedValue(makeTarget('admin', { id: 'actor' }));
+      prisma.industry.findMany.mockResolvedValue([{ id: 'ind1', isActive: true }]);
       const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
 
-      await expect(
-        service.setIndustries('actor', ['ind1'], actor('admin')),
-      ).rejects.toBeInstanceOf(BadRequestException);
-      expect(prisma.consultantIndustry.create).not.toHaveBeenCalled();
+      await service.setIndustries('actor', ['ind1'], actor('admin'));
+      expect(prisma.consultantIndustry.create).toHaveBeenCalledWith({
+        data: { consultantId: 'actor', industryId: 'ind1' },
+      });
     });
 
     it('lets an admin assign industries to anyone else', async () => {
@@ -473,9 +514,10 @@ describe('ConsultantsService', () => {
     it('replaces the whole set, removing before adding', async () => {
       const prisma = makePrisma();
       prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.consultantIndustry.findMany.mockResolvedValue([{ industryId: 'ind1' }]);
       prisma.specialization.findMany.mockResolvedValue([
-        { id: 'spec2', isActive: true },
-        { id: 'spec3', isActive: true },
+        { id: 'spec2', isActive: true, industryId: 'ind1' },
+        { id: 'spec3', isActive: true, industryId: 'ind1' },
       ]);
       prisma.consultantSpecialization.findMany.mockResolvedValue([
         { specializationId: 'spec1' },
@@ -499,6 +541,7 @@ describe('ConsultantsService', () => {
     it('rejects unknown specialization ids', async () => {
       const prisma = makePrisma();
       prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.consultantIndustry.findMany.mockResolvedValue([{ industryId: 'ind1' }]);
       prisma.specialization.findMany.mockResolvedValue([]);
       const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
 
@@ -511,12 +554,43 @@ describe('ConsultantsService', () => {
     it('rejects retired specializations', async () => {
       const prisma = makePrisma();
       prisma.consultant.findUnique.mockResolvedValue(makeTarget());
-      prisma.specialization.findMany.mockResolvedValue([{ id: 'spec1', isActive: false }]);
+      prisma.consultantIndustry.findMany.mockResolvedValue([{ industryId: 'ind1' }]);
+      prisma.specialization.findMany.mockResolvedValue([
+        { id: 'spec1', isActive: false, industryId: 'ind1' },
+      ]);
       const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
 
       await expect(
         service.setSpecializations('co1', ['spec1'], actor('admin')),
       ).rejects.toMatchObject({ response: { code: 'INACTIVE_SPECIALIZATION' } });
+    });
+
+    it('rejects specializations when the consultant holds no industries', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      // consultantIndustry.findMany defaults to [] in makePrisma().
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await expect(
+        service.setSpecializations('co1', ['spec1'], actor('admin')),
+      ).rejects.toMatchObject({ response: { code: 'NO_INDUSTRIES_ASSIGNED' } });
+      expect(prisma.specialization.findMany).not.toHaveBeenCalled();
+      expect(prisma.consultantSpecialization.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a specialization whose industry the consultant does not hold', async () => {
+      const prisma = makePrisma();
+      prisma.consultant.findUnique.mockResolvedValue(makeTarget());
+      prisma.consultantIndustry.findMany.mockResolvedValue([{ industryId: 'ind1' }]);
+      prisma.specialization.findMany.mockResolvedValue([
+        { id: 'spec1', isActive: true, industryId: 'ind2' },
+      ]);
+      const service = new ConsultantsService(prisma as unknown as ExtendedPrismaClient);
+
+      await expect(
+        service.setSpecializations('co1', ['spec1'], actor('admin')),
+      ).rejects.toMatchObject({ response: { code: 'SPECIALIZATION_INDUSTRY_MISMATCH' } });
+      expect(prisma.consultantSpecialization.create).not.toHaveBeenCalled();
     });
 
     it('applies the same escalation rules as industries', async () => {

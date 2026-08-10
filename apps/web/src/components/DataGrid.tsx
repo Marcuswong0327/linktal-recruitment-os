@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -72,6 +73,21 @@ export interface DataGridFilter {
    * behavior are unchanged — only where the trigger appears moves.
    */
   inHeader?: boolean;
+  /**
+   * Resolves a selected value to its display label, for the "Filters
+   * applied" summary row. Falls back to looking the value up in `options`
+   * when omitted — only needed for filters whose values aren't a static list
+   * (e.g. a server-searched `render` filter like a location or consultant
+   * combobox).
+   */
+  labelFor?: (value: string) => string;
+  /**
+   * Fully custom chip body for a selected value in the "Filters applied"
+   * row — e.g. a consultant's avatar + name instead of plain text. Overrides
+   * `labelFor`/`options` for that value; still wrapped in the same
+   * removable chip shell (rounded pill + trailing ✕).
+   */
+  chipContent?: (value: string) => React.ReactNode;
 }
 
 /** Per-column presentation hints, set via `meta` on a ColumnDef. */
@@ -234,6 +250,22 @@ interface DataGridProps<TData> {
    * special context menu) while nothing is selected.
    */
   selectionContextMenu?: React.ReactNode;
+  /**
+   * Default `true`: the grid's root and row-container use `flex-1 min-h-0`
+   * so that, when every ancestor up to a viewport-bounded shell is also a
+   * flex column, the grid fills the remaining height and scrolls its own
+   * rows (header/footer stay put). Set `false` to opt out and let the grid
+   * size to its actual content instead — for a page with a lot of its own
+   * chrome above the grid (search bars, filter rows), where the intent is
+   * for the *page* to scroll normally, not the grid internally. Relying on
+   * an intervening non-flex wrapper to achieve the same thing doesn't
+   * reliably work: `flex-1` is `flex-basis: 0%`, so an auto-height flex
+   * column ancestor can still resolve to something other than pure content
+   * height depending on the rest of the chain — this prop sidesteps that
+   * by removing the flex-fill classes outright rather than trying to make
+   * them inert.
+   */
+  fillHeight?: boolean;
 }
 
 export function DataGrid<TData>({
@@ -253,6 +285,7 @@ export function DataGrid<TData>({
   getRowId,
   onSelectionChange,
   canSelectRow,
+  fillHeight = true,
   enableRowRangeSelect = false,
   hideSelectColumn = false,
   selectionContextMenu,
@@ -286,9 +319,27 @@ export function DataGrid<TData>({
   // reference every time, which re-fires the onSelectionChange effect below,
   // which updates the caller's state, which re-renders this component with
   // (possibly) another new `data` reference — an infinite loop.
+  //
+  // In `server.infiniteScroll` mode `data` is the accumulated rows loaded so
+  // far (see that prop's doc) — it grows every time the caller appends
+  // another batch, which is a `data` reference change like any other but
+  // shouldn't drop a selection made on already-loaded rows. Detected as a
+  // pure append (every previously-loaded row, in order, is still a prefix of
+  // the new array) rather than gated on `infiniteScroll` alone, so a filter/
+  // sort/search change — which replaces the set outright even in infinite
+  // mode — still clears it.
+  const prevDataRef = React.useRef(data);
   React.useEffect(() => {
+    const prev = prevDataRef.current;
+    prevDataRef.current = data;
+    const isAppend =
+      server?.infiniteScroll &&
+      getRowId &&
+      data.length >= prev.length &&
+      prev.every((row, i) => getRowId(row) === getRowId(data[i]));
+    if (isAppend) return;
     setRowSelection((prev) => (Object.keys(prev).length === 0 ? prev : {}));
-  }, [data, setRowSelection]);
+  }, [data, setRowSelection, server?.infiniteScroll, getRowId]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
 
   // In server mode, report query state upward (debounced so typing in the
@@ -823,10 +874,11 @@ export function DataGrid<TData>({
   }, [rows, isLoading]);
 
   return (
-    // flex-1/min-h-0 let the grid fill a height-locked page and scroll its
-    // own rows (which also makes the sticky header work); in an unconstrained
-    // parent they're inert and the grid sizes to its content as before.
-    <div ref={rootRef} className="flex min-h-0 flex-1 flex-col gap-3">
+    // flex-1/min-h-0 (when fillHeight) let the grid fill a height-locked
+    // page and scroll its own rows (sticky header) — see the fillHeight doc
+    // for why this is an explicit prop rather than something callers are
+    // expected to neutralize from outside.
+    <div ref={rootRef} className={cn('flex flex-col gap-3', fillHeight && 'min-h-0 flex-1')}>
       {/* Toolbar: search + primary action on their own row, filters wrap freely on the next */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -844,7 +896,7 @@ export function DataGrid<TData>({
         </div>
         {toolbar ? <div className="flex items-center gap-2">{toolbar}</div> : null}
       </div>
-      {(filters ?? []).filter((filter) => !filter.inHeader).length > 0 || isFiltered ? (
+      {(filters ?? []).filter((filter) => !filter.inHeader).length > 0 ? (
         <div className="flex flex-wrap items-center gap-2">
           {(filters ?? [])
             .filter((filter) => !filter.inHeader)
@@ -872,16 +924,68 @@ export function DataGrid<TData>({
               />
             );
           })}
-          {isFiltered ? (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="inline-flex items-center gap-1.5 rounded-sm px-1 text-sm text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
-            >
-              <X className="size-4" />
-              Clear
-            </button>
+        </div>
+      ) : null}
+      {/* Summary row of every currently-active filter (header or toolbar) plus
+          the global search term, each independently clearable — separate from
+          the filter *pickers* above, which only cover non-inHeader filters. */}
+      {isFiltered ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Filters applied:</span>
+          {(filters ?? []).flatMap((filter) => {
+            const column = table.getColumn(filter.columnId);
+            if (!column) return [];
+            const selected = (column.getFilterValue() as string[]) ?? [];
+            if (selected.length === 0) return [];
+            const removeValue = (value: string) => {
+              const next = selected.filter((v) => v !== value);
+              column.setFilterValue(next.length ? next : undefined);
+            };
+            return selected.map((value) => {
+              const option = filter.options?.find((o) => o.value === value);
+              const label = filter.labelFor ? filter.labelFor(value) : (option?.label ?? value);
+              return (
+                <Badge
+                  key={`${filter.columnId}-${value}`}
+                  variant={option?.variant ?? 'secondary'}
+                  className="gap-1 rounded-md py-1 pr-1 font-normal"
+                >
+                  <span className="text-muted-foreground">{filter.title}:</span>
+                  {filter.chipContent ? filter.chipContent(value) : label}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${filter.title} filter: ${label}`}
+                    onClick={() => removeValue(value)}
+                    className="rounded-full opacity-70 outline-none hover:opacity-100"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </Badge>
+              );
+            });
+          })}
+          {globalFilter ? (
+            <Badge variant="secondary" className="gap-1 rounded-md pr-1 font-normal">
+              <span className="text-muted-foreground">Search:</span>
+              {globalFilter}
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setGlobalFilter('')}
+                className="rounded-full opacity-70 outline-none hover:opacity-100"
+              >
+                <X className="size-3" />
+              </button>
+            </Badge>
           ) : null}
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="inline-flex items-center gap-1.5 rounded-sm px-1 text-sm text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/30"
+          >
+            <X className="size-4" />
+            Clear all
+          </button>
         </div>
       ) : null}
       {/* Grid */}
@@ -906,7 +1010,7 @@ export function DataGrid<TData>({
       >
       <div
         ref={gridContainerRef}
-        className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-card"
+        className={cn('overflow-hidden rounded-xl border border-border bg-card', fillHeight && 'min-h-0 flex-1')}
       >
         {/* Vertical gridlines + tight rows for the spreadsheet look.
             table-fixed: widths come from the header row (header.getSize(),

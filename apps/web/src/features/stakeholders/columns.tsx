@@ -7,8 +7,16 @@ import { Phone } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ComboboxSelect } from '@/components/ComboboxSelect';
+import { ConsultantAvatar } from '@/components/ConsultantCombobox';
+import { ContactMethodsCell } from '@/components/ContactMethodsCell';
 import { CreatableCombobox, type CreatableComboboxOption } from '@/components/CreatableCombobox';
-import { stakeholderFullName, type Stakeholder } from './schema';
+import { LocationBadgeList } from '@/components/LocationBadgeList';
+import type { StakeholderEntity } from '@/lib/api/generated/types';
+
+/** Helper for display — the entity has no combined name field, by design (see firstName/lastName in the schema). */
+export function stakeholderFullName(s: Pick<StakeholderEntity, 'firstName' | 'lastName'>): string {
+  return [s.firstName, s.lastName].filter(Boolean).join(' ');
+}
 
 // Despite what a combined "fullName" field would suggest, some imported
 // stakeholders have neither name on file — guard rather than assume.
@@ -34,11 +42,28 @@ export function formatDate(iso: string) {
 
 // Three-state: null = "not yet checked" (distinct from false), per
 // StakeholderEntity.isAccurate's doc comment. Exported — StakeholderDetail
-// reuses the exact same options/colors for its own accuracy picker/badge.
+// reuses the exact same options/colors for its own accuracy picker/badge,
+// and StakeholdersTable's header filter reuses `variant` for the same
+// colored badges in its dropdown list.
 export const accuracyOptions = [
-  { value: 'unchecked', label: 'Unchecked', triggerClassName: 'border-transparent bg-muted text-muted-foreground' },
-  { value: 'true', label: 'Accurate', triggerClassName: 'border-success/30 bg-success/10 text-success' },
-  { value: 'false', label: 'Inaccurate', triggerClassName: 'border-destructive/30 bg-destructive/10 text-destructive' },
+  {
+    value: 'unchecked',
+    label: 'Unchecked',
+    variant: 'warning' as const,
+    triggerClassName: 'border-warning/30 bg-warning/10 text-warning',
+  },
+  {
+    value: 'true',
+    label: 'Accurate',
+    variant: 'success' as const,
+    triggerClassName: 'border-success/30 bg-success/10 text-success',
+  },
+  {
+    value: 'false',
+    label: 'Inaccurate',
+    variant: 'destructive' as const,
+    triggerClassName: 'border-destructive/30 bg-destructive/10 text-destructive',
+  },
 ];
 
 export function accuracyValue(isAccurate: boolean | null): string {
@@ -74,10 +99,10 @@ export function roleTypeStyle(index: number) {
 
 interface StakeholderColumnsOptions {
   roleTypes: CreatableComboboxOption[];
-  onRoleTypeChange: (stakeholder: Stakeholder, roleTypeId: string) => void;
+  onRoleTypeChange: (stakeholder: StakeholderEntity, roleTypeId: string) => void;
   onCreateRoleType: (name: string) => Promise<CreatableComboboxOption>;
-  onAccuracyChange: (stakeholder: Stakeholder, isAccurate: boolean | null) => void;
-  onLogContact: (stakeholder: Stakeholder) => void;
+  onAccuracyChange: (stakeholder: StakeholderEntity, isAccurate: boolean | null) => void;
+  onLogContact: (stakeholder: StakeholderEntity) => void;
   /** Row id currently saving an inline change — disables that row's controls. */
   pendingRowId: string | null;
   /** Absent when the caller lacks `stakeholder:update` — controls render read-only. */
@@ -92,12 +117,15 @@ export function getStakeholderColumns({
   onLogContact,
   pendingRowId,
   canUpdate,
-}: StakeholderColumnsOptions): ColumnDef<Stakeholder>[] {
+}: StakeholderColumnsOptions): ColumnDef<StakeholderEntity>[] {
   return [
     {
       id: 'fullName',
       // No single "fullName" column server-side to sort by (see
       // StakeholderSortField) — firstName/lastName are separate columns.
+      // strictMinSize only — avatar + name + link icon is left-aligned
+      // content, not a centered pill like Coverage/Role type.
+      meta: { strictMinSize: true },
       enableSorting: false,
       header: 'Name',
       cell: ({ row }) => {
@@ -118,9 +146,17 @@ export function getStakeholderColumns({
       header: 'Company',
       // Free text via a joined field — not a StakeholderSortField.
       enableSorting: false,
-      cell: ({ row }) => (
-        <span className="text-muted-foreground">{row.original.companyName ?? '—'}</span>
-      ),
+      cell: ({ row }) => <span className="text-muted-foreground">{row.original.companyName ?? '—'}</span>,
+    },
+    {
+      id: 'coverage',
+      header: 'Coverage',
+      // Not a StakeholderSortField (see query-stakeholders.dto.ts) — exposed
+      // as the 'coverage' header filter instead (StakeholdersTable), same as
+      // Company's analogous Market column/filter.
+      enableSorting: false,
+      meta: { align: 'center', strictMinSize: true },
+      cell: ({ row }) => <LocationBadgeList locations={row.original.coverage} />,
     },
     {
       id: 'roleType',
@@ -133,9 +169,7 @@ export function getStakeholderColumns({
       cell: ({ row }) => {
         const stakeholder = row.original;
         if (!canUpdate) {
-          return (
-            <span className="text-muted-foreground">{stakeholder.roleType ?? 'Uncategorized'}</span>
-          );
+          return <span className="text-muted-foreground">{stakeholder.roleType ?? 'Uncategorized'}</span>;
         }
         // No data-no-row-drag needed here (matches ComboboxSelect/Consultants'
         // Role column) — a mousedown that turns into a real drag never
@@ -162,22 +196,21 @@ export function getStakeholderColumns({
       accessorKey: 'jobTitle',
       header: 'Job title',
       enableSorting: false,
-      cell: ({ row }) => (
-        <span className="text-muted-foreground">{row.original.jobTitle ?? '—'}</span>
-      ),
+      cell: ({ row }) => <span className="text-muted-foreground">{row.original.jobTitle ?? '—'}</span>,
     },
     {
-      accessorKey: 'email',
-      header: 'Email',
+      id: 'contact',
+      header: 'Contact',
+      // Email/Mobile/LinkedIn aren't independently sortable server-side
+      // (StakeholderSortField) — same reasoning as Coverage/Role type above.
       enableSorting: false,
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.email ?? '—'}</span>,
-    },
-    {
-      accessorKey: 'mobile',
-      header: 'Mobile',
-      enableSorting: false,
+      meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => (
-        <span className="text-muted-foreground">{row.original.mobile ?? '—'}</span>
+        <ContactMethodsCell
+          email={row.original.email}
+          mobile={row.original.mobile}
+          linkedinUrl={row.original.linkedinUrl}
+        />
       ),
     },
     {
@@ -217,6 +250,30 @@ export function getStakeholderColumns({
           {row.original.lastContactedAt ? formatDate(row.original.lastContactedAt) : '—'}
         </span>
       ),
+    },
+    {
+      accessorKey: 'lastContactedBy',
+      header: 'Last contacted by',
+      // Resolved from the latest StakeholderContactHistory row, not a real
+      // column on Stakeholder itself — not a StakeholderSortField. Read-only
+      // (contactedById always comes from the caller's own session server-side,
+      // never request-supplied — see StakeholdersService.addContactHistory),
+      // so this borrows ConsultantCombobox's avatar-then-name look without
+      // the picker itself — same identity styling as everywhere else a
+      // consultant shows up, just static.
+      enableSorting: false,
+      cell: ({ row }) => {
+        const { lastContactedById, lastContactedBy } = row.original;
+        if (!lastContactedById) {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        return (
+          <div className="flex min-w-0 items-center gap-2">
+            <ConsultantAvatar consultantId={lastContactedById} name={lastContactedBy ?? undefined} size={5} />
+            <span className="truncate text-muted-foreground">{lastContactedBy ?? 'Unknown'}</span>
+          </div>
+        );
+      },
     },
     {
       id: 'logContact',

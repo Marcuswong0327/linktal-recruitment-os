@@ -40,7 +40,7 @@ export class StakeholdersController {
 
   @Get('by-display-id/:displayId')
   @RequirePermission('stakeholder', 'read')
-  @ApiOperation({ operationId: 'getStakeholderByDisplayId', summary: 'Get stakeholder by display ID (Stake-XXXX)' })
+  @ApiOperation({ operationId: 'getStakeholderByDisplayId', summary: 'Get stakeholder by display ID (STK-XXXX)' })
   @ApiResponse({ status: 200, description: 'Stakeholder found', type: StakeholderEntity })
   findByDisplayId(@Param('displayId') displayId: string) {
     return this.stakeholders.findByDisplayId(displayId);

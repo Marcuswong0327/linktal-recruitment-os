@@ -267,8 +267,8 @@ practice that resolved all 275.
 | All rows share one name — **the same person entered twice** | 306 |
 | Names differ — shared/household email, or a typo | 38 |
 
-Examples: `CDD-0002` and `CDD-0816` are both "Zeng Jun Pang" with the same
-mobile; `CDD-0018` and `CDD-1412` are both "Adam Stewart".
+Examples: `CDD-000001` and `CDD-000815` are both "Zeng Jun Pang" with the same
+mobile; `CDD-000017` and `CDD-001411` are both "Adam Stewart".
 
 **Importer behaviour:** contact history attaches to the earliest record. The
 duplicate candidates themselves are all imported — they exist as separate rows.
@@ -296,15 +296,18 @@ The `Client (TOB Details)` and `Linktal JobOrder` tabs name companies the
 
 A first pass lost more (9 TOBs, 12 job orders) because these tabs use short
 informal names where the client list uses formal ones. Six were the same
-company and are now matched via an explicit `COMPANY_ALIASES` table:
+company and are now matched via an explicit `COMPANY_ALIASES` table, keyed on
+the client's `companyName` rather than its `displayId` — a fixed `Client-0261`
+stopped being a stable reference once displayId became an ordinal assigned at
+import time rather than a fixed spreadsheet-row encoding:
 
 | Sheet says | Client record |
 |---|---|
-| `Cordina Chicken` | `Client-0261` Cordina Chicken Farms Pty Ltd |
-| `Regal Mushroom` | `Client-0827` Regal Mushrooms |
-| `Premier Fresh` | `Client-0777` Premier Fresh Australia |
-| `Baker's Maison` | `Client-0128` Bakers Maison Australia |
-| `JBS` | `Client-0526` JBS Australia Pty Limited |
+| `Cordina Chicken` | `CLI-000260` Cordina Chicken Farms Pty Ltd |
+| `Regal Mushroom` | `CLI-000826` Regal Mushrooms |
+| `Premier Fresh` | `CLI-000776` Premier Fresh Australia |
+| `Baker's Maison` | `CLI-000127` Bakers Maison Australia |
+| `JBS` | `CLI-000525` JBS Australia Pty Limited |
 | `…Berhad` suffixes | handled by extending the legal-suffix strip |
 
 **Hand-listed rather than fuzzy-matched, deliberately.** `Third Party Platform`

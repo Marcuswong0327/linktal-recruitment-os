@@ -39,7 +39,7 @@ describe('JobOrdersService.create', () => {
     const prisma = { jobOrder: { create } } as unknown as ExtendedPrismaClient;
     const service = new JobOrdersService(prisma);
 
-    const result = await service.create({ clientId: 'cl1', jobTitleId: 'jt-1' });
+    const result = await service.create({ clientId: 'cl1', jobTitleId: 'jt-1' }, makeUser());
 
     expect(create).toHaveBeenCalledTimes(1);
     expect(create.mock.calls[0][0].data).not.toHaveProperty('displayId');
@@ -55,36 +55,29 @@ describe('JobOrdersService.create', () => {
     const prisma = { jobOrder: { create } } as unknown as ExtendedPrismaClient;
     const service = new JobOrdersService(prisma);
 
-    await service.create({ clientId: 'cl1', jobTitleId: 'jt-1', jobRoleTypeId: 'jrt-1' });
+    await service.create({ clientId: 'cl1', jobTitleId: 'jt-1', jobRoleTypeId: 'jrt-1' }, makeUser());
 
     expect(create.mock.calls[0][0].data).toMatchObject({ jobTitleId: 'jt-1', jobRoleTypeId: 'jrt-1' });
     expect(create.mock.calls[0][0].data).not.toHaveProperty('jobTitle');
   });
 });
 
-describe('JobOrdersService.remove (cascade soft-delete)', () => {
-  it('cascades to its submissions + their placements, then deletes the job order', async () => {
+// Cascading to submissions (and their placements) is no longer this service's
+// job — it's handled centrally by the Prisma extension's CASCADE_MAP for any
+// delete path, not just this one. See prisma.extensions.spec.ts.
+describe('JobOrdersService.remove', () => {
+  it('checks scope, then hands off to a plain delete', async () => {
     const prisma = {
       jobOrder: {
         findUnique: jest.fn().mockResolvedValue(withRelations({ id: 'j1' })),
         delete: jest.fn().mockResolvedValue({ id: 'j1' }),
       },
-      candidateSubmission: {
-        findMany: jest.fn().mockResolvedValue([{ id: 's1' }, { id: 's2' }]),
-        deleteMany: jest.fn().mockResolvedValue({ count: 2 }),
-      },
-      placement: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
     };
     const service = new JobOrdersService(prisma as unknown as ExtendedPrismaClient);
 
     await service.remove('j1', makeUser());
 
-    expect(prisma.placement.deleteMany).toHaveBeenCalledWith({
-      where: { submissionId: { in: ['s1', 's2'] } },
-    });
-    expect(prisma.candidateSubmission.deleteMany).toHaveBeenCalledWith({
-      where: { jobOrderId: 'j1' },
-    });
+    expect(prisma.jobOrder.findUnique).toHaveBeenCalled();
     expect(prisma.jobOrder.delete).toHaveBeenCalledWith({ where: { id: 'j1' } });
   });
 });
@@ -290,14 +283,20 @@ describe('JobOrdersService.create — assignment guard (industry OR location)', 
   it('rejects assigning a consultant who covers neither the client industry nor the location', async () => {
     const { service, create } = makeService();
     await expect(
-      service.create({ clientId: 'cl1', jobTitleId: 'jt-1', consultantId: 'cons-1' }),
+      service.create(
+        { clientId: 'cl1', jobTitleId: 'jt-1', consultantId: 'cons-1' },
+        makeUser({ roleName: 'consultant' }),
+      ),
     ).rejects.toMatchObject({ response: { code: 'CONSULTANT_SCOPE_MISMATCH' } });
     expect(create).not.toHaveBeenCalled();
   });
 
   it("allows assigning a consultant whose industry matches the client's", async () => {
     const { service, create } = makeService({ industryIds: ['ind1'] });
-    await service.create({ clientId: 'cl1', jobTitleId: 'jt-1', consultantId: 'cons-1' });
+    await service.create(
+      { clientId: 'cl1', jobTitleId: 'jt-1', consultantId: 'cons-1' },
+      makeUser({ roleName: 'consultant' }),
+    );
     expect(create).toHaveBeenCalledTimes(1);
   });
 
@@ -305,18 +304,25 @@ describe('JobOrdersService.create — assignment guard (industry OR location)', 
   // client's industry sits outside the consultant's grants.
   it("allows assigning on the job order's own location alone", async () => {
     const { service, create } = makeService({ locationIds: ['au'], locationCovers: true });
-    await service.create({
-      clientId: 'cl1',
-      jobTitleId: 'jt-1',
-      consultantId: 'cons-1',
-      locationId: 'syd',
-    });
+    await service.create(
+      { clientId: 'cl1', jobTitleId: 'jt-1', consultantId: 'cons-1', locationId: 'syd' },
+      makeUser({ roleName: 'consultant' }),
+    );
     expect(create).toHaveBeenCalledTimes(1);
   });
 
   it('skips the guard entirely when no consultant is being assigned', async () => {
     const { service, create } = makeService();
-    await service.create({ clientId: 'cl1', jobTitleId: 'jt-1' });
+    await service.create({ clientId: 'cl1', jobTitleId: 'jt-1' }, makeUser());
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets admin assign a consultant who covers neither the client industry nor the location', async () => {
+    const { service, create } = makeService();
+    await service.create(
+      { clientId: 'cl1', jobTitleId: 'jt-1', consultantId: 'cons-1' },
+      makeUser({ roleName: 'admin' }),
+    );
     expect(create).toHaveBeenCalledTimes(1);
   });
 });

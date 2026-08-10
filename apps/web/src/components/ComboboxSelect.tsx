@@ -45,6 +45,12 @@ export function ComboboxSelect({
   const byId = React.useMemo(() => new Map(options.map((o) => [o.value, o])), [options]);
   const items = React.useMemo(() => options.map((o) => o.value), [options]);
   const [open, setOpen] = React.useState(false);
+  // Controlled and reset on every open — left uncontrolled, base-ui keeps
+  // whatever text was typed/selected last as the search query, so after
+  // picking "Active" once the list would stay filtered to labels matching
+  // "Active" (hiding "Inactive") the next time this same instance reopens.
+  // Same fix as TagMultiSelect/LocationMultiSelect's own inputValue reset.
+  const [inputValue, setInputValue] = React.useState('');
   const current = byId.get(value);
 
   return (
@@ -52,11 +58,16 @@ export function ComboboxSelect({
       items={items}
       value={value || null}
       onValueChange={(next) => onValueChange(next ?? '')}
+      inputValue={inputValue}
+      onInputValueChange={setInputValue}
       itemToStringLabel={(v) => byId.get(v)?.label ?? v}
       itemToStringValue={(v) => v}
       disabled={disabled}
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) setInputValue('');
+      }}
     >
       {/* Same full-cell overlay pattern as TagMultiSelect — see that
           component for why this needs to be absolute against TableCell
@@ -95,7 +106,7 @@ export function ComboboxSelect({
             </div>
             <Separator />
             <div className="bg-black/5 dark:bg-black/20">
-              <Combobox.Empty className="text-sm text-muted-foreground">
+              <Combobox.Empty className="text-sm text-muted-foreground empty:hidden">
                 <p className="px-3 py-3 text-center">No matches.</p>
               </Combobox.Empty>
               <Combobox.List className="max-h-64 overflow-y-auto p-1">

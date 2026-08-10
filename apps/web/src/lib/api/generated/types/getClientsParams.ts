@@ -5,10 +5,10 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
-import type { GetClientsQuality } from './getClientsQuality';
+import type { GetClientsQualitiesItem } from './getClientsQualitiesItem';
 import type { GetClientsSortBy } from './getClientsSortBy';
 import type { GetClientsSortOrder } from './getClientsSortOrder';
-import type { GetClientsStatus } from './getClientsStatus';
+import type { GetClientsStatusesItem } from './getClientsStatusesItem';
 
 export type GetClientsParams = {
 /**
@@ -32,17 +32,25 @@ sortOrder?: GetClientsSortOrder;
  */
 q?: string;
 /**
- * Filter by status. Defaults to ALL (every status); pass a specific status to narrow.
+ * Filter by status (one or more). Omit for all statuses.
  */
-status?: GetClientsStatus;
+statuses?: GetClientsStatusesItem[];
 /**
  * Filter by industry (contains, case-insensitive)
  */
 industry?: string;
 /**
+ * Filter by industry id(s) (one or more, exact match)
+ */
+industryIds?: string[];
+/**
  * Filter by specialization (contains, case-insensitive)
  */
 specialization?: string;
+/**
+ * Filter by specialization id(s) (one or more, exact match)
+ */
+specializationIds?: string[];
 /**
  * Filter by location name (contains, case-insensitive) — matches any node in the client's market set.
  */
@@ -52,13 +60,13 @@ location?: string;
  */
 locationIds?: string[];
 /**
- * Filter by owning consultant ID (exact match)
+ * Filter by owning consultant ID(s) (one or more, exact match). '' selects unassigned clients.
  */
-consultantId?: string;
+consultantIds?: string[];
 /**
- * Filter by lead quality. Defaults to ALL (every quality); pass a specific value to narrow.
+ * Filter by lead quality (one or more). Omit for all qualities.
  */
-quality?: GetClientsQuality;
+qualities?: GetClientsQualitiesItem[];
 /**
  * Filter by whether the client has any Terms of Business on file. Replaces the old `tobSigned` flag — TOBs are their own one-to-many table now (see /tobs).
  */

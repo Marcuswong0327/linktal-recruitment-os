@@ -45,3 +45,24 @@ export const candidateStatusTriggerClassName: Record<(typeof candidateStatuses)[
   PLACED: 'border-success/30 bg-success/10 text-success',
   UNS: 'border-transparent bg-muted text-muted-foreground',
 };
+
+/** "3mo ago" / "Never" — for `lastContactDate` (resolved live from the latest contact history row; see CandidateEntity.lastContactDate). */
+export function formatRelativeContact(iso: string | null): string {
+  if (!iso) return 'Never';
+  const diffDays = Math.round((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays <= 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  if (diffDays < 30) return `${diffDays}d ago`;
+  const diffMonths = Math.round(diffDays / 30);
+  if (diffMonths < 12) return `${diffMonths}mo ago`;
+  return `${Math.round(diffMonths / 12)}y ago`;
+}
+
+/** Recency color for the last-contacted column — a call list is triage by how cold a candidate's gone, so color carries that meaning directly. */
+export function contactRecencyClassName(iso: string | null): string {
+  if (!iso) return 'text-muted-foreground';
+  const diffDays = (Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24);
+  if (diffDays >= 180) return 'text-destructive';
+  if (diffDays >= 90) return 'text-warning';
+  return 'text-foreground';
+}

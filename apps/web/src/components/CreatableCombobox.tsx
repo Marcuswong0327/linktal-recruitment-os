@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { Combobox } from '@base-ui/react/combobox';
-import { Check, ChevronDown, Plus } from 'lucide-react';
+import { Check, ChevronDown, Plus, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +37,17 @@ interface CreatableComboboxProps {
   variant?: 'input' | 'badge';
   /** Accessible label for the trigger — required (and only used) when `variant="badge"`, same as `ComboboxSelect`'s `title`. */
   title?: string;
+  /**
+   * Shows a small ✕ on the trigger, next to the chevron, once a value is
+   * selected — clears back to '' without opening the popup. Only meaningful
+   * for genuinely optional fields (e.g. Specialization); omit for a required
+   * one (e.g. Industry) where clearing would just reintroduce the validation
+   * error the picker exists to satisfy. 'badge' variant ignores this — its
+   * pill is small enough that a second click target isn't worth it, and
+   * every 'badge' usage so far already has its own dedicated "unset" value
+   * (e.g. Uncategorized) reachable from the list itself.
+   */
+  clearable?: boolean;
 }
 
 /**
@@ -58,6 +69,7 @@ export function CreatableCombobox({
   className,
   variant = 'input',
   title,
+  clearable = false,
 }: CreatableComboboxProps) {
   const byId = React.useMemo(() => new Map(options.map((o) => [o.id, o])), [options]);
   const selected = byId.get(value);
@@ -68,10 +80,15 @@ export function CreatableCombobox({
   // fresh search rather than showing whatever was last typed.
   const [inputValue, setInputValue] = React.useState('');
   const [creating, setCreating] = React.useState(false);
-  // Only actually driven by the 'badge' trigger's full-cell overlay button
-  // below (mirrors ComboboxSelect) — harmless as a controlled prop either
-  // way for the plain 'input' trigger, which keeps toggling itself via its
-  // own Combobox.Trigger click.
+  // Only genuinely needed by the 'badge' trigger's full-cell overlay button
+  // below (mirrors ComboboxSelect), which has to open the popup from an
+  // element other than Combobox.Trigger itself. Only passed to Combobox.Root
+  // as a *controlled* `open` for that variant — controlling it for the plain
+  // 'input' trigger too used to seem harmless (it toggles itself via its own
+  // Combobox.Trigger click regardless), but it isn't: the extra React
+  // state round-trip between that click and the controlled `open` prop
+  // updating lands one render behind Base UI's own position sync, so the
+  // popup would flash at a stale position on first open.
   const [open, setOpen] = React.useState(false);
 
   const trimmed = inputValue.trim();
@@ -112,7 +129,7 @@ export function CreatableCombobox({
       onValueChange={handleSelect}
       inputValue={inputValue}
       onInputValueChange={setInputValue}
-      open={open}
+      open={variant === 'badge' ? open : undefined}
       onOpenChange={(next) => {
         setOpen(next);
         if (next) setInputValue('');
@@ -174,6 +191,31 @@ export function CreatableCombobox({
               }
             </Combobox.Value>
           </span>
+          {clearable && value ? (
+            // role="button", not a nested <button> — this sits inside
+            // Combobox.Trigger's own <button>, and nested interactive
+            // elements break hydration (same reasoning as LocationMultiSelect's
+            // pill removal control).
+            <span
+              role="button"
+              tabIndex={0}
+              aria-label={title ? `Clear ${title.toLowerCase()}` : 'Clear'}
+              onClick={(e) => {
+                e.stopPropagation();
+                onValueChange('');
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onValueChange('');
+                }
+              }}
+              className="cursor-pointer rounded-full p-0.5 text-muted-foreground opacity-70 outline-none hover:opacity-100"
+            >
+              <X className="size-3.5" />
+            </span>
+          ) : null}
           <Combobox.Icon className="text-muted-foreground">
             <ChevronDown className="pointer-events-none size-4 shrink-0" />
           </Combobox.Icon>
@@ -198,7 +240,7 @@ export function CreatableCombobox({
                 className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
               />
             </div>
-            <Combobox.Empty className="px-3 pb-3 text-center text-sm text-muted-foreground">
+            <Combobox.Empty className="px-3 pb-3 text-center text-sm text-muted-foreground empty:hidden">
               No matches — keep typing to add a new value.
             </Combobox.Empty>
             <Combobox.List className="max-h-64 overflow-y-auto p-1 pt-0">

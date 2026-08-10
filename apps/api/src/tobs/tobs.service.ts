@@ -13,15 +13,15 @@ import { QueryTobsDto } from './dto/query-tobs.dto';
 // A TOB has no scope fields of its own — no industry, no location, no
 // consultant — so everything the job-scope check needs comes through the
 // parent Client, and this include is what fetches it. The shape mirrors
-// CLIENT_INCLUDE's scope half exactly (own industry, own market set, and any
-// live stakeholder's coverage), because `tobScope` delegates to `clientScope`
-// and the single-record check has to agree with the list filter.
+// CLIENT_INCLUDE's scope half exactly (own industry, own market set), because
+// `tobScope` delegates to `clientScope` and the single-record check has to
+// agree with the list filter.
 //
-// All four scope-only fields (`industryId`, `consultantId`, `locations`,
-// `stakeholders`) are stripped back out in `toEntity` — never part of the API
-// response. `companyName` and the representative's name survive, resolved to
-// plain strings, since TobEntity documents them as `string | null` rather than
-// the nested objects Prisma would otherwise return.
+// The three scope-only fields (`industryId`, `consultantId`, `locations`) are
+// stripped back out in `toEntity` — never part of the API response.
+// `companyName` and the representative's name survive, resolved to plain
+// strings, since TobEntity documents them as `string | null` rather than the
+// nested objects Prisma would otherwise return.
 const TOB_INCLUDE = {
   client: {
     select: {
@@ -29,10 +29,6 @@ const TOB_INCLUDE = {
       industryId: true,
       consultantId: true,
       locations: { select: { location: { select: { ancestorIds: true } } } },
-      stakeholders: {
-        where: { deletedAt: null },
-        select: { coverage: { select: { location: { select: { ancestorIds: true } } } } },
-      },
     },
   },
   linktalRepresentative: { select: { fullName: true } },
@@ -43,7 +39,6 @@ type TobClient = {
   industryId: string | null;
   consultantId: string | null;
   locations: { location: { ancestorIds: string[] } }[];
-  stakeholders: { coverage: { location: { ancestorIds: string[] } }[] }[];
 };
 
 type TobWithRelations = {
@@ -172,10 +167,7 @@ export class TobsService {
     assertInScope(user, {
       consultantId: client?.consultantId ?? null,
       industryId: client?.industryId ?? null,
-      locationAncestorIds: [
-        ...(client?.locations.flatMap((l) => l.location.ancestorIds) ?? []),
-        ...(client?.stakeholders.flatMap((s) => s.coverage.flatMap((c) => c.location.ancestorIds)) ?? []),
-      ],
+      locationAncestorIds: client?.locations.flatMap((l) => l.location.ancestorIds) ?? [],
     });
   }
 

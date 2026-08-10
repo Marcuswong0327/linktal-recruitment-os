@@ -20,7 +20,7 @@ import { ClientJobResearch, ClientStatus } from '@prisma/client';
  */
 export class JobResearchEntity implements Omit<ClientJobResearch, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'JR-0001' }) displayId!: string;
+  @ApiProperty({ example: 'JR-000001' }) displayId!: string;
   @ApiProperty() clientId!: string;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved client company name' })
   companyName!: string | null;
