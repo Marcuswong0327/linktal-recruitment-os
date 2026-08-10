@@ -17,7 +17,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { DataGrid, type DataGridQuery } from '@/components/DataGrid';
-import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import {
@@ -26,14 +25,11 @@ import {
   getGetCandidatesQueryKey,
   restoreCandidate as restoreCandidateRequest,
   updateCandidate as updateCandidateRequest,
-  useAddCandidateContactHistory,
   useGetCandidates,
 } from '@/lib/api/generated/candidates/candidates';
-import type { ConsultantEntity, CreateCandidateContactHistoryDto, GetCandidatesSortBy, UpdateCandidateDto } from '@/lib/api/generated/types';
-import type { ColumnDef } from '@tanstack/react-table';
-import { candidateFullName, type Candidate, candidateStatuses, candidateStatusLabels, candidateStatusVariants } from './schema';
+import type { ConsultantEntity, GetCandidatesSortBy, UpdateCandidateDto } from '@/lib/api/generated/types';
+import { type Candidate, candidateStatuses, candidateStatusLabels, candidateStatusVariants } from './schema';
 import { candidateColumns } from './columns';
-import { CandidateRowActions } from './CandidateRowActions';
 import { exportCandidatesToExcel } from './exportToExcel';
 import type { useCandidateSearch } from './useCandidateSearch';
 
@@ -55,7 +51,7 @@ export function CandidatesTable({
 }: {
   canCreate?: boolean;
   canDelete?: boolean;
-  /** Gates Log Contact and the bulk status menu — both call candidate:update. A read-only role (viewer) sees the row but not the write affordances. */
+  /** Gates the bulk status menu — calls candidate:update. A read-only role (viewer) sees the row but not the write affordances. */
   canUpdate?: boolean;
   /** Filter/search state lifted into the search-gate parent — shared with its top filter row and Active Filters chips. */
   search: ReturnType<typeof useCandidateSearch>;
@@ -65,35 +61,7 @@ export function CandidatesTable({
   const { data: session } = useSession();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [loggingContactFor, setLoggingContactFor] = React.useState<Candidate | null>(null);
 
-  const columns = React.useMemo<ColumnDef<Candidate>[]>(
-    // Omit the column entirely (not just render it empty) when there's
-    // nothing to put in it — a reserved blank column reads as a layout bug,
-    // not as "you don't have permission for anything here".
-    () =>
-      !canDelete && !canUpdate
-        ? candidateColumns
-        : [
-            ...candidateColumns,
-            {
-              id: 'actions',
-              header: '',
-              size: 88,
-              enableSorting: false,
-              meta: { align: 'center' },
-              cell: ({ row }) => (
-                <CandidateRowActions
-                  candidate={row.original}
-                  canDelete={canDelete}
-                  canUpdate={canUpdate}
-                  onLogContact={setLoggingContactFor}
-                />
-              ),
-            },
-          ],
-    [canDelete, canUpdate],
-  );
   const [page, setPage] = React.useState(1);
   const [selectedCandidates, setSelectedCandidates] = React.useState<Candidate[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
@@ -193,32 +161,6 @@ export function CandidatesTable({
     exportCandidatesToExcel(selectedCandidates, consultantLabelFor);
   }
 
-  const addContactHistory = useAddCandidateContactHistory({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
-        toast.success('Contact logged');
-        setLoggingContactFor(null);
-      },
-      onError: (err) => toast.error(err.message || 'Failed to log contact'),
-    },
-  });
-
-  function handleLogContact(values: LogContactValues) {
-    if (!loggingContactFor) return;
-    // Generated DTO has `notes` as optional (undefined), not nullable — the
-    // sheet emits `null` for "cleared", so build the payload without the key
-    // entirely rather than sending an invalid `null`.
-    addContactHistory.mutate({
-      id: loggingContactFor.id,
-      data: {
-        contactType: values.contactType,
-        contactedAt: values.contactedAt,
-        ...(values.notes ? { notes: values.notes } : {}),
-      } as unknown as CreateCandidateContactHistoryDto,
-    });
-  }
-
   function handleBulkDelete() {
     setDeleteConfirmOpen(false);
     const toDelete = selectedCandidates;
@@ -249,16 +191,16 @@ export function CandidatesTable({
 
   const isConsultant = session?.user?.roleName === 'consultant';
   const scopeGrants =
-    (session?.user?.industryIds?.length ?? 0) + (session?.user?.locationIds?.length ?? 0) + (session?.user?.specializationIds?.length ?? 0);
+    (session?.user?.industryIds?.length ?? 0) +
+    (session?.user?.locationIds?.length ?? 0) +
+    (session?.user?.specializationIds?.length ?? 0);
   const allLoadedRowsSelected = selectedCandidates.length > 0 && selectedCandidates.length === candidates.length;
 
   return (
     <>
       {allLoadedRowsSelected && !selectAllMode && total > candidates.length ? (
         <div className="flex items-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-4 py-2 text-sm">
-          <span>
-            All {candidates.length} loaded so far are selected.
-          </span>
+          <span>All {candidates.length} loaded so far are selected.</span>
           <button
             type="button"
             onClick={handleSelectAllMatching}
@@ -273,7 +215,9 @@ export function CandidatesTable({
       ) : null}
       {selectAllMode ? (
         <div className="flex items-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-4 py-2 text-sm">
-          <span className="font-medium">{selectedCandidates.length.toLocaleString()} candidates selected (every match)</span>
+          <span className="font-medium">
+            {selectedCandidates.length.toLocaleString()} candidates selected (every match)
+          </span>
           <button type="button" onClick={handleClearSelection} className="text-muted-foreground hover:text-foreground">
             Clear selection
           </button>
@@ -281,7 +225,7 @@ export function CandidatesTable({
       ) : null}
 
       <DataGrid
-        columns={columns}
+        columns={candidateColumns}
         data={candidates}
         isLoading={isLoading}
         isFetching={isFetching}
@@ -381,21 +325,13 @@ export function CandidatesTable({
             <Button
               size="lg"
               disabled={true}
-              title={canCreate ? "Coming soon" : "You don't have permission to add candidates"}
+              title={canCreate ? 'Coming soon' : "You don't have permission to add candidates"}
               className="animate-in fade-in-0 duration-200"
             >
               Add Candidate
             </Button>
           )
         }
-      />
-
-      <LogContactSheet
-        open={loggingContactFor !== null}
-        onOpenChange={(open) => !open && setLoggingContactFor(null)}
-        subjectLabel={loggingContactFor ? candidateFullName(loggingContactFor) || 'this candidate' : ''}
-        isSaving={addContactHistory.isPending}
-        onSave={handleLogContact}
       />
     </>
   );
