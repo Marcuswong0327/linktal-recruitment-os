@@ -2,11 +2,14 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
+import { History } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import { ConsultantAvatar } from '@/components/ConsultantCombobox';
 import { ContactMethodsCell } from '@/components/ContactMethodsCell';
+import { LocationBadgeList } from '@/components/LocationBadgeList';
 import { cn } from '@/lib/utils';
-import { CandidateStatusCell } from './StatusCell';
-import { candidateFullName, contactRecencyClassName, formatRelativeContact, type Candidate } from './schema';
+import { contactRecencyClassName, formatRelativeContact, type Candidate } from './schema';
 
 function MutedCell({ value, className }: { value: string | null; className?: string }) {
   return (
@@ -17,28 +20,6 @@ function MutedCell({ value, className }: { value: string | null; className?: str
 }
 
 export const candidateColumns: ColumnDef<Candidate>[] = [
-  {
-    id: 'fullName',
-    // No single "fullName" column server-side to sort by — firstName/
-    // lastName are separate CandidateSortField values.
-    header: 'Name',
-    enableSorting: false,
-    size: 190,
-    cell: ({ row }) => {
-      const name = candidateFullName(row.original) || 'Unnamed candidate';
-      return (
-        <Link
-          href={`/candidates/${row.original.id}`}
-          onClick={(e) => e.stopPropagation()}
-          title={name}
-          className="flex min-w-0 flex-col"
-        >
-          <span className="truncate font-medium text-foreground hover:underline">{name}</span>
-          <span className="font-mono text-[10px] text-muted-foreground">{row.original.displayId}</span>
-        </Link>
-      );
-    },
-  },
   {
     accessorKey: 'jobRoleType',
     header: 'Role Type',
@@ -51,39 +32,55 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     cell: ({ row }) => <MutedCell value={row.original.jobRoleType} className="block truncate" />,
   },
   {
-    id: 'roleAtCompany',
-    header: 'Current Title',
+    id: 'specialization',
+    header: 'Specialization',
+    // Not a CandidateSortField — same reasoning as Role Type. Only tagged
+    // on ~5% of candidates (see CLAUDE.md), so "—" is the common case.
     enableSorting: false,
-    size: 180,
-    // currentRole/currentCompany are only filled on ~23% of candidates —
-    // collapses to nothing rather than two mostly-empty columns.
+    size: 170,
+    cell: ({ row }) => <LocationBadgeList locations={row.original.specializations} />,
+  },
+  {
+    accessorKey: 'location',
+    header: 'Suburb',
+    enableSorting: false,
+    size: 130,
     cell: ({ row }) => {
-      const { currentRole, currentCompany } = row.original;
-      if (!currentRole && !currentCompany) return <span className="text-muted-foreground">—</span>;
+      const { location, locationLevel } = row.original;
+      if (!location) return <span className="text-muted-foreground">—</span>;
+      // A country/state-level record isn't wrong, just coarser than the norm
+      // (most of this dataset is known to CITY level) — flagged so it doesn't
+      // read as more precise than "Suburb" implies.
+      const coarse = locationLevel === 'COUNTRY' || locationLevel === 'STATE';
       return (
-        <span className="flex min-w-0 flex-col" title={[currentRole, currentCompany].filter(Boolean).join(' @ ')}>
-          <span className="truncate">{currentRole || '—'}</span>
-          {currentCompany ? <span className="truncate text-xs text-muted-foreground">{currentCompany}</span> : null}
+        <span className="flex min-w-0 items-center gap-1 text-muted-foreground" title={location}>
+          <span className="truncate">{location}</span>
+          {coarse ? <span className="shrink-0 text-[10px] uppercase opacity-70">{locationLevel}</span> : null}
         </span>
       );
     },
   },
   {
-    id: 'lastContactedAt',
-    header: 'Last Contacted',
+    accessorKey: 'firstName',
+    header: 'First Name',
     enableSorting: true,
-    size: 170,
-    cell: ({ row }) => {
-      const { lastContactDate, lastContactNotes } = row.original;
-      return (
-        <span className="flex min-w-0 flex-col" title={lastContactNotes ?? undefined}>
-          <span className={cn('text-sm', contactRecencyClassName(lastContactDate))}>
-            {formatRelativeContact(lastContactDate)}
-          </span>
-          {lastContactNotes ? <span className="truncate text-xs text-muted-foreground">{lastContactNotes}</span> : null}
-        </span>
-      );
-    },
+    size: 130,
+    cell: ({ row }) => (
+      <span className="truncate font-medium text-foreground" title={row.original.firstName ?? undefined}>
+        {row.original.firstName || '—'}
+      </span>
+    ),
+  },
+  {
+    accessorKey: 'lastName',
+    header: 'Family Name',
+    enableSorting: true,
+    size: 130,
+    cell: ({ row }) => (
+      <span className="truncate font-medium text-foreground" title={row.original.lastName ?? undefined}>
+        {row.original.lastName || '—'}
+      </span>
+    ),
   },
   {
     id: 'contact',
@@ -104,31 +101,69 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     ),
   },
   {
-    accessorKey: 'location',
-    header: 'Location',
+    id: 'notes',
+    header: 'Notes',
+    // Resolved from the latest CandidateContactHistory row, not a
+    // CandidateSortField — same "denormalized, read-only" shape as
+    // lastContactedAt/lastContactedBy below.
     enableSorting: false,
-    size: 130,
+    size: 200,
+    cell: ({ row }) => <MutedCell value={row.original.lastContactNotes} className="block truncate" />,
+  },
+  {
+    id: 'lastContactedAt',
+    header: 'Last Contacted At',
+    enableSorting: true,
+    size: 140,
+    cell: ({ row }) => (
+      <span className={cn('text-sm', contactRecencyClassName(row.original.lastContactDate))}>
+        {formatRelativeContact(row.original.lastContactDate)}
+      </span>
+    ),
+  },
+  {
+    accessorKey: 'lastContactedBy',
+    header: 'Last Contacted By',
+    // Resolved from the latest CandidateContactHistory row, not a real
+    // column on Candidate itself — not a CandidateSortField. Same avatar +
+    // name treatment as Stakeholders' equivalent column.
+    enableSorting: false,
+    size: 160,
     cell: ({ row }) => {
-      const { location, locationLevel } = row.original;
-      if (!location) return <span className="text-muted-foreground">—</span>;
-      // A country/state-level record isn't wrong, just coarser than the norm
-      // (most of this dataset is known to CITY level) — flagged so it doesn't
-      // read as more precise than it is.
-      const coarse = locationLevel === 'COUNTRY' || locationLevel === 'STATE';
+      const { lastContactedById, lastContactedBy } = row.original;
+      if (!lastContactedById) {
+        return <span className="text-muted-foreground">—</span>;
+      }
       return (
-        <span className="flex min-w-0 items-center gap-1 text-muted-foreground" title={location}>
-          <span className="truncate">{location}</span>
-          {coarse ? <span className="shrink-0 text-[10px] uppercase opacity-70">{locationLevel}</span> : null}
-        </span>
+        <div className="flex min-w-0 items-center gap-2">
+          <ConsultantAvatar consultantId={lastContactedById} name={lastContactedBy ?? undefined} size={5} />
+          <span className="truncate text-muted-foreground">{lastContactedBy ?? 'Unknown'}</span>
+        </div>
       );
     },
   },
   {
-    accessorKey: 'status',
-    header: 'Status',
-    enableSorting: true,
-    size: 110,
+    id: 'history',
+    header: '',
+    enableSorting: false,
+    size: 56,
     meta: { align: 'center' },
-    cell: ({ row }) => <CandidateStatusCell candidate={row.original} />,
+    // No API endpoint lists a candidate's full contact history — only the
+    // denormalized "latest contact" fields above. This just opens the
+    // candidate detail page, where the notes timeline and work history live.
+    cell: ({ row }) => (
+      <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
+        <Button
+          variant="ghost"
+          size="icon"
+          nativeButton={false}
+          title="View history"
+          aria-label="View history"
+          render={<Link href={`/candidates/${row.original.id}`} />}
+        >
+          <History className="text-muted-foreground" />
+        </Button>
+      </div>
+    ),
   },
 ];
