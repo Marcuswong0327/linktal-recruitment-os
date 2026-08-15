@@ -10,7 +10,7 @@ import {
   useDroppable,
   type DragEndEvent,
 } from '@dnd-kit/core';
-import { ArrowLeft, GripVertical, MessagesSquare, Plus, Rows3, Trash2 } from 'lucide-react';
+import { ArrowLeft, CornerDownRight, GripVertical, MessagesSquare, Plus, Rows3, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -43,7 +43,12 @@ import {
   useUpdateInterview,
 } from '@/lib/api/generated/interviews/interviews';
 import { useCreatePlacement } from '@/lib/api/generated/placements/placements';
+import {
+  getGetCandidateContactHistoryQueryKey,
+  useAddCandidateContactHistory,
+} from '@/lib/api/generated/candidates/candidates';
 import type {
+  CreateCandidateContactHistoryDto,
   CreatePlacementDtoFeeType,
   InterviewEntityOutcome,
   SubmissionEntityStatus,
@@ -323,6 +328,92 @@ export function PipelineSheetTrigger({ jobOrder }: { jobOrder: JobOrder }) {
   );
 }
 
+/**
+ * Per-round interview notes — a consultant who sat in on this round (with a
+ * client stakeholder) leaves notes here; "Append to screening notes" pulls
+ * that content into a new SCREENING contact-history entry on the candidate,
+ * which the consultant can then edit/refine from the candidate's own page
+ * (distinct from these interview notes, which stay tied to this specific
+ * round and job order).
+ */
+function InterviewRoundNotes({
+  round,
+  candidateId,
+  submissionId,
+}: {
+  round: { id: string; notes: string | null };
+  candidateId: string;
+  submissionId: string;
+}) {
+  const queryClient = useQueryClient();
+  const [notes, setNotes] = React.useState(round.notes ?? '');
+  const isDirty = notes !== (round.notes ?? '');
+
+  const updateInterview = useUpdateInterview({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetInterviewsQueryKey({ submissionId }) });
+        toast.success('Interview notes saved');
+      },
+      onError: (err) => toast.error(err.message || 'Failed to save interview notes'),
+    },
+  });
+
+  const appendToScreeningNotes = useAddCandidateContactHistory({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetCandidateContactHistoryQueryKey(candidateId) });
+        toast.success('Appended to screening notes — refine it from the candidate page');
+      },
+      onError: (err) => toast.error(err.message || 'Failed to append to screening notes'),
+    },
+  });
+
+  function handleAppend() {
+    if (!notes.trim()) return;
+    appendToScreeningNotes.mutate({
+      id: candidateId,
+      data: {
+        contactType: 'meeting',
+        category: 'SCREENING',
+        screeningNotes: notes.trim(),
+      } as unknown as CreateCandidateContactHistoryDto,
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <textarea
+        aria-label="Interview notes"
+        placeholder="Notes from this round…"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        className="min-h-16 w-full rounded-md border border-input bg-transparent px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30"
+      />
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={!notes.trim() || appendToScreeningNotes.isPending}
+          onClick={handleAppend}
+        >
+          <CornerDownRight />
+          Append to screening notes
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          disabled={!isDirty || updateInterview.isPending}
+          onClick={() => updateInterview.mutate({ id: round.id, data: { notes: notes.trim() } })}
+        >
+          {updateInterview.isPending ? 'Saving…' : 'Save notes'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function InterviewRoundsView({
   candidate,
   onBack,
@@ -419,35 +510,42 @@ function InterviewRoundsView({
             {rounds.map((round) => (
               <li
                 key={round.id}
-                className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2"
+                className="flex flex-col gap-2 rounded-md border border-border bg-muted/30 px-3 py-2"
               >
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="truncate text-sm font-medium">{round.roundLabel}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(round.interviewDate).toLocaleDateString()}
-                  </span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <span className="truncate text-sm font-medium">{round.roundLabel}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(round.interviewDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <EnumSelect
+                      value={round.outcome}
+                      onValueChange={(v) =>
+                        updateInterview.mutate({ id: round.id, data: { outcome: v as InterviewEntityOutcome } })
+                      }
+                      options={outcomeOptions}
+                      size="badge"
+                    />
+                    <Badge variant={outcomeVariant[round.outcome]} className="sr-only">
+                      {round.outcome}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setConfirmingDeleteRound({ id: round.id, roundLabel: round.roundLabel })}
+                      aria-label="Remove round"
+                    >
+                      <Trash2 className="text-muted-foreground" />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  <EnumSelect
-                    value={round.outcome}
-                    onValueChange={(v) =>
-                      updateInterview.mutate({ id: round.id, data: { outcome: v as InterviewEntityOutcome } })
-                    }
-                    options={outcomeOptions}
-                    size="badge"
-                  />
-                  <Badge variant={outcomeVariant[round.outcome]} className="sr-only">
-                    {round.outcome}
-                  </Badge>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setConfirmingDeleteRound({ id: round.id, roundLabel: round.roundLabel })}
-                    aria-label="Remove round"
-                  >
-                    <Trash2 className="text-muted-foreground" />
-                  </Button>
-                </div>
+                <InterviewRoundNotes
+                  round={round}
+                  candidateId={candidate.candidateId}
+                  submissionId={candidate.submissionId}
+                />
               </li>
             ))}
           </ul>

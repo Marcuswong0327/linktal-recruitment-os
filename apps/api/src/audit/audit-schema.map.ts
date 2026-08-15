@@ -18,9 +18,9 @@ export type AuditFieldMeta =
  * relations (see the "Logical ref to Consultant.id (no FK)" comments in
  * schema.prisma) — invisible to DMMF by design, so they can't be derived.
  * Verified against every audited model: these two are the only such columns
- * that actually appear on an AUDITED_MODELS entry (CandidateContactHistory's
- * `contactedById` is a real `@relation`, but that model isn't audited at
- * all, so it never reaches this map).
+ * that actually appear on an AUDITED_MODELS entry. (CandidateContactHistory's
+ * `contactedById` is a real `@relation`, so it's already resolved via DMMF,
+ * not this overlay — it needed adding to AUDITED_MODELS itself, not here.)
  */
 const LOGICAL_REFS: Record<string, string> = {
   deletedById: 'Consultant',
@@ -95,6 +95,8 @@ export const LABEL_SPEC: Record<string, LabelSpec> = {
   JobTitle: { delegate: 'jobTitle', fields: ['name'], softDeletable: false },
   JobRoleType: { delegate: 'jobRoleType', fields: ['name'], softDeletable: false },
   StakeholderRoleType: { delegate: 'stakeholderRoleType', fields: ['name'], softDeletable: false },
+  CandidateContactHistory: { delegate: 'candidateContactHistory', fields: ['displayId'], softDeletable: false },
+  StakeholderContactHistory: { delegate: 'stakeholderContactHistory', fields: ['displayId'], softDeletable: false },
 };
 
 /**

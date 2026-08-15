@@ -78,12 +78,6 @@ export class CreateJobOrderDto {
   @Min(1)
   openings?: number;
 
-  @ApiPropertyOptional({ description: 'Number of openings already filled', example: 0, default: 0 })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  filledCount?: number;
-
   @ApiPropertyOptional({ description: 'Job description' })
   @IsOptional()
   @IsString()

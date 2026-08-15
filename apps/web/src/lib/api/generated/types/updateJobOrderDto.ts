@@ -29,8 +29,6 @@ export interface UpdateJobOrderDto {
   estimatedValue?: number;
   /** Number of openings */
   openings?: number;
-  /** Number of openings already filled */
-  filledCount?: number;
   /** Job description */
   description?: string;
   /** Requirements */

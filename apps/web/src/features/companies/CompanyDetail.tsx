@@ -34,7 +34,7 @@ import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import { ConsultantCombobox } from '@/components/ConsultantCombobox';
+import { ConsultantCombobox, useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
@@ -51,6 +51,7 @@ import {
   getGetClientsQueryKey,
   useDeleteClient,
   useGetClient,
+  useGetClientContactHistory,
   useRestoreClient,
   useUpdateClient,
 } from '@/lib/api/generated/clients/clients';
@@ -67,7 +68,15 @@ import {
 import { useGetStakeholders } from '@/lib/api/generated/stakeholders/stakeholders';
 import { getGetTobsQueryKey, useCreateTob, useGetTobs } from '@/lib/api/generated/tobs/tobs';
 import type { ClientEntity, CreateTobDto, UpdateClientDto } from '@/lib/api/generated/types';
-import { formatDate, qualityOptions, statusOptions, type ClientQuality, type ClientStatus } from './schema';
+import { qualityOptions, statusOptions, type ClientQuality, type ClientStatus } from './schema';
+
+const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
 
 function initials(name: string) {
   if (!name) return '?';
@@ -206,6 +215,10 @@ function CompanyEditForm({
 
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
+  const { labelFor: consultantLabelFor } = useConsultantLookup(consultants);
+
+  const { data: contactHistoryData } = useGetClientContactHistory(company.id);
+  const contactHistory = contactHistoryData?.status === 200 ? contactHistoryData.data : [];
 
   const updateCompany = useUpdateClient({
     mutation: {
@@ -554,30 +567,33 @@ function CompanyEditForm({
           <div className="flex flex-col gap-5">
             <Card>
               <CardHeader className="border-b">
-                <CardTitle>Last contact</CardTitle>
-                <CardDescription>Most recent logged contact, across all stakeholders.</CardDescription>
+                <CardTitle>Contact history</CardTitle>
+                <CardDescription>Every logged contact, across all of this company's stakeholders.</CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col gap-3 text-sm">
-                {company.lastContactedAt ? (
-                  <>
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">When</span>
-                      <span>{formatDate(company.lastContactedAt)}</span>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">Method</span>
-                      <span>{company.lastContactType ?? '—'}</span>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">By</span>
-                      <span>{company.lastContactedBy ?? '—'}</span>
-                    </div>
-                    {company.lastContactNotes ? (
-                      <p className="rounded-md bg-muted/50 p-2 text-muted-foreground">{company.lastContactNotes}</p>
-                    ) : null}
-                  </>
+              <CardContent className="flex flex-col gap-3">
+                {contactHistory.length > 0 ? (
+                  <ul className="flex max-h-96 flex-col gap-3 overflow-auto">
+                    {contactHistory.map((row) => (
+                      <li key={row.id} className="flex flex-col gap-1 rounded-md border border-border bg-muted/30 px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-sm font-medium">{row.stakeholderName}</span>
+                          {row.category ? (
+                            <Badge variant="muted" className="shrink-0">
+                              {row.category}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        {row.notes ? <p className="text-sm whitespace-pre-wrap text-muted-foreground">{row.notes}</p> : null}
+                        <span className="text-xs text-muted-foreground">
+                          {row.contactedById ? consultantLabelFor(row.contactedById) : 'Imported'} ·{' '}
+                          {contactDateFormatter.format(new Date(row.contactedAt))}
+                          {row.contactType ? ` · ${row.contactType}` : ''}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 ) : (
-                  <p className="text-muted-foreground">No contact logged yet.</p>
+                  <p className="text-sm text-muted-foreground">No contact logged yet.</p>
                 )}
               </CardContent>
             </Card>

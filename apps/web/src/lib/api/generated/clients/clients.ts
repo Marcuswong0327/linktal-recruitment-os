@@ -25,6 +25,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ClientContactHistoryEntity,
   ClientEntity,
   CreateClientDto,
   ErrorResponse,
@@ -980,7 +981,136 @@ export const useDeleteClient = <TError = ErrorResponse,
       > => {
       return useMutation(getDeleteClientMutationOptions(options), queryClient);
     }
-    export type restoreClientResponse201 = {
+    export type getClientContactHistoryResponse200 = {
+  data: ClientContactHistoryEntity[]
+  status: 200
+}
+
+export type getClientContactHistoryResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getClientContactHistoryResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type getClientContactHistoryResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getClientContactHistoryResponseSuccess = (getClientContactHistoryResponse200) & {
+  headers: Headers;
+};
+export type getClientContactHistoryResponseError = (getClientContactHistoryResponse400 | getClientContactHistoryResponse404 | getClientContactHistoryResponse500) & {
+  headers: Headers;
+};
+
+export type getClientContactHistoryResponse = (getClientContactHistoryResponseSuccess | getClientContactHistoryResponseError)
+
+export const getGetClientContactHistoryUrl = (id: string,) => {
+
+
+
+
+  return `/clients/${id}/contact-history`
+}
+
+/**
+ * @summary Every logged contact across this client's stakeholders, newest first
+ */
+export const getClientContactHistory = async (id: string, options?: RequestInit): Promise<getClientContactHistoryResponse> => {
+
+  return customFetch<getClientContactHistoryResponse>(getGetClientContactHistoryUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClientContactHistoryQueryKey = (id: string,) => {
+    return [
+    `/clients/${id}/contact-history`
+    ] as const;
+    }
+
+
+export const getGetClientContactHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClientContactHistoryQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientContactHistory>>> = ({ signal }) => getClientContactHistory(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetClientContactHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getClientContactHistory>>>
+export type GetClientContactHistoryQueryError = ErrorResponse
+
+
+export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getClientContactHistory>>,
+          TError,
+          Awaited<ReturnType<typeof getClientContactHistory>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getClientContactHistory>>,
+          TError,
+          Awaited<ReturnType<typeof getClientContactHistory>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Every logged contact across this client's stakeholders, newest first
+ */
+
+export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetClientContactHistoryQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type restoreClientResponse201 = {
   data: ClientEntity
   status: 201
 }

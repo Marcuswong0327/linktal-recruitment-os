@@ -1362,247 +1362,6 @@
         ]
       }
     },
-    "/candidates/{id}/notes": {
-      "post": {
-        "operationId": "addCandidateNote",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddCandidateNoteDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Candidate updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CandidateEntity"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Append a note to a candidate's timeline",
-        "tags": [
-          "Candidates"
-        ]
-      }
-    },
-    "/candidates/{id}/notes/{noteId}": {
-      "patch": {
-        "operationId": "updateCandidateNote",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "noteId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateCandidateNoteDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Candidate updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CandidateEntity"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Edit one note in a candidate's timeline (author or admin only)",
-        "tags": [
-          "Candidates"
-        ]
-      },
-      "delete": {
-        "operationId": "deleteCandidateNote",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "noteId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "expectedVersion",
-            "required": false,
-            "in": "query",
-            "description": "Optimistic concurrency check: the note's own `editedAt ?? timestamp` as last seen by the caller. If it no longer matches, the note was changed by someone else in the meantime and the request is rejected with 409.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Candidate updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CandidateEntity"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Remove one note from a candidate's timeline (author or admin only)",
-        "tags": [
-          "Candidates"
-        ]
-      }
-    },
     "/candidates/{id}/restore": {
       "post": {
         "operationId": "restoreCandidate",
@@ -1729,6 +1488,73 @@
       }
     },
     "/candidates/{id}/contact-history": {
+      "get": {
+        "operationId": "getCandidateContactHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contact history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CandidateContactHistoryEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "This candidate's full logged-contact history, newest first",
+        "tags": [
+          "Candidates"
+        ]
+      },
       "post": {
         "operationId": "addCandidateContactHistory",
         "parameters": [
@@ -1804,6 +1630,90 @@
         ]
       }
     },
+    "/candidates/{id}/contact-history/{contactHistoryId}": {
+      "patch": {
+        "operationId": "updateCandidateContactHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contactHistoryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCandidateContactHistoryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contact history updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateContactHistoryEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edit a SCREENING contact's screeningNotes (author or admin only) — every other field is immutable",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
     "/audit-logs": {
       "get": {
         "operationId": "getAuditLogs",
@@ -1871,7 +1781,8 @@
                 "SOFT_DELETE",
                 "RESTORE",
                 "DEACTIVATE",
-                "HARD_DELETE"
+                "HARD_DELETE",
+                "EXPORT"
               ]
             }
           },
@@ -2723,6 +2634,75 @@
           }
         ],
         "summary": "Soft-delete a client (recoverable, cascades)",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/{id}/contact-history": {
+      "get": {
+        "operationId": "getClientContactHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contact history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientContactHistoryEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every logged contact across this client's stakeholders, newest first",
         "tags": [
           "Clients"
         ]
@@ -9296,47 +9276,6 @@
           "user"
         ]
       },
-      "CandidateNoteDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable id, unique within this candidate’s notes (for edit/delete)"
-          },
-          "content": {
-            "type": "string",
-            "example": "Called to confirm availability for the panel interview."
-          },
-          "timestamp": {
-            "type": "string",
-            "description": "ISO 8601 timestamp",
-            "example": "2026-07-16T18:58:34.123Z"
-          },
-          "by": {
-            "type": "string",
-            "nullable": true,
-            "description": "Authoring consultant ID"
-          },
-          "editedAt": {
-            "type": "string",
-            "nullable": true,
-            "description": "ISO 8601 timestamp of the last edit, null if never edited"
-          },
-          "editedBy": {
-            "type": "string",
-            "nullable": true,
-            "description": "Consultant ID who made the last edit, null if never edited (may differ from `by`, e.g. an admin editing someone else’s note)"
-          }
-        },
-        "required": [
-          "id",
-          "content",
-          "timestamp",
-          "by",
-          "editedAt",
-          "editedBy"
-        ]
-      },
       "CandidateEntity": {
         "type": "object",
         "properties": {
@@ -9461,13 +9400,6 @@
               "UNS"
             ]
           },
-          "notes": {
-            "nullable": true,
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CandidateNoteDto"
-            }
-          },
           "lastContactedAt": {
             "format": "date-time",
             "type": "string",
@@ -9486,6 +9418,10 @@
           },
           "lastContactCategory": {
             "type": "string",
+            "enum": [
+              "SCREENING",
+              "OUTREACH"
+            ],
             "nullable": true,
             "description": "Category of the most recent contact — distinct from lastContactType, which is the channel"
           },
@@ -9538,7 +9474,6 @@
           "specializations",
           "specializationIds",
           "status",
-          "notes",
           "lastContactedAt",
           "lastContactedById",
           "lastContactType",
@@ -9897,34 +9832,118 @@
           }
         }
       },
-      "AddCandidateNoteDto": {
+      "CandidateContactHistoryEntity": {
         "type": "object",
         "properties": {
-          "content": {
-            "type": "string",
-            "description": "Note content",
-            "example": "Called to confirm availability for the panel interview."
-          }
-        },
-        "required": [
-          "content"
-        ]
-      },
-      "UpdateCandidateNoteDto": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "string",
-            "description": "New note content",
-            "example": "Called to confirm availability for the panel interview."
+          "id": {
+            "type": "string"
           },
-          "expectedVersion": {
+          "displayId": {
             "type": "string",
-            "description": "Optimistic concurrency check: the note's own `editedAt ?? timestamp` as last seen by the caller. If it no longer matches, the note was changed by someone else in the meantime and the request is rejected with 409."
+            "example": "CDN-000001"
+          },
+          "candidateId": {
+            "type": "string"
+          },
+          "contactType": {
+            "type": "string",
+            "nullable": true,
+            "example": "call",
+            "description": "Channel: email, call, meeting, linkedin"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "SCREENING",
+              "OUTREACH"
+            ],
+            "description": "Kind of note — distinct from contactType, which is the channel."
+          },
+          "contactedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant who made this contact"
+          },
+          "outreachChannel": {
+            "type": "string",
+            "enum": [
+              "SMS",
+              "EMAIL"
+            ],
+            "nullable": true,
+            "description": "Which channel this outreach used — set only when category is OUTREACH."
+          },
+          "outreachCampaignNotes": {
+            "type": "string",
+            "nullable": true,
+            "description": "Free-text campaign context — filled for OUTREACH entries."
+          },
+          "screeningNotes": {
+            "type": "string",
+            "nullable": true,
+            "description": "The screening call content — filled for SCREENING entries."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COLD",
+              "WARM",
+              "PLACED",
+              "UNS"
+            ],
+            "description": "Snapshot of the candidate's status at the time of this contact."
+          },
+          "suburb": {
+            "type": "string",
+            "nullable": true
+          },
+          "currentSalary": {
+            "type": "string",
+            "nullable": true,
+            "description": "Free text, not a number — the source records values like \"35 per hour\"."
+          },
+          "expectedSalary": {
+            "type": "string",
+            "nullable": true,
+            "description": "Free text, e.g. \"55-60\"."
+          },
+          "contactedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "editedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "Set only when screeningNotes has been edited after creation."
+          },
+          "editedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Who made the last edit — may differ from contactedById."
           }
         },
         "required": [
-          "content"
+          "id",
+          "displayId",
+          "candidateId",
+          "contactType",
+          "category",
+          "contactedById",
+          "outreachChannel",
+          "outreachCampaignNotes",
+          "screeningNotes",
+          "status",
+          "suburb",
+          "currentSalary",
+          "expectedSalary",
+          "contactedAt",
+          "createdAt",
+          "editedAt",
+          "editedById"
         ]
       },
       "CreateCandidateContactHistoryDto": {
@@ -9944,15 +9963,26 @@
           "category": {
             "type": "string",
             "description": "Kind of note — distinct from contactType, which is the channel",
-            "example": "Detailed Screening Notes"
+            "enum": [
+              "SCREENING",
+              "OUTREACH"
+            ]
           },
-          "conversationSummary": {
+          "screeningNotes": {
             "type": "string",
-            "description": "The screening call content"
+            "description": "The screening call content — set when category is SCREENING"
           },
           "outreachCampaignNotes": {
             "type": "string",
-            "description": "Notes for an outreach campaign entry"
+            "description": "Free-text campaign context (e.g. which job/campaign) — set when category is OUTREACH"
+          },
+          "outreachChannel": {
+            "type": "string",
+            "description": "Which channel this outreach used — set when category is OUTREACH",
+            "enum": [
+              "SMS",
+              "EMAIL"
+            ]
           },
           "status": {
             "type": "string",
@@ -9986,97 +10016,24 @@
           }
         },
         "required": [
-          "contactType"
+          "contactType",
+          "category"
         ]
       },
-      "CandidateContactHistoryEntity": {
+      "UpdateCandidateContactHistoryDto": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
-          "displayId": {
+          "screeningNotes": {
             "type": "string",
-            "example": "CDN-000001"
+            "description": "New screening notes content"
           },
-          "candidateId": {
-            "type": "string"
-          },
-          "contactType": {
+          "expectedVersion": {
             "type": "string",
-            "nullable": true,
-            "example": "call",
-            "description": "Channel: email, call, meeting, linkedin"
-          },
-          "category": {
-            "type": "string",
-            "nullable": true,
-            "example": "Detailed Screening Notes",
-            "description": "Kind of note — distinct from contactType, which is the channel."
-          },
-          "contactedById": {
-            "type": "string",
-            "nullable": true,
-            "description": "Consultant who made this contact"
-          },
-          "conversationSummary": {
-            "type": "string",
-            "nullable": true,
-            "description": "The screening call content."
-          },
-          "outreachCampaignNotes": {
-            "type": "string",
-            "nullable": true,
-            "description": "Filled for outreach campaign entries."
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "COLD",
-              "WARM",
-              "PLACED",
-              "UNS"
-            ],
-            "description": "Snapshot of the candidate's status at the time of this contact."
-          },
-          "suburb": {
-            "type": "string",
-            "nullable": true
-          },
-          "currentSalary": {
-            "type": "string",
-            "nullable": true,
-            "description": "Free text, not a number — the source records values like \"35 per hour\"."
-          },
-          "expectedSalary": {
-            "type": "string",
-            "nullable": true,
-            "description": "Free text, e.g. \"55-60\"."
-          },
-          "contactedAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
+            "description": "Optimistic concurrency check: the row's own `editedAt ?? createdAt` (ISO 8601) as last seen by the caller. If it no longer matches, the row was changed by someone else in the meantime and the request is rejected with 409."
           }
         },
         "required": [
-          "id",
-          "displayId",
-          "candidateId",
-          "contactType",
-          "category",
-          "contactedById",
-          "conversationSummary",
-          "outreachCampaignNotes",
-          "status",
-          "suburb",
-          "currentSalary",
-          "expectedSalary",
-          "contactedAt",
-          "createdAt"
+          "screeningNotes"
         ]
       },
       "ResolvedValue": {
@@ -10626,6 +10583,66 @@
             "example": "MEDIUM"
           }
         }
+      },
+      "ClientContactHistoryEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayId": {
+            "type": "string",
+            "example": "CN-000001"
+          },
+          "stakeholderId": {
+            "type": "string"
+          },
+          "stakeholderName": {
+            "type": "string",
+            "description": "Which stakeholder this contact was with"
+          },
+          "contactType": {
+            "type": "string",
+            "nullable": true,
+            "example": "call",
+            "description": "Channel: email, call, meeting, linkedin"
+          },
+          "category": {
+            "type": "string",
+            "nullable": true,
+            "example": "Detailed Brief Notes",
+            "description": "Kind of note — distinct from contactType, which is the channel."
+          },
+          "contactedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant who made this contact"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "displayId",
+          "stakeholderId",
+          "stakeholderName",
+          "contactType",
+          "category",
+          "contactedById",
+          "notes",
+          "contactedAt",
+          "createdAt"
+        ]
       },
       "StakeholderEntity": {
         "type": "object",
@@ -11640,12 +11657,6 @@
             "example": 1,
             "default": 1
           },
-          "filledCount": {
-            "type": "number",
-            "description": "Number of openings already filled",
-            "example": 0,
-            "default": 0
-          },
           "description": {
             "type": "string",
             "description": "Job description"
@@ -11739,12 +11750,6 @@
             "description": "Number of openings",
             "example": 1,
             "default": 1
-          },
-          "filledCount": {
-            "type": "number",
-            "description": "Number of openings already filled",
-            "example": 0,
-            "default": 0
           },
           "description": {
             "type": "string",

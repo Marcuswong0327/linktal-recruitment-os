@@ -113,7 +113,6 @@ function toPatch(values: {
   salaryMax: string;
   salaryCurrency: string;
   openings: string;
-  filledCount: string;
   description: string;
   requirements: string;
 }) {
@@ -127,7 +126,6 @@ function toPatch(values: {
     salaryMax: values.salaryMax === '' ? null : Number(values.salaryMax),
     salaryCurrency: values.salaryCurrency || null,
     openings: Number(values.openings),
-    filledCount: Number(values.filledCount),
     description: values.description || null,
     requirements: values.requirements || null,
   } as unknown as UpdateJobOrderDto;
@@ -166,7 +164,6 @@ function JobOrderEditForm({
   const [salaryMax, setSalaryMax] = React.useState(jobOrder.salaryMax != null ? String(jobOrder.salaryMax) : '');
   const [salaryCurrency, setSalaryCurrency] = React.useState(jobOrder.salaryCurrency ?? '');
   const [openings, setOpenings] = React.useState(String(jobOrder.openings));
-  const [filledCount, setFilledCount] = React.useState(String(jobOrder.filledCount));
   const [description, setDescription] = React.useState(jobOrder.description ?? '');
   const [requirements, setRequirements] = React.useState(jobOrder.requirements ?? '');
 
@@ -184,7 +181,6 @@ function JobOrderEditForm({
     salaryMax !== (jobOrder.salaryMax != null ? String(jobOrder.salaryMax) : '') ||
     salaryCurrency !== (jobOrder.salaryCurrency ?? '') ||
     openings !== String(jobOrder.openings) ||
-    filledCount !== String(jobOrder.filledCount) ||
     description !== (jobOrder.description ?? '') ||
     requirements !== (jobOrder.requirements ?? '');
 
@@ -255,7 +251,6 @@ function JobOrderEditForm({
             salaryMax,
             salaryCurrency,
             openings,
-            filledCount,
             description,
             requirements,
           }),
@@ -438,13 +433,12 @@ function JobOrderEditForm({
                   />
                 </FormField>
                 <FormField label="Filled" htmlFor="filledCount">
-                  <Input
-                    id="filledCount"
-                    type="number"
-                    min={0}
-                    value={filledCount}
-                    onChange={(e) => setFilledCount(e.target.value)}
-                  />
+                  {/* Derived from actual placements (see PlacementsService), not
+                      hand-editable — the two write paths used to be able to
+                      drift out of sync. */}
+                  <p id="filledCount" className="flex h-9 items-center text-sm text-muted-foreground">
+                    {jobOrder.filledCount}
+                  </p>
                 </FormField>
               </CardContent>
             </Card>

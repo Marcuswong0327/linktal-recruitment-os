@@ -22,11 +22,7 @@ import { QueryCandidateFacetsDto } from './dto/query-candidate-facets.dto';
 import { ExportCandidatesDto } from './dto/export-candidates.dto';
 import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
 import { XLSX_CONTENT_TYPE, exportFilename } from '../common/xlsx-export';
-import {
-  AddCandidateNoteDto,
-  DeleteCandidateNoteQueryDto,
-  UpdateCandidateNoteDto,
-} from './dto/candidate-note.dto';
+import { UpdateCandidateContactHistoryDto } from './dto/update-candidate-contact-history.dto';
 import { CandidateEntity } from './entities/candidate.entity';
 import { PaginatedCandidatesEntity } from './entities/paginated-candidates.entity';
 import { CandidateContactHistoryEntity } from './entities/candidate-contact-history.entity';
@@ -144,46 +140,6 @@ export class CandidatesController {
     return this.candidates.update(id, dto, user);
   }
 
-  @Post(':id/notes')
-  @RequirePermission('candidate', 'update')
-  @ApiOperation({ operationId: 'addCandidateNote', summary: "Append a note to a candidate's timeline" })
-  @ApiResponse({ status: 201, description: 'Candidate updated', type: CandidateEntity })
-  addNote(@Param('id') id: string, @Body() dto: AddCandidateNoteDto, @CurrentUser() user: AuthUser) {
-    return this.candidates.addNote(id, dto, user);
-  }
-
-  @Patch(':id/notes/:noteId')
-  @RequirePermission('candidate', 'update')
-  @ApiOperation({
-    operationId: 'updateCandidateNote',
-    summary: "Edit one note in a candidate's timeline (author or admin only)",
-  })
-  @ApiResponse({ status: 200, description: 'Candidate updated', type: CandidateEntity })
-  updateNote(
-    @Param('id') id: string,
-    @Param('noteId') noteId: string,
-    @Body() dto: UpdateCandidateNoteDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.candidates.updateNote(id, noteId, dto, user);
-  }
-
-  @Delete(':id/notes/:noteId')
-  @RequirePermission('candidate', 'update')
-  @ApiOperation({
-    operationId: 'deleteCandidateNote',
-    summary: "Remove one note from a candidate's timeline (author or admin only)",
-  })
-  @ApiResponse({ status: 200, description: 'Candidate updated', type: CandidateEntity })
-  deleteNote(
-    @Param('id') id: string,
-    @Param('noteId') noteId: string,
-    @Query() query: DeleteCandidateNoteQueryDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.candidates.deleteNote(id, noteId, user, query.expectedVersion);
-  }
-
   @Delete(':id')
   @HttpCode(204)
   @RequirePermission('candidate', 'delete')
@@ -220,6 +176,17 @@ export class CandidatesController {
     return this.candidates.purge(id);
   }
 
+  @Get(':id/contact-history')
+  @RequirePermission('candidate', 'read')
+  @ApiOperation({
+    operationId: 'getCandidateContactHistory',
+    summary: "This candidate's full logged-contact history, newest first",
+  })
+  @ApiResponse({ status: 200, description: 'Contact history', type: CandidateContactHistoryEntity, isArray: true })
+  listContactHistory(@Param('id') id: string) {
+    return this.candidates.listContactHistory(id);
+  }
+
   @Post(':id/contact-history')
   @RequirePermission('candidate', 'update')
   @ApiOperation({
@@ -233,5 +200,21 @@ export class CandidatesController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.candidates.addContactHistory(id, dto, user.consultantId);
+  }
+
+  @Patch(':id/contact-history/:contactHistoryId')
+  @RequirePermission('candidate', 'update')
+  @ApiOperation({
+    operationId: 'updateCandidateContactHistory',
+    summary: "Edit a SCREENING contact's screeningNotes (author or admin only) — every other field is immutable",
+  })
+  @ApiResponse({ status: 200, description: 'Contact history updated', type: CandidateContactHistoryEntity })
+  updateContactHistory(
+    @Param('id') id: string,
+    @Param('contactHistoryId') contactHistoryId: string,
+    @Body() dto: UpdateCandidateContactHistoryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.candidates.updateContactHistory(id, contactHistoryId, dto, user);
   }
 }

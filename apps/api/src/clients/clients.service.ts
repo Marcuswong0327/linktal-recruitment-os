@@ -11,6 +11,7 @@ import { UpdateClientDto } from './dto/update-client.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
 import { ExportClientsDto } from './dto/export-clients.dto';
 import { buildWorkbook, formatExportDate, resolveTimeZone, ExportColumn } from '../common/xlsx-export';
+import { logExport } from '../common/audit-export';
 import { clientStatusLabels, clientQualityLabels } from '../common/export-labels';
 
 /** The subset of QueryClientsDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination/sort but still satisfies this structurally. */
@@ -314,6 +315,8 @@ export class ClientsService {
     const where = this.buildWhere(query, user);
     const orderBy = this.buildOrderBy(query.sortBy, query.sortOrder);
     const clients = await this.prisma.client.findMany({ where, orderBy, include: CLIENT_INCLUDE });
+    const { timezone: _timezone, ...filters } = query;
+    await logExport(this.base, 'Client', { count: clients.length, filters });
     return this.buildExportWorkbook(clients.map(toEntity), query.timezone);
   }
 
@@ -322,6 +325,7 @@ export class ClientsService {
     const and: Prisma.ClientWhereInput[] = [{ id: { in: ids } }];
     if (isScoped(user)) and.push(clientScope(user));
     const clients = await this.prisma.client.findMany({ where: { AND: and }, include: CLIENT_INCLUDE });
+    await logExport(this.base, 'Client', { count: clients.length, requestedIds: ids });
     return this.buildExportWorkbook(clients.map(toEntity), timezone);
   }
 
@@ -380,6 +384,24 @@ export class ClientsService {
       throw new NotFoundException(`Client ${displayId} not found`);
     }
     return toEntity(client);
+  }
+
+  /**
+   * A client has no contact history of its own (see ClientContactHistoryEntity's
+   * doc) — this aggregates every non-deleted stakeholder's contact history at
+   * this client into one newest-first list, flattened with which stakeholder
+   * each row was actually with.
+   */
+  async listContactHistory(clientId: string) {
+    const rows = await this.prisma.stakeholderContactHistory.findMany({
+      where: { stakeholder: { clientId, deletedAt: null } },
+      include: { stakeholder: { select: { firstName: true, lastName: true } } },
+      orderBy: { contactedAt: 'desc' },
+    });
+    return rows.map(({ stakeholder, ...rest }) => ({
+      ...rest,
+      stakeholderName: [stakeholder.firstName, stakeholder.lastName].filter(Boolean).join(' ') || 'Unnamed contact',
+    }));
   }
 
   async create(dto: CreateClientDto, _user: AuthUser) {

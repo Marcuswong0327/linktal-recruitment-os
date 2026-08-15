@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CandidateStatus, PlacementStatus, SubmissionStatus } from '@prisma/client';
 import { CandidatesService } from './candidates.service';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
@@ -452,5 +452,105 @@ describe('CandidatesService.update', () => {
       deleteMany: {},
       create: [{ specializationId: 'spec1' }],
     });
+  });
+});
+
+describe('CandidatesService.updateContactHistory', () => {
+  function setup(existing: unknown) {
+    const update = jest.fn().mockResolvedValue({ id: 'ch1', screeningNotes: 'updated' });
+    const prisma = { candidateContactHistory: { update } };
+    const base = { candidateContactHistory: { findUnique: jest.fn().mockResolvedValue(existing) } };
+    const service = new CandidatesService(
+      prisma as unknown as ExtendedPrismaClient,
+      base as unknown as PrismaService,
+    );
+    return { prisma, base, service, update };
+  }
+
+  const screeningRow = {
+    id: 'ch1',
+    candidateId: 'cand1',
+    category: 'SCREENING' as const,
+    contactedById: 'me',
+    editedAt: null,
+    createdAt: new Date('2026-08-01T00:00:00.000Z'),
+  };
+
+  it('updates screeningNotes and stamps editedAt/editedById on a SCREENING row', async () => {
+    const { service, update } = setup(screeningRow);
+    await service.updateContactHistory('cand1', 'ch1', { screeningNotes: 'new content' }, makeUser({ consultantId: 'me' }));
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][0]).toMatchObject({
+      where: { id: 'ch1' },
+      data: expect.objectContaining({ screeningNotes: 'new content', editedById: 'me' }),
+    });
+  });
+
+  it('rejects editing a non-SCREENING (OUTREACH) row', async () => {
+    const { service } = setup({ ...screeningRow, category: 'OUTREACH' });
+    await expect(
+      service.updateContactHistory('cand1', 'ch1', { screeningNotes: 'x' }, makeUser({ consultantId: 'me' })),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('404s when the row does not exist', async () => {
+    const { service } = setup(null);
+    await expect(
+      service.updateContactHistory('cand1', 'missing', { screeningNotes: 'x' }, makeUser()),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('404s when the row belongs to a different candidate', async () => {
+    const { service } = setup(screeningRow);
+    await expect(
+      service.updateContactHistory('some-other-candidate', 'ch1', { screeningNotes: 'x' }, makeUser()),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("rejects an edit from someone other than the row's author or an admin", async () => {
+    const { service } = setup(screeningRow);
+    await expect(
+      service.updateContactHistory(
+        'cand1',
+        'ch1',
+        { screeningNotes: 'x' },
+        makeUser({ consultantId: 'someone-else', roleName: 'consultant' }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('lets an admin edit a row authored by someone else', async () => {
+    const { service, update } = setup(screeningRow);
+    await service.updateContactHistory(
+      'cand1',
+      'ch1',
+      { screeningNotes: 'x' },
+      makeUser({ consultantId: 'someone-else', roleName: 'admin' }),
+    );
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a stale edit whose expectedVersion no longer matches', async () => {
+    const { service } = setup(screeningRow);
+    await expect(
+      service.updateContactHistory(
+        'cand1',
+        'ch1',
+        { screeningNotes: 'x', expectedVersion: '2020-01-01T00:00:00.000Z' },
+        makeUser({ consultantId: 'me' }),
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('accepts an edit whose expectedVersion matches editedAt ?? createdAt', async () => {
+    const { service, update } = setup(screeningRow);
+    await service.updateContactHistory(
+      'cand1',
+      'ch1',
+      { screeningNotes: 'x', expectedVersion: screeningRow.createdAt.toISOString() },
+      makeUser({ consultantId: 'me' }),
+    );
+    expect(update).toHaveBeenCalledTimes(1);
   });
 });

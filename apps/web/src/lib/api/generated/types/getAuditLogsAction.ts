@@ -16,4 +16,5 @@ export const GetAuditLogsAction = {
   RESTORE: 'RESTORE',
   DEACTIVATE: 'DEACTIVATE',
   HARD_DELETE: 'HARD_DELETE',
+  EXPORT: 'EXPORT',
 } as const;

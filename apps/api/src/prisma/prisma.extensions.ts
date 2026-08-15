@@ -41,6 +41,11 @@ const AUDITED_MODELS = new Set([
   'Permission',
   'ConsultantIndustry',
   'JobOrderConsultant',
+  // Append-only contact-history logs — no delete endpoint on either, so
+  // neither belongs in SOFT_DELETE_MODELS, but every create/update still
+  // needs a paper trail like every other notes-bearing entity already has.
+  'CandidateContactHistory',
+  'StakeholderContactHistory',
 ]);
 
 /**

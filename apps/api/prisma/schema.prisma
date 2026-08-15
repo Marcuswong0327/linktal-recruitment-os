@@ -56,6 +56,24 @@ enum JobOrderStatus {
   ON_HOLD
 }
 
+// What kind of contact this was — screening (a pre-screening call/session
+// with the candidate) vs. outreach (a campaign touch). Previously a free
+// string ("Detailed Screening Notes" / "Outreach Campaign History") with no
+// enforcement; the channel distinction (SMS/email) used to be smuggled into
+// this same string ("Outreached Campaign - SMS") rather than living on its
+// own field — see OutreachChannel below.
+enum ContactCategory {
+  SCREENING
+  OUTREACH
+}
+
+// Which channel an OUTREACH-category contact used. Only two today; more
+// will be added as new campaign channels come online.
+enum OutreachChannel {
+  SMS
+  EMAIL
+}
+
 // Same declaration-order trick as ClientQuality (see its comment above) —
 // LOW < MEDIUM < HIGH lets `ORDER BY quality` come out meaningfully sorted.
 enum JobOrderQuality {
@@ -711,7 +729,6 @@ model Candidate {
   workHistory     Json? // JSONB: [{company, role, period}] — consolidated timeline replacing the sheet's separate "Previous Company 1/2", "Previous Role 1/2" columns. `period` is free text ("2020 - 2021 (1 year)"); the source never stores parseable dates.
 
   status CandidateStatus @default(COLD)
-  notes  Json? // JSONB: [{id, content, timestamp, by, editedAt, editedBy}] — internal note timeline, newest last; edit/delete restricted to the note's author (or an admin).
 
   lastContactedAt   DateTime? // Denormalized: max(CandidateContactHistory.contactedAt).
   lastContactedById String? // Logical ref to Consultant.id (no FK) — denormalized, mirrors lastContactedAt.
@@ -766,15 +783,19 @@ model CandidateContactHistory {
   candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
   contactType   String? // Channel: email, call, meeting, linkedin
-  category      String? // "Detailed Screening Notes" or "Outreach Campaign History"
+  category      ContactCategory // SCREENING or OUTREACH.
   contactedById String? // Consultant who made this specific contact.
   contactedBy   Consultant? @relation(fields: [contactedById], references: [id], onDelete: SetNull)
   contactedAt   DateTime    @default(now())
 
-  outreachCampaignNotes String? // Filled when category is "Outreach Campaign History".
-  conversationSummary   String? // Filled when category is "Detailed Screening Notes" — the actual screening call content.
+  outreachChannel       OutreachChannel? // Which channel an OUTREACH contact used — only set when category is OUTREACH.
+  outreachCampaignNotes String? // Free-text campaign context — filled when category is OUTREACH. Independent of outreachChannel: this is "which campaign/job", not "which channel".
+  screeningNotes        String? // The actual screening call content — filled when category is SCREENING. Renamed from conversationSummary. Editable (author-or-admin, optimistic concurrency — see editedAt/editedById); every other field on this row is an immutable factual record once logged.
   status                CandidateStatus @default(WARM) // Snapshot of the candidate's status at the time of this contact, not a live reference.
   suburb                String?
+
+  editedAt   DateTime? // Set only when screeningNotes has been edited after creation.
+  editedById String? // Logical ref to Consultant.id (no FK) — who made the last edit; may differ from contactedById (e.g. an admin correcting someone else's note).
 
   // Free text, not numbers: the source records these as "35 per hour", "more
   // 53-55", "above 47". Storing them numerically would drop ~740 populated

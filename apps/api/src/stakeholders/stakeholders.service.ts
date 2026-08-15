@@ -12,6 +12,7 @@ import { CreateStakeholderContactHistoryDto } from './dto/create-stakeholder-con
 import { ExportStakeholdersDto } from './dto/export-stakeholders.dto';
 import { classifyJobTitle } from './role-type-classifier';
 import { buildWorkbook, resolveTimeZone, splitContactDateTime, ExportColumn } from '../common/xlsx-export';
+import { logExport } from '../common/audit-export';
 
 /** The subset of QueryStakeholdersDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination/sort but still satisfies this structurally. */
 type StakeholderFilterFields = Pick<
@@ -274,6 +275,8 @@ export class StakeholdersService {
     const where = this.buildWhere(query, user);
     const orderBy = this.buildOrderBy(query.sortBy, query.sortOrder);
     const stakeholders = await this.prisma.stakeholder.findMany({ where, orderBy, include: STAKEHOLDER_INCLUDE });
+    const { timezone: _timezone, ...filters } = query;
+    await logExport(this.base, 'Stakeholder', { count: stakeholders.length, filters });
     return this.buildExportWorkbook(stakeholders.map(toEntity), query.timezone);
   }
 
@@ -282,6 +285,7 @@ export class StakeholdersService {
     const and: Prisma.StakeholderWhereInput[] = [{ id: { in: ids } }];
     if (isScoped(user)) and.push(stakeholderScope(user));
     const stakeholders = await this.prisma.stakeholder.findMany({ where: { AND: and }, include: STAKEHOLDER_INCLUDE });
+    await logExport(this.base, 'Stakeholder', { count: stakeholders.length, requestedIds: ids });
     return this.buildExportWorkbook(stakeholders.map(toEntity), timezone);
   }
 

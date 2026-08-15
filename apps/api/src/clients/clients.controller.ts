@@ -8,6 +8,7 @@ import { ExportClientsDto } from './dto/export-clients.dto';
 import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
 import { XLSX_CONTENT_TYPE, exportFilename } from '../common/xlsx-export';
 import { ClientEntity } from './entities/client.entity';
+import { ClientContactHistoryEntity } from './entities/client-contact-history.entity';
 import { PaginatedClientsEntity } from './entities/paginated-clients.entity';
 import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
 import { AuthUser } from '../auth/auth.types';
@@ -97,9 +98,20 @@ export class ClientsController {
     return this.clients.update(id, dto, user);
   }
 
-  // No note-timeline routes here, deliberately: client-side notes live in
-  // StakeholderContactHistory (see /stakeholders/:id/contact-history), not on
-  // the Client row. Candidates keep their own /notes routes.
+  // No note-timeline routes of its own, deliberately: client-side notes live
+  // in StakeholderContactHistory, not on the Client row itself — see
+  // ClientContactHistoryEntity's doc. The route below aggregates across every
+  // stakeholder at this client rather than owning a timeline directly.
+  @Get(':id/contact-history')
+  @RequirePermission('stakeholder', 'read')
+  @ApiOperation({
+    operationId: 'getClientContactHistory',
+    summary: "Every logged contact across this client's stakeholders, newest first",
+  })
+  @ApiResponse({ status: 200, description: 'Contact history', type: ClientContactHistoryEntity, isArray: true })
+  listContactHistory(@Param('id') id: string) {
+    return this.clients.listContactHistory(id);
+  }
 
   @Delete(':id')
   @HttpCode(204)
