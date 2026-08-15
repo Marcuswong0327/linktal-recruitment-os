@@ -70,3 +70,48 @@ export const customFetch = async <T>(
     headers: response.headers,
   } as T;
 };
+
+/**
+ * Sibling to `customFetch` for binary responses (currently: the .xlsx export
+ * endpoints) — `customFetch` unconditionally calls `response.json()`, which
+ * throws on a binary body, and every generated hook depends on that JSON
+ * contract, so this is a separate function rather than a branch inside it.
+ * Same base URL / credentials handling; triggers a browser download instead
+ * of returning parsed data.
+ */
+export async function downloadFile(url: string, options?: RequestInit): Promise<void> {
+  const response = await fetch(`${BASE_URL}${url}`, {
+    ...options,
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as ErrorResponse | null;
+    throw new ApiError(
+      body ?? {
+        statusCode: response.status,
+        code: 'ERROR',
+        message: `Request failed with ${response.status}`,
+        details: null,
+        path: url,
+        timestamp: new Date().toISOString(),
+      },
+    );
+  }
+
+  // Prefer the server's own filename (Content-Disposition) over guessing one
+  // client-side — the two can disagree on date/timezone/format drift.
+  const disposition = response.headers.get('Content-Disposition');
+  const match = disposition?.match(/filename="([^"]+)"/);
+  const filename = match?.[1] ?? 'download.xlsx';
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}

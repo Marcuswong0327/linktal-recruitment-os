@@ -3,7 +3,6 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { ChevronDown, Plus, Rocket, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
@@ -33,6 +32,7 @@ import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import {
   deleteJobOrder as deleteJobOrderRequest,
   getGetJobOrdersQueryKey,
+  setJobOrderConsultants as setJobOrderConsultantsRequest,
   updateJobOrder as updateJobOrderRequest,
   useGetJobOrders,
 } from '@/lib/api/generated/job-orders/job-orders';
@@ -68,12 +68,6 @@ export function JobOrdersTable({
   canDelete?: boolean;
 }) {
   const router = useRouter();
-  const { data: session } = useSession();
-  // Every row is already scoped to this consultant's own job orders (see
-  // JobOrdersService.findAll) and the field is redacted server-side too —
-  // the column/filter would just repeat their own name (or nothing) on
-  // every row. Same reasoning as Companies' `isConsultant` treatment.
-  const isConsultant = session?.user?.roleName === 'consultant';
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
@@ -92,8 +86,8 @@ export function JobOrdersTable({
     { query: { placeholderData: keepPreviousData } },
   );
 
-  // Client-side joins: the API returns clientId/consultantId only, so pull
-  // both lists once to resolve names for the table.
+  // Client-side join: the API returns clientId only, so this resolves it once
+  // for the table.
   const { data: clientsData } = useGetClients({ pageSize: 100 });
   const clients = clientsData?.status === 200 ? clientsData.data.data : [];
   const clientName = React.useCallback(
@@ -104,30 +98,9 @@ export function JobOrdersTable({
   // pageSize is capped at 100 server-side (query-consultants.dto.ts) — this
   // is a single unpaginated fetch, so if consultant headcount ever exceeds
   // 100, the overflow silently won't appear here, including as options in
-  // the single-row and bulk "Set consultant" pickers below.
+  // the filter and the bulk "Add consultant" picker below.
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
-  const consultantName = React.useCallback(
-    (id: string | null) => (id ? (consultants.find((c) => c.id === id)?.fullName ?? 'Unknown') : '—'),
-    [consultants],
-  );
-
-  // Industry-first, for bulk assignment too: a Job Order has no industry of
-  // its own, only via its Client — same reasoning as Companies'
-  // bulkAssignableConsultants. Only offer consultants who hold *every*
-  // distinct industry represented across the selected job orders' clients;
-  // any selected job order whose client is untagged makes bulk assignment
-  // impossible outright.
-  const bulkAssignableConsultants = React.useMemo(() => {
-    const selectedClientIndustryIds = selectedJobOrders.map(
-      (j) => clients.find((c) => c.id === j.clientId)?.industryId ?? null,
-    );
-    if (selectedClientIndustryIds.some((id) => !id)) return [];
-    const distinctIndustryIds = Array.from(new Set(selectedClientIndustryIds as string[]));
-    return consultants.filter(
-      (c) => c.industryIds === undefined || distinctIndustryIds.every((id) => c.industryIds!.includes(id)),
-    );
-  }, [consultants, clients, selectedJobOrders]);
 
   // For the Candidates column's multi-select picker.
   const { data: candidatesData } = useGetCandidates({ pageSize: 100 });
@@ -140,23 +113,16 @@ export function JobOrdersTable({
 
   // Filters render inside their column's header (2.1) instead of a toolbar
   // row, and every one is multi-select — the API takes arrays for all four.
+  // Consultant matches through the JobOrderConsultant join now — any of the
+  // selected consultants being on a job order's list is a match.
   const jobOrderFilters: DataGridFilter[] = React.useMemo(
     () => [
       { columnId: 'status', title: 'Status', options: statusOptions, inHeader: true },
       { columnId: 'quality', title: 'Quality', options: qualityOptions, inHeader: true },
       { columnId: 'priorityLevel', title: 'Priority', options: priorityOptions, inHeader: true },
-      ...(isConsultant
-        ? []
-        : [
-            {
-              columnId: 'consultantId',
-              title: 'Consultant',
-              options: consultantFilterOptions,
-              inHeader: true,
-            },
-          ]),
+      { columnId: 'consultantId', title: 'Consultant', options: consultantFilterOptions, inHeader: true },
     ],
-    [consultantFilterOptions, isConsultant],
+    [consultantFilterOptions],
   );
 
   const result = data?.status === 200 ? data.data : undefined;
@@ -197,6 +163,27 @@ export function JobOrdersTable({
     setSelectedJobOrders([]);
   }
 
+  // Adds one consultant to each selected job order's existing list (never
+  // replaces it — several consultants can work the same job order
+  // concurrently). No scope check: this is the deliberate escape hatch, same
+  // as the single-job-order picker on the detail page.
+  async function handleBulkAddConsultant(consultantId: string) {
+    setIsBulkUpdating(true);
+    const results = await Promise.allSettled(
+      selectedJobOrders.map((j) => {
+        const nextIds = Array.from(new Set([...j.consultants.map((c) => c.id), consultantId]));
+        return setJobOrderConsultantsRequest(j.id, { consultantIds: nextIds });
+      }),
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    const succeeded = results.length - failed;
+    queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
+    if (succeeded > 0) toast.success(`Consultant added for ${succeeded} job order${succeeded === 1 ? '' : 's'}`);
+    if (failed > 0) toast.error(`Failed for ${failed} job order${failed === 1 ? '' : 's'}`);
+    setIsBulkUpdating(false);
+    setSelectedJobOrders([]);
+  }
+
   function handleBulkDelete() {
     setDeleteConfirmOpen(false);
     const toDelete = selectedJobOrders;
@@ -217,8 +204,8 @@ export function JobOrdersTable({
   }
 
   const columns = React.useMemo(
-    () => getJobOrderColumns({ clientName, consultantName, candidates, hideConsultantColumn: isConsultant }),
-    [clientName, consultantName, candidates, isConsultant],
+    () => getJobOrderColumns({ clientName, candidates }),
+    [clientName, candidates],
   );
 
   if (isError) {
@@ -326,28 +313,23 @@ export function JobOrdersTable({
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
                   <DropdownMenuItem onClick={() => setConsultantPickerOpen(true)}>
-                    Set consultant
+                    Add consultant
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
               {/* Anchored to the trigger above — a live search inside a Menu's own
                   roving-focus popup isn't a supported composition, so this opens as
-                  its own popup right where "Set consultant" was clicked. */}
+                  its own popup right where "Add consultant" was clicked. No
+                  industry/location restriction on who's offered here — adding
+                  someone outside their usual scope is the deliberate point of
+                  this feature (see PUT /job-orders/:id/consultants). */}
               <BulkConsultantPicker
                 anchorRef={bulkActionsTriggerRef}
                 open={consultantPickerOpen}
                 onOpenChange={setConsultantPickerOpen}
-                consultants={bulkAssignableConsultants}
-                onAssign={(id) =>
-                  // Generated type omits null (API accepts it to clear the FK) —
-                  // cast around the gap rather than sending '' which Prisma would
-                  // reject as an invalid foreign key.
-                  handleBulkUpdate(
-                    { consultantId: id || null } as unknown as UpdateJobOrderDto,
-                    id ? 'Consultant assigned' : 'Unassigned',
-                  )
-                }
+                consultants={consultants}
+                onAssign={handleBulkAddConsultant}
               />
             </div>
           ) : null

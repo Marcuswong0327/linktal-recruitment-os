@@ -25,9 +25,12 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ClientContactHistoryEntity,
   ClientEntity,
   CreateClientDto,
   ErrorResponse,
+  ExportByIdsDto,
+  ExportClientsParams,
   GetClientsParams,
   PaginatedClientsEntity,
   UpdateClientDto
@@ -83,7 +86,7 @@ export const getGetClientsUrl = (params?: GetClientsParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["statuses","industryIds","specializationIds","locationIds","consultantIds","qualities"];
+    const explodeParameters = ["statuses","industryIds","specializationIds","locationIds","qualities"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
@@ -417,7 +420,240 @@ export function useGetClientByDisplayId<TData = Awaited<ReturnType<typeof getCli
 
 
 
-export type getClientResponse200 = {
+export type exportClientsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type exportClientsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportClientsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportClientsResponseSuccess = (exportClientsResponse200) & {
+  headers: Headers;
+};
+export type exportClientsResponseError = (exportClientsResponse400 | exportClientsResponse500) & {
+  headers: Headers;
+};
+
+export type exportClientsResponse = (exportClientsResponseSuccess | exportClientsResponseError)
+
+export const getExportClientsUrl = (params?: ExportClientsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["statuses","industryIds","specializationIds","locationIds","qualities"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/clients/export?${stringifiedParams}` : `/clients/export`
+}
+
+/**
+ * @summary Export every client matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+export const exportClients = async (params?: ExportClientsParams, options?: RequestInit): Promise<exportClientsResponse> => {
+
+  return customFetch<exportClientsResponse>(getExportClientsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportClientsQueryKey = (params?: ExportClientsParams,) => {
+    return [
+    `/clients/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportClientsQueryOptions = <TData = Awaited<ReturnType<typeof exportClients>>, TError = ErrorResponse>(params?: ExportClientsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportClients>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportClientsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportClients>>> = ({ signal }) => exportClients(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportClients>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportClientsQueryResult = NonNullable<Awaited<ReturnType<typeof exportClients>>>
+export type ExportClientsQueryError = ErrorResponse
+
+
+export function useExportClients<TData = Awaited<ReturnType<typeof exportClients>>, TError = ErrorResponse>(
+ params: undefined |  ExportClientsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportClients>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportClients>>,
+          TError,
+          Awaited<ReturnType<typeof exportClients>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportClients<TData = Awaited<ReturnType<typeof exportClients>>, TError = ErrorResponse>(
+ params?: ExportClientsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportClients>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportClients>>,
+          TError,
+          Awaited<ReturnType<typeof exportClients>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportClients<TData = Awaited<ReturnType<typeof exportClients>>, TError = ErrorResponse>(
+ params?: ExportClientsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportClients>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Export every client matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+
+export function useExportClients<TData = Awaited<ReturnType<typeof exportClients>>, TError = ErrorResponse>(
+ params?: ExportClientsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportClients>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getExportClientsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type exportClientsByIdsResponse201 = {
+  data: void
+  status: 201
+}
+
+export type exportClientsByIdsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportClientsByIdsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportClientsByIdsResponseSuccess = (exportClientsByIdsResponse201) & {
+  headers: Headers;
+};
+export type exportClientsByIdsResponseError = (exportClientsByIdsResponse400 | exportClientsByIdsResponse500) & {
+  headers: Headers;
+};
+
+export type exportClientsByIdsResponse = (exportClientsByIdsResponseSuccess | exportClientsByIdsResponseError)
+
+export const getExportClientsByIdsUrl = () => {
+
+
+
+
+  return `/clients/export`
+}
+
+/**
+ * @summary Export an explicit set of clients (by id) as an .xlsx file
+ */
+export const exportClientsByIds = async (exportByIdsDto: ExportByIdsDto, options?: RequestInit): Promise<exportClientsByIdsResponse> => {
+
+  return customFetch<exportClientsByIdsResponse>(getExportClientsByIdsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(exportByIdsDto)
+  }
+);}
+
+
+
+
+
+export const getExportClientsByIdsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportClientsByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportClientsByIds>>, TError,{data: ExportByIdsDto}, TContext> => {
+
+const mutationKey = ['exportClientsByIds'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportClientsByIds>>, {data: ExportByIdsDto}> = (props) => {
+          const {data} = props ?? {};
+
+          return  exportClientsByIds(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportClientsByIdsMutationResult = NonNullable<Awaited<ReturnType<typeof exportClientsByIds>>>
+    export type ExportClientsByIdsMutationBody = ExportByIdsDto
+    export type ExportClientsByIdsMutationError = ErrorResponse
+
+    /**
+ * @summary Export an explicit set of clients (by id) as an .xlsx file
+ */
+export const useExportClientsByIds = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportClientsByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof exportClientsByIds>>,
+        TError,
+        {data: ExportByIdsDto},
+        TContext
+      > => {
+      return useMutation(getExportClientsByIdsMutationOptions(options), queryClient);
+    }
+    export type getClientResponse200 = {
   data: ClientEntity
   status: 200
 }
@@ -745,7 +981,136 @@ export const useDeleteClient = <TError = ErrorResponse,
       > => {
       return useMutation(getDeleteClientMutationOptions(options), queryClient);
     }
-    export type restoreClientResponse201 = {
+    export type getClientContactHistoryResponse200 = {
+  data: ClientContactHistoryEntity[]
+  status: 200
+}
+
+export type getClientContactHistoryResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getClientContactHistoryResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type getClientContactHistoryResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getClientContactHistoryResponseSuccess = (getClientContactHistoryResponse200) & {
+  headers: Headers;
+};
+export type getClientContactHistoryResponseError = (getClientContactHistoryResponse400 | getClientContactHistoryResponse404 | getClientContactHistoryResponse500) & {
+  headers: Headers;
+};
+
+export type getClientContactHistoryResponse = (getClientContactHistoryResponseSuccess | getClientContactHistoryResponseError)
+
+export const getGetClientContactHistoryUrl = (id: string,) => {
+
+
+
+
+  return `/clients/${id}/contact-history`
+}
+
+/**
+ * @summary Every logged contact across this client's stakeholders, newest first
+ */
+export const getClientContactHistory = async (id: string, options?: RequestInit): Promise<getClientContactHistoryResponse> => {
+
+  return customFetch<getClientContactHistoryResponse>(getGetClientContactHistoryUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClientContactHistoryQueryKey = (id: string,) => {
+    return [
+    `/clients/${id}/contact-history`
+    ] as const;
+    }
+
+
+export const getGetClientContactHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClientContactHistoryQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientContactHistory>>> = ({ signal }) => getClientContactHistory(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetClientContactHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getClientContactHistory>>>
+export type GetClientContactHistoryQueryError = ErrorResponse
+
+
+export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getClientContactHistory>>,
+          TError,
+          Awaited<ReturnType<typeof getClientContactHistory>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getClientContactHistory>>,
+          TError,
+          Awaited<ReturnType<typeof getClientContactHistory>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Every logged contact across this client's stakeholders, newest first
+ */
+
+export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetClientContactHistoryQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type restoreClientResponse201 = {
   data: ClientEntity
   status: 201
 }

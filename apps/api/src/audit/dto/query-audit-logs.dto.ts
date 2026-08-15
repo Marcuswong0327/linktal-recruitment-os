@@ -2,7 +2,12 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsEnum, IsInt, IsISO8601, IsOptional, IsString, Max, Min } from 'class-validator';
 
-/** Actions the audit extension emits (see prisma.extensions.ts deriveAction). */
+/**
+ * Actions the audit extension emits (see prisma.extensions.ts deriveAction),
+ * plus EXPORT — written manually (see common/audit-export.ts) since an
+ * export is a read, not a row write, so it never goes through that
+ * extension's interception layer.
+ */
 export enum AuditAction {
   CREATE = 'CREATE',
   UPDATE = 'UPDATE',
@@ -10,6 +15,7 @@ export enum AuditAction {
   RESTORE = 'RESTORE',
   DEACTIVATE = 'DEACTIVATE',
   HARD_DELETE = 'HARD_DELETE',
+  EXPORT = 'EXPORT',
 }
 
 export enum AuditSortField {

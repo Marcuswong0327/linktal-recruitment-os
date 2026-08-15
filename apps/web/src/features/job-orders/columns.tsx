@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowUpRight } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
+import { ConsultantAvatar } from '@/components/ConsultantCombobox';
 import type { CandidateEntity } from '@/lib/api/generated/types';
 import { CandidatesCell, rosterCellLabel } from './CandidatesCell';
 import { PipelineSheetTrigger } from './PipelineSheet';
@@ -37,25 +38,11 @@ function formatDate(iso: string | null | undefined) {
 interface JobOrderColumnsOptions {
   /** Resolves a clientId to a display name (client-side join — the API returns IDs only). */
   clientName: (id: string) => string;
-  /** Resolves a consultantId to a display name — same client-side join as clientName. */
-  consultantName: (id: string | null) => string;
   /** Full candidate roster for the Candidates column's multi-select picker. */
   candidates: CandidateEntity[];
-  /**
-   * Omits the Consultant column — every row is scoped to this consultant's
-   * own job orders (see JobOrdersService.findAll) and the field is redacted
-   * server-side too, so the column would just repeat their own name (or
-   * nothing) on every row. Same reasoning as Companies' `hideConsultantColumn`.
-   */
-  hideConsultantColumn?: boolean;
 }
 
-export function getJobOrderColumns({
-  clientName,
-  consultantName,
-  candidates,
-  hideConsultantColumn,
-}: JobOrderColumnsOptions): ColumnDef<JobOrder>[] {
+export function getJobOrderColumns({ clientName, candidates }: JobOrderColumnsOptions): ColumnDef<JobOrder>[] {
   return [
     {
       accessorKey: 'jobTitle',
@@ -161,17 +148,25 @@ export function getJobOrderColumns({
         </span>
       ),
     },
-    ...(hideConsultantColumn
-      ? []
-      : [
-          {
-            accessorKey: 'consultantId',
-            header: 'Consultant',
-            enableSorting: false,
-            meta: { align: 'center' },
-            cell: ({ row }) => <span>{consultantName(row.original.consultantId)}</span>,
-          } satisfies ColumnDef<JobOrder>,
-        ]),
+    {
+      id: 'consultants',
+      header: 'Consultants',
+      enableSorting: false,
+      size: 160,
+      cell: ({ row }) => {
+        const rowConsultants = row.original.consultants;
+        if (rowConsultants.length === 0) {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        return (
+          <div className="flex -space-x-1.5" title={rowConsultants.map((c) => c.name).join(', ')}>
+            {rowConsultants.map((c) => (
+              <ConsultantAvatar key={c.id} consultantId={c.id} name={c.name} size={5} />
+            ))}
+          </div>
+        );
+      },
+    },
     {
       id: 'candidates',
       header: 'Candidates',

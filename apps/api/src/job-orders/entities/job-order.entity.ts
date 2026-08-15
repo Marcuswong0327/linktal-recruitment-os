@@ -8,6 +8,12 @@ import { JobOrder, JobOrderQuality, JobOrderStatus, LocationLevel, SubmissionSta
  * the full submission record (notes, etc.) is fetched separately on the
  * dedicated Job Order page via /candidate-submissions.
  */
+/** One consultant working this job order — see JobOrderConsultant in schema.prisma. */
+export class JobOrderConsultantEntity {
+  @ApiProperty() id!: string;
+  @ApiProperty() name!: string;
+}
+
 export class JobOrderPipelineCandidateEntity {
   @ApiProperty() submissionId!: string;
   @ApiProperty() candidateId!: string;
@@ -53,7 +59,12 @@ export class JobOrderEntity implements Omit<JobOrder, 'deletedAt' | 'deletedById
     description: "The client's human-readable id, for cross-referencing",
   })
   clientDisplayId!: string | null;
-  @ApiProperty({ type: String, nullable: true }) consultantId!: string | null;
+  @ApiProperty({
+    type: JobOrderConsultantEntity,
+    isArray: true,
+    description: 'Consultants working this job order — several can work it concurrently (see PUT /job-orders/:id/consultants)',
+  })
+  consultants!: JobOrderConsultantEntity[];
   @ApiProperty({ type: String, nullable: true }) jobTitleId!: string | null;
   @ApiProperty({
     type: String,

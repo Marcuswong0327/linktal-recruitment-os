@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -14,6 +15,7 @@ import { JobOrdersService } from './job-orders.service';
 import { CreateJobOrderDto } from './dto/create-job-order.dto';
 import { UpdateJobOrderDto } from './dto/update-job-order.dto';
 import { QueryJobOrdersDto } from './dto/query-job-orders.dto';
+import { SetJobOrderConsultantsDto } from './dto/set-job-order-consultants.dto';
 import { JobOrderEntity } from './entities/job-order.entity';
 import { PaginatedJobOrdersEntity } from './entities/paginated-job-orders.entity';
 import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
@@ -82,6 +84,22 @@ export class JobOrdersController {
   @ApiResponse({ status: 200, description: 'Job order updated', type: JobOrderEntity })
   update(@Param('id') id: string, @Body() dto: UpdateJobOrderDto, @CurrentUser() user: AuthUser) {
     return this.jobOrders.update(id, dto, user);
+  }
+
+  @Put(':id/consultants')
+  @RequirePermission('job_order', 'update')
+  @ApiOperation({
+    operationId: 'setJobOrderConsultants',
+    summary:
+      "Replace who's working this job order (full-set-replace). Several consultants can work the same job order concurrently, in or out of their usual scope — no scope check is applied here on purpose.",
+  })
+  @ApiResponse({ status: 200, description: 'Consultants updated', type: JobOrderEntity })
+  setConsultants(
+    @Param('id') id: string,
+    @Body() dto: SetJobOrderConsultantsDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.jobOrders.setConsultants(id, dto.consultantIds, user);
   }
 
   @Delete(':id')

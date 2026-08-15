@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { useSession } from 'next-auth/react';
 import { ChevronDown, SlidersHorizontal, X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -12,7 +11,6 @@ import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { useGetIndustries } from '@/lib/api/generated/industries/industries';
 import { useGetJobRoleTypes } from '@/lib/api/generated/job-role-types/job-role-types';
-import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import { useGetCandidateJobRoleTypeFacets } from '@/lib/api/generated/candidates/candidates';
 import type { GetCandidatesParams, JobRoleTypeFacetEntity } from '@/lib/api/generated/types';
 import { CandidateSearchBar } from './CandidateSearchBar';
@@ -51,9 +49,6 @@ export function CandidateSearchGate({
   canDelete: boolean;
   canUpdate: boolean;
 }) {
-  const { data: session } = useSession();
-  const isConsultant = session?.user?.roleName === 'consultant';
-
   const { data: industriesData } = useGetIndustries();
   const industries = industriesData?.status === 200 ? industriesData.data : [];
   // `take: 200` (the endpoint's max) rather than the 50 default — this
@@ -64,8 +59,6 @@ export function CandidateSearchGate({
   // it's what resolves the Active Filters chip label for whatever's picked.
   const { data: roleTypesData } = useGetJobRoleTypes({ take: 200 });
   const roleTypes = roleTypesData?.status === 200 ? roleTypesData.data : [];
-  const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
-  const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
 
   // Location and Specialization aren't preloaded (~2k location nodes;
   // Specialization is 775+ rows and growing — see CatalogMultiSelectFilter's
@@ -101,10 +94,9 @@ export function CandidateSearchGate({
       jobRoleTypeName: (id: string) =>
         jobRoleTypeFacets.find((f) => f.id === id)?.name ?? roleTypes.find((r) => r.id === id)?.name ?? id,
       specializationName: (id: string) => specializationNames[id] ?? id,
-      consultantName: (id: string) => consultants.find((c) => c.id === id)?.fullName ?? id,
       locationName: (id: string) => locationNames[id] ?? id,
     }),
-    [industries, jobRoleTypeFacets, roleTypes, consultants, locationNames, specializationNames],
+    [industries, jobRoleTypeFacets, roleTypes, locationNames, specializationNames],
   );
 
   const search = useCandidateSearch(resolvers);
@@ -115,7 +107,6 @@ export function CandidateSearchGate({
     statuses: search.queryParams.statuses,
     industryIds: search.queryParams.industryIds,
     specializationIds: search.queryParams.specializationIds,
-    consultantIds: search.queryParams.consultantIds,
     submissionStatuses: search.queryParams.submissionStatuses,
     placementStatuses: search.queryParams.placementStatuses,
     locationIds: search.queryParams.locationIds,
@@ -153,7 +144,6 @@ export function CandidateSearchGate({
   const moreFiltersCount =
     search.filters.industryIds.length +
     search.filters.specializationIds.length +
-    search.filters.consultantIds.length +
     search.filters.submissionStatuses.length +
     search.filters.placementStatuses.length;
 
@@ -174,7 +164,6 @@ export function CandidateSearchGate({
             lookups={{
               jobRoleTypes: roleTypes,
               industries,
-              consultants: consultants.map((c) => ({ id: c.id, name: c.fullName })),
             }}
           />
           <Button onClick={handleSearchSubmit} disabled={!searchText.trim()}>
@@ -261,19 +250,6 @@ export function CandidateSearchGate({
                     <p className="text-xs text-muted-foreground">Rarely tagged (~5% of candidates) — use Role Type first.</p>
                   )}
                 </div>
-                {!isConsultant ? (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-sm font-medium">Consultant</span>
-                    <DataGridFacetedFilter
-                      title="Select consultant"
-                      options={consultants.map((c) => ({ value: c.id, label: c.fullName }))}
-                      selected={search.filters.consultantIds}
-                      onChange={(values) => search.set('consultantIds', values)}
-                      triggerClassName="w-full justify-between"
-                    />
-                    <p className="text-xs text-muted-foreground">No candidates are currently assigned to a consultant.</p>
-                  </div>
-                ) : null}
                 <div className="flex flex-col gap-1.5">
                   <span className="text-sm font-medium">Submission status</span>
                   <DataGridFacetedFilter
@@ -351,13 +327,7 @@ export function CandidateSearchGate({
         </div>
       ) : null}
 
-      <CandidatesTable
-        canCreate={canCreate}
-        canDelete={canDelete}
-        canUpdate={canUpdate}
-        search={search}
-        consultants={consultants}
-      />
+      <CandidatesTable canCreate={canCreate} canDelete={canDelete} canUpdate={canUpdate} search={search} />
     </div>
   );
 }

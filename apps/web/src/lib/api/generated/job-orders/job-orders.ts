@@ -31,6 +31,7 @@ import type {
   JobOrderEntity,
   PaginatedJobOrdersEntity,
   PipelineTimelineEventEntity,
+  SetJobOrderConsultantsDto,
   UpdateJobOrderDto
 } from '../types';
 
@@ -875,3 +876,103 @@ export function useGetJobOrderPipelineTimeline<TData = Awaited<ReturnType<typeof
 
 
 
+export type setJobOrderConsultantsResponse200 = {
+  data: JobOrderEntity
+  status: 200
+}
+
+export type setJobOrderConsultantsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type setJobOrderConsultantsResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type setJobOrderConsultantsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type setJobOrderConsultantsResponseSuccess = (setJobOrderConsultantsResponse200) & {
+  headers: Headers;
+};
+export type setJobOrderConsultantsResponseError = (setJobOrderConsultantsResponse400 | setJobOrderConsultantsResponse404 | setJobOrderConsultantsResponse500) & {
+  headers: Headers;
+};
+
+export type setJobOrderConsultantsResponse = (setJobOrderConsultantsResponseSuccess | setJobOrderConsultantsResponseError)
+
+export const getSetJobOrderConsultantsUrl = (id: string,) => {
+
+
+
+
+  return `/job-orders/${id}/consultants`
+}
+
+/**
+ * @summary Replace who's working this job order (full-set-replace). Several consultants can work the same job order concurrently, in or out of their usual scope — no scope check is applied here on purpose.
+ */
+export const setJobOrderConsultants = async (id: string,
+    setJobOrderConsultantsDto: SetJobOrderConsultantsDto, options?: RequestInit): Promise<setJobOrderConsultantsResponse> => {
+
+  return customFetch<setJobOrderConsultantsResponse>(getSetJobOrderConsultantsUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setJobOrderConsultantsDto)
+  }
+);}
+
+
+
+
+
+export const getSetJobOrderConsultantsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setJobOrderConsultants>>, TError,{id: string;data: SetJobOrderConsultantsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setJobOrderConsultants>>, TError,{id: string;data: SetJobOrderConsultantsDto}, TContext> => {
+
+const mutationKey = ['setJobOrderConsultants'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setJobOrderConsultants>>, {id: string;data: SetJobOrderConsultantsDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setJobOrderConsultants(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetJobOrderConsultantsMutationResult = NonNullable<Awaited<ReturnType<typeof setJobOrderConsultants>>>
+    export type SetJobOrderConsultantsMutationBody = SetJobOrderConsultantsDto
+    export type SetJobOrderConsultantsMutationError = ErrorResponse
+
+    /**
+ * @summary Replace who's working this job order (full-set-replace). Several consultants can work the same job order concurrently, in or out of their usual scope — no scope check is applied here on purpose.
+ */
+export const useSetJobOrderConsultants = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setJobOrderConsultants>>, TError,{id: string;data: SetJobOrderConsultantsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof setJobOrderConsultants>>,
+        TError,
+        {id: string;data: SetJobOrderConsultantsDto},
+        TContext
+      > => {
+      return useMutation(getSetJobOrderConsultantsMutationOptions(options), queryClient);
+    }

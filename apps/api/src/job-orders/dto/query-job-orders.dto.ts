@@ -85,7 +85,7 @@ export class QueryJobOrdersDto {
   @IsString()
   clientId?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by owning consultant ID(s). Ignored (overridden by the caller\'s own id) for the `consultant` role.', type: [String] })
+  @ApiPropertyOptional({ description: 'Filter by assigned consultant ID(s) — matches a job order any of these consultants are working.', type: [String] })
   @IsOptional()
   @Transform(toArray)
   @IsArray()

@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { JobOrderConsultantEntity } from './jobOrderConsultantEntity';
 import type { JobOrderEntityLocationLevel } from './jobOrderEntityLocationLevel';
 import type { JobOrderEntityQuality } from './jobOrderEntityQuality';
 import type { JobOrderEntityStatus } from './jobOrderEntityStatus';
@@ -24,8 +25,8 @@ export interface JobOrderEntity {
      * @nullable
      */
   clientDisplayId: string | null;
-  /** @nullable */
-  consultantId: string | null;
+  /** Consultants working this job order — several can work it concurrently (see PUT /job-orders/:id/consultants) */
+  consultants: JobOrderConsultantEntity[];
   /** @nullable */
   jobTitleId: string | null;
   /**

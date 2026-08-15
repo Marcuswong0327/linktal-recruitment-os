@@ -119,17 +119,6 @@ export class QueryClientsDto {
   locationIds?: string[];
 
   @ApiPropertyOptional({
-    description:
-      "Filter by owning consultant ID(s) (one or more, exact match). '' selects unassigned clients.",
-    type: [String],
-  })
-  @IsOptional()
-  @Transform(toArray)
-  @IsArray()
-  @IsString({ each: true })
-  consultantIds?: string[];
-
-  @ApiPropertyOptional({
     description: 'Filter by lead quality (one or more). Omit for all qualities.',
     enum: ClientQuality,
     isArray: true,

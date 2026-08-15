@@ -364,18 +364,6 @@
             }
           },
           {
-            "name": "consultantIds",
-            "required": false,
-            "in": "query",
-            "description": "Filter by owning consultant ID(s)",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          {
             "name": "submissionStatuses",
             "required": false,
             "in": "query",
@@ -622,18 +610,6 @@
             }
           },
           {
-            "name": "consultantIds",
-            "required": false,
-            "in": "query",
-            "description": "Filter by owning consultant ID(s)",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          {
             "name": "submissionStatuses",
             "required": false,
             "in": "query",
@@ -833,6 +809,288 @@
           }
         ],
         "summary": "Get candidate by display ID (CDD-XXXX)",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
+    "/candidates/export": {
+      "get": {
+        "operationId": "exportCandidates",
+        "parameters": [
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to most recently created.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "displayId",
+                "firstName",
+                "lastName",
+                "lastContactedAt",
+                "status"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across firstName, lastName, email, displayId, mobile, currentRole, currentCompany, and location/industry/job role type name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by status (one or more). Omit for all statuses.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "PLACED",
+                  "UNS"
+                ]
+              }
+            }
+          },
+          {
+            "name": "industryIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by industry ID(s) (see /industries)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobRoleTypeIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by job role type ID(s) (see /job-role-types)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "specializationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by specialization ID(s) (see /specializations)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "submissionStatuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by submission status (has at least one submission with this status)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "SUBMITTED",
+                  "INTERVIEWING",
+                  "REJECTED",
+                  "PLACED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "placementStatuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by placement status (has at least one placement with this status)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "COMPLETED",
+                  "FAILED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "location",
+            "required": false,
+            "in": "query",
+            "description": "Filter by location name (contains, case-insensitive) — matches the candidate's own node only. Use locationIds to match descendants too.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "currentCompany",
+            "required": false,
+            "in": "query",
+            "description": "Filter by current company (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "currentRole",
+            "required": false,
+            "in": "query",
+            "description": "Filter by current role (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedFrom",
+            "required": false,
+            "in": "query",
+            "description": "Only candidates last contacted on/after this date (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedTo",
+            "required": false,
+            "in": "query",
+            "description": "Only candidates last contacted on/before this date (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Location id(s). Selecting a country or state matches every candidate beneath it, via the ancestor path.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "timezone",
+            "required": false,
+            "in": "query",
+            "description": "IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Candidates workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export every candidate matching the current filters as an .xlsx file — unbounded, not paginated",
+        "tags": [
+          "Candidates"
+        ]
+      },
+      "post": {
+        "operationId": "exportCandidatesByIds",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportByIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Candidates workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export an explicit set of candidates (by id) as an .xlsx file",
         "tags": [
           "Candidates"
         ]
@@ -1104,247 +1362,6 @@
         ]
       }
     },
-    "/candidates/{id}/notes": {
-      "post": {
-        "operationId": "addCandidateNote",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AddCandidateNoteDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Candidate updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CandidateEntity"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Append a note to a candidate's timeline",
-        "tags": [
-          "Candidates"
-        ]
-      }
-    },
-    "/candidates/{id}/notes/{noteId}": {
-      "patch": {
-        "operationId": "updateCandidateNote",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "noteId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateCandidateNoteDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Candidate updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CandidateEntity"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Edit one note in a candidate's timeline (author or admin only)",
-        "tags": [
-          "Candidates"
-        ]
-      },
-      "delete": {
-        "operationId": "deleteCandidateNote",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "noteId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "expectedVersion",
-            "required": false,
-            "in": "query",
-            "description": "Optimistic concurrency check: the note's own `editedAt ?? timestamp` as last seen by the caller. If it no longer matches, the note was changed by someone else in the meantime and the request is rejected with 409.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Candidate updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CandidateEntity"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Remove one note from a candidate's timeline (author or admin only)",
-        "tags": [
-          "Candidates"
-        ]
-      }
-    },
     "/candidates/{id}/restore": {
       "post": {
         "operationId": "restoreCandidate",
@@ -1471,6 +1488,73 @@
       }
     },
     "/candidates/{id}/contact-history": {
+      "get": {
+        "operationId": "getCandidateContactHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contact history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CandidateContactHistoryEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "This candidate's full logged-contact history, newest first",
+        "tags": [
+          "Candidates"
+        ]
+      },
       "post": {
         "operationId": "addCandidateContactHistory",
         "parameters": [
@@ -1546,6 +1630,90 @@
         ]
       }
     },
+    "/candidates/{id}/contact-history/{contactHistoryId}": {
+      "patch": {
+        "operationId": "updateCandidateContactHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contactHistoryId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCandidateContactHistoryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Contact history updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateContactHistoryEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edit a SCREENING contact's screeningNotes (author or admin only) — every other field is immutable",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
     "/audit-logs": {
       "get": {
         "operationId": "getAuditLogs",
@@ -1613,7 +1781,8 @@
                 "SOFT_DELETE",
                 "RESTORE",
                 "DEACTIVATE",
-                "HARD_DELETE"
+                "HARD_DELETE",
+                "EXPORT"
               ]
             }
           },
@@ -1842,18 +2011,6 @@
             }
           },
           {
-            "name": "consultantIds",
-            "required": false,
-            "in": "query",
-            "description": "Filter by owning consultant ID(s) (one or more, exact match). '' selects unassigned clients.",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          {
             "name": "qualities",
             "required": false,
             "in": "query",
@@ -2039,6 +2196,247 @@
           }
         ],
         "summary": "Get client by display ID (CLI-XXXX)",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/export": {
+      "get": {
+        "operationId": "exportClients",
+        "parameters": [
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to most recently contacted.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "displayId",
+                "createdAt",
+                "lastContactedAt",
+                "quality"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across companyName, displayId and website",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by status (one or more). Omit for all statuses.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "TRADED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "industry",
+            "required": false,
+            "in": "query",
+            "description": "Filter by industry (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "industryIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by industry id(s) (one or more, exact match)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "specialization",
+            "required": false,
+            "in": "query",
+            "description": "Filter by specialization (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "specializationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by specialization id(s) (one or more, exact match)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "location",
+            "required": false,
+            "in": "query",
+            "description": "Filter by location name (contains, case-insensitive) — matches any node in the client's market set.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Location id(s). Selecting a country or state matches every client whose market sits beneath it, via the ancestor path.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "qualities",
+            "required": false,
+            "in": "query",
+            "description": "Filter by lead quality (one or more). Omit for all qualities.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "LOW",
+                  "MEDIUM",
+                  "HIGH"
+                ]
+              }
+            }
+          },
+          {
+            "name": "hasTob",
+            "required": false,
+            "in": "query",
+            "description": "Filter by whether the client has any Terms of Business on file. Replaces the old `tobSigned` flag — TOBs are their own one-to-many table now (see /tobs).",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "timezone",
+            "required": false,
+            "in": "query",
+            "description": "IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clients workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export every client matching the current filters as an .xlsx file — unbounded, not paginated",
+        "tags": [
+          "Clients"
+        ]
+      },
+      "post": {
+        "operationId": "exportClientsByIds",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportByIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Clients workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export an explicit set of clients (by id) as an .xlsx file",
         "tags": [
           "Clients"
         ]
@@ -2236,6 +2634,75 @@
           }
         ],
         "summary": "Soft-delete a client (recoverable, cascades)",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/{id}/contact-history": {
+      "get": {
+        "operationId": "getClientContactHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contact history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientContactHistoryEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every logged contact across this client's stakeholders, newest first",
         "tags": [
           "Clients"
         ]
@@ -2674,6 +3141,225 @@
           }
         ],
         "summary": "Get stakeholder by display ID (STK-XXXX)",
+        "tags": [
+          "Stakeholders"
+        ]
+      }
+    },
+    "/stakeholders/export": {
+      "get": {
+        "operationId": "exportStakeholders",
+        "parameters": [
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to most recently created.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "displayId",
+                "firstName",
+                "lastName",
+                "createdAt",
+                "lastContactedAt"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across firstName, lastName, email, displayId and mobile",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by client ID (exact match)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by multiple client IDs at once (e.g. the stakeholder enrichment workspace, scoped to a set of selected companies)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobTitle",
+            "required": false,
+            "in": "query",
+            "description": "Filter by job title (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "roleTypeIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by role type ID(s) (see /stakeholder-role-types)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobTitleIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by JobTitle id(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Location id(s) matched against a stakeholder's own coverage (not its client's location). Selecting a country or state matches every stakeholder whose coverage sits beneath it, via the ancestor path — same semantics as Client.locationIds.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "accuracy",
+            "required": false,
+            "in": "query",
+            "description": "Filter by verification state (one or more): 'true' (Accurate), 'false' (Inaccurate), 'unchecked' (not yet verified). Omit for all.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "true",
+                  "false",
+                  "unchecked"
+                ]
+              }
+            }
+          },
+          {
+            "name": "timezone",
+            "required": false,
+            "in": "query",
+            "description": "IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stakeholders workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export every stakeholder matching the current filters as an .xlsx file — unbounded, not paginated",
+        "tags": [
+          "Stakeholders"
+        ]
+      },
+      "post": {
+        "operationId": "exportStakeholdersByIds",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportByIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stakeholders workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export an explicit set of stakeholders (by id) as an .xlsx file",
         "tags": [
           "Stakeholders"
         ]
@@ -3649,7 +4335,7 @@
             "name": "consultantIds",
             "required": false,
             "in": "query",
-            "description": "Filter by owning consultant ID(s). Ignored (overridden by the caller's own id) for the `consultant` role.",
+            "description": "Filter by assigned consultant ID(s) — matches a job order any of these consultants are working.",
             "schema": {
               "type": "array",
               "items": {
@@ -4160,6 +4846,82 @@
           }
         ],
         "summary": "Every candidate submission/stage change for this job order",
+        "tags": [
+          "Job Orders"
+        ]
+      }
+    },
+    "/job-orders/{id}/consultants": {
+      "put": {
+        "operationId": "setJobOrderConsultants",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetJobOrderConsultantsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Consultants updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOrderEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace who's working this job order (full-set-replace). Several consultants can work the same job order concurrently, in or out of their usual scope — no scope check is applied here on purpose.",
         "tags": [
           "Job Orders"
         ]
@@ -8514,47 +9276,6 @@
           "user"
         ]
       },
-      "CandidateNoteDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable id, unique within this candidate’s notes (for edit/delete)"
-          },
-          "content": {
-            "type": "string",
-            "example": "Called to confirm availability for the panel interview."
-          },
-          "timestamp": {
-            "type": "string",
-            "description": "ISO 8601 timestamp",
-            "example": "2026-07-16T18:58:34.123Z"
-          },
-          "by": {
-            "type": "string",
-            "nullable": true,
-            "description": "Authoring consultant ID"
-          },
-          "editedAt": {
-            "type": "string",
-            "nullable": true,
-            "description": "ISO 8601 timestamp of the last edit, null if never edited"
-          },
-          "editedBy": {
-            "type": "string",
-            "nullable": true,
-            "description": "Consultant ID who made the last edit, null if never edited (may differ from `by`, e.g. an admin editing someone else’s note)"
-          }
-        },
-        "required": [
-          "id",
-          "content",
-          "timestamp",
-          "by",
-          "editedAt",
-          "editedBy"
-        ]
-      },
       "CandidateEntity": {
         "type": "object",
         "properties": {
@@ -8679,17 +9400,6 @@
               "UNS"
             ]
           },
-          "notes": {
-            "nullable": true,
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CandidateNoteDto"
-            }
-          },
-          "consultantId": {
-            "type": "string",
-            "nullable": true
-          },
           "lastContactedAt": {
             "format": "date-time",
             "type": "string",
@@ -8708,6 +9418,10 @@
           },
           "lastContactCategory": {
             "type": "string",
+            "enum": [
+              "SCREENING",
+              "OUTREACH"
+            ],
             "nullable": true,
             "description": "Category of the most recent contact — distinct from lastContactType, which is the channel"
           },
@@ -8760,8 +9474,6 @@
           "specializations",
           "specializationIds",
           "status",
-          "notes",
-          "consultantId",
           "lastContactedAt",
           "lastContactedById",
           "lastContactType",
@@ -8830,6 +9542,25 @@
           "id",
           "name",
           "count"
+        ]
+      },
+      "ExportByIdsDto": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "description": "Row IDs to export (an explicit selection, not a filter)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid."
+          }
+        },
+        "required": [
+          "ids"
         ]
       },
       "PipelineTimelineEventEntity": {
@@ -9005,10 +9736,6 @@
               "UNS"
             ],
             "example": "COLD"
-          },
-          "consultantId": {
-            "type": "string",
-            "description": "Owning consultant ID"
           }
         },
         "required": [
@@ -9102,41 +9829,121 @@
               "UNS"
             ],
             "example": "COLD"
-          },
-          "consultantId": {
-            "type": "string",
-            "description": "Owning consultant ID"
           }
         }
       },
-      "AddCandidateNoteDto": {
+      "CandidateContactHistoryEntity": {
         "type": "object",
         "properties": {
-          "content": {
-            "type": "string",
-            "description": "Note content",
-            "example": "Called to confirm availability for the panel interview."
-          }
-        },
-        "required": [
-          "content"
-        ]
-      },
-      "UpdateCandidateNoteDto": {
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "string",
-            "description": "New note content",
-            "example": "Called to confirm availability for the panel interview."
+          "id": {
+            "type": "string"
           },
-          "expectedVersion": {
+          "displayId": {
             "type": "string",
-            "description": "Optimistic concurrency check: the note's own `editedAt ?? timestamp` as last seen by the caller. If it no longer matches, the note was changed by someone else in the meantime and the request is rejected with 409."
+            "example": "CDN-000001"
+          },
+          "candidateId": {
+            "type": "string"
+          },
+          "contactType": {
+            "type": "string",
+            "nullable": true,
+            "example": "call",
+            "description": "Channel: email, call, meeting, linkedin"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "SCREENING",
+              "OUTREACH"
+            ],
+            "description": "Kind of note — distinct from contactType, which is the channel."
+          },
+          "contactedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant who made this contact"
+          },
+          "outreachChannel": {
+            "type": "string",
+            "enum": [
+              "SMS",
+              "EMAIL"
+            ],
+            "nullable": true,
+            "description": "Which channel this outreach used — set only when category is OUTREACH."
+          },
+          "outreachCampaignNotes": {
+            "type": "string",
+            "nullable": true,
+            "description": "Free-text campaign context — filled for OUTREACH entries."
+          },
+          "screeningNotes": {
+            "type": "string",
+            "nullable": true,
+            "description": "The screening call content — filled for SCREENING entries."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COLD",
+              "WARM",
+              "PLACED",
+              "UNS"
+            ],
+            "description": "Snapshot of the candidate's status at the time of this contact."
+          },
+          "suburb": {
+            "type": "string",
+            "nullable": true
+          },
+          "currentSalary": {
+            "type": "string",
+            "nullable": true,
+            "description": "Free text, not a number — the source records values like \"35 per hour\"."
+          },
+          "expectedSalary": {
+            "type": "string",
+            "nullable": true,
+            "description": "Free text, e.g. \"55-60\"."
+          },
+          "contactedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "editedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "Set only when screeningNotes has been edited after creation."
+          },
+          "editedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Who made the last edit — may differ from contactedById."
           }
         },
         "required": [
-          "content"
+          "id",
+          "displayId",
+          "candidateId",
+          "contactType",
+          "category",
+          "contactedById",
+          "outreachChannel",
+          "outreachCampaignNotes",
+          "screeningNotes",
+          "status",
+          "suburb",
+          "currentSalary",
+          "expectedSalary",
+          "contactedAt",
+          "createdAt",
+          "editedAt",
+          "editedById"
         ]
       },
       "CreateCandidateContactHistoryDto": {
@@ -9156,15 +9963,26 @@
           "category": {
             "type": "string",
             "description": "Kind of note — distinct from contactType, which is the channel",
-            "example": "Detailed Screening Notes"
+            "enum": [
+              "SCREENING",
+              "OUTREACH"
+            ]
           },
-          "conversationSummary": {
+          "screeningNotes": {
             "type": "string",
-            "description": "The screening call content"
+            "description": "The screening call content — set when category is SCREENING"
           },
           "outreachCampaignNotes": {
             "type": "string",
-            "description": "Notes for an outreach campaign entry"
+            "description": "Free-text campaign context (e.g. which job/campaign) — set when category is OUTREACH"
+          },
+          "outreachChannel": {
+            "type": "string",
+            "description": "Which channel this outreach used — set when category is OUTREACH",
+            "enum": [
+              "SMS",
+              "EMAIL"
+            ]
           },
           "status": {
             "type": "string",
@@ -9198,97 +10016,24 @@
           }
         },
         "required": [
-          "contactType"
+          "contactType",
+          "category"
         ]
       },
-      "CandidateContactHistoryEntity": {
+      "UpdateCandidateContactHistoryDto": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
-          "displayId": {
+          "screeningNotes": {
             "type": "string",
-            "example": "CDN-000001"
+            "description": "New screening notes content"
           },
-          "candidateId": {
-            "type": "string"
-          },
-          "contactType": {
+          "expectedVersion": {
             "type": "string",
-            "nullable": true,
-            "example": "call",
-            "description": "Channel: email, call, meeting, linkedin"
-          },
-          "category": {
-            "type": "string",
-            "nullable": true,
-            "example": "Detailed Screening Notes",
-            "description": "Kind of note — distinct from contactType, which is the channel."
-          },
-          "contactedById": {
-            "type": "string",
-            "nullable": true,
-            "description": "Consultant who made this contact"
-          },
-          "conversationSummary": {
-            "type": "string",
-            "nullable": true,
-            "description": "The screening call content."
-          },
-          "outreachCampaignNotes": {
-            "type": "string",
-            "nullable": true,
-            "description": "Filled for outreach campaign entries."
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "COLD",
-              "WARM",
-              "PLACED",
-              "UNS"
-            ],
-            "description": "Snapshot of the candidate's status at the time of this contact."
-          },
-          "suburb": {
-            "type": "string",
-            "nullable": true
-          },
-          "currentSalary": {
-            "type": "string",
-            "nullable": true,
-            "description": "Free text, not a number — the source records values like \"35 per hour\"."
-          },
-          "expectedSalary": {
-            "type": "string",
-            "nullable": true,
-            "description": "Free text, e.g. \"55-60\"."
-          },
-          "contactedAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
+            "description": "Optimistic concurrency check: the row's own `editedAt ?? createdAt` (ISO 8601) as last seen by the caller. If it no longer matches, the row was changed by someone else in the meantime and the request is rejected with 409."
           }
         },
         "required": [
-          "id",
-          "displayId",
-          "candidateId",
-          "contactType",
-          "category",
-          "contactedById",
-          "conversationSummary",
-          "outreachCampaignNotes",
-          "status",
-          "suburb",
-          "currentSalary",
-          "expectedSalary",
-          "contactedAt",
-          "createdAt"
+          "screeningNotes"
         ]
       },
       "ResolvedValue": {
@@ -9607,10 +10352,6 @@
             "nullable": true,
             "description": "Resolved name of the consultant who made the most recent contact, across all stakeholders"
           },
-          "consultantId": {
-            "type": "string",
-            "nullable": true
-          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -9644,7 +10385,6 @@
           "lastContactCategory",
           "lastContactNotes",
           "lastContactedBy",
-          "consultantId",
           "createdAt",
           "updatedAt"
         ]
@@ -9760,10 +10500,6 @@
               "HIGH"
             ],
             "example": "MEDIUM"
-          },
-          "consultantId": {
-            "type": "string",
-            "description": "Owning consultant ID"
           }
         },
         "required": [
@@ -9845,12 +10581,68 @@
               "HIGH"
             ],
             "example": "MEDIUM"
-          },
-          "consultantId": {
-            "type": "string",
-            "description": "Owning consultant ID"
           }
         }
+      },
+      "ClientContactHistoryEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayId": {
+            "type": "string",
+            "example": "CN-000001"
+          },
+          "stakeholderId": {
+            "type": "string"
+          },
+          "stakeholderName": {
+            "type": "string",
+            "description": "Which stakeholder this contact was with"
+          },
+          "contactType": {
+            "type": "string",
+            "nullable": true,
+            "example": "call",
+            "description": "Channel: email, call, meeting, linkedin"
+          },
+          "category": {
+            "type": "string",
+            "nullable": true,
+            "example": "Detailed Brief Notes",
+            "description": "Kind of note — distinct from contactType, which is the channel."
+          },
+          "contactedById": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant who made this contact"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "contactedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "displayId",
+          "stakeholderId",
+          "stakeholderName",
+          "contactType",
+          "category",
+          "contactedById",
+          "notes",
+          "contactedAt",
+          "createdAt"
+        ]
       },
       "StakeholderEntity": {
         "type": "object",
@@ -10503,6 +11295,21 @@
           }
         }
       },
+      "JobOrderConsultantEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
       "JobOrderPipelineCandidateEntity": {
         "type": "object",
         "properties": {
@@ -10585,9 +11392,12 @@
             "example": "CLI-000128",
             "description": "The client's human-readable id, for cross-referencing"
           },
-          "consultantId": {
-            "type": "string",
-            "nullable": true
+          "consultants": {
+            "description": "Consultants working this job order — several can work it concurrently (see PUT /job-orders/:id/consultants)",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobOrderConsultantEntity"
+            }
           },
           "jobTitleId": {
             "type": "string",
@@ -10724,7 +11534,7 @@
           "clientId",
           "clientName",
           "clientDisplayId",
-          "consultantId",
+          "consultants",
           "jobTitleId",
           "jobTitle",
           "jobRoleTypeId",
@@ -10805,9 +11615,12 @@
             "type": "string",
             "description": "Job role type ID (see /job-role-types) — the consultant's classification"
           },
-          "consultantId": {
-            "type": "string",
-            "description": "Owning consultant ID"
+          "consultantIds": {
+            "description": "Consultants working this job order at creation time (see PUT /job-orders/:id/consultants to change it later). Several can work the same job order concurrently — no scope check is applied here on purpose.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "locationId": {
             "type": "string",
@@ -10843,12 +11656,6 @@
             "description": "Number of openings",
             "example": 1,
             "default": 1
-          },
-          "filledCount": {
-            "type": "number",
-            "description": "Number of openings already filled",
-            "example": 0,
-            "default": 0
           },
           "description": {
             "type": "string",
@@ -10909,10 +11716,6 @@
             "type": "string",
             "description": "Job role type ID (see /job-role-types) — the consultant's classification"
           },
-          "consultantId": {
-            "type": "string",
-            "description": "Owning consultant ID"
-          },
           "locationId": {
             "type": "string",
             "description": "Most specific known Location node (see /locations) — replaces the old city/suburb columns"
@@ -10947,12 +11750,6 @@
             "description": "Number of openings",
             "example": 1,
             "default": 1
-          },
-          "filledCount": {
-            "type": "number",
-            "description": "Number of openings already filled",
-            "example": 0,
-            "default": 0
           },
           "description": {
             "type": "string",
@@ -10994,6 +11791,21 @@
             "default": 2
           }
         }
+      },
+      "SetJobOrderConsultantsDto": {
+        "type": "object",
+        "properties": {
+          "consultantIds": {
+            "description": "Consultant IDs working this job order — replaces the whole set",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "consultantIds"
+        ]
       },
       "JobResearchEntity": {
         "type": "object",

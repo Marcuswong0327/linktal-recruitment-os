@@ -26,8 +26,12 @@ import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
 import { AuthUser } from '../auth/auth.types';
 
 /**
- * Consultant directory. Guarded by the `consultant` permission, which only
- * admin and manager hold — every other role gets 403 Forbidden.
+ * Consultant directory. Guarded by the `consultant` permission. Read access
+ * (`consultant:read`) is held by admin, manager, consultant and researcher —
+ * the latter two need it to pick teammates by name (and see their industry/
+ * location grants) when assigning a job order's consultant list (see
+ * docs/scope-explained.md). Write access (create/update/delete) stays
+ * admin/manager only; every other role gets 403 Forbidden throughout.
  */
 @ApiTags('Consultants')
 @ApiBearerAuth()

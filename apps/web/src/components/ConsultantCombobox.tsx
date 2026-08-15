@@ -1,8 +1,8 @@
 'use client';
 
-import { useMemo, useCallback } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Combobox } from '@base-ui/react/combobox';
-import { Check, ChevronDown, ListFilter, UserRound } from 'lucide-react';
+import { Check, ChevronDown, ListFilter, UserRound, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import type { ConsultantEntity } from '@/lib/api/generated/types';
@@ -184,12 +184,6 @@ interface ConsultantComboboxProps {
   className?: string;
   /** The logged-in user — shows "(You)" on their own entry, see useConsultantLookup. */
   currentUser?: CurrentConsultant | null;
-  /**
-   * Hides the "Unassigned" choice from the dropdown — for consultants, who
-   * shouldn't be able to orphan a company off their own book (enforced
-   * server-side too, in ClientsService.update). Defaults to `true`.
-   */
-  allowUnassign?: boolean;
 }
 
 /**
@@ -206,14 +200,12 @@ export function ConsultantCombobox({
   disabled,
   className,
   currentUser,
-  allowUnassign = true,
 }: ConsultantComboboxProps) {
   const { byId, items, labelFor, searchTextFor } = useConsultantLookup(consultants, currentUser);
-  const selectableItems = allowUnassign ? items : items.filter((item) => item !== UNASSIGNED);
 
   return (
     <Combobox.Root
-      items={selectableItems}
+      items={items}
       value={value}
       onValueChange={(next) => onValueChange(next ?? UNASSIGNED)}
       itemToStringLabel={searchTextFor}
@@ -235,6 +227,117 @@ export function ConsultantCombobox({
           <ChevronDown className="pointer-events-none size-4 shrink-0" />
         </Combobox.Icon>
       </Combobox.Trigger>
+
+      <ConsultantComboboxPopup byId={byId} labelFor={labelFor} />
+    </Combobox.Root>
+  );
+}
+
+export interface ConsultantMultiSelectProps {
+  id?: string;
+  /** Selected consultant ids — no "Unassigned" option here, unlike the single-select field. */
+  selected: string[];
+  onChange: (ids: string[]) => void;
+  consultants: ConsultantEntity[];
+  disabled?: boolean;
+  placeholder?: string;
+  /** The logged-in user — shows "(You)" on their own entry, see useConsultantLookup. */
+  currentUser?: CurrentConsultant | null;
+}
+
+/**
+ * Multi-select consultant picker — several people can work the same job
+ * order concurrently (see JobOrderConsultant in schema.prisma). Chips +
+ * add-trigger, same field shape as `LocationMultiSelect`; unlike that one,
+ * the roster is small and already fetched in full, so this filters
+ * client-side rather than server-searching per keystroke.
+ */
+export function ConsultantMultiSelect({
+  id,
+  selected,
+  onChange,
+  consultants,
+  disabled = false,
+  placeholder = 'Add a consultant…',
+  currentUser,
+}: ConsultantMultiSelectProps) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const { byId, items, labelFor, searchTextFor } = useConsultantLookup(consultants, currentUser);
+  const selectableItems = items.filter((item) => item !== UNASSIGNED);
+
+  function remove(consultantId: string) {
+    onChange(selected.filter((id) => id !== consultantId));
+  }
+
+  return (
+    <Combobox.Root
+      items={selectableItems}
+      multiple
+      value={selected}
+      onValueChange={onChange}
+      itemToStringLabel={searchTextFor}
+      itemToStringValue={(consultantId: string) => consultantId}
+      disabled={disabled}
+      onOpenChange={setOpen}
+    >
+      {/* Same click-catcher + relative wrapper pattern as LocationMultiSelect — see its doc for why. */}
+      <div className="relative">
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden
+          disabled={disabled}
+          onClick={() => triggerRef.current?.click()}
+          className={cn(
+            'absolute inset-0 rounded-2xl outline-none transition-colors disabled:pointer-events-none',
+            !disabled && 'hover:bg-accent/50',
+            open && 'bg-accent/50',
+          )}
+        />
+        <Combobox.Trigger
+          ref={triggerRef}
+          id={id}
+          aria-label={selected.length === 0 ? placeholder : undefined}
+          className="relative flex min-h-9 w-full flex-wrap items-center gap-1 rounded-2xl border border-transparent bg-input/50 px-2 py-1.5 text-left outline-none disabled:pointer-events-none disabled:opacity-50"
+        >
+          {selected.length === 0 ? (
+            <span className="pointer-events-none text-sm text-muted-foreground">{placeholder}</span>
+          ) : (
+            selected.map((consultantId) => (
+              <span
+                key={consultantId}
+                className="flex items-center gap-1.5 rounded-full bg-secondary py-0.5 pr-1 pl-0.5 text-sm text-secondary-foreground"
+              >
+                <ConsultantAvatar consultantId={consultantId} name={byId.get(consultantId)?.fullName} size={5} />
+                {labelFor(consultantId)}
+                {!disabled ? (
+                  // role="button" (not a nested <button>) — sits inside Combobox.Trigger's own <button>.
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Remove ${labelFor(consultantId)}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      remove(consultantId);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        remove(consultantId);
+                      }
+                    }}
+                    className="cursor-pointer rounded-full opacity-70 outline-none hover:opacity-100"
+                  >
+                    <X className="size-3" />
+                  </span>
+                ) : null}
+              </span>
+            ))
+          )}
+        </Combobox.Trigger>
+      </div>
 
       <ConsultantComboboxPopup byId={byId} labelFor={labelFor} />
     </Combobox.Root>

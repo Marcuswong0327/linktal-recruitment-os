@@ -6,7 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 
-export interface AddCandidateNoteDto {
-  /** Note content */
-  content: string;
+export interface SetJobOrderConsultantsDto {
+  /** Consultant IDs working this job order — replaces the whole set */
+  consultantIds: string[];
 }

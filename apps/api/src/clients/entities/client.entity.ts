@@ -87,7 +87,6 @@ export class ClientEntity implements Omit<Client, 'deletedAt' | 'deletedById'> {
   lastContactNotes!: string | null;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved name of the consultant who made the most recent contact, across all stakeholders' })
   lastContactedBy!: string | null;
-  @ApiProperty({ type: String, nullable: true }) consultantId!: string | null;
   @ApiProperty() createdAt!: Date;
   @ApiProperty() updatedAt!: Date;
 }

@@ -47,10 +47,13 @@ import {
 import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
+import { downloadFile } from '@/lib/api/fetcher';
 import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
 import {
   deleteStakeholder,
+  getExportStakeholdersByIdsUrl,
+  getExportStakeholdersUrl,
   getGetStakeholdersQueryKey,
   updateStakeholder,
   useAddStakeholderContactHistory,
@@ -74,7 +77,6 @@ import type {
   UpdateStakeholderDto,
 } from '@/lib/api/generated/types';
 import { accuracyOptions, getStakeholderColumns, stakeholderFullName } from './columns';
-import { exportStakeholdersToExcel } from './exportToExcel';
 
 const PAGE_SIZE = 50;
 
@@ -163,6 +165,7 @@ export function StakeholdersTable({
   const [sortOrder, setSortOrder] = React.useState<GetStakeholdersSortOrder>('desc');
   const [selected, setSelected] = React.useState<StakeholderEntity[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
+  const [isExporting, setIsExporting] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
   const [loggingContactFor, setLoggingContactFor] = React.useState<StakeholderEntity | null>(null);
@@ -432,8 +435,31 @@ export function StakeholdersTable({
     setSelected([]);
   }
 
-  function handleExport() {
-    exportStakeholdersToExcel(selected.length > 0 ? selected : stakeholders);
+  // Routes through the server (not the old in-browser xlsx build) so
+  // formatting stays in one place and scope is re-checked on every export —
+  // a selection exports exactly those rows; no selection exports everything
+  // matching the current filters, unbounded.
+  async function handleExport() {
+    setIsExporting(true);
+    // The server has no ambient concept of "the viewer's timezone" — it only
+    // ever sees UTC timestamps, so date/time export columns need this sent
+    // along explicitly.
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    try {
+      if (selected.length > 0) {
+        await downloadFile(getExportStakeholdersByIdsUrl(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: selected.map((s) => s.id), timezone }),
+        });
+      } else {
+        await downloadFile(getExportStakeholdersUrl({ q: search, roleTypeIds, accuracy, locationIds, sortBy, sortOrder, timezone }));
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   const columns = React.useMemo(
@@ -482,50 +508,52 @@ export function StakeholdersTable({
           ) : undefined
         }
         toolbar={
-          selected.length > 0 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button size="lg" disabled={isBulkUpdating}>
-                    {isBulkUpdating ? 'Updating…' : `Bulk actions (${selected.length})`}
-                    <ChevronDown />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleExport}>
-                  <Download />
-                  Export to Excel
-                </DropdownMenuItem>
-                {canUpdate ? (
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <CheckCheck />
-                      Mark details
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="min-w-48">
-                      <DropdownMenuItem onClick={() => handleBulkSetAccuracy(true)}>
-                        <Badge variant="success" className="rounded-md">
-                          Accurate
-                        </Badge>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleBulkSetAccuracy(false)}>
-                        <Badge variant="destructive" className="rounded-md">
-                          Inaccurate
-                        </Badge>
-                      </DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                ) : null}
-                {canDelete ? (
-                  <DropdownMenuItem variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>
-                    <Trash2 />
-                    Delete
-                  </DropdownMenuItem>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            <Button size="lg" variant="outline" onClick={handleExport} disabled={isExporting}>
+              <Download />
+              {isExporting ? 'Exporting…' : 'Export to Excel'}
+            </Button>
+            {selected.length > 0 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button size="lg" disabled={isBulkUpdating}>
+                      {isBulkUpdating ? 'Updating…' : `Bulk actions (${selected.length})`}
+                      <ChevronDown />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end">
+                  {canUpdate ? (
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <CheckCheck />
+                        Mark details
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="min-w-48">
+                        <DropdownMenuItem onClick={() => handleBulkSetAccuracy(true)}>
+                          <Badge variant="success" className="rounded-md">
+                            Accurate
+                          </Badge>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleBulkSetAccuracy(false)}>
+                          <Badge variant="destructive" className="rounded-md">
+                            Inaccurate
+                          </Badge>
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                  ) : null}
+                  {canDelete ? (
+                    <DropdownMenuItem variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>
+                      <Trash2 />
+                      Delete
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+          </div>
         }
         selectionContextMenu={
           <>

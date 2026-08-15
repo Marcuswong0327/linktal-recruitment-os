@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
@@ -34,7 +33,6 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import { ConsultantAvatar, ConsultantCombobox, ConsultantFilterButton, UNASSIGNED } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { EnumSelect } from '@/components/EnumSelect';
@@ -52,8 +50,11 @@ import {
 } from '@/components/SpecializationPicker';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
+import { downloadFile } from '@/lib/api/fetcher';
 import {
   deleteClient,
+  getExportClientsByIdsUrl,
+  getExportClientsUrl,
   getGetClientsQueryKey,
   restoreClient,
   updateClient,
@@ -61,7 +62,6 @@ import {
   useGetClients,
   useUpdateClient,
 } from '@/lib/api/generated/clients/clients';
-import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@/lib/api/generated/industries/industries';
 import {
   getGetSpecializationsQueryKey,
@@ -69,7 +69,6 @@ import {
 } from '@/lib/api/generated/specializations/specializations';
 import { GetClientsSortBy } from '@/lib/api/generated/types/getClientsSortBy';
 import type {
-  ConsultantEntity,
   CreateClientDto,
   GetClientsQualitiesItem,
   GetClientsSortOrder,
@@ -77,7 +76,6 @@ import type {
   LocationEntity,
 } from '@/lib/api/generated/types';
 import { getCompanyColumns } from './columns';
-import { exportCompaniesToExcel } from './exportToExcel';
 import { qualityOptions, statusOptions, type ClientQuality, type ClientStatus, type Company } from './schema';
 
 const PAGE_SIZE = 50;
@@ -96,7 +94,6 @@ interface CompanyFormValues {
   generalDescription: string;
   status: ClientStatus;
   quality: ClientQuality;
-  consultantId: string;
 }
 
 function splitLines(value: string): string[] {
@@ -120,7 +117,6 @@ function buildCompanyPayload(values: CompanyFormValues): CreateClientDto {
     generalDescription: values.generalDescription || undefined,
     status: values.status,
     quality: values.quality,
-    consultantId: values.consultantId || undefined,
   };
 }
 
@@ -135,17 +131,11 @@ export function CompaniesTable({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session } = useSession();
-  // Every row is already scoped to this consultant's own book (see
-  // ClientsService.findAll) and the field is redacted server-side too — the
-  // column/filter would just repeat their own name (or nothing) on every row.
-  const isConsultant = session?.user?.roleName === 'consultant';
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
   const [statuses, setStatuses] = React.useState<GetClientsStatusesItem[] | undefined>();
   const [qualities, setQualities] = React.useState<GetClientsQualitiesItem[] | undefined>();
-  const [consultantIds, setConsultantIds] = React.useState<string[] | undefined>();
   const [industryIds, setIndustryIds] = React.useState<string[] | undefined>();
   const [specializationIds, setSpecializationIds] = React.useState<string[] | undefined>();
   const [locationIds, setLocationIds] = React.useState<string[] | undefined>();
@@ -172,6 +162,7 @@ export function CompaniesTable({
   const [sortOrder, setSortOrder] = React.useState<GetClientsSortOrder>('desc');
   const [selected, setSelected] = React.useState<Company[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
+  const [isExporting, setIsExporting] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
 
@@ -192,7 +183,6 @@ export function CompaniesTable({
       q: search,
       statuses,
       qualities,
-      consultantIds,
       industryIds,
       specializationIds,
       locationIds,
@@ -207,14 +197,6 @@ export function CompaniesTable({
   const result = data?.status === 200 ? data.data : undefined;
   const companies = useInfinitePages(result?.data, page, isFetching);
 
-  // pageSize is capped at 100 server-side (query-consultants.dto.ts) — same
-  // known limitation as every other consultant lookup in this app.
-  const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
-  const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
-  const consultantName = React.useCallback(
-    (id: string | null) => (id ? (consultants.find((c) => c.id === id)?.fullName ?? 'Unknown') : '—'),
-    [consultants],
-  );
   const { data: industryData } = useGetIndustries();
   const industries = industryData?.status === 200 ? industryData.data : [];
   // Specialization (775+ rows) is deliberately NOT fetched eagerly here —
@@ -286,36 +268,8 @@ export function CompaniesTable({
           );
         },
       },
-      ...(isConsultant
-        ? []
-        : [
-            {
-              columnId: 'consultantId',
-              title: 'Consultant',
-              inHeader: true,
-              render: ({ selected, onChange }: { selected: string[]; onChange: (values: string[]) => void }) => (
-                <ConsultantFilterButton selected={selected} onChange={onChange} consultants={consultants} title="Consultant" />
-              ),
-              labelFor: (id: string) => (id === UNASSIGNED ? 'Unassigned' : consultantName(id)),
-              chipContent: (id: string) => (
-                <span className="flex items-center gap-1.5">
-                  <ConsultantAvatar consultantId={id} name={id === UNASSIGNED ? undefined : consultantName(id)} size={5} />
-                  {id === UNASSIGNED ? 'Unassigned' : consultantName(id)}
-                </span>
-              ),
-            },
-          ]),
     ],
-    [
-      consultants,
-      consultantName,
-      isConsultant,
-      marketInfoById,
-      resolveMarketInfo,
-      industryFilterOptions,
-      specializationInfoById,
-      resolveSpecializationInfo,
-    ],
+    [marketInfoById, resolveMarketInfo, industryFilterOptions, specializationInfoById, resolveSpecializationInfo],
   );
 
   const createCompanyMutation = useCreateClient({
@@ -335,7 +289,6 @@ export function CompaniesTable({
     const qualityFilter = valueOf('quality');
     const industryFilter = valueOf('industry');
     const specializationFilter = valueOf('specialization');
-    const consultantFilter = valueOf('consultantId');
     const marketFilter = valueOf('locations');
     const sort = sorting[0];
     const sortField = sort && sort.id in GetClientsSortBy ? (sort.id as GetClientsSortBy) : undefined;
@@ -344,7 +297,6 @@ export function CompaniesTable({
     setQualities(qualityFilter?.length ? (qualityFilter as GetClientsQualitiesItem[]) : undefined);
     setIndustryIds(industryFilter?.length ? industryFilter : undefined);
     setSpecializationIds(specializationFilter?.length ? specializationFilter : undefined);
-    setConsultantIds(consultantFilter?.length ? consultantFilter : undefined);
     setLocationIds(marketFilter?.length ? marketFilter : undefined);
     setSortBy(sortField);
     setSortOrder(sort?.desc ? 'desc' : 'asc');
@@ -435,8 +387,33 @@ export function CompaniesTable({
     setSelected([]);
   }
 
-  function handleExport() {
-    exportCompaniesToExcel(selected.length > 0 ? selected : companies);
+  // Routes through the server (not the old in-browser xlsx build) so
+  // formatting stays in one place and scope is re-checked on every export —
+  // a selection exports exactly those rows; no selection exports everything
+  // matching the current filters, unbounded.
+  async function handleExport() {
+    setIsExporting(true);
+    // The server has no ambient concept of "the viewer's timezone" — it only
+    // ever sees UTC timestamps, so date/time export columns need this sent
+    // along explicitly.
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    try {
+      if (selected.length > 0) {
+        await downloadFile(getExportClientsByIdsUrl(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: selected.map((c) => c.id), timezone }),
+        });
+      } else {
+        await downloadFile(
+          getExportClientsUrl({ q: search, statuses, qualities, industryIds, specializationIds, locationIds, sortBy, sortOrder, timezone }),
+        );
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   const columns = React.useMemo(
@@ -444,12 +421,10 @@ export function CompaniesTable({
       getCompanyColumns({
         onStatusChange: handleStatusChange,
         onQualityChange: handleQualityChange,
-        consultantName,
         pendingRowId,
         canUpdate,
-        hideConsultantColumn: isConsultant,
       }),
-    [handleStatusChange, handleQualityChange, consultantName, pendingRowId, canUpdate, isConsultant],
+    [handleStatusChange, handleQualityChange, pendingRowId, canUpdate],
   );
 
   if (isError) {
@@ -484,60 +459,62 @@ export function CompaniesTable({
           ) : undefined
         }
         toolbar={
-          selected.length > 0 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button size="lg" disabled={isBulkUpdating}>
-                    {isBulkUpdating ? 'Updating…' : `Bulk actions (${selected.length})`}
-                    <ChevronDown />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleExport}>
-                  <Download />
-                  Export to Excel
-                </DropdownMenuItem>
-                {canUpdate ? (
-                  <>
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger>
-                        <Tag />
-                        Set status
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent className="min-w-48">
-                        {statusOptions.map((o) => (
-                          <DropdownMenuItem key={o.value} onClick={() => handleBulkSetStatus(o.value as ClientStatus)}>
-                            <Badge className={o.triggerClassName}>{o.label}</Badge>
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger>
-                        <Tag />
-                        Set quality
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent className="min-w-48">
-                        {qualityOptions.map((o) => (
-                          <DropdownMenuItem key={o.value} onClick={() => handleBulkSetQuality(o.value as ClientQuality)}>
-                            <Badge className={o.triggerClassName}>{o.label}</Badge>
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                  </>
-                ) : null}
-                {canDelete ? (
-                  <DropdownMenuItem variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>
-                    <Trash2 />
-                    Delete
-                  </DropdownMenuItem>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            <Button size="lg" variant="outline" onClick={handleExport} disabled={isExporting}>
+              <Download />
+              {isExporting ? 'Exporting…' : 'Export to Excel'}
+            </Button>
+            {selected.length > 0 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button size="lg" disabled={isBulkUpdating}>
+                      {isBulkUpdating ? 'Updating…' : `Bulk actions (${selected.length})`}
+                      <ChevronDown />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end">
+                  {canUpdate ? (
+                    <>
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <Tag />
+                          Set status
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="min-w-48">
+                          {statusOptions.map((o) => (
+                            <DropdownMenuItem key={o.value} onClick={() => handleBulkSetStatus(o.value as ClientStatus)}>
+                              <Badge className={o.triggerClassName}>{o.label}</Badge>
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <Tag />
+                          Set quality
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="min-w-48">
+                          {qualityOptions.map((o) => (
+                            <DropdownMenuItem key={o.value} onClick={() => handleBulkSetQuality(o.value as ClientQuality)}>
+                              <Badge className={o.triggerClassName}>{o.label}</Badge>
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    </>
+                  ) : null}
+                  {canDelete ? (
+                    <DropdownMenuItem variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>
+                      <Trash2 />
+                      Delete
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+          </div>
         }
         selectionContextMenu={
           <>
@@ -616,7 +593,6 @@ export function CompaniesTable({
                 if (res.status !== 201) throw new Error('Failed to add specialization');
                 return res.data;
               }}
-              consultants={consultants}
               isSaving={createCompanyMutation.isPending}
               onSave={handleCreate}
               onCancel={() => setCreating(false)}
@@ -635,7 +611,6 @@ function CompanyForm({
   industries,
   onCreateIndustry,
   onCreateSpecialization,
-  consultants,
   isSaving,
   onSave,
   onCancel,
@@ -645,7 +620,6 @@ function CompanyForm({
   industries: { id: string; name: string }[];
   onCreateIndustry: (name: string) => Promise<{ id: string; name: string }>;
   onCreateSpecialization: (name: string, industryId: string) => Promise<SpecializationOption>;
-  consultants: ConsultantEntity[];
   isSaving: boolean;
   onSave: (values: CompanyFormValues) => void;
   onCancel: () => void;
@@ -662,7 +636,6 @@ function CompanyForm({
   const [generalDescription, setGeneralDescription] = React.useState('');
   const [status, setStatus] = React.useState<ClientStatus>('COLD');
   const [quality, setQuality] = React.useState<ClientQuality>('MEDIUM');
-  const [consultantId, setConsultantId] = React.useState('');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -679,7 +652,6 @@ function CompanyForm({
       generalDescription,
       status,
       quality,
-      consultantId,
     });
   }
 
@@ -746,9 +718,6 @@ function CompanyForm({
         </FormField>
         <FormField label="Quality" htmlFor="company-quality" description="A subjective read on how good a prospect this is.">
           <EnumSelect id="company-quality" value={quality} onValueChange={(v) => setQuality(v as ClientQuality)} options={qualityOptions} />
-        </FormField>
-        <FormField label="Consultant" htmlFor="company-consultant" description="Owning consultant — optional.">
-          <ConsultantCombobox id="company-consultant" value={consultantId} onValueChange={setConsultantId} consultants={consultants} />
         </FormField>
         <FormField label="Office address(es)" htmlFor="company-addresses" description="One per line — distinct from Market above.">
           <textarea

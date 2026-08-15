@@ -4,45 +4,23 @@ import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestContext } from '../common/request-context';
-import { assertInScope, isScoped, tobScope } from '../common/scope';
+import { isScoped, tobScope } from '../common/scope';
 import { AuthUser } from '../auth/auth.types';
 import { CreateTobDto } from './dto/create-tob.dto';
 import { UpdateTobDto } from './dto/update-tob.dto';
 import { QueryTobsDto } from './dto/query-tobs.dto';
 
 // A TOB has no scope fields of its own — no industry, no location, no
-// consultant — so everything the job-scope check needs comes through the
-// parent Client, and this include is what fetches it. The shape mirrors
-// CLIENT_INCLUDE's scope half exactly (own industry, own market set), because
-// `tobScope` delegates to `clientScope` and the single-record check has to
-// agree with the list filter.
-//
-// The three scope-only fields (`industryId`, `consultantId`, `locations`) are
-// stripped back out in `toEntity` — never part of the API response.
-// `companyName` and the representative's name survive, resolved to plain
-// strings, since TobEntity documents them as `string | null` rather than the
-// nested objects Prisma would otherwise return.
+// consultant. `companyName` and the representative's name are resolved to
+// plain strings here, since TobEntity documents them as `string | null`
+// rather than the nested objects Prisma would otherwise return.
 const TOB_INCLUDE = {
-  client: {
-    select: {
-      companyName: true,
-      industryId: true,
-      consultantId: true,
-      locations: { select: { location: { select: { ancestorIds: true } } } },
-    },
-  },
+  client: { select: { companyName: true } },
   linktalRepresentative: { select: { fullName: true } },
 } satisfies Prisma.TobInclude;
 
-type TobClient = {
-  companyName: string;
-  industryId: string | null;
-  consultantId: string | null;
-  locations: { location: { ancestorIds: string[] } }[];
-};
-
 type TobWithRelations = {
-  client: TobClient | null;
+  client: { companyName: string } | null;
   linktalRepresentative: { fullName: string } | null;
 };
 
@@ -136,16 +114,15 @@ export class TobsService {
   }
 
   /**
-   * `user` gates the job-scope check (findOne/update/remove are single-record
-   * access — a scoped consultant hitting an out-of-scope row directly gets an
-   * explicit 403, unlike `findAll`, which just filters silently).
+   * Single-record access is unguarded by scope — scope only ever filters
+   * `findAll`. `user` is accepted for signature symmetry with the other
+   * services but unused here now.
    */
-  async findOne(id: string, user: AuthUser) {
+  async findOne(id: string, _user: AuthUser) {
     const tob = await this.prisma.tob.findUnique({ where: { id }, include: TOB_INCLUDE });
     if (!tob) {
       throw new NotFoundException(`Tob ${id} not found`);
     }
-    this.assertClientInScope(user, tob.client);
     return toEntity(tob);
   }
 
@@ -157,39 +134,7 @@ export class TobsService {
     return toEntity(tob);
   }
 
-  /**
-   * The single-record half of `tobScope`: a TOB is reachable exactly when its
-   * client is, so this re-runs the client's own check against the relations
-   * TOB_INCLUDE pulled through. Kept identical to ClientsService.findOne's
-   * assertion — same arms, same ownership short-circuit.
-   */
-  private assertClientInScope(user: AuthUser, client: TobClient | null): void {
-    assertInScope(user, {
-      consultantId: client?.consultantId ?? null,
-      industryId: client?.industryId ?? null,
-      locationAncestorIds: client?.locations.flatMap((l) => l.location.ancestorIds) ?? [],
-    });
-  }
-
-  /**
-   * A consultant can only file a TOB against a company they can already see —
-   * otherwise create is a blind write into someone else's book, and the row
-   * would immediately vanish from the creator's own list.
-   */
-  private async assertCanWriteToClient(clientId: string, user: AuthUser) {
-    if (!isScoped(user)) return;
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
-      select: TOB_INCLUDE.client.select,
-    });
-    if (!client) {
-      throw new NotFoundException(`Client ${clientId} not found`);
-    }
-    this.assertClientInScope(user, client);
-  }
-
-  async create(dto: CreateTobDto, user: AuthUser) {
-    await this.assertCanWriteToClient(dto.clientId, user);
+  async create(dto: CreateTobDto, _user: AuthUser) {
     // displayId is assigned by the DB (Tob_displayId_seq default).
     const tob = await this.prisma.tob.create({ data: dto, include: TOB_INCLUDE });
     return toEntity(tob);
@@ -197,13 +142,8 @@ export class TobsService {
 
   async update(id: string, dto: UpdateTobDto, user: AuthUser) {
     await this.findOne(id, user);
-    // Re-parenting is allowed (a TOB filed against the wrong company gets
-    // moved, it isn't deleted and retyped), but the destination is checked
-    // too — otherwise a scoped consultant could push a row into a book they
-    // can't read.
-    if (dto.clientId !== undefined) {
-      await this.assertCanWriteToClient(dto.clientId, user);
-    }
+    // Re-parenting (dto.clientId) is allowed unguarded — a TOB filed against
+    // the wrong company gets moved, it isn't deleted and retyped.
     const tob = await this.prisma.tob.update({ where: { id }, data: dto, include: TOB_INCLUDE });
     return toEntity(tob);
   }

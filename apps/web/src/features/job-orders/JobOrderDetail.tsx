@@ -22,7 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ClientCombobox } from '@/components/ClientCombobox';
-import { ConsultantCombobox } from '@/components/ConsultantCombobox';
+import { ConsultantMultiSelect } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
@@ -33,12 +33,14 @@ import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { useGetCandidates } from '@/lib/api/generated/candidates/candidates';
 import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
+import { useGetLocation } from '@/lib/api/generated/locations/locations';
 import {
   getGetJobOrderPipelineTimelineQueryKey,
   getGetJobOrderQueryKey,
   getGetJobOrdersQueryKey,
   useGetJobOrder,
   useGetJobOrderPipelineTimeline,
+  useSetJobOrderConsultants,
   useUpdateJobOrder,
 } from '@/lib/api/generated/job-orders/job-orders';
 import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
@@ -104,7 +106,6 @@ export function JobOrderDetail({ id }: { id: string }) {
 function toPatch(values: {
   jobTitleId: string;
   clientId: string;
-  consultantId: string;
   quality: JobOrderQuality;
   status: JobOrderStatus;
   priorityLevel: string;
@@ -112,14 +113,12 @@ function toPatch(values: {
   salaryMax: string;
   salaryCurrency: string;
   openings: string;
-  filledCount: string;
   description: string;
   requirements: string;
 }) {
   return {
     jobTitleId: values.jobTitleId || null,
     clientId: values.clientId,
-    consultantId: values.consultantId || null,
     quality: values.quality,
     status: values.status,
     priorityLevel: values.priorityLevel === '' ? null : Number(values.priorityLevel),
@@ -127,7 +126,6 @@ function toPatch(values: {
     salaryMax: values.salaryMax === '' ? null : Number(values.salaryMax),
     salaryCurrency: values.salaryCurrency || null,
     openings: Number(values.openings),
-    filledCount: Number(values.filledCount),
     description: values.description || null,
     requirements: values.requirements || null,
   } as unknown as UpdateJobOrderDto;
@@ -155,7 +153,8 @@ function JobOrderEditForm({
   }
 
   const [clientId, setClientId] = React.useState(jobOrder.clientId);
-  const [consultantId, setConsultantId] = React.useState(jobOrder.consultantId ?? '');
+  const initialConsultantIds = React.useMemo(() => jobOrder.consultants.map((c) => c.id), [jobOrder.consultants]);
+  const [consultantIds, setConsultantIds] = React.useState<string[]>(initialConsultantIds);
   const [quality, setQuality] = React.useState<JobOrderQuality>(jobOrder.quality);
   const [status, setStatus] = React.useState<JobOrderStatus>(jobOrder.status);
   const [priorityLevel, setPriorityLevel] = React.useState(
@@ -165,14 +164,16 @@ function JobOrderEditForm({
   const [salaryMax, setSalaryMax] = React.useState(jobOrder.salaryMax != null ? String(jobOrder.salaryMax) : '');
   const [salaryCurrency, setSalaryCurrency] = React.useState(jobOrder.salaryCurrency ?? '');
   const [openings, setOpenings] = React.useState(String(jobOrder.openings));
-  const [filledCount, setFilledCount] = React.useState(String(jobOrder.filledCount));
   const [description, setDescription] = React.useState(jobOrder.description ?? '');
   const [requirements, setRequirements] = React.useState(jobOrder.requirements ?? '');
+
+  const consultantIdsKey = (ids: string[]) => [...ids].sort().join(',');
+  const consultantsDirty = consultantIdsKey(consultantIds) !== consultantIdsKey(initialConsultantIds);
 
   const isDirty =
     jobTitleId !== (jobOrder.jobTitleId ?? '') ||
     clientId !== jobOrder.clientId ||
-    consultantId !== (jobOrder.consultantId ?? '') ||
+    consultantsDirty ||
     quality !== jobOrder.quality ||
     status !== jobOrder.status ||
     priorityLevel !== (jobOrder.priorityLevel != null ? String(jobOrder.priorityLevel) : '') ||
@@ -180,7 +181,6 @@ function JobOrderEditForm({
     salaryMax !== (jobOrder.salaryMax != null ? String(jobOrder.salaryMax) : '') ||
     salaryCurrency !== (jobOrder.salaryCurrency ?? '') ||
     openings !== String(jobOrder.openings) ||
-    filledCount !== String(jobOrder.filledCount) ||
     description !== (jobOrder.description ?? '') ||
     requirements !== (jobOrder.requirements ?? '');
 
@@ -194,16 +194,36 @@ function JobOrderEditForm({
 
   // Industry-first: a Job Order has no industry of its own, only via its
   // (possibly just-changed) Client — reacts to the live `clientId` selection,
-  // not the original `jobOrder.clientId`, so switching Client immediately
-  // updates which consultants are assignable. No industry tagged yet means
-  // no consultant can be assigned at all (enforced server-side too, in
-  // JobOrdersService — see INDUSTRY_REQUIRED).
+  // not the original `jobOrder.clientId`.
   const selectedClientIndustryId = clients.find((c) => c.id === clientId)?.industryId ?? null;
-  const availableConsultants = !selectedClientIndustryId
-    ? []
-    : consultants.filter(
-        (c) => c.industryIds === undefined || c.industryIds.includes(selectedClientIndustryId),
-      );
+
+  // The job order's own location's ancestor path — needed to check a
+  // candidate consultant's location grants the same way the backend does
+  // (`ancestorIds: { hasSome: grantedLocationIds } }`). Only fetched when the
+  // job order actually has a location; the picker itself is never restricted
+  // by this — it's purely for the out-of-scope warning below.
+  const { data: locationData } = useGetLocation(jobOrder.locationId ?? '', {
+    query: { enabled: !!jobOrder.locationId },
+  });
+  const locationAncestorIds = locationData?.status === 200 ? locationData.data.ancestorIds : [];
+
+  // Non-blocking: which of the currently-picked consultants are outside both
+  // this job order's industry (via its client) and its location. There's no
+  // gate on adding them anyway — see PUT /job-orders/:id/consultants — this
+  // is purely informational, the deliberate escape hatch this feature exists
+  // for. Grants come back `undefined` when the caller lacks read access on
+  // them; treated as "can't tell", not as a match.
+  const outOfScopeConsultants = consultantIds
+    .map((id) => consultants.find((c) => c.id === id))
+    .filter((c): c is ConsultantEntity => c != null)
+    .filter((c) => {
+      // Can't tell without grant data (omitted when the caller lacks
+      // consultant_industry/location:read) — never warn on a guess.
+      if (c.industryIds == null && c.locationIds == null) return false;
+      const industryMatch = selectedClientIndustryId != null && (c.industryIds?.includes(selectedClientIndustryId) ?? false);
+      const locationMatch = c.locationIds?.some((id) => locationAncestorIds.includes(id)) ?? false;
+      return !industryMatch && !locationMatch;
+    });
 
   const { data: pipelineData, isLoading: pipelineLoading } = useGetJobOrderPipelineTimeline(jobOrder.id);
   const pipelineEvents = pipelineData?.status === 200 ? pipelineData.data : undefined;
@@ -211,37 +231,40 @@ function JobOrderEditForm({
   const { data: candidatesData } = useGetCandidates({ pageSize: 100 });
   const candidates = candidatesData?.status === 200 ? candidatesData.data.data : [];
 
-  const updateJobOrder = useUpdateJobOrder({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetJobOrderQueryKey(jobOrder.id) });
-        toast.success(`Saved changes to ${jobTitles.find((j) => j.id === jobTitleId)?.name ?? 'this job order'}`);
-      },
-      onError: (err) => toast.error(err.message || 'Failed to save job order'),
-    },
-  });
+  const updateJobOrder = useUpdateJobOrder();
+  const setConsultants = useSetJobOrderConsultants();
+  const isSaving = updateJobOrder.isPending || setConsultants.isPending;
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    updateJobOrder.mutate({
-      id: jobOrder.id,
-      data: toPatch({
-        jobTitleId,
-        clientId,
-        consultantId,
-        quality,
-        status,
-        priorityLevel,
-        salaryMin,
-        salaryMax,
-        salaryCurrency,
-        openings,
-        filledCount,
-        description,
-        requirements,
-      }),
-    });
+    try {
+      await Promise.all([
+        updateJobOrder.mutateAsync({
+          id: jobOrder.id,
+          data: toPatch({
+            jobTitleId,
+            clientId,
+            quality,
+            status,
+            priorityLevel,
+            salaryMin,
+            salaryMax,
+            salaryCurrency,
+            openings,
+            description,
+            requirements,
+          }),
+        }),
+        // Full-set-replace, only when the picked set actually changed — see
+        // PUT /job-orders/:id/consultants (no scope check, deliberately).
+        consultantsDirty ? setConsultants.mutateAsync({ id: jobOrder.id, data: { consultantIds } }) : Promise.resolve(),
+      ]);
+      queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetJobOrderQueryKey(jobOrder.id) });
+      toast.success(`Saved changes to ${jobTitles.find((j) => j.id === jobTitleId)?.name ?? 'this job order'}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save job order');
+    }
   }
 
   return (
@@ -275,11 +298,11 @@ function JobOrderEditForm({
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {isDirty && !updateJobOrder.isPending ? (
+            {isDirty && !isSaving ? (
               <span className="text-xs text-muted-foreground">Unsaved changes</span>
             ) : null}
-            <Button type="submit" form="job-order-form" size="lg" disabled={updateJobOrder.isPending || !isDirty}>
-              {updateJobOrder.isPending ? 'Saving…' : 'Save changes'}
+            <Button type="submit" form="job-order-form" size="lg" disabled={isSaving || !isDirty}>
+              {isSaving ? 'Saving…' : 'Save changes'}
             </Button>
           </div>
         </div>
@@ -309,23 +332,27 @@ function JobOrderEditForm({
                 <FormField label="Client" htmlFor="clientId">
                   <ClientCombobox id="clientId" value={clientId} onValueChange={setClientId} clients={clients} />
                 </FormField>
-                <FormField
-                  label="Consultant"
-                  htmlFor="consultantId"
-                  description={
-                    !selectedClientIndustryId
-                      ? 'Tag the client with an industry before assigning a consultant'
-                      : undefined
-                  }
-                >
-                  <ConsultantCombobox
-                    id="consultantId"
-                    value={consultantId}
-                    onValueChange={setConsultantId}
-                    consultants={availableConsultants}
-                    disabled={!selectedClientIndustryId}
-                  />
-                </FormField>
+                <div className="sm:col-span-2">
+                  <FormField
+                    label="Consultants"
+                    htmlFor="consultantIds"
+                    description="Several consultants can work this job order concurrently — adding someone outside their usual industry/location is allowed on purpose (see the warning below, not a block)."
+                  >
+                    <ConsultantMultiSelect
+                      id="consultantIds"
+                      selected={consultantIds}
+                      onChange={setConsultantIds}
+                      consultants={consultants}
+                    />
+                  </FormField>
+                  {outOfScopeConsultants.length > 0 ? (
+                    <p className="mt-1.5 text-xs text-warning">
+                      {outOfScopeConsultants.map((c) => c.fullName).join(', ')}{' '}
+                      {outOfScopeConsultants.length === 1 ? "isn't" : "aren't"} tagged for this job order's industry
+                      or location — still fine to add.
+                    </p>
+                  ) : null}
+                </div>
                 <FormField
                   label="Location"
                   htmlFor="location"
@@ -406,13 +433,12 @@ function JobOrderEditForm({
                   />
                 </FormField>
                 <FormField label="Filled" htmlFor="filledCount">
-                  <Input
-                    id="filledCount"
-                    type="number"
-                    min={0}
-                    value={filledCount}
-                    onChange={(e) => setFilledCount(e.target.value)}
-                  />
+                  {/* Derived from actual placements (see PlacementsService), not
+                      hand-editable — the two write paths used to be able to
+                      drift out of sync. */}
+                  <p id="filledCount" className="flex h-9 items-center text-sm text-muted-foreground">
+                    {jobOrder.filledCount}
+                  </p>
                 </FormField>
               </CardContent>
             </Card>

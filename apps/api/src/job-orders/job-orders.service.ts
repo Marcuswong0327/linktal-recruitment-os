@@ -1,15 +1,8 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, SubmissionStatus } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
-import {
-  assertConsultantCoversJobOrder,
-  assertInScope,
-  consultantCovers,
-  isScoped,
-  jobOrderScope,
-} from '../common/scope';
-import { redactConsultantField } from '../common/redact-consultant-field';
+import { isScoped, jobOrderScope } from '../common/scope';
 import { AuthUser } from '../auth/auth.types';
 import { CreateJobOrderDto } from './dto/create-job-order.dto';
 import { UpdateJobOrderDto } from './dto/update-job-order.dto';
@@ -35,6 +28,9 @@ const JOB_ORDER_INCLUDE = {
   // the scope check below (a Job Order has no industry of its own, only via
   // its Client) and is stripped back out in `toEntity`.
   client: { select: { industryId: true, companyName: true, displayId: true } },
+  // Who's working this job order — see JobOrderConsultant in schema.prisma.
+  // Several consultants can be on the same job order concurrently.
+  consultants: { select: { consultantId: true, consultant: { select: { fullName: true } } } },
   jobTitle: { select: { name: true } },
   jobRoleType: { select: { name: true } },
   // `ancestorIds` comes along on the location purely for the single-record
@@ -61,6 +57,7 @@ const JOB_ORDER_INCLUDE = {
 
 type JobOrderWithRelations = {
   client: { industryId: string; companyName: string; displayId: string } | null;
+  consultants: { consultantId: string; consultant: { fullName: string } }[];
   jobTitle: { name: string } | null;
   jobRoleType: { name: string } | null;
   location: { name: string; level: string; ancestorIds: string[] } | null;
@@ -82,7 +79,7 @@ function displayName(candidate: { firstName: string | null; lastName: string | n
 }
 
 function toEntity<T extends JobOrderWithRelations>(jobOrder: T) {
-  const { submissions, client, jobTitle, jobRoleType, location, ...rest } = jobOrder;
+  const { submissions, client, consultants, jobTitle, jobRoleType, location, ...rest } = jobOrder;
   return {
     ...rest,
     // `clientId` (on ...rest) is what you PATCH; these two are what you show
@@ -90,6 +87,7 @@ function toEntity<T extends JobOrderWithRelations>(jobOrder: T) {
     // input, not part of the job order's public shape.
     clientName: client?.companyName ?? null,
     clientDisplayId: client?.displayId ?? null,
+    consultants: consultants.map((c) => ({ id: c.consultantId, name: c.consultant.fullName })),
     jobTitle: jobTitle?.name ?? null,
     jobRoleType: jobRoleType?.name ?? null,
     location: location?.name ?? null,
@@ -141,7 +139,7 @@ export class JobOrdersService {
       // Safe to honour for a consultant too: `jobOrderScope` is AND-ed on
       // below, so filtering *by* another consultant can only narrow what this
       // caller was already allowed to see, never widen it.
-      where.consultantId = { in: query.consultantIds };
+      where.consultants = { some: { consultantId: { in: query.consultantIds } } };
     }
 
     if (query.priorityLevels?.length) {
@@ -215,7 +213,7 @@ export class JobOrdersService {
     ]);
 
     return {
-      data: data.map((jo) => redactConsultantField(toEntity(jo), user)),
+      data: data.map((jo) => toEntity(jo)),
       total,
       page,
       pageSize,
@@ -223,7 +221,12 @@ export class JobOrdersService {
     };
   }
 
-  async findOne(id: string, user: AuthUser) {
+  /**
+   * Single-record access is unguarded by scope — scope only ever filters
+   * `findAll`. `user` is accepted for signature symmetry with the other
+   * services but unused here now.
+   */
+  async findOne(id: string, _user: AuthUser) {
     const jobOrder = await this.prisma.jobOrder.findUnique({
       where: { id },
       include: JOB_ORDER_INCLUDE,
@@ -231,15 +234,7 @@ export class JobOrdersService {
     if (!jobOrder) {
       throw new NotFoundException(`Job order ${id} not found`);
     }
-    // A Job Order has no industry of its own — it inherits its Client's.
-    // `consultantId` short-circuits both arms: an assigned job order is always
-    // its owner's to open (see ownedBy in common/scope.ts).
-    assertInScope(user, {
-      consultantId: jobOrder.consultantId,
-      industryId: jobOrder.client?.industryId ?? null,
-      locationAncestorIds: jobOrder.location?.ancestorIds ?? [],
-    });
-    return redactConsultantField(toEntity(jobOrder), user);
+    return toEntity(jobOrder);
   }
 
   async findByDisplayId(displayId: string) {
@@ -253,74 +248,96 @@ export class JobOrdersService {
     return toEntity(jobOrder);
   }
 
-  async create(dto: CreateJobOrderDto, user: AuthUser) {
-    // A consultant can only be assigned a job order they'd reach anyway — its
-    // own location, or the industry of its client (JobOrder has none of its
-    // own) — unless an admin/manager is deliberately making an exception
-    // (see assertConsultantCovers).
-    if (dto.consultantId) {
-      await assertConsultantCoversJobOrder(
-        this.prisma,
-        dto.consultantId,
-        dto.clientId,
-        dto.locationId ?? null,
-        user.roleName,
-      );
-    }
+  async create(dto: CreateJobOrderDto, _user: AuthUser) {
+    const { consultantIds, ...rest } = dto;
     // displayId is assigned by the DB (JobOrder_displayId_seq default). A
     // brand-new job order has no submissions yet, but still runs through
     // toEntity so the response shape (pipelineSubmissions: []) matches every
     // other endpoint instead of omitting the field.
     const jobOrder = await this.prisma.jobOrder.create({
-      data: { ...dto },
+      data: {
+        ...rest,
+        ...(consultantIds && consultantIds.length > 0
+          ? { consultants: { create: consultantIds.map((consultantId) => ({ consultantId })) } }
+          : {}),
+      },
       include: JOB_ORDER_INCLUDE,
     });
     return toEntity(jobOrder);
   }
 
   async update(id: string, dto: UpdateJobOrderDto, user: AuthUser) {
-    const existing = await this.findOne(id, user);
+    await this.findOne(id, user);
 
-    // Only validated when a consultant is explicitly being set/changed here —
-    // re-linking to a different client never blocks on this by itself (that's
-    // what the auto-clear below is for instead of erroring).
-    if ('consultantId' in dto && dto.consultantId) {
-      await assertConsultantCoversJobOrder(
-        this.prisma,
-        dto.consultantId,
-        'clientId' in dto && dto.clientId ? dto.clientId : existing.clientId,
-        'locationId' in dto ? (dto.locationId ?? null) : existing.locationId,
-        user.roleName,
-      );
-    }
-
-    let jobOrder = await this.prisma.jobOrder.update({
+    const jobOrder = await this.prisma.jobOrder.update({
       where: { id },
       data: { ...dto },
       include: JOB_ORDER_INCLUDE,
     });
 
-    // Bidirectional auto-clear: re-linked to a different client, or moved to a
-    // different location, without an explicit consultant change in the same
-    // request — silently unassign if the existing consultant no longer reaches
-    // it on either arm.
-    const relinked = ('clientId' in dto && dto.clientId) || 'locationId' in dto;
-    if (relinked && !('consultantId' in dto) && existing.consultantId) {
-      const client = await this.prisma.client.findUnique({
-        where: { id: jobOrder.clientId },
-        select: { industryId: true },
+    return toEntity(jobOrder);
+  }
+
+  /**
+   * Full-set-replace of who's working this job order — mirrors
+   * ConsultantsService.setIndustries's diff shape (removals first, then
+   * additions, each as its own top-level create/delete call so the audit
+   * extension sees and diffs every row, never a nested relation write).
+   *
+   * Deliberately no scope-mismatch guard: adding a consultant here on purpose
+   * is the one way to reach an otherwise out-of-scope Client/Candidate — see
+   * the SCOPING note above Consultant in schema.prisma. Several consultants
+   * can be on the same job order at once.
+   */
+  async setConsultants(id: string, consultantIds: string[], actor: AuthUser) {
+    const jobOrder = await this.prisma.jobOrder.findUnique({ where: { id }, select: { id: true } });
+    if (!jobOrder) {
+      throw new NotFoundException(`Job order ${id} not found`);
+    }
+
+    const uniqueIds = Array.from(new Set(consultantIds));
+    if (uniqueIds.length > 0) {
+      const consultants = await this.prisma.consultant.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true, isActive: true },
       });
-      const covers = await consultantCovers(this.prisma, existing.consultantId, {
-        industryId: client?.industryId ?? null,
-        locationIds: jobOrder.locationId ? [jobOrder.locationId] : [],
-      });
-      if (!covers) {
-        await this.prisma.jobOrder.update({ where: { id }, data: { consultantId: null } });
-        jobOrder = await this.prisma.jobOrder.findUniqueOrThrow({ where: { id }, include: JOB_ORDER_INCLUDE });
+      const found = new Map(consultants.map((c) => [c.id, c.isActive]));
+      const missing = uniqueIds.filter((v) => !found.has(v));
+      if (missing.length > 0) {
+        throw new BadRequestException({
+          code: 'INVALID_CONSULTANT',
+          message: `Unknown consultant id(s): ${missing.join(', ')}`,
+        });
+      }
+      const inactive = uniqueIds.filter((v) => found.get(v) === false);
+      if (inactive.length > 0) {
+        throw new BadRequestException({
+          code: 'INACTIVE_CONSULTANT',
+          message: `Inactive consultant id(s): ${inactive.join(', ')}`,
+        });
       }
     }
 
-    return redactConsultantField(toEntity(jobOrder), user);
+    const current = await this.prisma.jobOrderConsultant.findMany({
+      where: { jobOrderId: id },
+      select: { consultantId: true },
+    });
+    const currentIds = current.map((c) => c.consultantId);
+    const currentSet = new Set(currentIds);
+    const nextSet = new Set(uniqueIds);
+    const toAdd = uniqueIds.filter((v) => !currentSet.has(v));
+    const toRemove = currentIds.filter((v) => !nextSet.has(v));
+
+    for (const consultantId of toRemove) {
+      await this.prisma.jobOrderConsultant.delete({
+        where: { jobOrderId_consultantId: { jobOrderId: id, consultantId } },
+      });
+    }
+    for (const consultantId of toAdd) {
+      await this.prisma.jobOrderConsultant.create({ data: { jobOrderId: id, consultantId } });
+    }
+
+    return this.findOne(id, actor);
   }
 
   /**

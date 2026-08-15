@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CandidateStatus, PlacementStatus, SubmissionStatus } from '@prisma/client';
 import { CandidatesService } from './candidates.service';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
@@ -6,7 +6,6 @@ import { QueryCandidatesDto, SortOrder } from './dto/query-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { AuthUser } from '../auth/auth.types';
-import { grantsMock } from '../common/grants.testing';
 
 function baseQuery(overrides: Partial<QueryCandidatesDto> = {}): QueryCandidatesDto {
   return { page: 1, pageSize: 20, sortOrder: SortOrder.asc, ...overrides } as QueryCandidatesDto;
@@ -96,7 +95,7 @@ describe('CandidatesService.create', () => {
 // job — it's handled centrally by the Prisma extension's CASCADE_MAP for any
 // delete path, not just this one. See prisma.extensions.spec.ts.
 describe('CandidatesService.remove', () => {
-  it('checks scope, then hands off to a plain delete', async () => {
+  it('checks existence, then hands off to a plain delete', async () => {
     const prisma = {
       candidate: {
         findUnique: jest.fn().mockResolvedValue(withRelations({ id: 'c1', industryId: 'ind1' })),
@@ -206,7 +205,6 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
         industryIds: ['ind1'],
         jobRoleTypeIds: ['role1'],
         specializationIds: ['spec1'],
-        consultantIds: ['cons1'],
       }),
       makeUser(),
     );
@@ -218,7 +216,6 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
         { industryId: { in: ['ind1'] } },
         { jobRoleTypeId: { in: ['role1'] } },
         { specializations: { some: { specializationId: { in: ['spec1'] } } } },
-        { consultantId: { in: ['cons1'] } },
       ]),
     );
   });
@@ -312,8 +309,9 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
   });
 });
 
-// visible = (industry AND specialization) OR location — the two arms are
-// OR-ed, so either one alone is enough to reach a record.
+// visible = industry OR own location OR reach via a job order I'm on — three
+// arms OR-ed, so any one alone is enough to reach a record. Pure list filter,
+// no ownership arm.
 describe('CandidatesService.findAll — scope', () => {
   function setup() {
     const findMany = jest.fn().mockResolvedValue([]);
@@ -322,7 +320,7 @@ describe('CandidatesService.findAll — scope', () => {
     return { findMany, service: new CandidatesService(prisma, {} as unknown as PrismaService) };
   }
 
-  it('ORs ownership, industry and location onto the where for a scoped consultant', async () => {
+  it('ORs industry, location and job-order-membership onto the where for a scoped consultant', async () => {
     const { findMany, service } = setup();
     await service.findAll(
       baseQuery(),
@@ -332,9 +330,13 @@ describe('CandidatesService.findAll — scope', () => {
     const where = findMany.mock.calls[0][0].where;
     expect(where.AND).toContainEqual({
       OR: [
-        { consultantId: 'cons-me' }, // an assigned candidate is always mine to see
         { industryId: { in: ['ind1', 'ind2'] } },
         { location: { ancestorIds: { hasSome: ['nsw'] } } },
+        {
+          submissions: {
+            some: { deletedAt: null, jobOrder: { consultants: { some: { consultantId: 'cons-me' } } } },
+          },
+        },
       ],
     });
   });
@@ -354,7 +356,7 @@ describe('CandidatesService.findAll — scope', () => {
 
     const where = findMany.mock.calls[0][0].where;
     const scope = where.AND.find((c: Record<string, unknown>) => 'OR' in c);
-    expect(scope.OR[1]).toEqual({
+    expect(scope.OR[0]).toEqual({
       industryId: { in: ['ind1'] },
       OR: [
         { specializations: { none: {} } },
@@ -363,16 +365,24 @@ describe('CandidatesService.findAll — scope', () => {
     });
   });
 
-  // Zero grants means "not configured", never "sees everything" — wildcards
-  // are materialised into concrete rows at assignment time. An assignment is a
-  // specific row rather than a wildcard, so an unconfigured consultant still
-  // keeps whatever has been handed to them.
-  it('falls back to just their assigned candidates when there are no grants at all', async () => {
+  // Zero grants means "not configured", never "sees everything" — the industry
+  // and location arms naturally match nothing (`in: []` / `hasSome: []`), and
+  // there's no ownership arm left to fall back to. The job-order-membership
+  // arm is unaffected by grants, so it's still present.
+  it('emits unmatchable industry/location arms but keeps the job-order arm with no grants at all', async () => {
     const { findMany, service } = setup();
     await service.findAll(baseQuery(), makeUser({ roleName: 'consultant', consultantId: 'cons-me' }));
 
-    expect(findMany.mock.calls[0][0].where.AND).toContainEqual({ consultantId: 'cons-me' });
-    expect(findMany.mock.calls[0][0].where.AND).not.toContainEqual({ id: { in: [] } });
+    const scope = findMany.mock.calls[0][0].where.AND.find((c: Record<string, unknown>) => 'OR' in c);
+    expect(scope.OR).toEqual([
+      { industryId: { in: [] } },
+      { location: { ancestorIds: { hasSome: [] } } },
+      {
+        submissions: {
+          some: { deletedAt: null, jobOrder: { consultants: { some: { consultantId: 'cons-me' } } } },
+        },
+      },
+    ]);
   });
 
   it('does not scope non-consultant roles', async () => {
@@ -383,7 +393,10 @@ describe('CandidatesService.findAll — scope', () => {
   });
 });
 
-describe('CandidatesService.findOne — job scope', () => {
+// findOne no longer gates on scope — scope is a list filter only now (see
+// common/scope.ts). A direct fetch by id always succeeds regardless of the
+// caller's industry/location grants.
+describe('CandidatesService.findOne', () => {
   function makeService(candidate: unknown) {
     const findUnique = jest.fn().mockResolvedValue(candidate);
     const prisma = { candidate: { findUnique } } as unknown as ExtendedPrismaClient;
@@ -391,165 +404,153 @@ describe('CandidatesService.findOne — job scope', () => {
     return { service: new CandidatesService(prisma, base) };
   }
 
-  it('rejects a scoped consultant when neither arm matches', async () => {
-    const { service } = makeService(
-      withRelations({ id: 'c1', industryId: 'finance', location: { name: 'Perth', level: 'CITY', ancestorIds: ['perth', 'wa', 'au'] } }),
-    );
-    await expect(
-      service.findOne('c1', makeUser({ roleName: 'consultant', industryIds: ['tech'], locationIds: ['nsw'] })),
-    ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
-  });
-
-  // Ownership short-circuits both arms: a candidate handed to this consultant
-  // stays theirs to open even after the record is retagged out of their patch.
-  it('allows the owning consultant through regardless of both arms', async () => {
+  it('returns the record for a scoped consultant even when no arm matches', async () => {
     const { service } = makeService(
       withRelations({
         id: 'c1',
         industryId: 'finance',
-        consultantId: 'cons-me',
         location: { name: 'Perth', level: 'CITY', ancestorIds: ['perth', 'wa', 'au'] },
       }),
     );
     await expect(
-      service.findOne(
-        'c1',
-        makeUser({ roleName: 'consultant', consultantId: 'cons-me', industryIds: ['tech'], locationIds: ['nsw'] }),
-      ),
-    ).resolves.toMatchObject({ id: 'c1' });
-  });
-
-  it("does not let one consultant through on another's assignment", async () => {
-    const { service } = makeService(
-      withRelations({ id: 'c1', industryId: 'finance', consultantId: 'someone-else' }),
-    );
-    await expect(
-      service.findOne(
-        'c1',
-        makeUser({ roleName: 'consultant', consultantId: 'cons-me', industryIds: ['tech'] }),
-      ),
-    ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
-  });
-
-  it('allows a scoped consultant on an industry match alone', async () => {
-    const { service } = makeService(
-      withRelations({ id: 'c1', industryId: 'tech', location: { name: 'Perth', level: 'CITY', ancestorIds: ['perth', 'wa', 'au'] } }),
-    );
-    await expect(
       service.findOne('c1', makeUser({ roleName: 'consultant', industryIds: ['tech'], locationIds: ['nsw'] })),
     ).resolves.toMatchObject({ id: 'c1' });
   });
 
-  // The location arm resolves upward: a STATE grant reaches a candidate
-  // pinned to a suburb inside it, because the state is on the suburb's
-  // ancestor path.
-  it('allows a scoped consultant on a location match alone, via an ancestor', async () => {
-    const { service } = makeService(
-      withRelations({
-        id: 'c1',
-        industryId: 'finance',
-        location: { name: 'Silverwater', level: 'SUBURB', ancestorIds: ['silverwater', 'sydney', 'nsw', 'au'] },
-      }),
-    );
+  it('throws NotFound when the candidate does not exist, for every role', async () => {
+    const { service } = makeService(null);
     await expect(
-      service.findOne('c1', makeUser({ roleName: 'consultant', industryIds: ['tech'], locationIds: ['nsw'] })),
-    ).resolves.toMatchObject({ id: 'c1' });
+      service.findOne('missing', makeUser({ roleName: 'consultant' })),
+    ).rejects.toThrow('Candidate missing not found');
   });
 });
 
-describe('CandidatesService.create — assignment guard (industry OR location)', () => {
-  function makeService(grants: Parameters<typeof grantsMock>[0] = {}) {
-    const create = jest.fn().mockResolvedValue(withRelations({ id: 'c1' }));
-    const prisma = { candidate: { create }, ...grantsMock(grants) } as unknown as ExtendedPrismaClient;
-    const base = {} as unknown as PrismaService;
-    return { service: new CandidatesService(prisma, base), create };
-  }
-
-  it('rejects assigning a consultant who covers neither the industry nor the location', async () => {
-    const { service, create } = makeService();
-    await expect(
-      service.create(
-        makeDto({ industryId: 'ind1', consultantId: 'cons-1' }),
-        makeUser({ roleName: 'consultant' }),
-      ),
-    ).rejects.toMatchObject({ response: { code: 'CONSULTANT_SCOPE_MISMATCH' } });
-    expect(create).not.toHaveBeenCalled();
-  });
-
-  it('allows assigning a consultant whose industry matches', async () => {
-    const { service, create } = makeService({ industryIds: ['ind1'] });
-    await service.create(
-      makeDto({ industryId: 'ind1', consultantId: 'cons-1' }),
-      makeUser({ roleName: 'consultant' }),
-    );
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-
-  it('allows assigning a consultant on location alone', async () => {
-    const { service, create } = makeService({ locationIds: ['au'], locationCovers: true });
-    await service.create(
-      makeDto({ industryId: 'ind1', consultantId: 'cons-1', locationId: 'syd' }),
-      makeUser({ roleName: 'consultant' }),
-    );
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-
-  it('skips the guard entirely when no consultant is being assigned', async () => {
-    const { service, create } = makeService();
-    await service.create(makeDto(), makeUser());
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-
-  it('lets admin assign a consultant who covers neither the industry nor the location', async () => {
-    const { service, create } = makeService();
-    await service.create(
-      makeDto({ industryId: 'ind1', consultantId: 'cons-1' }),
-      makeUser({ roleName: 'admin' }),
-    );
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('CandidatesService.update — bidirectional auto-clear', () => {
-  function makeService(grants: Parameters<typeof grantsMock>[0] = {}) {
-    const findUnique = jest
-      .fn()
-      .mockResolvedValueOnce(withRelations({ id: 'c1', industryId: 'ind1', consultantId: 'cons-1' }))
-      // the auto-clear's own re-read of the persisted row
-      .mockResolvedValueOnce({ consultantId: 'cons-1', industryId: 'ind2', locationId: 'syd' })
-      .mockResolvedValueOnce(withRelations({ id: 'c1', industryId: 'ind2', consultantId: null }));
+describe('CandidatesService.update', () => {
+  function makeService(existing: unknown = withRelations({ id: 'c1', industryId: 'ind1' })) {
+    const findUnique = jest.fn().mockResolvedValue(existing);
     const update = jest.fn().mockResolvedValue(withRelations({ id: 'c1', industryId: 'ind2' }));
-    const prisma = {
-      candidate: { findUnique, update, findUniqueOrThrow: findUnique },
-      ...grantsMock(grants),
-    } as unknown as ExtendedPrismaClient;
+    const prisma = { candidate: { findUnique, update } } as unknown as ExtendedPrismaClient;
     const base = {} as unknown as PrismaService;
     return { service: new CandidatesService(prisma, base), update };
   }
 
-  it('clears a now-uncovered consultant when the industry changes without touching consultantId', async () => {
+  it('writes the industry change straight through, with no follow-up write', async () => {
     const { service, update } = makeService();
-    const result = await service.update('c1', { industryId: 'ind2' }, makeUser());
+    await service.update('c1', { industryId: 'ind2' }, makeUser());
 
-    expect(update).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'c1' }, data: { consultantId: null } }),
+      expect.objectContaining({ where: { id: 'c1' }, data: { industryId: 'ind2' } }),
     );
-    expect(result.consultantId).toBeNull();
   });
 
-  it("leaves the consultant alone when their patch still covers the candidate", async () => {
-    const { service, update } = makeService({ locationIds: ['au'], locationCovers: true });
-    await service.update('c1', { industryId: 'ind2' }, makeUser());
+  it('replaces the whole specialization set rather than merging into it', async () => {
+    const { service, update } = makeService();
+    await service.update('c1', { specializationIds: ['spec1'] }, makeUser());
+
+    expect(update.mock.calls[0][0].data.specializations).toEqual({
+      deleteMany: {},
+      create: [{ specializationId: 'spec1' }],
+    });
+  });
+});
+
+describe('CandidatesService.updateContactHistory', () => {
+  function setup(existing: unknown) {
+    const update = jest.fn().mockResolvedValue({ id: 'ch1', screeningNotes: 'updated' });
+    const prisma = { candidateContactHistory: { update } };
+    const base = { candidateContactHistory: { findUnique: jest.fn().mockResolvedValue(existing) } };
+    const service = new CandidatesService(
+      prisma as unknown as ExtendedPrismaClient,
+      base as unknown as PrismaService,
+    );
+    return { prisma, base, service, update };
+  }
+
+  const screeningRow = {
+    id: 'ch1',
+    candidateId: 'cand1',
+    category: 'SCREENING' as const,
+    contactedById: 'me',
+    editedAt: null,
+    createdAt: new Date('2026-08-01T00:00:00.000Z'),
+  };
+
+  it('updates screeningNotes and stamps editedAt/editedById on a SCREENING row', async () => {
+    const { service, update } = setup(screeningRow);
+    await service.updateContactHistory('cand1', 'ch1', { screeningNotes: 'new content' }, makeUser({ consultantId: 'me' }));
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][0]).toMatchObject({
+      where: { id: 'ch1' },
+      data: expect.objectContaining({ screeningNotes: 'new content', editedById: 'me' }),
+    });
+  });
+
+  it('rejects editing a non-SCREENING (OUTREACH) row', async () => {
+    const { service } = setup({ ...screeningRow, category: 'OUTREACH' });
+    await expect(
+      service.updateContactHistory('cand1', 'ch1', { screeningNotes: 'x' }, makeUser({ consultantId: 'me' })),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('404s when the row does not exist', async () => {
+    const { service } = setup(null);
+    await expect(
+      service.updateContactHistory('cand1', 'missing', { screeningNotes: 'x' }, makeUser()),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('404s when the row belongs to a different candidate', async () => {
+    const { service } = setup(screeningRow);
+    await expect(
+      service.updateContactHistory('some-other-candidate', 'ch1', { screeningNotes: 'x' }, makeUser()),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it("rejects an edit from someone other than the row's author or an admin", async () => {
+    const { service } = setup(screeningRow);
+    await expect(
+      service.updateContactHistory(
+        'cand1',
+        'ch1',
+        { screeningNotes: 'x' },
+        makeUser({ consultantId: 'someone-else', roleName: 'consultant' }),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('lets an admin edit a row authored by someone else', async () => {
+    const { service, update } = setup(screeningRow);
+    await service.updateContactHistory(
+      'cand1',
+      'ch1',
+      { screeningNotes: 'x' },
+      makeUser({ consultantId: 'someone-else', roleName: 'admin' }),
+    );
     expect(update).toHaveBeenCalledTimes(1);
   });
 
-  // A candidate's location is an ownership arm now, so moving them re-checks.
-  it('runs the auto-clear when only the location changed', async () => {
-    const { service, update } = makeService();
-    await service.update('c1', { locationId: 'mel' }, makeUser());
-    expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'c1' }, data: { consultantId: null } }),
+  it('rejects a stale edit whose expectedVersion no longer matches', async () => {
+    const { service } = setup(screeningRow);
+    await expect(
+      service.updateContactHistory(
+        'cand1',
+        'ch1',
+        { screeningNotes: 'x', expectedVersion: '2020-01-01T00:00:00.000Z' },
+        makeUser({ consultantId: 'me' }),
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('accepts an edit whose expectedVersion matches editedAt ?? createdAt', async () => {
+    const { service, update } = setup(screeningRow);
+    await service.updateContactHistory(
+      'cand1',
+      'ch1',
+      { screeningNotes: 'x', expectedVersion: screeningRow.createdAt.toISOString() },
+      makeUser({ consultantId: 'me' }),
     );
+    expect(update).toHaveBeenCalledTimes(1);
   });
 });

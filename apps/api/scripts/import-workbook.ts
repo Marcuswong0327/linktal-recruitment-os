@@ -1039,15 +1039,29 @@ async function importCandidateContacts(refs: Refs, rejects: RejectReport): Promi
       reject('Contacted date', row.cells[CANDIDATE_CONTACT.contactedAt], 'unparseable date — defaulted to now');
     }
 
+    const rawCategory = norm(row.cells[CANDIDATE_CONTACT.category]);
+    // Same classification the schema migration applied to existing rows —
+    // the channel (SMS/email) isn't recorded on this tab at all, so
+    // outreachChannel stays unset regardless of category.
+    let category: 'SCREENING' | 'OUTREACH';
+    if (rawCategory && /screening/i.test(rawCategory)) {
+      category = 'SCREENING';
+    } else if (rawCategory && /outreach/i.test(rawCategory)) {
+      category = 'OUTREACH';
+    } else {
+      reject('category', rawCategory ?? '', 'unrecognized or missing — defaulted to SCREENING');
+      category = 'SCREENING';
+    }
+
     const scalars = {
       candidateId: match.ref.id,
       // The channel isn't recorded on this tab — only the category (screening
       // vs. outreach) — so contactType stays null rather than being inferred.
-      category: norm(row.cells[CANDIDATE_CONTACT.category]),
+      category,
       contactedById: contactedById ?? null,
       ...(contactedAt ? { contactedAt } : {}),
       outreachCampaignNotes: norm(row.cells[CANDIDATE_CONTACT.outreachCampaignNotes]),
-      conversationSummary: norm(row.cells[CANDIDATE_CONTACT.conversationSummary]),
+      screeningNotes: norm(row.cells[CANDIDATE_CONTACT.conversationSummary]),
       status: candidateStatus(norm(row.cells[CANDIDATE_CONTACT.status])),
       // The suburb survives here as free text — the Location tree has no SUBURB
       // rung loaded, so there is nothing to resolve it against.
