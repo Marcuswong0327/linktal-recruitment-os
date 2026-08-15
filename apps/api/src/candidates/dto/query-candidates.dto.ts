@@ -94,14 +94,6 @@ export class QueryCandidatesDto {
   @IsString({ each: true })
   specializationIds?: string[];
 
-
-  @ApiPropertyOptional({ description: 'Filter by owning consultant ID(s)', type: [String] })
-  @IsOptional()
-  @Transform(toArray)
-  @IsArray()
-  @IsString({ each: true })
-  consultantIds?: string[];
-
   @ApiPropertyOptional({ description: 'Filter by submission status (has at least one submission with this status)', enum: SubmissionStatus, isArray: true })
   @IsOptional()
   @Transform(toArray)

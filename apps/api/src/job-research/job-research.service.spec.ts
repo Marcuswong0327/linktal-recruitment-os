@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ClientStatus } from '@prisma/client';
 import { JobResearchService } from './job-research.service';
 import { JobResearchSortField, QueryJobResearchDto, SortOrder } from './dto/query-job-research.dto';
@@ -188,7 +188,12 @@ describe('JobResearchService.findAll', () => {
   });
 });
 
-describe('JobResearchService.findOne — job scope', () => {
+// findOne no longer gates on scope — it's a plain existence check now (see
+// common/scope.ts: scope is a list filter only). ClientJobResearch.consultantId
+// ("who conducted this research") is descriptive metadata only — it was never
+// folded into `jobResearchScope` as an ownership arm even before this change,
+// since research isn't job-order-scoped.
+describe('JobResearchService.findOne', () => {
   function setup(row: Record<string, unknown> | null) {
     const findUnique = jest.fn().mockResolvedValue(row === null ? null : withRelations(row));
     const prisma = { clientJobResearch: { findUnique } } as unknown as ExtendedPrismaClient;
@@ -200,7 +205,7 @@ describe('JobResearchService.findOne — job scope', () => {
     await expect(service.findOne('nope', makeUser())).rejects.toThrow(NotFoundException);
   });
 
-  it('403s a scoped consultant when neither arm matches', async () => {
+  it('returns the row for a scoped consultant even when neither arm matches', async () => {
     const { service } = setup({
       id: 'jr1',
       consultantId: null,
@@ -208,42 +213,7 @@ describe('JobResearchService.findOne — job scope', () => {
     });
     await expect(
       service.findOne('jr1', makeUser({ roleName: 'consultant', industryIds: ['ind1'] })),
-    ).rejects.toThrow(ForbiddenException);
-  });
-
-  it('allows it on the parent client’s industry alone', async () => {
-    const { service } = setup({ id: 'jr1', consultantId: null });
-    const result = await service.findOne(
-      'jr1',
-      makeUser({ roleName: 'consultant', industryIds: ['ind1'] }),
-    );
-    expect(result).toMatchObject({ id: 'jr1', companyName: 'Acme Corp' });
-  });
-
-  it('allows it on the row’s own location, under a granted ancestor', async () => {
-    const { service } = setup({
-      id: 'jr1',
-      consultantId: null,
-      client: { companyName: 'Acme', industryId: 'other' },
-      location: { name: 'Mackay', level: 'CITY', ancestorIds: ['mky', 'qld', 'au'] },
-    });
-    const result = await service.findOne(
-      'jr1',
-      makeUser({ roleName: 'consultant', industryIds: ['ind1'], locationIds: ['qld'] }),
-    );
-    expect(result).toMatchObject({ id: 'jr1', location: 'Mackay' });
-  });
-
-  // The ownership arm, above the no-grants short-circuit: a row you logged
-  // yourself stays yours even with nothing configured.
-  it('allows the researcher who logged it, whatever their grants say', async () => {
-    const { service } = setup({
-      id: 'jr1',
-      consultantId: 'me',
-      client: { companyName: 'Acme', industryId: 'other' },
-    });
-    const result = await service.findOne('jr1', makeUser({ roleName: 'consultant' }));
-    expect(result).toMatchObject({ id: 'jr1' });
+    ).resolves.toMatchObject({ id: 'jr1' });
   });
 
   it('never leaks the scope-only relation fields into the response', async () => {

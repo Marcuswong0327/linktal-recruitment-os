@@ -1,61 +1,35 @@
 # Scope, explained
 
 **Who can see what, and why.** This walks through the rules from a consultant's
-point of view, with the real numbers from the seeded database.
+point of view, with real numbers from the seeded database.
 
 For the implementer's reference — permission matrix, error codes, exact `where`
 shapes — see [`rbac-roles.md`](./rbac-roles.md) §3. This document is the
 explanation; that one is the specification. Code lives in
 `apps/api/src/common/scope.ts`.
 
-Every count below was measured against the dev database on 2026-08-03 by
-running the real scope functions, not a reimplementation.
+Every count below was measured on 2026-08-12 by running the real scope
+functions against the dev database, not a reimplementation.
 
 ---
 
 ## Contents
 
-1. [Two different questions](#1-two-different-questions)
-2. [The rule](#2-the-rule)
-3. [Grants cover everything beneath them](#3-grants-cover-everything-beneath-them)
-4. [The hidden third gate: specialization](#4-the-hidden-third-gate-specialization)
-5. [Who sees what, today](#5-who-sees-what-today)
-6. [Per-entity rules](#6-per-entity-rules)
-7. [Walkthroughs](#7-walkthroughs)
-8. [Assignment](#8-assignment)
-9. [What happens when things are deleted](#9-what-happens-when-things-are-deleted)
-10. [Known gaps](#10-known-gaps)
+1. [The rule](#1-the-rule)
+2. [Grants cover everything beneath them](#2-grants-cover-everything-beneath-them)
+3. [The hidden third gate: specialization](#3-the-hidden-third-gate-specialization)
+4. [Who sees what, today](#4-who-sees-what-today)
+5. [Per-entity rules](#5-per-entity-rules)
+6. [Job order consultant assignment](#6-job-order-consultant-assignment)
+7. [What happens when things are deleted](#7-what-happens-when-things-are-deleted)
+8. [Known gaps](#8-known-gaps)
 
 ---
 
-## 1. Two different questions
-
-These get confused constantly, so they're worth separating up front.
-
-| | Comes from | Means | Set by |
-|---|---|---|---|
-| **Coverage** | grants on the consultant (`Manufacturing`, `Sydney`) | "this is my kind of work" | admin/manager, via `/consultants/:id/industries` etc. |
-| **Ownership** | `consultantId` on the record itself | "this specific account is mine" | anyone with `:update` on that entity |
-
-A consultant sees a record if **either** is true. Coverage is a standing rule;
-ownership is one deliberate act on one row.
-
-Only the **`consultant`** role is scoped at all. `admin`, `manager`, `finance`,
-`researcher` and `viewer` see everything their permissions allow.
-
-> **Zero grants means *not configured*, never *everything*.** Wildcards are
-> materialised into concrete rows — `All Malaysia` is stored as one COUNTRY
-> grant, never as an "unrestricted" flag. A consultant with no grants and no
-> assignments sees nothing.
-
----
-
-## 2. The rule
+## 1. The rule
 
 ```
-visible  =  assigned to me
-         OR industry matches (and passes the specialization gate)
-         OR location matches
+visible  =  (industry match AND specialization match)  OR  (location match)
 ```
 
 The arms are **OR**-ed. This matters more than it sounds:
@@ -63,34 +37,47 @@ The arms are **OR**-ed. This matters more than it sounds:
 > **Whichever arm is broader decides everything, and the narrower one stops
 > mattering.**
 
-Joshua Fang covers Construction (914 candidates) and Sydney (3,071 candidates).
-He sees 3,071. His industry grant adds nobody — every Construction candidate is
-already in Sydney. Adding a grant can only ever widen, never narrow.
+Woanru Lim covers Equipment (0 clients, 0 candidates in the whole database) and
+four cities (Sydney, Melbourne, Brisbane, Gold Coast). His industry grant adds
+nobody — his entire visible list comes from geography. Adding a grant can only
+ever widen, never narrow.
+
+**This is a pure list filter — there is no gate.** `findAll` is the only place
+any of this is enforced. A direct `findOne`/`update`/`remove` never checks
+scope: a scoped consultant can open any record by id or a shared link
+regardless of whether it matches their grants. There used to be a `403
+OUT_OF_JOB_SCOPE` on single-record access and a `consultantId`-based ownership
+arm that overrode everything — both are gone. Only the `consultant` role is
+scoped at all; `admin`, `manager`, `finance`, `researcher` and `viewer` see
+everything their permissions allow.
 
 ```mermaid
 flowchart TD
     A["Consultant opens a list"] --> B{"Is my role consultant?"}
     B -- no --> Z["See everything"]
-    B -- yes --> C{"Assigned to me?"}
-    C -- yes --> Y["Visible"]
-    C -- no --> D{"Any grants at all?"}
-    D -- no --> N["Nothing visible"]
-    D -- yes --> E{"Industry matches?"}
-    E -- yes --> F{"Passes the specialization gate?"}
-    F -- yes --> Y
+    B -- yes --> D{"Industry matches?"}
+    D -- yes --> F{"Passes the specialization gate?"}
+    F -- yes --> Y["Visible"]
     F -- no --> G{"Location matches?"}
-    E -- no --> G
+    D -- no --> G
     G -- yes --> Y
-    G -- no --> N2["Not visible"]
+    G -- no --> H{"On a JobOrder that reaches this record?<br/>(Client/Candidate only)"}
+    H -- yes --> Y
+    H -- no --> N["Not visible"]
 ```
 
-The ownership check sits **above** the no-grants short-circuit deliberately. Two
-failures that prevents: being handed an account and still getting a 403 on it,
-and watching one vanish the moment its industry is retagged.
+> **Zero grants means *not configured*, never *everything*.** Wildcards are
+> materialised into concrete grant rows — `All Malaysia` is stored as one
+> COUNTRY grant, never as an "unrestricted" flag. A consultant with no
+> industry/location grants sees nothing on those two arms — `industryId: { in:
+> [] } }` and `ancestorIds: { hasSome: [] } }` both evaluate to "matches
+> nothing" in Postgres, so no special-cased short-circuit is needed in code
+> anymore. The one arm that's exempt is job-order membership (§6) — that one
+> never depended on grants in the first place.
 
 ---
 
-## 3. Grants cover everything beneath them
+## 2. Grants cover everything beneath them
 
 Both hierarchies work the same way: **grant a node, get that node plus
 everything under it.**
@@ -128,9 +115,9 @@ suburb ever loaded.
 
 ---
 
-## 4. The hidden third gate: specialization
+## 3. The hidden third gate: specialization
 
-Specialization is not a fourth arm. It's a **gate inside the industry arm**:
+Specialization is not a third arm. It's a **gate inside the industry arm**:
 
 ```
 industry arm passes  =  industry matches
@@ -157,111 +144,85 @@ Untagged Manufacturing candidate, seen by...
   → VISIBLE via industry              → visible only if she covers their city
 ```
 
-### Why it hits clients 30× harder than candidates
+### Why it hits clients much harder than candidates
 
 How hard this gate bites is decided entirely by **tagging coverage** — not by
-any deliberate setting:
+any deliberate setting. Historically (2026-08-03), 1,643 of 1,645 clients
+carried a specialization versus only 205 of 3,960 candidates — the gate cuts
+client lists hard and candidate lists barely, for no reason other than which
+side of the workbook got tagged. Same rule, same consultant, same industry:
+the filter isn't harsher on clients, it just has vastly more to bite on.
 
-| | Rows tagged with a specialization |
-|---|---|
-| Clients | **1,643 of 1,645** (99.9%) |
-| Candidates | **205 of 3,960** (5.2%) |
-
-Take Zhao Hao Teoh — Manufacturing, holding `Packaging` and `Food`:
-
-| His clients | | | His candidates | |
-|---|---|---|---|---|
-| Manufacturing clients | 1,335 | | Manufacturing candidates | 2,157 |
-| ├─ untagged (free pass) | 2 ✅ | | ├─ untagged (free pass) | 1,977 ✅ |
-| ├─ tagged Packaging/Food | 397 ✅ | | ├─ tagged Packaging/Food | 147 ✅ |
-| └─ tagged something else | **936 ❌** | | └─ tagged something else | **33 ❌** |
-
-Same rule, same consultant, same industry. The filter isn't harsher on clients —
-it just has vastly more to bite on.
-
-> ⚠️ **This is an open decision.** Backfilling the missing candidate tags would
-> narrow candidate lists sharply with no code change at all. Zhao could drop
-> from 2,124 candidates to a few hundred overnight. Worth deciding deliberately
-> rather than discovering.
+> ⚠️ **This is still an open decision.** Backfilling the missing candidate tags
+> would narrow candidate lists sharply with no code change at all — worth
+> deciding deliberately rather than discovering.
 
 ---
 
-## 5. Who sees what, today
+## 4. Who sees what, today
 
 ### The grants
 
-| Consultant | Industry | Specializations | Locations |
-|---|---|---|---|
-| Daniel Kee | Banking Financial Services | Bank, Asset Management, Insurance | 6 MY states + **Australia (country)** |
-| Wong Yuen Xing | Banking Financial Services | Bank, Asset Management, Insurance | all 16 MY states + **Australia (country)** |
-| Karen Lin | Manufacturing | Food, Pharmaceutical | Sydney |
-| Eve Goh | Manufacturing | Packaging, Engineering Parts | Sydney |
-| Zhao Hao Teoh | Manufacturing | Packaging, Food | Melbourne |
-| Joshua Fang | Construction | Class 1, Class 2, Remedial, Fitout | Sydney |
-| Kim Chan | Construction | Class 1, Class 2, Remedial, Fitout | Brisbane, Gold Coast |
-| Woanru Lim | Equipment | EWP, Crane, Forklift, Excavators | Sydney, Melbourne, Brisbane, Gold Coast |
+| Consultant | Industry | Locations |
+|---|---|---|
+| Daniel Kee | Banking Financial Services | 6 MY states + **Australia (country)** |
+| Wong Yuen Xing | Banking Financial Services | all 16 MY states + **Australia (country)** |
+| Karen Lin | Manufacturing | Sydney |
+| Eve Goh | Manufacturing | Sydney |
+| Zhao Hao Teoh | Manufacturing | Melbourne |
+| Joshua Fang | Construction | Sydney |
+| Kim Chan | Construction | Brisbane, Gold Coast |
+| Woanru Lim | Equipment | Sydney, Melbourne, Brisbane, Gold Coast |
+
+(Specialization grants are omitted here — they only narrow the industry arm,
+never widen it; see §3.)
 
 ### What that resolves to
 
-Totals in the system: **1,645** clients · **3,960** candidates · **6,451**
-stakeholders · **10** job orders · **11** TOBs · **6** research rows.
+Totals in the system today: **1,645** clients · **3,960** candidates · **10**
+job orders.
 
-| Consultant | Clients | Candidates | Contacts | Job orders | TOBs | Research |
-|---|---|---|---|---|---|---|
-| Daniel Kee | 1,610 | **3,960** | 6,263 | 10 | 9 | 6 |
-| Wong Yuen Xing | 1,610 | **3,960** | 6,263 | 10 | 9 | 6 |
-| Woanru Lim | 1,527 | 3,071 | 5,363 | 9 | 4 | 6 |
-| Karen Lin | 1,459 | 3,071 | 5,057 | 8 | 4 | 5 |
-| Eve Goh | 1,373 | 3,071 | 4,808 | 9 | 4 | 4 |
-| Joshua Fang | 1,343 | 3,071 | 4,664 | 8 | 4 | 4 |
-| Zhao Hao Teoh | 402 | 2,124 | 1,536 | 6 | 3 | 6 |
-| Kim Chan | 401 | 890 | 1,533 | 1 | 2 | 0 |
-
-### Which arm actually let them in — clients
-
-| Consultant | via industry+spec | via location | **Total** |
+| Consultant | Clients | Candidates | Job orders |
 |---|---|---|---|
-| Daniel Kee | 83 | 1,527 | 1,610 |
-| Wong Yuen Xing | 83 | 1,527 | 1,610 |
-| Woanru Lim | **0** | 1,527 | 1,527 |
-| Karen Lin | 400 | 1,343 | 1,459 |
-| Eve Goh | 335 | 1,343 | 1,373 |
-| Joshua Fang | 192 | 1,343 | 1,343 |
-| Zhao Hao Teoh | 399 | **3** | 402 |
-| Kim Chan | 192 | 186 | 401 |
+| Daniel Kee | 1,610 | **3,960** | 10 |
+| Wong Yuen Xing | 1,610 | **3,960** | 10 |
+| Woanru Lim | 1,527 | 3,071 | 9 |
+| Karen Lin | 1,459 | 3,071 | 8 |
+| Eve Goh | 1,373 | 3,071 | 9 |
+| Joshua Fang | 1,343 | 3,071 | 8 |
+| Zhao Hao Teoh | 400 | 2,124 | 6 |
+| Kim Chan | 378 | 890 | 1 |
 
-Three things that table shows:
+Two things worth knowing about these numbers:
 
-1. **Location dominates for almost everyone.** Six of eight get most of their
-   list from geography.
-2. **Woanru Lim's industry grant matches nothing.** `Equipment` has 0 clients and
-   0 candidates in the whole database. Everything he sees is location.
-3. **Zhao Hao Teoh is the mirror image** — Melbourne has 3 clients, so he's
-   almost entirely industry.
-
-> A client used to carry a fourth arm — reachable through a contact who
-> covered the consultant's patch even when the company's own market didn't.
-> It measured **0 for all 8 consultants** (every stakeholder's coverage was
-> set equal to their client's own location, so it never reached anywhere the
-> location arm didn't already) and has since been removed in favour of
-> straightforward inheritance — see §6.
+1. **Location dominates for almost everyone.** The industry arm alone rarely
+   beats a city/country grant — see Woanru Lim in §1, whose `Equipment` grant
+   matches nothing at all.
+2. **Job order counts now come from three sources**, OR-ed: the job order's
+   client's industry, the job order's own location, and direct
+   `JobOrderConsultant` membership (§6). The 10 job orders in the seed carry
+   their original single-owner assignments, migrated one-for-one into
+   `JobOrderConsultant` rows — so today's membership arm reproduces the old
+   ownership numbers exactly, until someone deliberately adds a second
+   consultant to one.
 
 ### A data artifact worth knowing
 
 **Every Australian candidate in the source workbook is recorded as Sydney.**
 Melbourne, Brisbane and Gold Coast have zero candidates. So today "Sydney" and
-"all of Australia" mean the same thing for candidates, which is why four
-consultants see the identical 3,071.
+"all of Australia" mean the same thing for candidates, which is why several
+consultants see the identical 3,071 or 3,960.
 
 If that's a gap in the source data rather than reality, fixing it will change
 these numbers a lot.
 
 ---
 
-## 6. Per-entity rules
+## 5. Per-entity rules
 
-Four entities carry a `consultantId` and get the ownership arm. Stakeholder and
-Tob don't — both delegate entirely to their parent Client instead.
+Three entities carry a job-order-membership arm — the deliberate way to reach
+an out-of-scope record (§6). Stakeholder and Tob don't — both delegate entirely
+to their parent Client instead.
 
 ```mermaid
 flowchart TD
@@ -274,8 +235,8 @@ flowchart TD
         JR["ClientJobResearch<br/>+ its OWN location"]
     end
     subgraph DEL["Fully delegate to their Client"]
-        ST["Stakeholder<br/>coverage is descriptive only"]
-        TB["Tob<br/>no scope fields at all"]
+        ST["Stakeholder"]
+        TB["Tob"]
     end
     CL --> JO
     CL --> JR
@@ -283,47 +244,31 @@ flowchart TD
     CL --> TB
 ```
 
-| Entity | Ownership arm | Industry from | Location from |
+| Entity | Industry from | Location from | Job-order-membership arm |
 |---|---|---|---|
-| **Client** | ✅ | its own | its own market set |
-| **Candidate** | ✅ | its own | its own single node |
-| **JobOrder** | ✅ | its Client | its own node (nullable) |
-| **ClientJobResearch** | ✅ | its Client | its own node (nullable) |
-| **Stakeholder** | ❌ none | its Client | its Client's — visible exactly when its Client is |
-| **Tob** | ❌ none | its Client | its Client's — visible exactly when its Client is |
+| **Client** | its own | its own market set | reachable via any live `JobOrder` this consultant is on |
+| **Candidate** | its own | its own single node | reachable via a live submission to a `JobOrder` this consultant is on |
+| **JobOrder** | its Client | its own node (nullable) | its own `JobOrderConsultant` membership |
+| **ClientJobResearch** | its Client | its own node (nullable) | — (not job-order-scoped; see below) |
+| **Stakeholder** | its Client | its Client's | — (delegates entirely to its Client) |
+| **Tob** | its Client | its Client's | — (delegates entirely to its Client) |
 
-### Stakeholder used to be an asymmetry — it isn't anymore
+### Stakeholder and Tob: full delegation
 
-**Stakeholders used to match on their own coverage**, independent of their
-employer: a Brisbane company's national account manager whose coverage
-included Sydney was reachable by a Sydney-scoped consultant, on the theory
-that's the person you'd actually ring about a Sydney role. Clients carried a
-matching fourth arm as the counterpart — reachable through such a contact even
-when the company's own market didn't match — so the two rules wouldn't
-disagree with each other.
+`stakeholderScope` is `{ client: clientScope(user) }` and `tobScope` is the
+identical shape — a stakeholder or TOB is visible exactly when its client is,
+full stop. `Stakeholder.coverage` is kept purely as descriptive routing data
+(who to call about which patch), not a scope gate. Neither entity has an
+ownership concept of its own to speak of — a contact belongs to a client, not
+to a recruiter, and a TOB is a commercial document belonging to a company.
 
-**Both are gone.** `stakeholderScope` is now `{ client: clientScope(user) }` —
-identical to `tobScope` — so a stakeholder is visible exactly when its client
-is, full stop. `coverage` remains on the row (who to call about which patch),
-but it's descriptive data now, not a scope gate. This was a deliberate
-simplification, not a bug fix: the old fourth arm measured **0 clients for all
-8 consultants** the whole time (the importer set every stakeholder's coverage
-equal to their client's own location, so it never reached anywhere the
-location arm didn't already reach) — there was no real behavior it was
-protecting once removed.
+### ClientJobResearch: no membership arm, on purpose
 
-One side effect worth knowing: a consultant with **zero grants** who directly
-owns a client (via assignment) can now see that client's stakeholders too.
-Previously they couldn't — Stakeholder had no ownership arm of its own and the
-old coverage-only check ignored `hasNoGrants`'s ownership short-circuit
-entirely. That was the same class of bug §7's Karen Lin walkthrough describes
-for `GET /clients` (an assigned account whose own list hid it) — this closes
-the equivalent gap for stakeholders.
-
-**TOBs still delegate entirely** — `tobScope` is `{ client: clientScope(user) }`,
-unchanged. A TOB is a commercial document belonging to a company, so it's
-visible exactly when that company is. Restating the arms here would let them
-drift apart; Stakeholder now follows the identical pattern.
+`ClientJobResearch.consultantId` ("who conducted this research") is descriptive
+metadata only — it never gated visibility even before this rework, and it
+still doesn't now. Research is public market intelligence logged *before* a
+job order necessarily exists, so there's no natural "member of this job order"
+concept to borrow the way Client/Candidate now do.
 
 ### Required vs. optional
 
@@ -333,192 +278,90 @@ drift apart; Stakeholder now follows the identical pattern.
 | Candidate | **required** | **required** |
 | JobOrder | via client | optional |
 | ClientJobResearch | via client | optional |
-| Stakeholder | via client | via client (its own `coverage` no longer scope-relevant) |
+| Stakeholder | via client | via client |
 
 **A blank field makes a record harder to see, not easier** — the arm has nothing
 to match on, so that route in closes. A job order with no location is reachable
-only through its client's industry. (Blank *specialization* is the one exception,
-§4.)
-
-Every row is filled today: all 1,645 clients have a location, all 6,451 contacts
-have coverage, all 10 job orders and 6 research rows have a location.
+only through its client's industry (or its own `JobOrderConsultant` list).
+(Blank *specialization* is the one exception, §3.)
 
 ---
 
-## 7. Walkthroughs
+## 6. Job order consultant assignment
 
-### Karen Lin's morning
-
-Karen covers **Manufacturing** (`Food`, `Pharmaceutical`) and **Sydney**. She
-owns 7 job orders.
+**There is no more manual "assign a consultant to a client/candidate."**
+`Client.consultantId` and `Candidate.consultantId` are gone from the schema
+entirely — scope for those two entities is industry/location only, a pure
+filter. The one deliberate way to reach an out-of-scope Client or Candidate is
+to be added to a **Job Order**'s consultant list.
 
 ```mermaid
 flowchart LR
-    K["Karen Lin"] --> I["Manufacturing<br/>+ Food, Pharmaceutical"]
-    K --> L["Sydney"]
-    I --> R1["400 clients"]
-    L --> R2["1,343 clients"]
-    R1 --> T["1,459 clients<br/>(union, not sum)"]
-    R2 --> T
+    subgraph JO["JobOrder JO-0007 — Bakers Maison Australia"]
+        C1["Karen Lin<br/>(Manufacturing, Sydney — in scope anyway)"]
+        C2["Priya Singh<br/>(Construction, Perth — brought in deliberately)"]
+    end
+    JO -->|reachable| CL["Client: Bakers Maison Australia"]
+    JO -->|reachable, via submissions| CD["Candidates submitted to JO-0007"]
 ```
 
-She opens JO-0007, a role at **Bakers Maison Australia**.
+`JobOrder.consultantId` (a single nullable owner) has been replaced by
+`JobOrderConsultant`, a many-to-many join table: **several consultants can work
+the same job order concurrently.** Being on that list is a new OR-arm on
+`clientScope` (via the job order's client) and `candidateScope` (via a
+submission to that job order) — it doesn't unlock the client's *other* job
+orders, candidates, or history, only what's actually attached to that specific
+job order.
 
-| Question | Answer | Why |
-|---|---|---|
-| Can she see the job order? | ✅ | owned + client industry + Sydney |
-| Can she see the client? | ✅ | Manufacturing + Sydney |
-| Can she see its contacts? | ✅ | follows the client (Manufacturing + Sydney) |
-| Can she see its TOB? | ✅ | follows the client |
-| Can she see the submitted candidates? | ✅ | Sydney |
+**No scope-mismatch guard applies.** Every other assignment path in the app
+used to check "would this consultant reach the record anyway?" before allowing
+an assignment — that guard doesn't exist here. Adding Priya Singh (Perth,
+Construction) to a Manufacturing job order in Sydney is allowed outright. This
+is the entire point: it's the sanctioned way to bring in help from outside
+someone's usual patch, not an exception to be validated against.
 
-All 7 of her job orders sit at Manufacturing clients in Sydney — Air Liquide,
-Cordina Chicken Farms, Regal Mushrooms, Premier Fresh Australia, Bakers Maison,
-Newcold, Hakka. She matches every one on both arms.
+### The endpoint
 
-> **This was broken until recently.** `GET /clients` used to AND on
-> `consultantId = me`, which swallowed every other arm — so Karen saw **0
-> clients** while owning 7 job orders at those very companies. She could open
-> the job order and not reach the company it was for. Removing that one line is
-> what produced the numbers in §5.
+`PUT /job-orders/:id/consultants` — full-set-replace, `{ consultantIds:
+string[] }`, mirroring `ConsultantsService.setIndustries`'s diff shape
+(minimum add/remove set, each written as an individual top-level
+`JobOrderConsultant` create/delete so the audit log sees and diffs every row).
+Gated by `job_order:update` — the same permission that already covers editing
+a job order's other fields, held by admin/manager/consultant/researcher.
+`consultantIds` can also be seeded at creation time (`POST /job-orders`).
 
-### Woanru Lim — an industry grant that matches nothing
+### Nothing auto-clears
 
-`Equipment` has **0 clients and 0 candidates** in the entire database.
+Unlike the old ownership model (which used to silently unassign a consultant
+whose industry/location no longer covered a record), `JobOrderConsultant`
+membership is **immune to grant and industry drift** in both directions:
 
-```
-industry arm  →  0 records
-location arm  →  Sydney, Melbourne, Brisbane, Gold Coast  →  1,527 clients
-                                                             3,071 candidates
-```
+- Narrowing a consultant's own industry/location grants never touches their
+  `JobOrderConsultant` rows.
+- Re-linking a job order to a different client, or changing its location,
+  never re-checks its members either.
 
-His whole working life runs through geography. Two knock-on effects:
+That's deliberate — a membership grant that could evaporate on an unrelated
+edit wouldn't be a reliable escape hatch. Once someone's added to a job order,
+they stay on it until someone removes them.
 
-- Removing his `Equipment` grant would change nothing he can see.
-- Until the assignment guard was fixed, **he could not be assigned any account at
-  all** — the guard checked industry only, and no client is in Equipment. He can
-  now own any of the 1,527 clients in his cities (§8).
+### Frontend: no restriction on who's offered
 
-### Kim Chan — the narrowest desk
-
-Construction, Brisbane + Gold Coast.
-
-| Arm | Clients | Candidates |
-|---|---|---|
-| industry (Construction, all 4 specs) | 192 | 914 → **890** after the spec gate |
-| location (Brisbane, Gold Coast) | 186 | **0** |
-| **Total** | **401** | **890** |
-
-Brisbane and the Gold Coast have no candidates at all, so her candidate list is
-100% industry. Her 24 lost candidates are the only ones in the seed tagged with
-a Construction specialization she doesn't hold.
-
-### Daniel Kee — a country grant means everything
-
-His `Australia` grant covers all 2,023 cities beneath it. Combined with his 6
-Malaysian states:
-
-```
-Banking FS  →   889 candidates
-Australia   → 3,071 candidates
-             ─────────────────
-union        → 3,960  = every candidate in the system
-```
-
-Including all 2,157 Manufacturing and 914 Construction candidates, none of which
-are his industry. **Confirmed as intended** — but it's the reason a
-country-level grant should be a deliberate choice, not a default.
+The job order detail page and the "new job order" form both show the **full
+active consultant roster** in the assignment picker — not filtered to
+industry/location matches. When a picked consultant doesn't match the job
+order's industry or location, the UI shows a **non-blocking warning** naming
+them ("Jane Tan is outside this job order's industry and location — still fine
+to add") rather than hiding them from the list or blocking the save. Reading
+that warning requires the picker to resolve names and grants for consultants
+who aren't the caller, which is why `consultant:read` and the three
+`consultant_industry/specialization/location:read` permissions were widened
+from admin/manager-only to include `consultant` and `researcher` — see
+`rbac-roles.md` §2, footnote 3.
 
 ---
 
-## 8. Assignment
-
-**Assignment must agree with visibility — for a consultant assigning it.** A
-record can only be assigned to a consultant who would reach it anyway — the
-same `industry OR location` test. Otherwise you'd hand someone an account
-their own list then hides.
-
-```mermaid
-flowchart TD
-    A["PATCH /clients/:id — set consultantId to X"] --> Z{"Is the caller admin/manager?"}
-    Z -- yes --> OK["assigned — deliberate override"]
-    Z -- no --> B{"Does X hold its industry?"}
-    B -- yes --> OK2["assigned"]
-    B -- no --> C{"Does X cover any of its markets?"}
-    C -- yes --> OK2
-    C -- no --> ERR["400 CONSULTANT_SCOPE_MISMATCH"]
-```
-
-Locations compare through `ancestorIds`, so a COUNTRY grant qualifies its holder
-for a CITY-tagged record, same as everywhere else.
-
-**Admin and manager bypass the guard entirely.** Ownership is already the
-top-priority arm in every scope function (`ownedBy` sits above the no-grants
-short-circuit) — once assigned, the record is visible to its new owner
-regardless of grants. The guard exists to stop a *consultant* handing
-themselves or a peer an account that then silently vanishes from their own
-list, not to stop admin/manager making a deliberate cross-scope exception
-(e.g. a one-off account outside anyone's usual patch). Every consultant- or
-researcher-initiated assignment still goes through the full check.
-
-**Stakeholder coverage is deliberately excluded from this guard** — a client has
-no contacts at the moment it's created, so the check would be unenforceable on
-`create` and inconsistent with `update`. It's also moot now that a
-stakeholder's visibility is fully inherited from its client (§6) — there's no
-separate "ownership" of a contact to guard in the first place.
-
-### Who can assign
-
-Gated by permission, not role — anyone with `:update` on the entity:
-
-| Role | Can assign? |
-|---|---|
-| admin · manager · **consultant** · **researcher** | ✅ |
-| finance · viewer | ❌ (read only) |
-
-One extra restriction: **a consultant can hand a client to someone else but
-cannot unassign it entirely.** Sending `consultantId: null` gets a 403. Only
-admin/manager can leave a client ownerless.
-
-### Auto-clear — a stale assignment can never persist
-
-Two triggers, both re-reading current state rather than acting on what changed:
-
-```mermaid
-flowchart LR
-    subgraph T1["The record changed"]
-        A1["Client/Candidate's industry<br/>or location(s) edited"] --> A2["Re-check its owner.<br/>Neither arm reaches it?<br/>→ unassign"]
-        A2 --> A3["Cascade to that client's<br/>job orders, each on<br/>its own location"]
-    end
-    subgraph T2["The consultant changed"]
-        B1["setIndustries or<br/>setLocations narrows a grant"] --> B2["Re-check EVERY record<br/>they own → release<br/>whatever no longer qualifies"]
-    end
-```
-
-Why it re-reads rather than acting on the removed ids: with two arms granting
-ownership, **losing an industry no longer implies a record is stranded** — the
-location arm may still cover it. The only correct test is to re-run the same
-predicate against what the consultant currently holds.
-
-Specializations never cascade. They only narrow the industry arm and never grant
-on their own, so removing one strands nothing.
-
-### Nothing is assigned yet
-
-| Table | Assigned |
-|---|---|
-| Client | **0** of 1,645 |
-| Candidate | **0** of 3,960 |
-| ClientJobResearch | **0** of 6 |
-| JobOrder | **10** of 10 |
-
-The source workbook has an owner column on the job orders tab and nowhere else,
-so the importer had nothing to copy from. Every number in §5 therefore comes
-purely from coverage.
-
----
-
-## 9. What happens when things are deleted
+## 7. What happens when things are deleted
 
 **Nothing is ever really deleted.** A delete stamps a `deletedAt` date; the row
 stays and can be restored. Lists hide stamped rows automatically — **but only
@@ -544,26 +387,28 @@ The layer guards the front door, not the passengers. Some includes carry a
 hand-written `deletedAt: null` because someone remembered to add it. A single
 linked record (like `submission.candidate`) can't have one at all.
 
-### Cascading is centralized now — Path A and Path B are the same path
+### Cascading is centralized — the Prisma extension owns it
 
-This used to be two different stories: `ClientsService.remove` (and
-`CandidatesService.remove`, `JobOrdersService.remove`) each hand-wrote their
-own cascade, so anything that didn't call one of those three methods — a
-script, the importer, another service, a raw Prisma call — orphaned every
-child underneath.
+The cascade lives in the Prisma extension itself (`prisma.extensions.ts`,
+`CASCADE_MAP`), which intercepts every `delete`/`deleteMany` on a soft-delete
+model regardless of who calls it — the API, a script, the importer, or a raw
+Prisma call. Client → JobOrder → CandidateSubmission → Placement, and Candidate
+→ CandidateSubmission → Placement, all cascade automatically off a single
+soft-delete, walked recursively.
 
-**That's fixed at the root.** The cascade now lives in the Prisma extension
-itself (`prisma.extensions.ts`, `CASCADE_MAP`), which intercepts every
-`delete`/`deleteMany` on a soft-delete model regardless of who calls it. Client
-→ JobOrder → CandidateSubmission → Placement, and Candidate → CandidateSubmission
-→ Placement, all cascade automatically off a single soft-delete, walked
-recursively. The three service methods are now one line each
-(`return this.prisma.<model>.delete({ where: { id } })`) — the cascade isn't
-their code anymore, it's a property of the delete itself.
+`JobOrderConsultant` is **not** part of this soft-delete cascade — it isn't a
+soft-deletable model at all (no `deletedAt` column; it's a pure join table like
+`ConsultantIndustry`). Its rows are hard-deleted via a plain FK
+`onDelete: Cascade` whenever the `JobOrder` or `Consultant` row they reference
+is *hard*-deleted. A JobOrder's ordinary soft-delete (the normal `DELETE
+/job-orders/:id` path) leaves its `JobOrderConsultant` rows in place — they're
+harmless once the parent job order itself is hidden, and restoring the job
+order restores its consultant list along with it, with nothing extra to
+reconcile.
 
 | You delete | Cascades to | Still left behind |
 |---|---|---|
-| **Client** | stakeholders, job research, TOBs, job orders, and (through those) their submissions and placements | ⚠️ interviews (gap #3, §10) · ⚠️ cascaded placements don't reverse their side effects — see below |
+| **Client** | stakeholders, job research, TOBs, job orders, and (through those) their submissions and placements | ⚠️ interviews (gap #1, §8) · ⚠️ cascaded placements don't reverse their side effects — see below |
 | **Stakeholder** | nothing (it has no children) | ⚠️ client's "last contacted" date stays but its notes/type/by go blank |
 | **Candidate** | their submissions, and (through those) their placements | ⚠️ interviews · ⚠️ cascaded placements don't reverse their side effects |
 | **Job order** | its submissions, and (through those) their placements | ⚠️ interviews · ⚠️ cascaded placements don't reverse their side effects |
@@ -584,10 +429,6 @@ client → `TRADED`). Reversing those is application logic that lives in
   record. A candidate placed through a job order that gets deleted this way
   stays `PLACED`.
 
-That asymmetry (orphan-free, but side-effect-stale) is now the actual state,
-in place of the old orphan problem. Worth deciding whether cascaded placement
-deletes should also run the reversal — flagged as a new open item in §10.
-
 ### Reversing a Placement
 
 Deleting a Placement directly reverses what `create` applied: the submission
@@ -605,7 +446,7 @@ through" is a separate, deliberate `status: FAILED` transition via `update`.
 |---|---|
 | Row fetched directly by a list or by ID | ✅ hidden |
 | Row's name pulled in through a parent's `include` | ❌ **still shows**, unless that include carries its own `deletedAt: null` |
-| Any Prisma `delete`/`deleteMany` on a soft-delete model, from any call site | ✅ children cascade (the fix above) |
+| Any Prisma `delete`/`deleteMany` on a soft-delete model, from any call site | ✅ children cascade |
 | A genuine raw SQL `DELETE` issued outside Prisma entirely | ❌ still bypasses everything — the extension only intercepts Prisma calls |
 | Parent deleted without the cascade, child fetched from its own list | ❌ **child still shows** |
 
@@ -614,52 +455,37 @@ through" is a separate, deliberate `status: FAILED` transition via `update`.
 **A job order with a deleted stakeholder.** `JobOrder` has no `stakeholderId` at
 all — it links only to a Client.
 
-### Nothing is deleted yet
-
-0 soft-deleted clients, stakeholders or candidates. 0 orphans. 0 interviews. All
-of the above is what *will* happen, not what has.
-
 ---
 
-## 10. Known gaps
+## 8. Known gaps
 
-Open items, in rough order of consequence. Originally logged 2026-08-03;
-updated 2026-08-08 as items got resolved.
+Open items, in rough order of consequence.
 
 | # | Gap | Status |
 |---|---|---|
-| 1 | **`submissions`, `interviews` and `placements` have no scoping at all.** Those three services never receive the logged-in user. Every consultant can list every submission, interview and placement in the system, including for clients and candidates they can't otherwise see. Only 4 submissions exist today, so nothing is exposed yet. Also the gate for whether a submission should grant implicit visibility into its candidate (§6-adjacent — a candidate isn't owned by a job order the way a stakeholder is owned by a client, so this can't just mirror that fix; leaning toward *not* granting implicit visibility, requiring the candidate to already be visible before a submission can link them). | Deferred |
-| 2 | ~~The client delete cascade lives in a service method, so any other path orphans children.~~ **Fixed** — moved into the Prisma extension's `CASCADE_MAP` (§9), so it fires for any delete path, not just the three service methods. | Fixed |
-| 3 | **Interviews are never cleaned up** by any cascade. 0 rows today, so nothing is broken yet. | Deferred |
-| 4 | ~~Placement side effects are never reversed on delete.~~ **Fixed** for direct deletes (`DELETE /placements/:id`) — see §9. **Still open** for placements that get soft-deleted via a Client/JobOrder cascade (§9's "side effects vs. orphans" note) — those stamp `deletedAt` but don't reverse the candidate/job-order/client state. | Partially fixed |
-| 5 | **The specialization gate is on and cuts client lists by up to two-thirds** (§4). Whether that's intended, and whether to backfill candidate tags, is undecided. Confirmed as working as designed — each entity gates on its own tag only, never a related entity's, so there's no cross-entity leak to worry about; the backfill question is a data decision, not a bug. | Open decision |
-| 6 | **No client, candidate or research row has an owner.** Every number in §5 is pure coverage. | Open decision |
-| 7 | **Every Australian candidate is recorded as Sydney** (§5). Likely a source-data gap — deliberately not being chased for now. | Ignored for now |
-| 8 | **Cascaded placement deletes don't reverse side effects** (see gap #4's second half). Deciding whether a Client/JobOrder cascade should also run the same reversal `PlacementsService.remove` does, or whether that's acceptable as "the record's gone, its downstream status is a separate concern." | Open decision |
+| 1 | **`submissions`, `interviews` and `placements` have no scoping at all.** Those three services never receive the logged-in user. Every consultant can list every submission, interview and placement in the system, including for clients and candidates they can't otherwise see. | Deferred |
+| 2 | **Interviews are never cleaned up** by any cascade. | Deferred |
+| 3 | **Cascaded placement deletes don't reverse side effects.** Fixed for direct deletes (`DELETE /placements/:id`) — see §7. Still open for placements that get soft-deleted via a Client/JobOrder cascade — those stamp `deletedAt` but don't reverse the candidate/job-order/client state. | Partially fixed |
+| 4 | **The specialization gate is on and cuts client lists hard** (§3). Whether to backfill candidate tags is undecided — each entity gates on its own tag only, no cross-entity leak. | Open decision |
+| 5 | **No Client or Candidate has an owner anymore, by design** — there is no such concept left. Every client/candidate list is pure industry/location filtering, plus whatever job-order membership adds. This used to be listed as a gap ("nothing is assigned yet"); it no longer applies — there's nothing to assign. | Resolved by design |
+| 6 | **Every Australian candidate is recorded as Sydney** (§4). Likely a source-data gap — deliberately not being chased for now. | Ignored for now |
 
 Confirmed as intended, for the record:
 
 - Country-level grants for Daniel Kee and Wong Yuen Xing → both see all 3,960 candidates.
 - Industry and location combine as **OR**, not AND.
-- Clients reach consultants through industry/location, not through assignment alone.
 - A candidate's own specialization gates their own visibility only — a
   client's specialization tag has no bearing on any candidate's visibility,
   and vice versa. No cross-entity matching exists, or is planned.
-- Job orders stay single-owner (one `consultantId`, no many-to-many). What
-  looks like "multiple consultants on one job order" is really independent
-  consultants each owning different candidates submitted to it — see gap #1.
-
-Resolved since 2026-08-03 (see §6, §8, §9 for the mechanics):
-
-- Stakeholder visibility now fully inherits from its client — the old
-  own-coverage asymmetry (and the client's matching fourth arm) is gone.
-- Admin/manager can now deliberately assign a client, candidate, or job order
-  outside a consultant's own grants — `assertConsultantCovers` accepts an
-  `assignerRole` that bypasses `CONSULTANT_SCOPE_MISMATCH` for those two roles
-  only.
-- Delete cascades are centralized in the Prisma extension, closing the
-  "any path that isn't the service method orphans children" hole.
-- Deleting a Placement directly now reverses its side effects.
+- Several consultants can now genuinely work the same job order concurrently
+  (`JobOrderConsultant`) — this replaces the old workaround of independent
+  consultants each owning different candidates submitted to the same job
+  order.
+- Scope never gates a direct fetch by id, for any entity — only `findAll`
+  filters. This was a deliberate simplification: the old `403
+  OUT_OF_JOB_SCOPE` gate added complexity without adding real protection once
+  job-order membership existed as a sanctioned way to be handed an
+  out-of-scope record anyway.
 
 ---
 

@@ -80,8 +80,6 @@ export interface CandidateEntity {
   status: CandidateEntityStatus;
   /** @nullable */
   notes: CandidateNoteDto[] | null;
-  /** @nullable */
-  consultantId: string | null;
   /**
      * Latest contactedAt across this candidate's contact history; null if never contacted
      * @nullable

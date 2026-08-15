@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { TobsService } from './tobs.service';
 import { CreateTobDto } from './dto/create-tob.dto';
 import { QueryTobsDto, SortOrder, TobSortField } from './dto/query-tobs.dto';
@@ -26,15 +26,9 @@ function baseQuery(overrides: Partial<QueryTobsDto> = {}): QueryTobsDto {
   return { page: 1, pageSize: 20, sortOrder: SortOrder.asc, ...overrides } as QueryTobsDto;
 }
 
-/** The client shape TOB_INCLUDE pulls through — everything the scope check reads. */
+/** The client shape TOB_INCLUDE pulls through now — just the display name. */
 function makeClient(overrides: Record<string, unknown> = {}) {
-  return {
-    companyName: 'Acme Corp',
-    industryId: 'ind1',
-    consultantId: null,
-    locations: [],
-    ...overrides,
-  };
+  return { companyName: 'Acme Corp', ...overrides };
 }
 
 /** The relation keys TOB_INCLUDE pulls in — `toEntity` destructures both. */
@@ -80,39 +74,16 @@ describe('TobsService.create', () => {
     });
   });
 
-  // A TOB has no scope fields of its own, so "can I file this?" is entirely a
-  // question about the destination client.
-  it('rejects a scoped consultant filing against a client outside their patch', async () => {
-    const findUnique = jest.fn().mockResolvedValue(makeClient({ industryId: 'other' }));
-    const create = jest.fn();
-    const prisma = { client: { findUnique }, tob: { create } } as unknown as ExtendedPrismaClient;
-    const service = new TobsService(prisma, {} as PrismaService);
-
-    await expect(
-      service.create({ clientId: 'cl1' }, makeUser({ roleName: 'consultant', industryIds: ['ind1'] })),
-    ).rejects.toThrow(ForbiddenException);
-    expect(create).not.toHaveBeenCalled();
-  });
-
-  it('allows a scoped consultant to file against a client they own, whatever their grants say', async () => {
-    const findUnique = jest
-      .fn()
-      .mockResolvedValue(makeClient({ industryId: 'other', consultantId: 'me' }));
-    const create = jest.fn().mockResolvedValue(withRelations({ id: 't1', clientId: 'cl1' }));
-    const prisma = { client: { findUnique }, tob: { create } } as unknown as ExtendedPrismaClient;
-    const service = new TobsService(prisma, {} as PrismaService);
-
-    await service.create({ clientId: 'cl1' }, makeUser({ roleName: 'consultant', industryIds: [] }));
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not query the client at all for an unscoped role', async () => {
+  // Create no longer checks whether the destination client is in the caller's
+  // own scope — scope is a pure list filter now (see common/scope.ts).
+  it('creates against a client outside a scoped consultant’s patch, with no client lookup at all', async () => {
     const findUnique = jest.fn();
     const create = jest.fn().mockResolvedValue(withRelations({ id: 't1' }));
     const prisma = { client: { findUnique }, tob: { create } } as unknown as ExtendedPrismaClient;
     const service = new TobsService(prisma, {} as PrismaService);
 
-    await service.create({ clientId: 'cl1' }, makeUser({ roleName: 'manager' }));
+    await service.create({ clientId: 'cl1' }, makeUser({ roleName: 'consultant', industryIds: ['ind1'] }));
+    expect(create).toHaveBeenCalledTimes(1);
     expect(findUnique).not.toHaveBeenCalled();
   });
 });
@@ -191,6 +162,7 @@ describe('TobsService.findAll', () => {
   });
 });
 
+// findOne no longer gates on scope — it's a plain existence check now.
 describe('TobsService.findOne', () => {
   function setup(client: Record<string, unknown> | null) {
     const findUnique = jest.fn().mockResolvedValue(
@@ -205,58 +177,41 @@ describe('TobsService.findOne', () => {
     await expect(service.findOne('nope', makeUser())).rejects.toThrow(NotFoundException);
   });
 
-  it('403s a scoped consultant whose patch does not reach the parent client', async () => {
-    const { service } = setup(makeClient({ industryId: 'other' }));
+  it('returns the row for a scoped consultant whose patch does not reach the parent client', async () => {
+    const { service } = setup(makeClient());
     await expect(
       service.findOne('t1', makeUser({ roleName: 'consultant', industryIds: ['ind1'] })),
-    ).rejects.toThrow(ForbiddenException);
+    ).resolves.toMatchObject({ id: 't1' });
   });
 
-  // Same four arms as ClientsService.findOne — including the one that reaches a
-  // company through a contact's own coverage rather than the company's market.
-  // A stakeholder's own coverage used to carry the client (and the TOB with
-  // it) even when the client's own industry/market didn't match — that arm
-  // is gone, since stakeholders now inherit the client's visibility instead
-  // of the other way around. TOB visibility follows the client's own arms
-  // only.
-  it("no longer lets a stakeholder's coverage rescue an out-of-scope client's TOB", async () => {
-    const { service } = setup(makeClient({ industryId: 'other' }));
-    await expect(
-      service.findOne('t1', makeUser({ roleName: 'consultant', industryIds: ['ind1'], locationIds: ['nsw'] })),
-    ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
-  });
-
-  it('never leaks the scope-only client fields into the response', async () => {
+  it('never leaks the client relation object into the response', async () => {
     const { service } = setup(makeClient());
     const result = await service.findOne('t1', makeUser());
     expect(result).not.toHaveProperty('client');
-    expect(result).not.toHaveProperty('industryId');
-    expect(result).not.toHaveProperty('consultantId');
   });
 });
 
 describe('TobsService.update', () => {
-  it('checks the destination client too, so a row cannot be pushed out of reach', async () => {
+  it('re-parents to a different client with no destination check', async () => {
     const tobFindUnique = jest.fn().mockResolvedValue(withRelations({ id: 't1', clientId: 'cl1' }));
-    const clientFindUnique = jest.fn().mockResolvedValue(makeClient({ industryId: 'other' }));
-    const update = jest.fn();
+    const clientFindUnique = jest.fn();
+    const update = jest.fn().mockResolvedValue(withRelations({ id: 't1', clientId: 'cl2' }));
     const prisma = {
       tob: { findUnique: tobFindUnique, update },
       client: { findUnique: clientFindUnique },
     } as unknown as ExtendedPrismaClient;
     const service = new TobsService(prisma, {} as PrismaService);
 
-    await expect(
-      service.update(
-        't1',
-        { clientId: 'cl2' },
-        makeUser({ roleName: 'consultant', industryIds: ['ind1'] }),
-      ),
-    ).rejects.toThrow(ForbiddenException);
-    expect(update).not.toHaveBeenCalled();
+    await service.update(
+      't1',
+      { clientId: 'cl2' },
+      makeUser({ roleName: 'consultant', industryIds: ['ind1'] }),
+    );
+    expect(update.mock.calls[0][0].data).toEqual({ clientId: 'cl2' });
+    expect(clientFindUnique).not.toHaveBeenCalled();
   });
 
-  it('skips the destination check when clientId is not being changed', async () => {
+  it('updates a plain field with no client lookup at all', async () => {
     const tobFindUnique = jest.fn().mockResolvedValue(withRelations({ id: 't1' }));
     const clientFindUnique = jest.fn();
     const update = jest.fn().mockResolvedValue(withRelations({ id: 't1', paymentTerm: '45 days' }));

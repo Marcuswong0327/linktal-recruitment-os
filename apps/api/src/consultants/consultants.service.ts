@@ -10,7 +10,6 @@ import { Prisma } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { AuthUser } from '../auth/auth.types';
-import { clearUncoveredConsultantAssignments } from '../common/scope';
 import { CreateConsultantDto } from './dto/create-consultant.dto';
 import { UpdateConsultantDto } from './dto/update-consultant.dto';
 import { QueryConsultantsDto } from './dto/query-consultants.dto';
@@ -363,7 +362,7 @@ export class ConsultantsService {
       select: { industryId: true },
     });
 
-    const { toRemove } = await this.applyScopeDiff(
+    await this.applyScopeDiff(
       current.map((c) => c.industryId),
       uniqueIds,
       {
@@ -375,13 +374,6 @@ export class ConsultantsService {
           this.prisma.consultantIndustry.create({ data: { consultantId: id, industryId } }),
       },
     );
-
-    // Dropping an industry can strand records assigned to this consultant —
-    // but only if their locations don't still cover them, which is why the
-    // re-check reads current grants rather than acting on `toRemove` directly.
-    if (toRemove.length > 0) {
-      await clearUncoveredConsultantAssignments(this.prisma, id);
-    }
 
     return this.findOne(id, actor);
   }
@@ -488,7 +480,7 @@ export class ConsultantsService {
       select: { locationId: true },
     });
 
-    const { toRemove } = await this.applyScopeDiff(
+    await this.applyScopeDiff(
       current.map((c) => c.locationId),
       uniqueIds,
       {
@@ -500,14 +492,6 @@ export class ConsultantsService {
           this.prisma.consultantLocation.create({ data: { consultantId: id, locationId } }),
       },
     );
-
-    // Locations grant ownership now, same as industries — so narrowing a patch
-    // can strand a record just as dropping an industry can, and needs the same
-    // re-check. (Specializations still cascade nothing: they only ever narrow
-    // the industry arm, never grant on their own.)
-    if (toRemove.length > 0) {
-      await clearUncoveredConsultantAssignments(this.prisma, id);
-    }
 
     return this.findOne(id, actor);
   }

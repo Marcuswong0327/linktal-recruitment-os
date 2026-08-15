@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ClientCombobox } from '@/components/ClientCombobox';
-import { ConsultantCombobox } from '@/components/ConsultantCombobox';
+import { ConsultantMultiSelect } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
@@ -58,16 +58,22 @@ export function NewJobOrderForm() {
   }
 
   const [clientId, setClientId] = React.useState('');
-  // Industry-first: a Job Order has no industry of its own, only via its
-  // Client — no client picked yet (or one with no industry tagged) means no
-  // consultant can be assigned at all (enforced server-side too).
+  // A Job Order has no industry of its own, only via its Client — used below
+  // purely for the non-blocking out-of-scope warning, not to restrict who can
+  // be picked (several consultants can work a job order regardless of their
+  // own industry/location — see PUT /job-orders/:id/consultants).
   const selectedClientIndustryId = clients.find((c) => c.id === clientId)?.industryId ?? null;
-  const availableConsultants = !selectedClientIndustryId
-    ? []
-    : consultants.filter(
-        (c) => c.industryIds === undefined || c.industryIds.includes(selectedClientIndustryId),
-      );
-  const [consultantId, setConsultantId] = React.useState('');
+  const [consultantIds, setConsultantIds] = React.useState<string[]>([]);
+  const outOfScopeConsultants = consultantIds
+    .map((id) => consultants.find((c) => c.id === id))
+    .filter((c): c is (typeof consultants)[number] => c != null)
+    .filter((c) => {
+      // Can't tell without grant data (omitted when the caller lacks
+      // consultant_industry:read) — never warn on a guess. There's no
+      // location to check yet — this form doesn't collect one.
+      if (c.industryIds == null) return false;
+      return selectedClientIndustryId == null || !c.industryIds.includes(selectedClientIndustryId);
+    });
   const [status, setStatus] = React.useState<JobOrderStatus>('ACTIVE');
   const [quality, setQuality] = React.useState<JobOrderQuality>('MEDIUM');
   const [priorityLevel, setPriorityLevel] = React.useState('2');
@@ -95,7 +101,7 @@ export function NewJobOrderForm() {
     const dto: CreateJobOrderDto = {
       jobTitleId: jobTitleId || undefined,
       clientId,
-      consultantId: consultantId || undefined,
+      consultantIds: consultantIds.length > 0 ? consultantIds : undefined,
       status,
       quality,
       priorityLevel: priorityLevel === '' ? undefined : Number(priorityLevel),
@@ -172,23 +178,27 @@ export function NewJobOrderForm() {
                 <FormField label="Client" htmlFor="clientId" required>
                   <ClientCombobox id="clientId" value={clientId} onValueChange={setClientId} clients={clients} />
                 </FormField>
-                <FormField
-                  label="Consultant"
-                  htmlFor="consultantId"
-                  description={
-                    !selectedClientIndustryId
-                      ? 'Tag the client with an industry before assigning a consultant'
-                      : undefined
-                  }
-                >
-                  <ConsultantCombobox
-                    id="consultantId"
-                    value={consultantId}
-                    onValueChange={setConsultantId}
-                    consultants={availableConsultants}
-                    disabled={!selectedClientIndustryId}
-                  />
-                </FormField>
+                <div className="sm:col-span-2">
+                  <FormField
+                    label="Consultants"
+                    htmlFor="consultantIds"
+                    description="Several consultants can work this job order concurrently — optional at creation, can be changed later."
+                  >
+                    <ConsultantMultiSelect
+                      id="consultantIds"
+                      selected={consultantIds}
+                      onChange={setConsultantIds}
+                      consultants={consultants}
+                    />
+                  </FormField>
+                  {outOfScopeConsultants.length > 0 ? (
+                    <p className="mt-1.5 text-xs text-warning">
+                      {outOfScopeConsultants.map((c) => c.fullName).join(', ')}{' '}
+                      {outOfScopeConsultants.length === 1 ? "isn't" : "aren't"} tagged for this client's industry —
+                      still fine to add.
+                    </p>
+                  ) : null}
+                </div>
                 <FormField label="Status" htmlFor="status">
                   <EnumSelect
                     id="status"

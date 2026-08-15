@@ -110,6 +110,7 @@ const ENTITY_TYPE_LABEL_OVERRIDES: Record<string, string> = {
   CandidateSubmission: 'Submission',
   ClientJobResearch: 'Job Research',
   ConsultantIndustry: 'Industry Assignment',
+  JobOrderConsultant: 'Consultant Assignment',
   Tob: 'Terms of Business',
 };
 
@@ -161,9 +162,8 @@ export function booleanLabel(field: string, value: boolean): string {
 /**
  * Role-sensitive columns to redact in the activity log regardless of the
  * viewer — `audit:read` is admin-only today (see docs/rbac-roles.md), but
- * these are compensation fields already redacted from every other response
- * (see redact-consultant-field.ts's `consultantId`-hiding sibling), so if
- * `audit:read` is ever granted more broadly this can't become a silent leak.
+ * these are compensation fields that shouldn't leak if `audit:read` is ever
+ * granted more broadly.
  */
 export const SENSITIVE_FIELDS: Record<string, Set<string>> = {
   Consultant: new Set(['salary', 'costTo']),

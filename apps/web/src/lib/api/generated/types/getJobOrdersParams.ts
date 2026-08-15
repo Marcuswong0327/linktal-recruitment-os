@@ -44,7 +44,7 @@ qualities?: GetJobOrdersQualitiesItem[];
  */
 clientId?: string;
 /**
- * Filter by owning consultant ID(s). Ignored (overridden by the caller's own id) for the `consultant` role.
+ * Filter by assigned consultant ID(s) — matches a job order any of these consultants are working.
  */
 consultantIds?: string[];
 /**

@@ -94,7 +94,6 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
   specializationIds!: string[];
   @ApiProperty({ enum: CandidateStatus }) status!: CandidateStatus;
   @ApiProperty({ type: [CandidateNoteDto], nullable: true }) notes!: CandidateNoteDto[] | null;
-  @ApiProperty({ type: String, nullable: true }) consultantId!: string | null;
   @ApiProperty({
     type: Date,
     nullable: true,

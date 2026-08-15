@@ -364,18 +364,6 @@
             }
           },
           {
-            "name": "consultantIds",
-            "required": false,
-            "in": "query",
-            "description": "Filter by owning consultant ID(s)",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          {
             "name": "submissionStatuses",
             "required": false,
             "in": "query",
@@ -622,18 +610,6 @@
             }
           },
           {
-            "name": "consultantIds",
-            "required": false,
-            "in": "query",
-            "description": "Filter by owning consultant ID(s)",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          {
             "name": "submissionStatuses",
             "required": false,
             "in": "query",
@@ -833,6 +809,288 @@
           }
         ],
         "summary": "Get candidate by display ID (CDD-XXXX)",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
+    "/candidates/export": {
+      "get": {
+        "operationId": "exportCandidates",
+        "parameters": [
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to most recently created.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "displayId",
+                "firstName",
+                "lastName",
+                "lastContactedAt",
+                "status"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across firstName, lastName, email, displayId, mobile, currentRole, currentCompany, and location/industry/job role type name",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by status (one or more). Omit for all statuses.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "PLACED",
+                  "UNS"
+                ]
+              }
+            }
+          },
+          {
+            "name": "industryIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by industry ID(s) (see /industries)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobRoleTypeIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by job role type ID(s) (see /job-role-types)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "specializationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by specialization ID(s) (see /specializations)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "submissionStatuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by submission status (has at least one submission with this status)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "SUBMITTED",
+                  "INTERVIEWING",
+                  "REJECTED",
+                  "PLACED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "placementStatuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by placement status (has at least one placement with this status)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "COMPLETED",
+                  "FAILED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "location",
+            "required": false,
+            "in": "query",
+            "description": "Filter by location name (contains, case-insensitive) — matches the candidate's own node only. Use locationIds to match descendants too.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "currentCompany",
+            "required": false,
+            "in": "query",
+            "description": "Filter by current company (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "currentRole",
+            "required": false,
+            "in": "query",
+            "description": "Filter by current role (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedFrom",
+            "required": false,
+            "in": "query",
+            "description": "Only candidates last contacted on/after this date (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedTo",
+            "required": false,
+            "in": "query",
+            "description": "Only candidates last contacted on/before this date (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Location id(s). Selecting a country or state matches every candidate beneath it, via the ancestor path.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "timezone",
+            "required": false,
+            "in": "query",
+            "description": "IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Candidates workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export every candidate matching the current filters as an .xlsx file — unbounded, not paginated",
+        "tags": [
+          "Candidates"
+        ]
+      },
+      "post": {
+        "operationId": "exportCandidatesByIds",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportByIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Candidates workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export an explicit set of candidates (by id) as an .xlsx file",
         "tags": [
           "Candidates"
         ]
@@ -1842,18 +2100,6 @@
             }
           },
           {
-            "name": "consultantIds",
-            "required": false,
-            "in": "query",
-            "description": "Filter by owning consultant ID(s) (one or more, exact match). '' selects unassigned clients.",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          },
-          {
             "name": "qualities",
             "required": false,
             "in": "query",
@@ -2039,6 +2285,247 @@
           }
         ],
         "summary": "Get client by display ID (CLI-XXXX)",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/export": {
+      "get": {
+        "operationId": "exportClients",
+        "parameters": [
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to most recently contacted.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "displayId",
+                "createdAt",
+                "lastContactedAt",
+                "quality"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across companyName, displayId and website",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by status (one or more). Omit for all statuses.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "TRADED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "industry",
+            "required": false,
+            "in": "query",
+            "description": "Filter by industry (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "industryIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by industry id(s) (one or more, exact match)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "specialization",
+            "required": false,
+            "in": "query",
+            "description": "Filter by specialization (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "specializationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by specialization id(s) (one or more, exact match)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "location",
+            "required": false,
+            "in": "query",
+            "description": "Filter by location name (contains, case-insensitive) — matches any node in the client's market set.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Location id(s). Selecting a country or state matches every client whose market sits beneath it, via the ancestor path.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "qualities",
+            "required": false,
+            "in": "query",
+            "description": "Filter by lead quality (one or more). Omit for all qualities.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "LOW",
+                  "MEDIUM",
+                  "HIGH"
+                ]
+              }
+            }
+          },
+          {
+            "name": "hasTob",
+            "required": false,
+            "in": "query",
+            "description": "Filter by whether the client has any Terms of Business on file. Replaces the old `tobSigned` flag — TOBs are their own one-to-many table now (see /tobs).",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "timezone",
+            "required": false,
+            "in": "query",
+            "description": "IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Clients workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export every client matching the current filters as an .xlsx file — unbounded, not paginated",
+        "tags": [
+          "Clients"
+        ]
+      },
+      "post": {
+        "operationId": "exportClientsByIds",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportByIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Clients workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export an explicit set of clients (by id) as an .xlsx file",
         "tags": [
           "Clients"
         ]
@@ -2674,6 +3161,225 @@
           }
         ],
         "summary": "Get stakeholder by display ID (STK-XXXX)",
+        "tags": [
+          "Stakeholders"
+        ]
+      }
+    },
+    "/stakeholders/export": {
+      "get": {
+        "operationId": "exportStakeholders",
+        "parameters": [
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to most recently created.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "displayId",
+                "firstName",
+                "lastName",
+                "createdAt",
+                "lastContactedAt"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across firstName, lastName, email, displayId and mobile",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by client ID (exact match)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by multiple client IDs at once (e.g. the stakeholder enrichment workspace, scoped to a set of selected companies)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobTitle",
+            "required": false,
+            "in": "query",
+            "description": "Filter by job title (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "roleTypeIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by role type ID(s) (see /stakeholder-role-types)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobTitleIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by JobTitle id(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Location id(s) matched against a stakeholder's own coverage (not its client's location). Selecting a country or state matches every stakeholder whose coverage sits beneath it, via the ancestor path — same semantics as Client.locationIds.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "accuracy",
+            "required": false,
+            "in": "query",
+            "description": "Filter by verification state (one or more): 'true' (Accurate), 'false' (Inaccurate), 'unchecked' (not yet verified). Omit for all.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "true",
+                  "false",
+                  "unchecked"
+                ]
+              }
+            }
+          },
+          {
+            "name": "timezone",
+            "required": false,
+            "in": "query",
+            "description": "IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stakeholders workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export every stakeholder matching the current filters as an .xlsx file — unbounded, not paginated",
+        "tags": [
+          "Stakeholders"
+        ]
+      },
+      "post": {
+        "operationId": "exportStakeholdersByIds",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportByIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Stakeholders workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export an explicit set of stakeholders (by id) as an .xlsx file",
         "tags": [
           "Stakeholders"
         ]
@@ -3649,7 +4355,7 @@
             "name": "consultantIds",
             "required": false,
             "in": "query",
-            "description": "Filter by owning consultant ID(s). Ignored (overridden by the caller's own id) for the `consultant` role.",
+            "description": "Filter by assigned consultant ID(s) — matches a job order any of these consultants are working.",
             "schema": {
               "type": "array",
               "items": {
@@ -4160,6 +4866,82 @@
           }
         ],
         "summary": "Every candidate submission/stage change for this job order",
+        "tags": [
+          "Job Orders"
+        ]
+      }
+    },
+    "/job-orders/{id}/consultants": {
+      "put": {
+        "operationId": "setJobOrderConsultants",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetJobOrderConsultantsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Consultants updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOrderEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace who's working this job order (full-set-replace). Several consultants can work the same job order concurrently, in or out of their usual scope — no scope check is applied here on purpose.",
         "tags": [
           "Job Orders"
         ]
@@ -8686,10 +9468,6 @@
               "$ref": "#/components/schemas/CandidateNoteDto"
             }
           },
-          "consultantId": {
-            "type": "string",
-            "nullable": true
-          },
           "lastContactedAt": {
             "format": "date-time",
             "type": "string",
@@ -8761,7 +9539,6 @@
           "specializationIds",
           "status",
           "notes",
-          "consultantId",
           "lastContactedAt",
           "lastContactedById",
           "lastContactType",
@@ -8830,6 +9607,25 @@
           "id",
           "name",
           "count"
+        ]
+      },
+      "ExportByIdsDto": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "description": "Row IDs to export (an explicit selection, not a filter)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid."
+          }
+        },
+        "required": [
+          "ids"
         ]
       },
       "PipelineTimelineEventEntity": {
@@ -9005,10 +9801,6 @@
               "UNS"
             ],
             "example": "COLD"
-          },
-          "consultantId": {
-            "type": "string",
-            "description": "Owning consultant ID"
           }
         },
         "required": [
@@ -9102,10 +9894,6 @@
               "UNS"
             ],
             "example": "COLD"
-          },
-          "consultantId": {
-            "type": "string",
-            "description": "Owning consultant ID"
           }
         }
       },
@@ -9607,10 +10395,6 @@
             "nullable": true,
             "description": "Resolved name of the consultant who made the most recent contact, across all stakeholders"
           },
-          "consultantId": {
-            "type": "string",
-            "nullable": true
-          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -9644,7 +10428,6 @@
           "lastContactCategory",
           "lastContactNotes",
           "lastContactedBy",
-          "consultantId",
           "createdAt",
           "updatedAt"
         ]
@@ -9760,10 +10543,6 @@
               "HIGH"
             ],
             "example": "MEDIUM"
-          },
-          "consultantId": {
-            "type": "string",
-            "description": "Owning consultant ID"
           }
         },
         "required": [
@@ -9845,10 +10624,6 @@
               "HIGH"
             ],
             "example": "MEDIUM"
-          },
-          "consultantId": {
-            "type": "string",
-            "description": "Owning consultant ID"
           }
         }
       },
@@ -10503,6 +11278,21 @@
           }
         }
       },
+      "JobOrderConsultantEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
       "JobOrderPipelineCandidateEntity": {
         "type": "object",
         "properties": {
@@ -10585,9 +11375,12 @@
             "example": "CLI-000128",
             "description": "The client's human-readable id, for cross-referencing"
           },
-          "consultantId": {
-            "type": "string",
-            "nullable": true
+          "consultants": {
+            "description": "Consultants working this job order — several can work it concurrently (see PUT /job-orders/:id/consultants)",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobOrderConsultantEntity"
+            }
           },
           "jobTitleId": {
             "type": "string",
@@ -10724,7 +11517,7 @@
           "clientId",
           "clientName",
           "clientDisplayId",
-          "consultantId",
+          "consultants",
           "jobTitleId",
           "jobTitle",
           "jobRoleTypeId",
@@ -10805,9 +11598,12 @@
             "type": "string",
             "description": "Job role type ID (see /job-role-types) — the consultant's classification"
           },
-          "consultantId": {
-            "type": "string",
-            "description": "Owning consultant ID"
+          "consultantIds": {
+            "description": "Consultants working this job order at creation time (see PUT /job-orders/:id/consultants to change it later). Several can work the same job order concurrently — no scope check is applied here on purpose.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "locationId": {
             "type": "string",
@@ -10909,10 +11705,6 @@
             "type": "string",
             "description": "Job role type ID (see /job-role-types) — the consultant's classification"
           },
-          "consultantId": {
-            "type": "string",
-            "description": "Owning consultant ID"
-          },
           "locationId": {
             "type": "string",
             "description": "Most specific known Location node (see /locations) — replaces the old city/suburb columns"
@@ -10994,6 +11786,21 @@
             "default": 2
           }
         }
+      },
+      "SetJobOrderConsultantsDto": {
+        "type": "object",
+        "properties": {
+          "consultantIds": {
+            "description": "Consultant IDs working this job order — replaces the whole set",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "consultantIds"
+        ]
       },
       "JobResearchEntity": {
         "type": "object",

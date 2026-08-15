@@ -60,10 +60,6 @@ location?: string;
  */
 locationIds?: string[];
 /**
- * Filter by owning consultant ID(s) (one or more, exact match). '' selects unassigned clients.
- */
-consultantIds?: string[];
-/**
  * Filter by lead quality (one or more). Omit for all qualities.
  */
 qualities?: GetClientsQualitiesItem[];

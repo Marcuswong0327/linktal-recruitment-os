@@ -149,7 +149,6 @@ function CompanyEditForm({
   const [generalDescription, setGeneralDescription] = React.useState(company.generalDescription ?? '');
   const [status, setStatus] = React.useState<ClientStatus>(company.status);
   const [quality, setQuality] = React.useState<ClientQuality>(company.quality);
-  const [consultantId, setConsultantId] = React.useState(company.consultantId ?? '');
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [addingTob, setAddingTob] = React.useState(false);
 
@@ -170,8 +169,7 @@ function CompanyEditForm({
     linkedinJobMarketUrl !== (company.linkedinJobMarketUrl ?? '') ||
     generalDescription !== (company.generalDescription ?? '') ||
     status !== company.status ||
-    quality !== company.quality ||
-    consultantId !== (company.consultantId ?? '');
+    quality !== company.quality;
 
   const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty && canEdit);
 
@@ -267,7 +265,6 @@ function CompanyEditForm({
       generalDescription: generalDescription || undefined,
       status,
       quality,
-      consultantId: consultantId || undefined,
     };
     updateCompany.mutate({ id: company.id, data });
   }
@@ -440,15 +437,6 @@ function CompanyEditForm({
                     value={quality}
                     onValueChange={(v) => setQuality(v as ClientQuality)}
                     options={qualityOptions}
-                    disabled={!canEdit}
-                  />
-                </FormField>
-                <FormField label="Consultant" htmlFor="consultantId" description="Owning consultant.">
-                  <ConsultantCombobox
-                    id="consultantId"
-                    value={consultantId}
-                    onValueChange={setConsultantId}
-                    consultants={consultants}
                     disabled={!canEdit}
                   />
                 </FormField>

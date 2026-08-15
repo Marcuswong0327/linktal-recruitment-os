@@ -15,8 +15,8 @@ export interface CreateJobOrderDto {
   jobTitleId?: string;
   /** Job role type ID (see /job-role-types) — the consultant's classification */
   jobRoleTypeId?: string;
-  /** Owning consultant ID */
-  consultantId?: string;
+  /** Consultants working this job order at creation time (see PUT /job-orders/:id/consultants to change it later). Several can work the same job order concurrently — no scope check is applied here on purpose. */
+  consultantIds?: string[];
   /** Most specific known Location node (see /locations) — replaces the old city/suburb columns */
   locationId?: string;
   /** ClientJobResearch row this job order originated from, if any (see /job-research) */

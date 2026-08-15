@@ -15,8 +15,6 @@ export interface UpdateJobOrderDto {
   jobTitleId?: string;
   /** Job role type ID (see /job-role-types) — the consultant's classification */
   jobRoleTypeId?: string;
-  /** Owning consultant ID */
-  consultantId?: string;
   /** Most specific known Location node (see /locations) — replaces the old city/suburb columns */
   locationId?: string;
   /** ClientJobResearch row this job order originated from, if any (see /job-research) */

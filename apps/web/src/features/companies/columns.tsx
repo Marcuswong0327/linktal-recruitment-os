@@ -21,20 +21,10 @@ function initials(name: string) {
 interface CompanyColumnsOptions {
   onStatusChange: (company: Company, status: string) => void;
   onQualityChange: (company: Company, quality: string) => void;
-  /** Resolves a consultantId to a display name — client-side join, the API returns the id only. */
-  consultantName: (id: string | null) => string;
   /** Row id currently saving an inline change — disables that row's controls. */
   pendingRowId: string | null;
   /** Absent when the caller lacks `client:update` — controls render read-only. */
   canUpdate: boolean;
-  /**
-   * Omits the Consultant column — every row is already scoped to this
-   * consultant's own book (see ClientsService.findAll) and the field is
-   * redacted server-side too, so the column would just repeat their own name
-   * (or nothing) on every row. Same reasoning as Job Orders'
-   * hideConsultantColumn.
-   */
-  hideConsultantColumn?: boolean;
 }
 
 export function getCompanyColumns({

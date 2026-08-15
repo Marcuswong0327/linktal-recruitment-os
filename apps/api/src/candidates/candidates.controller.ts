@@ -8,8 +8,9 @@ import {
   Patch,
   Post,
   Query,
+  StreamableFile,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiProduces, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CandidatesService } from './candidates.service';
 import { AuditService } from '../audit/audit.service';
 import { PipelineTimelineEventEntity } from '../audit/entities/pipeline-timeline-event.entity';
@@ -18,6 +19,9 @@ import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { QueryCandidatesDto } from './dto/query-candidates.dto';
 import { CreateCandidateContactHistoryDto } from './dto/create-candidate-contact-history.dto';
 import { QueryCandidateFacetsDto } from './dto/query-candidate-facets.dto';
+import { ExportCandidatesDto } from './dto/export-candidates.dto';
+import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
+import { XLSX_CONTENT_TYPE, exportFilename } from '../common/xlsx-export';
 import {
   AddCandidateNoteDto,
   DeleteCandidateNoteQueryDto,
@@ -71,6 +75,38 @@ export class CandidatesController {
   @ApiResponse({ status: 200, description: 'Candidate found', type: CandidateEntity })
   findByDisplayId(@Param('displayId') displayId: string) {
     return this.candidates.findByDisplayId(displayId);
+  }
+
+  @Get('export')
+  @RequirePermission('candidate', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportCandidates',
+    summary: 'Export every candidate matching the current filters as an .xlsx file — unbounded, not paginated',
+  })
+  @ApiResponse({ status: 200, description: 'Candidates workbook' })
+  async exportAll(@Query() query: ExportCandidatesDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.candidates.exportAll(query, user);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('candidates')}"`,
+    });
+  }
+
+  @Post('export')
+  @RequirePermission('candidate', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportCandidatesByIds',
+    summary: 'Export an explicit set of candidates (by id) as an .xlsx file',
+  })
+  @ApiResponse({ status: 201, description: 'Candidates workbook' })
+  async exportByIds(@Body() dto: ExportByIdsDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.candidates.exportByIds(dto.ids, user, dto.timezone);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('candidates')}"`,
+    });
   }
 
   @Get(':id')

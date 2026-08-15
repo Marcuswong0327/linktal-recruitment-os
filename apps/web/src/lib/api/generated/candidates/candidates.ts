@@ -32,6 +32,8 @@ import type {
   CreateCandidateDto,
   DeleteCandidateNoteParams,
   ErrorResponse,
+  ExportByIdsDto,
+  ExportCandidatesParams,
   GetCandidateJobRoleTypeFacetsParams,
   GetCandidatesParams,
   JobRoleTypeFacetEntity,
@@ -91,7 +93,7 @@ export const getGetCandidatesUrl = (params?: GetCandidatesParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["statuses","industryIds","jobRoleTypeIds","specializationIds","consultantIds","submissionStatuses","placementStatuses","locationIds"];
+    const explodeParameters = ["statuses","industryIds","jobRoleTypeIds","specializationIds","submissionStatuses","placementStatuses","locationIds"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
@@ -324,7 +326,7 @@ export const getGetCandidateJobRoleTypeFacetsUrl = (params?: GetCandidateJobRole
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["statuses","industryIds","specializationIds","consultantIds","submissionStatuses","placementStatuses","locationIds"];
+    const explodeParameters = ["statuses","industryIds","specializationIds","submissionStatuses","placementStatuses","locationIds"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
@@ -564,7 +566,240 @@ export function useGetCandidateByDisplayId<TData = Awaited<ReturnType<typeof get
 
 
 
-export type getCandidateResponse200 = {
+export type exportCandidatesResponse200 = {
+  data: void
+  status: 200
+}
+
+export type exportCandidatesResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportCandidatesResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportCandidatesResponseSuccess = (exportCandidatesResponse200) & {
+  headers: Headers;
+};
+export type exportCandidatesResponseError = (exportCandidatesResponse400 | exportCandidatesResponse500) & {
+  headers: Headers;
+};
+
+export type exportCandidatesResponse = (exportCandidatesResponseSuccess | exportCandidatesResponseError)
+
+export const getExportCandidatesUrl = (params?: ExportCandidatesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["statuses","industryIds","jobRoleTypeIds","specializationIds","submissionStatuses","placementStatuses","locationIds"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/candidates/export?${stringifiedParams}` : `/candidates/export`
+}
+
+/**
+ * @summary Export every candidate matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+export const exportCandidates = async (params?: ExportCandidatesParams, options?: RequestInit): Promise<exportCandidatesResponse> => {
+
+  return customFetch<exportCandidatesResponse>(getExportCandidatesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportCandidatesQueryKey = (params?: ExportCandidatesParams,) => {
+    return [
+    `/candidates/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportCandidatesQueryOptions = <TData = Awaited<ReturnType<typeof exportCandidates>>, TError = ErrorResponse>(params?: ExportCandidatesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCandidates>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportCandidatesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportCandidates>>> = ({ signal }) => exportCandidates(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportCandidates>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportCandidatesQueryResult = NonNullable<Awaited<ReturnType<typeof exportCandidates>>>
+export type ExportCandidatesQueryError = ErrorResponse
+
+
+export function useExportCandidates<TData = Awaited<ReturnType<typeof exportCandidates>>, TError = ErrorResponse>(
+ params: undefined |  ExportCandidatesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCandidates>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportCandidates>>,
+          TError,
+          Awaited<ReturnType<typeof exportCandidates>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportCandidates<TData = Awaited<ReturnType<typeof exportCandidates>>, TError = ErrorResponse>(
+ params?: ExportCandidatesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCandidates>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportCandidates>>,
+          TError,
+          Awaited<ReturnType<typeof exportCandidates>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportCandidates<TData = Awaited<ReturnType<typeof exportCandidates>>, TError = ErrorResponse>(
+ params?: ExportCandidatesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCandidates>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Export every candidate matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+
+export function useExportCandidates<TData = Awaited<ReturnType<typeof exportCandidates>>, TError = ErrorResponse>(
+ params?: ExportCandidatesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCandidates>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getExportCandidatesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type exportCandidatesByIdsResponse201 = {
+  data: void
+  status: 201
+}
+
+export type exportCandidatesByIdsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportCandidatesByIdsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportCandidatesByIdsResponseSuccess = (exportCandidatesByIdsResponse201) & {
+  headers: Headers;
+};
+export type exportCandidatesByIdsResponseError = (exportCandidatesByIdsResponse400 | exportCandidatesByIdsResponse500) & {
+  headers: Headers;
+};
+
+export type exportCandidatesByIdsResponse = (exportCandidatesByIdsResponseSuccess | exportCandidatesByIdsResponseError)
+
+export const getExportCandidatesByIdsUrl = () => {
+
+
+
+
+  return `/candidates/export`
+}
+
+/**
+ * @summary Export an explicit set of candidates (by id) as an .xlsx file
+ */
+export const exportCandidatesByIds = async (exportByIdsDto: ExportByIdsDto, options?: RequestInit): Promise<exportCandidatesByIdsResponse> => {
+
+  return customFetch<exportCandidatesByIdsResponse>(getExportCandidatesByIdsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(exportByIdsDto)
+  }
+);}
+
+
+
+
+
+export const getExportCandidatesByIdsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportCandidatesByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportCandidatesByIds>>, TError,{data: ExportByIdsDto}, TContext> => {
+
+const mutationKey = ['exportCandidatesByIds'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportCandidatesByIds>>, {data: ExportByIdsDto}> = (props) => {
+          const {data} = props ?? {};
+
+          return  exportCandidatesByIds(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportCandidatesByIdsMutationResult = NonNullable<Awaited<ReturnType<typeof exportCandidatesByIds>>>
+    export type ExportCandidatesByIdsMutationBody = ExportByIdsDto
+    export type ExportCandidatesByIdsMutationError = ErrorResponse
+
+    /**
+ * @summary Export an explicit set of candidates (by id) as an .xlsx file
+ */
+export const useExportCandidatesByIds = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportCandidatesByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof exportCandidatesByIds>>,
+        TError,
+        {data: ExportByIdsDto},
+        TContext
+      > => {
+      return useMutation(getExportCandidatesByIdsMutationOptions(options), queryClient);
+    }
+    export type getCandidateResponse200 = {
   data: CandidateEntity
   status: 200
 }

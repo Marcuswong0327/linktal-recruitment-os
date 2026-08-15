@@ -80,8 +80,6 @@ export interface ClientEntity {
      * @nullable
      */
   lastContactedBy: string | null;
-  /** @nullable */
-  consultantId: string | null;
   createdAt: string;
   updatedAt: string;
 }

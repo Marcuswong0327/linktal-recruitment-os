@@ -16,19 +16,17 @@ interface NamedOption {
 export interface CandidateSearchLookups {
   jobRoleTypes: NamedOption[];
   industries: NamedOption[];
-  consultants: NamedOption[];
 }
 
 // Specialization is deliberately not a suggestion source here — it's 775+
 // rows and growing, server-searched on demand by CatalogMultiSelectFilter
 // (see its doc), and offering it as a search-bar suggestion would mean
 // preloading the whole catalog just for that, undoing the point.
-type SuggestionField = 'jobRoleTypeIds' | 'industryIds' | 'consultantIds';
+type SuggestionField = 'jobRoleTypeIds' | 'industryIds';
 
 const FIELD_LABELS: Record<SuggestionField, string> = {
   jobRoleTypeIds: 'Role Type',
   industryIds: 'Industry',
-  consultantIds: 'Consultant',
 };
 
 interface Suggestion {
@@ -39,8 +37,8 @@ interface Suggestion {
 /**
  * A single search box, replacing the old free-text/"Advanced (Key-Value
  * Search)" tab split. There's no syntax to learn: typing a name that matches
- * a real catalog entry (a Role Type, Industry, Specialization or Consultant)
- * offers it as a one-click filter chip; anything else just runs as free text
+ * a real catalog entry (a Role Type or Industry) offers it as a one-click
+ * filter chip; anything else just runs as free text
  * on Enter — same fields the API's `q` already covers (name, email, mobile,
  * displayId, current role/company, resolved location/industry/role type).
  *
@@ -75,7 +73,6 @@ export function CandidateSearchBar({
     const fields: [SuggestionField, NamedOption[]][] = [
       ['jobRoleTypeIds', lookups.jobRoleTypes],
       ['industryIds', lookups.industries],
-      ['consultantIds', lookups.consultants],
     ];
     const matches: Suggestion[] = [];
     for (const [field, options] of fields) {

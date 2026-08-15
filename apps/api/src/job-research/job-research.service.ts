@@ -4,7 +4,7 @@ import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestContext } from '../common/request-context';
-import { assertInScope, isScoped, jobResearchScope } from '../common/scope';
+import { isScoped, jobResearchScope } from '../common/scope';
 import { AuthUser } from '../auth/auth.types';
 import { CreateJobResearchDto } from './dto/create-job-research.dto';
 import { UpdateJobResearchDto } from './dto/update-job-research.dto';
@@ -172,11 +172,11 @@ export class JobResearchService {
   }
 
   /**
-   * `user` gates the job-scope check (findOne/update/remove are single-record
-   * access — a scoped consultant hitting an out-of-scope row directly gets an
-   * explicit 403, unlike `findAll`, which just filters silently).
+   * Single-record access is unguarded by scope — scope only ever filters
+   * `findAll`. `user` is accepted for signature symmetry with the other
+   * services but unused here now.
    */
-  async findOne(id: string, user: AuthUser) {
+  async findOne(id: string, _user: AuthUser) {
     const research = await this.prisma.clientJobResearch.findUnique({
       where: { id },
       include: JOB_RESEARCH_INCLUDE,
@@ -184,14 +184,6 @@ export class JobResearchService {
     if (!research) {
       throw new NotFoundException(`Job research ${id} not found`);
     }
-    // No industry of its own — it inherits its Client's. `consultantId`
-    // short-circuits both arms: a row you logged yourself is always yours to
-    // open (see ownedBy in common/scope.ts).
-    assertInScope(user, {
-      consultantId: research.consultantId,
-      industryId: research.client?.industryId ?? null,
-      locationAncestorIds: research.location?.ancestorIds ?? [],
-    });
     return toEntity(research);
   }
 

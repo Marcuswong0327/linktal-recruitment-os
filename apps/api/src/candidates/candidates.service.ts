@@ -7,25 +7,22 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { Prisma } from '@prisma/client';
+import { CandidateStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { RequestContext } from '../common/request-context';
-import {
-  assertConsultantCovers,
-  assertInScope,
-  candidateScope,
-  clearMismatchedCandidateAssignment,
-  isScoped,
-} from '../common/scope';
+import { candidateScope, isScoped } from '../common/scope';
 import { AuthUser } from '../auth/auth.types';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
 import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { QueryCandidatesDto } from './dto/query-candidates.dto';
 import { CreateCandidateContactHistoryDto } from './dto/create-candidate-contact-history.dto';
 import { QueryCandidateFacetsDto } from './dto/query-candidate-facets.dto';
+import { ExportCandidatesDto } from './dto/export-candidates.dto';
 import { AddCandidateNoteDto, CandidateNoteDto, UpdateCandidateNoteDto } from './dto/candidate-note.dto';
+import { buildWorkbook, resolveTimeZone, splitContactDateTime, ExportColumn } from '../common/xlsx-export';
+import { candidateStatusLabels } from '../common/export-labels';
 
 /** The subset of QueryCandidatesDto that `buildWhere` actually reads — shared with QueryCandidateFacetsDto, which omits pagination/sort/jobRoleTypeIds but still satisfies this structurally. */
 type CandidateFilterFields = Pick<
@@ -35,7 +32,6 @@ type CandidateFilterFields = Pick<
   | 'industryIds'
   | 'jobRoleTypeIds'
   | 'specializationIds'
-  | 'consultantIds'
   | 'submissionStatuses'
   | 'placementStatuses'
   | 'locationIds'
@@ -90,6 +86,22 @@ type CandidateWithRelations = {
   jobRoleType: { name: string } | null;
   location: { name: string; level: string; ancestorIds: string[] } | null;
   specializations: { specializationId: string; specialization: { name: string } }[];
+};
+
+/** The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept separate from the generic `toEntity<T>` return type, which erases extra fields when used across a second generic boundary. */
+type CandidateExportRow = {
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  mobile: string | null;
+  currentRole: string | null;
+  currentCompany: string | null;
+  location: string | null;
+  status: CandidateStatus;
+  lastContactedAt: Date | null;
+  lastContactType: string | null;
+  lastContactedBy: string | null;
+  lastContactNotes: string | null;
 };
 
 function toEntity<T extends CandidateWithRelations>(candidate: T) {
@@ -163,7 +175,6 @@ export class CandidatesService {
     if (query.specializationIds?.length) {
       and.push({ specializations: { some: { specializationId: { in: query.specializationIds } } } });
     }
-    if (query.consultantIds?.length) and.push({ consultantId: { in: query.consultantIds } });
     if (isScoped(user)) and.push(candidateScope(user));
     if (query.submissionStatuses?.length) {
       and.push({ submissions: { some: { status: { in: query.submissionStatuses } } } });
@@ -221,6 +232,21 @@ export class CandidatesService {
     return and.length > 0 ? { AND: and } : {};
   }
 
+  /** Shared by `findAll` and `exportAll` so the exported sheet mirrors the grid's current sort exactly. */
+  private buildOrderBy(
+    sortBy: QueryCandidatesDto['sortBy'],
+    sortOrder: QueryCandidatesDto['sortOrder'],
+  ): Prisma.CandidateOrderByWithRelationInput[] {
+    return [
+      !sortBy
+        ? { createdAt: 'desc' }
+        : sortBy === 'lastContactedAt'
+          ? { lastContactedAt: { sort: sortOrder, nulls: 'last' } }
+          : { [sortBy]: sortOrder },
+      { id: 'asc' },
+    ];
+  }
+
   async findAll(query: QueryCandidatesDto, user: AuthUser) {
     const { page, pageSize, sortBy, sortOrder } = query;
     const where = this.buildWhere(query, user);
@@ -239,14 +265,7 @@ export class CandidatesService {
     // doesn't guarantee a stable order across separate paginated queries for
     // tied rows. Without it, paging (or infinite-scroll's page-by-page
     // accumulation) can silently return the same row twice or skip one.
-    const orderBy: Prisma.CandidateOrderByWithRelationInput[] = [
-      !sortBy
-        ? { createdAt: 'desc' }
-        : sortBy === 'lastContactedAt'
-          ? { lastContactedAt: { sort: sortOrder, nulls: 'last' } }
-          : { [sortBy]: sortOrder },
-      { id: 'asc' },
-    ];
+    const orderBy = this.buildOrderBy(sortBy, sortOrder);
 
     // Parallel, not $transaction: these two reads don't need one consistent
     // DB snapshot, and running them concurrently instead of sequentially
@@ -292,7 +311,64 @@ export class CandidatesService {
       .map((g) => ({ id: g.jobRoleTypeId as string, name: nameById.get(g.jobRoleTypeId as string)!, count: g._count }));
   }
 
-  async findOne(id: string, user: AuthUser) {
+  /** Every row matching the current filters, unbounded — no `skip`/`take`. */
+  async exportAll(query: ExportCandidatesDto, user: AuthUser): Promise<Buffer> {
+    const where = this.buildWhere(query, user);
+    const orderBy = this.buildOrderBy(query.sortBy, query.sortOrder);
+    const candidates = await this.prisma.candidate.findMany({ where, orderBy, include: CANDIDATE_INCLUDE });
+    return this.buildExportWorkbook(candidates.map(toEntity), query.timezone);
+  }
+
+  /** An explicit row selection — scope is still re-applied server-side (defense-in-depth), so an out-of-scope id is silently dropped rather than exported. */
+  async exportByIds(ids: string[], user: AuthUser, timezone?: string): Promise<Buffer> {
+    const and: Prisma.CandidateWhereInput[] = [{ id: { in: ids } }];
+    if (isScoped(user)) and.push(candidateScope(user));
+    const candidates = await this.prisma.candidate.findMany({ where: { AND: and }, include: CANDIDATE_INCLUDE });
+    return this.buildExportWorkbook(candidates.map(toEntity), timezone);
+  }
+
+  private buildExportWorkbook(candidates: CandidateExportRow[], timezone?: string): Promise<Buffer> {
+    const tz = resolveTimeZone(timezone);
+    const columns: ExportColumn[] = [
+      { header: 'Candidate Name', key: 'name' },
+      { header: 'Email', key: 'email' },
+      { header: 'Mobile', key: 'mobile' },
+      { header: 'Current Role', key: 'currentRole' },
+      { header: 'Current Company', key: 'currentCompany' },
+      { header: 'Location', key: 'location' },
+      { header: 'Status', key: 'status' },
+      { header: 'Last Contacted Date', key: 'lastContactedDate' },
+      { header: 'Last Contacted Time', key: 'lastContactedTime' },
+      { header: 'Last Contact Method', key: 'lastContactType' },
+      { header: 'Last Contacted By', key: 'lastContactedBy' },
+      { header: 'Last Contact Notes', key: 'lastContactNotes', wrap: true },
+    ];
+    const rows = candidates.map((c) => {
+      const { date, time } = splitContactDateTime(c.lastContactedAt, tz);
+      return {
+        name: [c.firstName, c.lastName].filter(Boolean).join(' '),
+        email: c.email ?? '',
+        mobile: c.mobile ?? '',
+        currentRole: c.currentRole ?? '',
+        currentCompany: c.currentCompany ?? '',
+        location: c.location ?? '',
+        status: candidateStatusLabels[c.status],
+        lastContactedDate: date,
+        lastContactedTime: time,
+        lastContactType: c.lastContactType ?? '',
+        lastContactedBy: c.lastContactedBy ?? '',
+        lastContactNotes: c.lastContactNotes ?? '',
+      };
+    });
+    return buildWorkbook('Candidates', columns, rows);
+  }
+
+  /**
+   * Single-record access is unguarded by scope — scope only ever filters
+   * `findAll`. `user` is accepted for signature symmetry with the other
+   * services but unused here now.
+   */
+  async findOne(id: string, _user: AuthUser) {
     const candidate = await this.prisma.candidate.findUnique({
       where: { id },
       include: CANDIDATE_INCLUDE,
@@ -300,13 +376,6 @@ export class CandidatesService {
     if (!candidate) {
       throw new NotFoundException(`Candidate ${id} not found`);
     }
-    // `consultantId` short-circuits the arms below — an assigned candidate is
-    // always their owner's to open (see ownedBy in common/scope.ts).
-    assertInScope(user, {
-      consultantId: candidate.consultantId,
-      industryId: candidate.industryId,
-      locationAncestorIds: candidate.location?.ancestorIds ?? [],
-    });
     return toEntity(candidate);
   }
 
@@ -321,18 +390,7 @@ export class CandidatesService {
     return toEntity(candidate);
   }
 
-  async create(dto: CreateCandidateDto, user: AuthUser) {
-    // A consultant can only be assigned a candidate they'd reach anyway —
-    // their industry or their location — unless an admin/manager is
-    // deliberately making an exception (see assertConsultantCovers).
-    if (dto.consultantId) {
-      await assertConsultantCovers(
-        this.prisma,
-        dto.consultantId,
-        { industryId: dto.industryId ?? null, locationIds: dto.locationId ? [dto.locationId] : [] },
-        user.roleName,
-      );
-    }
+  async create(dto: CreateCandidateDto, _user: AuthUser) {
     // displayId is assigned by the DB (Candidate_displayId_seq default).
     const candidate = await this.prisma.candidate.create({
       data: {
@@ -347,25 +405,9 @@ export class CandidatesService {
   }
 
   async update(id: string, dto: UpdateCandidateDto, user: AuthUser) {
-    const existing = await this.findOne(id, user);
+    await this.findOne(id, user);
 
-    // Only validated when a consultant is explicitly being set/changed here —
-    // an industry/location-only edit never blocks on this (that's what the
-    // auto-clear below is for instead of erroring).
-    if ('consultantId' in dto && dto.consultantId) {
-      const effectiveLocationId = 'locationId' in dto ? dto.locationId : existing.locationId;
-      await assertConsultantCovers(
-        this.prisma,
-        dto.consultantId,
-        {
-          industryId: 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId,
-          locationIds: effectiveLocationId ? [effectiveLocationId] : [],
-        },
-        user.roleName,
-      );
-    }
-
-    let candidate = await this.prisma.candidate.update({
+    const candidate = await this.prisma.candidate.update({
       where: { id },
       data: {
         ...this.toPrismaData(dto),
@@ -384,16 +426,6 @@ export class CandidatesService {
       },
       include: CANDIDATE_INCLUDE,
     });
-
-    // Bidirectional auto-clear: the industry changed without an explicit
-    // consultant change in the same request — silently unassign if the
-    // existing consultant no longer matches, rather than blocking the edit.
-    if (('industryId' in dto || 'locationId' in dto) && !('consultantId' in dto)) {
-      const cleared = await clearMismatchedCandidateAssignment(this.prisma, id);
-      if (cleared) {
-        candidate = await this.prisma.candidate.findUniqueOrThrow({ where: { id }, include: CANDIDATE_INCLUDE });
-      }
-    }
 
     return toEntity(candidate);
   }

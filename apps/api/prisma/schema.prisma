@@ -181,13 +181,11 @@ model Consultant {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  clients             Client[]
-  jobOrders           JobOrder[]
-  candidates          Candidate[]
   stakeholderContacts StakeholderContactHistory[]
   candidateContacts   CandidateContactHistory[]
   tobsRepresented     Tob[]
   jobResearch         ClientJobResearch[]
+  jobOrderAssignments JobOrderConsultant[] // Which job orders this consultant is working — see SCOPING below and JobOrderConsultant.
 
   // The two arms of the visibility scope — see the "SCOPING" note below.
   industries      ConsultantIndustry[]
@@ -228,6 +226,13 @@ model Consultant {
 // vocabulary is coarse ("Food") while the record-side is fine ("Food Meat"),
 // and the parent tier added to Specialization is what reconciles them. It's
 // enabled once the catalog backfill lands.
+//
+// This is a pure LIST FILTER, never a gate on direct access — there is no
+// per-record consultantId ownership on Client/Candidate anymore. The one
+// deliberate way to reach an out-of-scope Client/Candidate is to be added to
+// a JobOrder (JobOrderConsultant, below): that surfaces the job order's own
+// Client and the Candidates submitted to THAT job order specifically, out of
+// scope or not — no guard blocks it, by design.
 
 // Many-to-many: which industries a consultant is scoped to (they can carry
 // several, unlike Client/Candidate's single industryId). Explicit join model
@@ -469,8 +474,6 @@ model Client {
   quality           ClientQuality @default(MEDIUM)
   lastContactedAt   DateTime? // Denormalized: max(StakeholderContactHistory.contactedAt) across this client's stakeholders. Lets the list sort by it without a cross-table aggregate on every page load; source of truth stays StakeholderContactHistory.
   lastContactedById String? // Logical ref to Consultant.id (no FK) — denormalized, mirrors lastContactedAt.
-  consultantId      String?
-  consultant        Consultant?   @relation(fields: [consultantId], references: [id])
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   deletedAt         DateTime? // Soft delete: null = live
@@ -482,7 +485,6 @@ model Client {
   tobs         Tob[] // Terms of Business — one-to-many: a client can have multiple TOB records over time
 
   @@index([status])
-  @@index([consultantId])
   @@index([deletedAt])
   @@index([industryId])
   @@index([specializationId])
@@ -711,8 +713,6 @@ model Candidate {
   status CandidateStatus @default(COLD)
   notes  Json? // JSONB: [{id, content, timestamp, by, editedAt, editedBy}] — internal note timeline, newest last; edit/delete restricted to the note's author (or an admin).
 
-  consultantId      String? // Owning consultant — distinct from CandidateContactHistory.contactedById (who actually made a given contact).
-  consultant        Consultant? @relation(fields: [consultantId], references: [id])
   lastContactedAt   DateTime? // Denormalized: max(CandidateContactHistory.contactedAt).
   lastContactedById String? // Logical ref to Consultant.id (no FK) — denormalized, mirrors lastContactedAt.
   createdAt         DateTime    @default(now())
@@ -726,7 +726,6 @@ model Candidate {
   @@index([status])
   @@index([email])
   @@index([deletedAt])
-  @@index([consultantId])
   @@index([lastContactedAt])
   @@index([industryId])
   @@index([jobRoleTypeId])
@@ -768,7 +767,7 @@ model CandidateContactHistory {
 
   contactType   String? // Channel: email, call, meeting, linkedin
   category      String? // "Detailed Screening Notes" or "Outreach Campaign History"
-  contactedById String? // Consultant who made this specific contact — distinct from Candidate.consultantId (the owner).
+  contactedById String? // Consultant who made this specific contact.
   contactedBy   Consultant? @relation(fields: [contactedById], references: [id], onDelete: SetNull)
   contactedAt   DateTime    @default(now())
 
@@ -798,8 +797,12 @@ model JobOrder {
   clientId  String
   client    Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
-  consultantId String?
-  consultant   Consultant? @relation(fields: [consultantId], references: [id])
+  // Who's working this job order — deliberately many-to-many (see
+  // JobOrderConsultant below): several consultants can work the same job
+  // order concurrently, and being on this list is also the one way to reach
+  // an otherwise out-of-scope Client/Candidate (see the SCOPING note above
+  // Consultant).
+  consultants JobOrderConsultant[]
 
   // Both, same split as Stakeholder: the client's brief vs. the consultant's
   // classification. The sheet has a single "Role" column, imported into both.
@@ -838,13 +841,32 @@ model JobOrder {
   submissions CandidateSubmission[]
 
   @@index([clientId])
-  @@index([consultantId])
   @@index([status])
   @@index([quality])
   @@index([deletedAt])
   @@index([locationId])
   @@index([jobTitleId])
   @@index([jobRoleTypeId])
+}
+
+// Many-to-many: which consultants are working a given job order. Explicit
+// join model, same audit-diffing reasoning as ConsultantIndustry — written as
+// individual top-level create/delete calls (never a nested relation write) so
+// the generic Prisma audit extension actually sees and diffs each row. No
+// scope-mismatch guard applies to this table: assigning someone here on
+// purpose reaches outside their normal industry/location grants — that's the
+// entire point (see the SCOPING note above Consultant).
+model JobOrderConsultant {
+  jobOrderId String
+  jobOrder   JobOrder @relation(fields: [jobOrderId], references: [id], onDelete: Cascade)
+
+  consultantId String
+  consultant   Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+
+  @@id([jobOrderId, consultantId])
+  @@index([consultantId])
 }
 
 // ============================================================================

@@ -15,22 +15,25 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { ContextMenuItem } from '@/components/ui/context-menu';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { DataGrid, type DataGridQuery } from '@/components/DataGrid';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
+import { downloadFile } from '@/lib/api/fetcher';
 import {
   deleteCandidate as deleteCandidateRequest,
   getCandidates,
+  getExportCandidatesByIdsUrl,
+  getExportCandidatesUrl,
   getGetCandidatesQueryKey,
   restoreCandidate as restoreCandidateRequest,
   updateCandidate as updateCandidateRequest,
   useGetCandidates,
 } from '@/lib/api/generated/candidates/candidates';
-import type { ConsultantEntity, GetCandidatesSortBy, UpdateCandidateDto } from '@/lib/api/generated/types';
+import type { GetCandidatesSortBy, UpdateCandidateDto } from '@/lib/api/generated/types';
 import { type Candidate, candidateStatuses, candidateStatusLabels, candidateStatusVariants } from './schema';
 import { candidateColumns } from './columns';
-import { exportCandidatesToExcel } from './exportToExcel';
 import type { useCandidateSearch } from './useCandidateSearch';
 
 // Batch size fetched per infinite-scroll page — no longer user-selectable
@@ -47,7 +50,6 @@ export function CandidatesTable({
   canDelete = true,
   canUpdate = true,
   search,
-  consultants,
 }: {
   canCreate?: boolean;
   canDelete?: boolean;
@@ -55,8 +57,6 @@ export function CandidatesTable({
   canUpdate?: boolean;
   /** Filter/search state lifted into the search-gate parent — shared with its top filter row and Active Filters chips. */
   search: ReturnType<typeof useCandidateSearch>;
-  /** Fetched once by the parent (also needed there for chip labels) — avoids fetching it twice. */
-  consultants: ConsultantEntity[];
 }) {
   const { data: session } = useSession();
   const router = useRouter();
@@ -65,6 +65,7 @@ export function CandidatesTable({
   const [page, setPage] = React.useState(1);
   const [selectedCandidates, setSelectedCandidates] = React.useState<Candidate[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
+  const [isExporting, setIsExporting] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   // Selection is normally page-scoped (see DataGrid's onSelectionChange doc)
   // — this flips on once the user explicitly asks to extend it to every row
@@ -82,12 +83,6 @@ export function CandidatesTable({
     { page, pageSize: PAGE_SIZE, ...search.queryParams },
     // Keep the previous page's rows while the next one loads (no flash).
     { query: { placeholderData: keepPreviousData } },
-  );
-
-  const consultantById = React.useMemo(() => new Map(consultants.map((c) => [c.id, c.fullName])), [consultants]);
-  const consultantLabelFor = React.useCallback(
-    (consultantId: string) => consultantById.get(consultantId) ?? 'Unassigned',
-    [consultantById],
   );
 
   // customFetch throws on non-2xx, so a resolved query is always the 200
@@ -157,8 +152,33 @@ export function CandidatesTable({
     handleClearSelection();
   }
 
-  function handleExport() {
-    exportCandidatesToExcel(selectedCandidates, consultantLabelFor);
+  // Routes through the server (not the old in-browser xlsx build) so
+  // formatting stays in one place and scope is re-checked on every export —
+  // a selection exports exactly those rows; no selection exports everything
+  // matching the current filters, unbounded (not just what's scrolled into
+  // view — see the infinite-scroll grid's own doc on why that'd be
+  // scroll-position-dependent and not a coherent "export" target).
+  async function handleExport() {
+    setIsExporting(true);
+    // The server has no ambient concept of "the viewer's timezone" — it only
+    // ever sees UTC timestamps, so date/time export columns need this sent
+    // along explicitly.
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    try {
+      if (selectedCandidates.length > 0) {
+        await downloadFile(getExportCandidatesByIdsUrl(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: selectedCandidates.map((c) => c.id), timezone }),
+        });
+      } else {
+        await downloadFile(getExportCandidatesUrl({ ...search.queryParams, timezone }));
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   function handleBulkDelete() {
@@ -273,64 +293,71 @@ export function CandidatesTable({
           )
         }
         toolbar={
-          selectedCandidates.length > 0 ? (
-            <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
-              <Button size="lg" variant="outline" onClick={handleExport}>
-                <Download />
-                Export to Excel
-              </Button>
-
-              <Button
-                variant="destructive"
-                size="lg"
-                disabled={!canDelete}
-                title={canDelete ? undefined : "You don't have permission to delete candidates"}
-                onClick={() => setDeleteConfirmOpen(true)}
-              >
-                <Trash2 />
-                Delete
-              </Button>
-              <ConfirmDeleteDialog
-                open={deleteConfirmOpen}
-                onOpenChange={setDeleteConfirmOpen}
-                title={`Delete ${selectedCandidates.length} candidate${selectedCandidates.length === 1 ? '' : 's'}?`}
-                description="Archived (soft delete) — you can undo this from the toast right after."
-                onConfirm={handleBulkDelete}
-              />
-
-              {canUpdate ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    render={
-                      <Button size="lg" disabled={isBulkUpdating}>
-                        {isBulkUpdating ? 'Updating…' : `Bulk actions (${selectedCandidates.length})`}
-                        <ChevronDown />
-                      </Button>
-                    }
-                  />
-                  <DropdownMenuContent align="end">
-                    {candidateStatuses.map((s) => (
-                      <DropdownMenuItem
-                        key={s}
-                        onClick={() => handleBulkUpdate({ status: s }, `Marked ${candidateStatusLabels[s]}`)}
-                      >
-                        <Badge variant={candidateStatusVariants[s]}>{candidateStatusLabels[s]}</Badge>
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              ) : null}
-            </div>
-          ) : (
-            <Button
-              size="lg"
-              disabled={true}
-              title={canCreate ? 'Coming soon' : "You don't have permission to add candidates"}
-              className="animate-in fade-in-0 duration-200"
-            >
-              Add Candidate
+          <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
+            <Button size="lg" variant="outline" onClick={handleExport} disabled={isExporting}>
+              <Download />
+              {isExporting ? 'Exporting…' : 'Export to Excel'}
             </Button>
-          )
+
+            {selectedCandidates.length > 0 ? (
+              <>
+                <Button
+                  variant="destructive"
+                  size="lg"
+                  disabled={!canDelete}
+                  title={canDelete ? undefined : "You don't have permission to delete candidates"}
+                  onClick={() => setDeleteConfirmOpen(true)}
+                >
+                  <Trash2 />
+                  Delete
+                </Button>
+                <ConfirmDeleteDialog
+                  open={deleteConfirmOpen}
+                  onOpenChange={setDeleteConfirmOpen}
+                  title={`Delete ${selectedCandidates.length} candidate${selectedCandidates.length === 1 ? '' : 's'}?`}
+                  description="Archived (soft delete) — you can undo this from the toast right after."
+                  onConfirm={handleBulkDelete}
+                />
+
+                {canUpdate ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button size="lg" disabled={isBulkUpdating}>
+                          {isBulkUpdating ? 'Updating…' : `Bulk actions (${selectedCandidates.length})`}
+                          <ChevronDown />
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="end">
+                      {candidateStatuses.map((s) => (
+                        <DropdownMenuItem
+                          key={s}
+                          onClick={() => handleBulkUpdate({ status: s }, `Marked ${candidateStatusLabels[s]}`)}
+                        >
+                          <Badge variant={candidateStatusVariants[s]}>{candidateStatusLabels[s]}</Badge>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : null}
+              </>
+            ) : (
+              <Button
+                size="lg"
+                disabled={true}
+                title={canCreate ? 'Coming soon' : "You don't have permission to add candidates"}
+              >
+                Add Candidate
+              </Button>
+            )}
+          </div>
+        }
+        selectionContextMenu={
+          <ContextMenuItem onClick={handleExport}>
+            <Download />
+            Export to Excel
+          </ContextMenuItem>
         }
       />
     </>

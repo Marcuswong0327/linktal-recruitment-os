@@ -3,13 +3,21 @@ import { Prisma } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { PrismaService } from '../prisma/prisma.service';
-import { assertInScope, isScoped, stakeholderScope } from '../common/scope';
+import { isScoped, stakeholderScope } from '../common/scope';
 import { AuthUser } from '../auth/auth.types';
 import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
 import { UpdateStakeholderDto } from './dto/update-stakeholder.dto';
 import { AccuracyFilter, QueryStakeholdersDto } from './dto/query-stakeholders.dto';
 import { CreateStakeholderContactHistoryDto } from './dto/create-stakeholder-contact-history.dto';
+import { ExportStakeholdersDto } from './dto/export-stakeholders.dto';
 import { classifyJobTitle } from './role-type-classifier';
+import { buildWorkbook, resolveTimeZone, splitContactDateTime, ExportColumn } from '../common/xlsx-export';
+
+/** The subset of QueryStakeholdersDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination/sort but still satisfies this structurally. */
+type StakeholderFilterFields = Pick<
+  QueryStakeholdersDto,
+  'q' | 'clientId' | 'clientIds' | 'jobTitle' | 'roleTypeIds' | 'jobTitleIds' | 'locationIds' | 'accuracy'
+>;
 
 // roleType/client are FK relations — every read needs this to get the
 // resolved name back (ClientEntity/StakeholderEntity document them as plain
@@ -31,18 +39,7 @@ import { classifyJobTitle } from './role-type-classifier';
 // own right; see the `stakeholderScope` comment in common/scope.ts for why
 // that changed to full inheritance from the client.
 const STAKEHOLDER_INCLUDE = {
-  // industryId/consultantId/locations are fetched alongside companyName
-  // purely for the job-scope check below (a stakeholder has no scope fields
-  // of its own — it inherits its client's entirely) — stripped back out in
-  // `toEntity`, never part of the API response.
-  client: {
-    select: {
-      companyName: true,
-      industryId: true,
-      consultantId: true,
-      locations: { select: { location: { select: { ancestorIds: true } } } },
-    },
-  },
+  client: { select: { companyName: true } },
   jobTitle: { select: { name: true } },
   stakeholderRoleType: { select: { name: true } },
   coverage: { select: { locationId: true, location: { select: { name: true, ancestorIds: true } } } },
@@ -59,12 +56,7 @@ const STAKEHOLDER_INCLUDE = {
 } satisfies Prisma.StakeholderInclude;
 
 type StakeholderWithRelations = {
-  client: {
-    companyName: string;
-    industryId: string | null;
-    consultantId: string | null;
-    locations: { location: { ancestorIds: string[] } }[];
-  } | null;
+  client: { companyName: string } | null;
   jobTitle: { name: string } | null;
   stakeholderRoleType: { name: string } | null;
   coverage: { locationId: string; location: { name: string; ancestorIds: string[] } }[];
@@ -74,6 +66,23 @@ type StakeholderWithRelations = {
     notes: string | null;
     contactedBy: { fullName: string } | null;
   }[];
+};
+
+/** The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept separate from the generic `toEntity<T>` return type, which erases extra fields when used across a second generic boundary. */
+type StakeholderExportRow = {
+  firstName: string | null;
+  lastName: string | null;
+  companyName: string | null;
+  coverage: string[];
+  roleType: string | null;
+  jobTitle: string | null;
+  email: string | null;
+  mobile: string | null;
+  isAccurate: boolean | null;
+  lastContactedAt: Date | null;
+  lastContactType: string | null;
+  lastContactedBy: string | null;
+  lastContactNotes: string | null;
 };
 
 function toEntity<T extends StakeholderWithRelations>(stakeholder: T) {
@@ -135,8 +144,13 @@ export class StakeholdersService {
     return row?.name ?? null;
   }
 
-  async findAll(query: QueryStakeholdersDto, user: AuthUser) {
-    const { page, pageSize, sortBy, sortOrder, q } = query;
+  /**
+   * Shared by `findAll` and the export endpoint — every list/export read
+   * against Stakeholder applies the same filters and scope, just with a
+   * different set of rows selected out of the result.
+   */
+  private buildWhere(query: StakeholderFilterFields, user: AuthUser): Prisma.StakeholderWhereInput {
+    const { q } = query;
 
     const where: Prisma.StakeholderWhereInput = {};
 
@@ -205,6 +219,28 @@ export class StakeholdersService {
       where.AND = and;
     }
 
+    return where;
+  }
+
+  /** Shared by `findAll` and `exportAll` so the exported sheet mirrors the grid's current sort exactly. */
+  private buildOrderBy(
+    sortBy: QueryStakeholdersDto['sortBy'],
+    sortOrder: QueryStakeholdersDto['sortOrder'],
+  ): Prisma.StakeholderOrderByWithRelationInput[] {
+    return [
+      sortBy === 'lastContactedAt'
+        ? { lastContactedAt: { sort: sortOrder, nulls: 'last' } }
+        : sortBy
+          ? { [sortBy]: sortOrder }
+          : { createdAt: 'desc' },
+      { id: 'asc' },
+    ];
+  }
+
+  async findAll(query: QueryStakeholdersDto, user: AuthUser) {
+    const { page, pageSize, sortBy, sortOrder } = query;
+    const where = this.buildWhere(query, user);
+
     // lastContactedAt is null for stakeholders with no contact history yet —
     // "nulls: last" keeps those at the bottom regardless of sort direction
     // (mirrors Client.lastContactedAt's ordering).
@@ -214,14 +250,7 @@ export class StakeholdersService {
     // guarantee a stable order across separate paginated queries for tied
     // rows. Without it, paging (or infinite-scroll's page-by-page
     // accumulation) can silently return the same row twice or skip one.
-    const orderBy: Prisma.StakeholderOrderByWithRelationInput[] = [
-      sortBy === 'lastContactedAt'
-        ? { lastContactedAt: { sort: sortOrder, nulls: 'last' } }
-        : sortBy
-          ? { [sortBy]: sortOrder }
-          : { createdAt: 'desc' },
-      { id: 'asc' },
-    ];
+    const orderBy = this.buildOrderBy(sortBy, sortOrder);
 
     // Parallel, not $transaction: these two reads don't need one consistent
     // DB snapshot, and running them concurrently instead of sequentially
@@ -240,7 +269,66 @@ export class StakeholdersService {
     return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }
 
-  async findOne(id: string, user: AuthUser) {
+  /** Every row matching the current filters, unbounded — no `skip`/`take`. */
+  async exportAll(query: ExportStakeholdersDto, user: AuthUser): Promise<Buffer> {
+    const where = this.buildWhere(query, user);
+    const orderBy = this.buildOrderBy(query.sortBy, query.sortOrder);
+    const stakeholders = await this.prisma.stakeholder.findMany({ where, orderBy, include: STAKEHOLDER_INCLUDE });
+    return this.buildExportWorkbook(stakeholders.map(toEntity), query.timezone);
+  }
+
+  /** An explicit row selection — scope is still re-applied server-side (defense-in-depth, delegated to the client's scope, same as `findAll`), so an out-of-scope id is silently dropped rather than exported. */
+  async exportByIds(ids: string[], user: AuthUser, timezone?: string): Promise<Buffer> {
+    const and: Prisma.StakeholderWhereInput[] = [{ id: { in: ids } }];
+    if (isScoped(user)) and.push(stakeholderScope(user));
+    const stakeholders = await this.prisma.stakeholder.findMany({ where: { AND: and }, include: STAKEHOLDER_INCLUDE });
+    return this.buildExportWorkbook(stakeholders.map(toEntity), timezone);
+  }
+
+  private buildExportWorkbook(stakeholders: StakeholderExportRow[], timezone?: string): Promise<Buffer> {
+    const tz = resolveTimeZone(timezone);
+    const columns: ExportColumn[] = [
+      { header: 'Contact Name', key: 'name' },
+      { header: 'Company', key: 'company' },
+      { header: 'Coverage', key: 'coverage' },
+      { header: 'Role type', key: 'roleType' },
+      { header: 'Job title', key: 'jobTitle' },
+      { header: 'Email', key: 'email' },
+      { header: 'Mobile', key: 'mobile' },
+      { header: 'Details accurate', key: 'detailsAccurate' },
+      { header: 'Last Contacted Date', key: 'lastContactedDate' },
+      { header: 'Last Contacted Time', key: 'lastContactedTime' },
+      { header: 'Last Contact Method', key: 'lastContactType' },
+      { header: 'Last Contacted By', key: 'lastContactedBy' },
+      { header: 'Last Contact Notes', key: 'lastContactNotes', wrap: true },
+    ];
+    const rows = stakeholders.map((s) => {
+      const { date, time } = splitContactDateTime(s.lastContactedAt, tz);
+      return {
+        name: [s.firstName, s.lastName].filter(Boolean).join(' '),
+        company: s.companyName ?? '',
+        coverage: s.coverage.join(', '),
+        roleType: s.roleType ?? '',
+        jobTitle: s.jobTitle ?? '',
+        email: s.email ?? '',
+        mobile: s.mobile ?? '',
+        detailsAccurate: s.isAccurate === null ? 'Unchecked' : s.isAccurate ? 'Yes' : 'No',
+        lastContactedDate: date,
+        lastContactedTime: time,
+        lastContactType: s.lastContactType ?? '',
+        lastContactedBy: s.lastContactedBy ?? '',
+        lastContactNotes: s.lastContactNotes ?? '',
+      };
+    });
+    return buildWorkbook('Stakeholders', columns, rows);
+  }
+
+  /**
+   * Single-record access is unguarded by scope — scope only ever filters
+   * `findAll`. `user` is accepted for signature symmetry with the other
+   * services but unused here now.
+   */
+  async findOne(id: string, _user: AuthUser) {
     const stakeholder = await this.prisma.stakeholder.findUnique({
       where: { id },
       include: STAKEHOLDER_INCLUDE,
@@ -248,13 +336,6 @@ export class StakeholdersService {
     if (!stakeholder) {
       throw new NotFoundException(`Stakeholder ${id} not found`);
     }
-    // Inherited entirely from the client — its industry, its own locations,
-    // and its ownership. The stakeholder's own `coverage` no longer matters.
-    assertInScope(user, {
-      industryId: stakeholder.client?.industryId ?? null,
-      locationAncestorIds: stakeholder.client?.locations.flatMap((l) => l.location.ancestorIds) ?? [],
-      consultantId: stakeholder.client?.consultantId ?? null,
-    });
     return toEntity(stakeholder);
   }
 
@@ -269,38 +350,7 @@ export class StakeholdersService {
     return toEntity(stakeholder);
   }
 
-  /**
-   * Would the client this stakeholder belongs to be visible to its author?
-   * Now that a stakeholder's visibility is entirely inherited from its client
-   * (see `stakeholderScope`), that's the whole check — `coverage` has no
-   * bearing on it, only on where the contact is described as working.
-   *
-   * Without this, create had no scope check at all: a consultant could attach
-   * a contact to any company in the system, and the row would vanish from
-   * their own list the moment it was written.
-   */
-  private async assertResultInScope(clientId: string, user: AuthUser): Promise<void> {
-    if (!isScoped(user)) return;
-    const client = await this.prisma.client.findUnique({
-      where: { id: clientId },
-      select: {
-        industryId: true,
-        consultantId: true,
-        locations: { select: { location: { select: { ancestorIds: true } } } },
-      },
-    });
-    if (!client) {
-      throw new NotFoundException(`Client ${clientId} not found`);
-    }
-    assertInScope(user, {
-      industryId: client.industryId,
-      locationAncestorIds: client.locations.flatMap((l) => l.location.ancestorIds),
-      consultantId: client.consultantId,
-    });
-  }
-
-  async create(dto: CreateStakeholderDto, user: AuthUser) {
-    await this.assertResultInScope(dto.clientId, user);
+  async create(dto: CreateStakeholderDto, _user: AuthUser) {
     const { coverageLocationIds, roleTypeId, ...scalars } = dto;
     const data: Prisma.StakeholderUncheckedCreateInput = { ...scalars };
     // An explicit role type always wins; otherwise derive one from the title.
@@ -318,17 +368,8 @@ export class StakeholdersService {
   }
 
   async update(id: string, dto: UpdateStakeholderDto, user: AuthUser) {
-    // Existence + scope check only — its return value isn't needed now that
-    // re-parenting no longer falls back to the current coverage list.
+    // Existence check only — scope never gates a direct write.
     await this.findOne(id, user);
-
-    // Re-parenting only. A coverage-only edit needs no re-check — coverage no
-    // longer has any bearing on visibility. Moving the contact onto a
-    // *company* the author can't see is the only act that matters: it writes
-    // into someone else's book, so the destination client is what's checked.
-    if (dto.clientId !== undefined) {
-      await this.assertResultInScope(dto.clientId, user);
-    }
 
     const { coverageLocationIds, roleTypeId, ...scalars } = dto;
     const data: Prisma.StakeholderUncheckedUpdateInput = { ...scalars };

@@ -1,7 +1,6 @@
 import { JobOrdersService } from './job-orders.service';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { AuthUser } from '../auth/auth.types';
-import { grantsMock } from '../common/grants.testing';
 
 function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
@@ -23,6 +22,7 @@ function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
 function withRelations(row: Record<string, unknown> = {}) {
   return {
     client: null,
+    consultants: [],
     jobTitle: null,
     jobRoleType: null,
     location: null,
@@ -45,6 +45,7 @@ describe('JobOrdersService.create', () => {
     expect(create.mock.calls[0][0].data).not.toHaveProperty('displayId');
     expect(result).toMatchObject({ id: 'j1', displayId: 'JO-0069', jobTitle: 'Production Manager' });
     expect(result.pipelineSubmissions).toEqual([]);
+    expect(result.consultants).toEqual([]);
   });
 
   // Unlike Stakeholder, a job order never grows the JobTitle catalog on the
@@ -60,13 +61,42 @@ describe('JobOrdersService.create', () => {
     expect(create.mock.calls[0][0].data).toMatchObject({ jobTitleId: 'jt-1', jobRoleTypeId: 'jrt-1' });
     expect(create.mock.calls[0][0].data).not.toHaveProperty('jobTitle');
   });
+
+  // consultantIds seeds the join table at creation time — a nested write is
+  // fine here (unlike setConsultants) since there's no existing set to diff
+  // against on a brand-new row.
+  it('nests consultantIds as a create on the join relation', async () => {
+    const create = jest.fn().mockResolvedValue(withRelations({ id: 'j1' }));
+    const prisma = { jobOrder: { create } } as unknown as ExtendedPrismaClient;
+    const service = new JobOrdersService(prisma);
+
+    await service.create(
+      { clientId: 'cl1', jobTitleId: 'jt-1', consultantIds: ['c1', 'c2'] },
+      makeUser(),
+    );
+
+    expect(create.mock.calls[0][0].data.consultants).toEqual({
+      create: [{ consultantId: 'c1' }, { consultantId: 'c2' }],
+    });
+    expect(create.mock.calls[0][0].data).not.toHaveProperty('consultantIds');
+  });
+
+  it('omits the consultants relation write entirely when none are given', async () => {
+    const create = jest.fn().mockResolvedValue(withRelations({ id: 'j1' }));
+    const prisma = { jobOrder: { create } } as unknown as ExtendedPrismaClient;
+    const service = new JobOrdersService(prisma);
+
+    await service.create({ clientId: 'cl1' }, makeUser());
+
+    expect(create.mock.calls[0][0].data).not.toHaveProperty('consultants');
+  });
 });
 
 // Cascading to submissions (and their placements) is no longer this service's
 // job — it's handled centrally by the Prisma extension's CASCADE_MAP for any
 // delete path, not just this one. See prisma.extensions.spec.ts.
 describe('JobOrdersService.remove', () => {
-  it('checks scope, then hands off to a plain delete', async () => {
+  it('checks existence, then hands off to a plain delete', async () => {
     const prisma = {
       jobOrder: {
         findUnique: jest.fn().mockResolvedValue(withRelations({ id: 'j1' })),
@@ -133,11 +163,22 @@ describe('JobOrdersService.findAll — filters', () => {
     expect(where.salaryMax).toEqual({ gte: 100000 });
     expect(where.salaryMin).toEqual({ lte: 150000 });
   });
+
+  // consultantIds now matches through the JobOrderConsultant join, not a
+  // scalar column — several consultants can be on the same job order.
+  it('matches consultantIds through the join relation, any-of semantics', async () => {
+    const { findMany, service } = setup();
+    await service.findAll({ ...baseQuery, consultantIds: ['c1', 'c2'] } as never, makeUser());
+
+    expect(findMany.mock.calls[0][0].where.consultants).toEqual({
+      some: { consultantId: { in: ['c1', 'c2'] } },
+    });
+  });
 });
 
-// visible = (industry via parent Client) OR location — the two arms are
-// OR-ed, and for job orders they sit on top of the pre-existing "own book
-// only" ownership rule.
+// visible = (industry via parent Client) OR own location OR direct
+// membership on the job order's consultant list — three arms OR-ed, pure list
+// filter, no ownership arm.
 describe('JobOrdersService.findAll — scope', () => {
   function setup() {
     const findMany = jest.fn().mockResolvedValue([]);
@@ -148,7 +189,7 @@ describe('JobOrdersService.findAll — scope', () => {
 
   const baseQuery = { page: 1, pageSize: 20, sortOrder: 'asc' } as unknown as Record<string, unknown>;
 
-  it('ANDs the scope (industry via parent Client, OR location) with the free-text search', async () => {
+  it('ANDs the scope (industry via parent Client, own location, or membership) with the free-text search', async () => {
     const { findMany, service } = setup();
     await service.findAll(
       { ...baseQuery, q: 'manager' } as never,
@@ -159,30 +200,31 @@ describe('JobOrdersService.findAll — scope', () => {
       { OR: expect.any(Array) },
       {
         OR: [
-          { consultantId: 'cons-me' }, // an assigned job order is always mine to see
           { client: { industryId: { in: ['ind1'] } } },
           { location: { ancestorIds: { hasSome: ['qld'] } } },
+          { consultants: { some: { consultantId: 'cons-me' } } },
         ],
       },
     ]);
-    // `jobOrderScope` is the only thing narrowing the list. It used to also
-    // AND on `consultantId = me`, which swallowed the industry and location
-    // arms entirely — a consultant saw their own book and nothing else.
-    expect(where).not.toHaveProperty('consultantId');
   });
 
-  // Zero grants means "not configured", never "sees everything" — but an
-  // assignment is a specific row rather than a wildcard, so an unconfigured
-  // consultant keeps whatever has been handed to them.
-  it('falls back to just their assigned job orders when there are no grants at all', async () => {
+  // Zero grants means "not configured", never "sees everything" — but the
+  // job-order-membership arm doesn't depend on grants at all, so a consultant
+  // added directly to a job order still reaches it even before anything else
+  // is configured for them.
+  it('keeps the membership arm for a consultant with no grants at all', async () => {
     const { findMany, service } = setup();
     await service.findAll(
       baseQuery as never,
       makeUser({ roleName: 'consultant', consultantId: 'cons-me' }),
     );
 
-    expect(findMany.mock.calls[0][0].where.AND).toContainEqual({ consultantId: 'cons-me' });
-    expect(findMany.mock.calls[0][0].where.AND).not.toContainEqual({ id: { in: [] } });
+    const scope = findMany.mock.calls[0][0].where.AND[0];
+    expect(scope.OR).toEqual([
+      { client: { industryId: { in: [] } } },
+      { location: { ancestorIds: { hasSome: [] } } },
+      { consultants: { some: { consultantId: 'cons-me' } } },
+    ]);
   });
 
   it('does not scope non-consultant roles', async () => {
@@ -192,14 +234,16 @@ describe('JobOrdersService.findAll — scope', () => {
   });
 });
 
-describe('JobOrdersService.findOne — job scope', () => {
+// findOne no longer gates on scope — scope is a list filter only now (see
+// common/scope.ts). A direct fetch by id always succeeds.
+describe('JobOrdersService.findOne', () => {
   function makeService(jobOrder: unknown) {
     const findUnique = jest.fn().mockResolvedValue(jobOrder);
     const prisma = { jobOrder: { findUnique } } as unknown as ExtendedPrismaClient;
     return { service: new JobOrdersService(prisma) };
   }
 
-  it('rejects a scoped consultant when neither arm matches', async () => {
+  it('returns the record for a scoped consultant even when no arm matches', async () => {
     const { service } = makeService(
       withRelations({
         id: 'j1',
@@ -209,212 +253,156 @@ describe('JobOrdersService.findOne — job scope', () => {
     );
     await expect(
       service.findOne('j1', makeUser({ roleName: 'consultant', industryIds: ['tech'], locationIds: ['qld'] })),
-    ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
+    ).resolves.toMatchObject({ id: 'j1' });
   });
 
-  // Ownership short-circuits both arms, same as Client and Candidate.
-  it('allows the owning consultant through regardless of both arms', async () => {
+  it('resolves the consultants list to id/name pairs', async () => {
     const { service } = makeService(
       withRelations({
         id: 'j1',
-        consultantId: 'cons-me',
-        client: { industryId: 'finance' },
-        location: { name: 'Perth', level: 'CITY', ancestorIds: ['perth', 'wa', 'au'] },
+        consultants: [
+          { consultantId: 'c1', consultant: { fullName: 'Joshua Fang' } },
+          { consultantId: 'c2', consultant: { fullName: 'Kim Chan' } },
+        ],
       }),
     );
-    await expect(
-      service.findOne(
-        'j1',
-        makeUser({ roleName: 'consultant', consultantId: 'cons-me', industryIds: ['tech'], locationIds: ['qld'] }),
-      ),
-    ).resolves.toMatchObject({ id: 'j1' });
+    const result = await service.findOne('j1', makeUser());
+    expect(result.consultants).toEqual([
+      { id: 'c1', name: 'Joshua Fang' },
+      { id: 'c2', name: 'Kim Chan' },
+    ]);
   });
 
-  it("does not let one consultant through on another's assignment", async () => {
-    const { service } = makeService(
-      withRelations({ id: 'j1', consultantId: 'someone-else', client: { industryId: 'finance' } }),
-    );
+  it('throws NotFound when the job order does not exist, for every role', async () => {
+    const { service } = makeService(null);
     await expect(
-      service.findOne(
-        'j1',
-        makeUser({ roleName: 'consultant', consultantId: 'cons-me', industryIds: ['tech'] }),
-      ),
-    ).rejects.toMatchObject({ response: { code: 'OUT_OF_JOB_SCOPE' } });
-  });
-
-  it("allows a scoped consultant on the parent Client's industry alone", async () => {
-    const { service } = makeService(withRelations({ id: 'j1', client: { industryId: 'tech' } }));
-    await expect(
-      service.findOne('j1', makeUser({ roleName: 'consultant', industryIds: ['tech'] })),
-    ).resolves.toMatchObject({ id: 'j1' });
-  });
-
-  // The location arm resolves upward: a STATE grant reaches a job order
-  // pinned to a city inside it, because the state is on the city's ancestor
-  // path.
-  it('allows a scoped consultant on a location match alone, via an ancestor', async () => {
-    const { service } = makeService(
-      withRelations({
-        id: 'j1',
-        client: { industryId: 'finance' },
-        location: { name: 'Brisbane', level: 'CITY', ancestorIds: ['brisbane', 'qld', 'au'] },
-      }),
-    );
-    await expect(
-      service.findOne('j1', makeUser({ roleName: 'consultant', industryIds: ['tech'], locationIds: ['qld'] })),
-    ).resolves.toMatchObject({ id: 'j1' });
+      service.findOne('missing', makeUser({ roleName: 'consultant' })),
+    ).rejects.toThrow('Job order missing not found');
   });
 });
 
-describe('JobOrdersService.create — assignment guard (industry OR location)', () => {
-  function makeService(
-    grants: Parameters<typeof grantsMock>[0] = {},
-    clientRow: unknown = { industryId: 'ind1' },
-  ) {
-    const create = jest.fn().mockResolvedValue(withRelations({ id: 'j1' }));
-    const prisma = {
-      jobOrder: { create },
-      ...grantsMock(grants),
-      client: { findUnique: jest.fn().mockResolvedValue(clientRow) },
-    } as unknown as ExtendedPrismaClient;
-    return { service: new JobOrdersService(prisma), create };
-  }
-
-  it('rejects assigning a consultant who covers neither the client industry nor the location', async () => {
-    const { service, create } = makeService();
-    await expect(
-      service.create(
-        { clientId: 'cl1', jobTitleId: 'jt-1', consultantId: 'cons-1' },
-        makeUser({ roleName: 'consultant' }),
-      ),
-    ).rejects.toMatchObject({ response: { code: 'CONSULTANT_SCOPE_MISMATCH' } });
-    expect(create).not.toHaveBeenCalled();
-  });
-
-  it("allows assigning a consultant whose industry matches the client's", async () => {
-    const { service, create } = makeService({ industryIds: ['ind1'] });
-    await service.create(
-      { clientId: 'cl1', jobTitleId: 'jt-1', consultantId: 'cons-1' },
-      makeUser({ roleName: 'consultant' }),
-    );
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-
-  // A job order carries its own location — matching it is enough even when the
-  // client's industry sits outside the consultant's grants.
-  it("allows assigning on the job order's own location alone", async () => {
-    const { service, create } = makeService({ locationIds: ['au'], locationCovers: true });
-    await service.create(
-      { clientId: 'cl1', jobTitleId: 'jt-1', consultantId: 'cons-1', locationId: 'syd' },
-      makeUser({ roleName: 'consultant' }),
-    );
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-
-  it('skips the guard entirely when no consultant is being assigned', async () => {
-    const { service, create } = makeService();
-    await service.create({ clientId: 'cl1', jobTitleId: 'jt-1' }, makeUser());
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-
-  it('lets admin assign a consultant who covers neither the client industry nor the location', async () => {
-    const { service, create } = makeService();
-    await service.create(
-      { clientId: 'cl1', jobTitleId: 'jt-1', consultantId: 'cons-1' },
-      makeUser({ roleName: 'admin' }),
-    );
-    expect(create).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('JobOrdersService.update — bidirectional auto-clear on re-link', () => {
-  function makeService(grants: Parameters<typeof grantsMock>[0] = {}) {
-    const findUnique = jest
-      .fn()
-      // findOne (existing, before the update)
-      .mockResolvedValueOnce(
-        withRelations({ id: 'j1', clientId: 'cl1', consultantId: 'cons-1', client: { industryId: 'ind1' } }),
-      )
-      // final re-fetch for the response
-      .mockResolvedValueOnce(withRelations({ id: 'j1', clientId: 'cl2', consultantId: null }));
-    const update = jest
-      .fn()
-      .mockResolvedValue(withRelations({ id: 'j1', clientId: 'cl2', locationId: 'syd' }));
-    const prisma = {
-      jobOrder: { findUnique, update, findUniqueOrThrow: findUnique },
-      ...grantsMock(grants),
-      // the new client's industry
-      client: { findUnique: jest.fn().mockResolvedValue({ industryId: 'ind2' }) },
-    } as unknown as ExtendedPrismaClient;
+describe('JobOrdersService.update', () => {
+  function makeService(existing: unknown = withRelations({ id: 'j1' })) {
+    const findUnique = jest.fn().mockResolvedValue(existing);
+    const update = jest.fn().mockResolvedValue(withRelations({ id: 'j1', clientId: 'cl2' }));
+    const prisma = { jobOrder: { findUnique, update } } as unknown as ExtendedPrismaClient;
     return { service: new JobOrdersService(prisma), update };
   }
 
-  it('clears a now-uncovered consultant when re-linked to a different client', async () => {
-    const { service, update } = makeService(); // cons-1 covers neither ind2 nor syd
-    const result = await service.update('j1', { clientId: 'cl2' }, makeUser());
-
-    expect(update).toHaveBeenCalledTimes(2);
-    expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'j1' }, data: { consultantId: null } }),
-    );
-    expect(result.consultantId).toBeNull();
-  });
-
-  it('leaves the consultant alone when their patch still covers the job order', async () => {
-    const { service, update } = makeService({ locationIds: ['au'], locationCovers: true });
-    await service.update('j1', { clientId: 'cl2' }, makeUser());
-    expect(update).toHaveBeenCalledTimes(1);
-  });
-
-  // Location is an ownership arm now, so moving a job order re-checks even
-  // when it stays with the same client.
-  it('runs the auto-clear when only the location changed', async () => {
+  it('re-links to a different client with no follow-up write and no guard', async () => {
     const { service, update } = makeService();
-    await service.update('j1', { locationId: 'mel' }, makeUser());
+    await service.update('j1', { clientId: 'cl2' }, makeUser());
+
+    expect(update).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'j1' }, data: { consultantId: null } }),
+      expect.objectContaining({ where: { id: 'j1' }, data: { clientId: 'cl2' } }),
     );
   });
 });
 
-describe('JobOrdersService — consultantId redaction for the consultant role', () => {
-  const row = withRelations({ id: 'j1', consultantId: 'cons-1', client: { industryId: 'ind1' } });
+// Full-set-replace of who's working a job order, mirroring
+// ConsultantsService.setIndustries's diff shape. No scope-mismatch guard —
+// this is deliberately the escape hatch for reaching an out-of-scope
+// client/candidate.
+describe('JobOrdersService.setConsultants', () => {
+  function makeService(
+    current: { consultantId: string }[] = [],
+    consultantRows: { id: string; isActive: boolean }[] = [],
+  ) {
+    const jobOrderConsultantDelete = jest.fn().mockResolvedValue({});
+    const jobOrderConsultantCreate = jest.fn().mockResolvedValue({});
+    const findUnique = jest.fn().mockResolvedValue(withRelations({ id: 'j1' }));
+    const prisma = {
+      jobOrder: { findUnique },
+      jobOrderConsultant: {
+        findMany: jest.fn().mockResolvedValue(current),
+        delete: jobOrderConsultantDelete,
+        create: jobOrderConsultantCreate,
+      },
+      consultant: { findMany: jest.fn().mockResolvedValue(consultantRows) },
+    } as unknown as ExtendedPrismaClient;
+    return { service: new JobOrdersService(prisma), jobOrderConsultantDelete, jobOrderConsultantCreate };
+  }
 
-  it('redacts consultantId to null in findAll for the consultant role', async () => {
-    const findMany = jest.fn().mockResolvedValue([row]);
-    const count = jest.fn().mockResolvedValue(1);
-    const prisma = { jobOrder: { findMany, count } } as unknown as ExtendedPrismaClient;
+  it('404s when the job order does not exist', async () => {
+    const prisma = {
+      jobOrder: { findUnique: jest.fn().mockResolvedValue(null) },
+    } as unknown as ExtendedPrismaClient;
     const service = new JobOrdersService(prisma);
-
-    const result = await service.findAll(
-      { page: 1, pageSize: 20, sortOrder: 'asc' } as never,
-      makeUser({ roleName: 'consultant', consultantId: 'cons-1', industryIds: ['ind1'] }),
+    await expect(service.setConsultants('missing', ['c1'], makeUser())).rejects.toThrow(
+      'Job order missing not found',
     );
-    expect(result.data[0].consultantId).toBeNull();
   });
 
-  it('does not redact consultantId for non-consultant roles', async () => {
-    const findMany = jest.fn().mockResolvedValue([row]);
-    const count = jest.fn().mockResolvedValue(1);
-    const prisma = { jobOrder: { findMany, count } } as unknown as ExtendedPrismaClient;
-    const service = new JobOrdersService(prisma);
-
-    const result = await service.findAll(
-      { page: 1, pageSize: 20, sortOrder: 'asc' } as never,
-      makeUser({ roleName: 'manager' }),
-    );
-    expect(result.data[0].consultantId).toBe('cons-1');
+  it('rejects an unknown consultant id', async () => {
+    const { service } = makeService([], []);
+    await expect(service.setConsultants('j1', ['c1'], makeUser())).rejects.toMatchObject({
+      response: { code: 'INVALID_CONSULTANT' },
+    });
   });
 
-  it('redacts consultantId to null in findOne for the consultant role', async () => {
-    const findUnique = jest.fn().mockResolvedValue(row);
-    const prisma = { jobOrder: { findUnique } } as unknown as ExtendedPrismaClient;
-    const service = new JobOrdersService(prisma);
+  it('rejects an inactive consultant id', async () => {
+    const { service } = makeService([], [{ id: 'c1', isActive: false }]);
+    await expect(service.setConsultants('j1', ['c1'], makeUser())).rejects.toMatchObject({
+      response: { code: 'INACTIVE_CONSULTANT' },
+    });
+  });
 
-    const result = await service.findOne(
-      'j1',
-      makeUser({ roleName: 'consultant', consultantId: 'cons-1', industryIds: ['ind1'] }),
+  it('adds consultants not already on the job order', async () => {
+    const { service, jobOrderConsultantCreate, jobOrderConsultantDelete } = makeService(
+      [],
+      [{ id: 'c1', isActive: true }, { id: 'c2', isActive: true }],
     );
-    expect(result.consultantId).toBeNull();
+    await service.setConsultants('j1', ['c1', 'c2'], makeUser());
+
+    expect(jobOrderConsultantCreate).toHaveBeenCalledWith({ data: { jobOrderId: 'j1', consultantId: 'c1' } });
+    expect(jobOrderConsultantCreate).toHaveBeenCalledWith({ data: { jobOrderId: 'j1', consultantId: 'c2' } });
+    expect(jobOrderConsultantDelete).not.toHaveBeenCalled();
+  });
+
+  it('removes consultants no longer in the set, before adding new ones', async () => {
+    const { service, jobOrderConsultantCreate, jobOrderConsultantDelete } = makeService(
+      [{ consultantId: 'c1' }, { consultantId: 'c2' }],
+      [{ id: 'c3', isActive: true }],
+    );
+    await service.setConsultants('j1', ['c3'], makeUser());
+
+    expect(jobOrderConsultantDelete).toHaveBeenCalledWith({
+      where: { jobOrderId_consultantId: { jobOrderId: 'j1', consultantId: 'c1' } },
+    });
+    expect(jobOrderConsultantDelete).toHaveBeenCalledWith({
+      where: { jobOrderId_consultantId: { jobOrderId: 'j1', consultantId: 'c2' } },
+    });
+    expect(jobOrderConsultantCreate).toHaveBeenCalledWith({ data: { jobOrderId: 'j1', consultantId: 'c3' } });
+  });
+
+  it('leaves an already-present consultant untouched', async () => {
+    const { service, jobOrderConsultantCreate, jobOrderConsultantDelete } = makeService(
+      [{ consultantId: 'c1' }],
+      [{ id: 'c1', isActive: true }],
+    );
+    await service.setConsultants('j1', ['c1'], makeUser());
+
+    expect(jobOrderConsultantCreate).not.toHaveBeenCalled();
+    expect(jobOrderConsultantDelete).not.toHaveBeenCalled();
+  });
+
+  // No industry/location validation at all — this is the deliberate
+  // out-of-scope escape hatch, unlike every other assignment path in the app.
+  it('accepts a consultant with no matching industry or location grants', async () => {
+    const { service, jobOrderConsultantCreate } = makeService(
+      [],
+      [{ id: 'out-of-scope-consultant', isActive: true }],
+    );
+    await service.setConsultants('j1', ['out-of-scope-consultant'], makeUser());
+    expect(jobOrderConsultantCreate).toHaveBeenCalledWith({
+      data: { jobOrderId: 'j1', consultantId: 'out-of-scope-consultant' },
+    });
+  });
+
+  it('dedupes repeated ids in the request', async () => {
+    const { service, jobOrderConsultantCreate } = makeService([], [{ id: 'c1', isActive: true }]);
+    await service.setConsultants('j1', ['c1', 'c1'], makeUser());
+    expect(jobOrderConsultantCreate).toHaveBeenCalledTimes(1);
   });
 });

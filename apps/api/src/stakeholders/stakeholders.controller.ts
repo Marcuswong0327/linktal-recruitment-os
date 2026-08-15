@@ -8,12 +8,16 @@ import {
   Patch,
   Post,
   Query,
+  StreamableFile,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiProduces, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { StakeholdersService } from './stakeholders.service';
 import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
 import { UpdateStakeholderDto } from './dto/update-stakeholder.dto';
 import { QueryStakeholdersDto } from './dto/query-stakeholders.dto';
+import { ExportStakeholdersDto } from './dto/export-stakeholders.dto';
+import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
+import { XLSX_CONTENT_TYPE, exportFilename } from '../common/xlsx-export';
 import { CreateStakeholderContactHistoryDto } from './dto/create-stakeholder-contact-history.dto';
 import { StakeholderEntity } from './entities/stakeholder.entity';
 import { PaginatedStakeholdersEntity } from './entities/paginated-stakeholders.entity';
@@ -44,6 +48,38 @@ export class StakeholdersController {
   @ApiResponse({ status: 200, description: 'Stakeholder found', type: StakeholderEntity })
   findByDisplayId(@Param('displayId') displayId: string) {
     return this.stakeholders.findByDisplayId(displayId);
+  }
+
+  @Get('export')
+  @RequirePermission('stakeholder', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportStakeholders',
+    summary: 'Export every stakeholder matching the current filters as an .xlsx file — unbounded, not paginated',
+  })
+  @ApiResponse({ status: 200, description: 'Stakeholders workbook' })
+  async exportAll(@Query() query: ExportStakeholdersDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.stakeholders.exportAll(query, user);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('stakeholders')}"`,
+    });
+  }
+
+  @Post('export')
+  @RequirePermission('stakeholder', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportStakeholdersByIds',
+    summary: 'Export an explicit set of stakeholders (by id) as an .xlsx file',
+  })
+  @ApiResponse({ status: 201, description: 'Stakeholders workbook' })
+  async exportByIds(@Body() dto: ExportByIdsDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.stakeholders.exportByIds(dto.ids, user, dto.timezone);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('stakeholders')}"`,
+    });
   }
 
   @Get(':id')

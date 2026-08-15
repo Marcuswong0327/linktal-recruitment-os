@@ -28,6 +28,8 @@ import type {
   CreateStakeholderContactHistoryDto,
   CreateStakeholderDto,
   ErrorResponse,
+  ExportByIdsDto,
+  ExportStakeholdersParams,
   GetStakeholdersParams,
   PaginatedStakeholdersEntity,
   StakeholderContactHistoryEntity,
@@ -419,7 +421,240 @@ export function useGetStakeholderByDisplayId<TData = Awaited<ReturnType<typeof g
 
 
 
-export type getStakeholderResponse200 = {
+export type exportStakeholdersResponse200 = {
+  data: void
+  status: 200
+}
+
+export type exportStakeholdersResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportStakeholdersResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportStakeholdersResponseSuccess = (exportStakeholdersResponse200) & {
+  headers: Headers;
+};
+export type exportStakeholdersResponseError = (exportStakeholdersResponse400 | exportStakeholdersResponse500) & {
+  headers: Headers;
+};
+
+export type exportStakeholdersResponse = (exportStakeholdersResponseSuccess | exportStakeholdersResponseError)
+
+export const getExportStakeholdersUrl = (params?: ExportStakeholdersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["clientIds","roleTypeIds","jobTitleIds","locationIds","accuracy"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/stakeholders/export?${stringifiedParams}` : `/stakeholders/export`
+}
+
+/**
+ * @summary Export every stakeholder matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+export const exportStakeholders = async (params?: ExportStakeholdersParams, options?: RequestInit): Promise<exportStakeholdersResponse> => {
+
+  return customFetch<exportStakeholdersResponse>(getExportStakeholdersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportStakeholdersQueryKey = (params?: ExportStakeholdersParams,) => {
+    return [
+    `/stakeholders/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportStakeholdersQueryOptions = <TData = Awaited<ReturnType<typeof exportStakeholders>>, TError = ErrorResponse>(params?: ExportStakeholdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportStakeholders>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportStakeholdersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportStakeholders>>> = ({ signal }) => exportStakeholders(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportStakeholders>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportStakeholdersQueryResult = NonNullable<Awaited<ReturnType<typeof exportStakeholders>>>
+export type ExportStakeholdersQueryError = ErrorResponse
+
+
+export function useExportStakeholders<TData = Awaited<ReturnType<typeof exportStakeholders>>, TError = ErrorResponse>(
+ params: undefined |  ExportStakeholdersParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportStakeholders>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportStakeholders>>,
+          TError,
+          Awaited<ReturnType<typeof exportStakeholders>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportStakeholders<TData = Awaited<ReturnType<typeof exportStakeholders>>, TError = ErrorResponse>(
+ params?: ExportStakeholdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportStakeholders>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportStakeholders>>,
+          TError,
+          Awaited<ReturnType<typeof exportStakeholders>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportStakeholders<TData = Awaited<ReturnType<typeof exportStakeholders>>, TError = ErrorResponse>(
+ params?: ExportStakeholdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportStakeholders>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Export every stakeholder matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+
+export function useExportStakeholders<TData = Awaited<ReturnType<typeof exportStakeholders>>, TError = ErrorResponse>(
+ params?: ExportStakeholdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportStakeholders>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getExportStakeholdersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type exportStakeholdersByIdsResponse201 = {
+  data: void
+  status: 201
+}
+
+export type exportStakeholdersByIdsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportStakeholdersByIdsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportStakeholdersByIdsResponseSuccess = (exportStakeholdersByIdsResponse201) & {
+  headers: Headers;
+};
+export type exportStakeholdersByIdsResponseError = (exportStakeholdersByIdsResponse400 | exportStakeholdersByIdsResponse500) & {
+  headers: Headers;
+};
+
+export type exportStakeholdersByIdsResponse = (exportStakeholdersByIdsResponseSuccess | exportStakeholdersByIdsResponseError)
+
+export const getExportStakeholdersByIdsUrl = () => {
+
+
+
+
+  return `/stakeholders/export`
+}
+
+/**
+ * @summary Export an explicit set of stakeholders (by id) as an .xlsx file
+ */
+export const exportStakeholdersByIds = async (exportByIdsDto: ExportByIdsDto, options?: RequestInit): Promise<exportStakeholdersByIdsResponse> => {
+
+  return customFetch<exportStakeholdersByIdsResponse>(getExportStakeholdersByIdsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(exportByIdsDto)
+  }
+);}
+
+
+
+
+
+export const getExportStakeholdersByIdsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportStakeholdersByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportStakeholdersByIds>>, TError,{data: ExportByIdsDto}, TContext> => {
+
+const mutationKey = ['exportStakeholdersByIds'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportStakeholdersByIds>>, {data: ExportByIdsDto}> = (props) => {
+          const {data} = props ?? {};
+
+          return  exportStakeholdersByIds(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportStakeholdersByIdsMutationResult = NonNullable<Awaited<ReturnType<typeof exportStakeholdersByIds>>>
+    export type ExportStakeholdersByIdsMutationBody = ExportByIdsDto
+    export type ExportStakeholdersByIdsMutationError = ErrorResponse
+
+    /**
+ * @summary Export an explicit set of stakeholders (by id) as an .xlsx file
+ */
+export const useExportStakeholdersByIds = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportStakeholdersByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof exportStakeholdersByIds>>,
+        TError,
+        {data: ExportByIdsDto},
+        TContext
+      > => {
+      return useMutation(getExportStakeholdersByIdsMutationOptions(options), queryClient);
+    }
+    export type getStakeholderResponse200 = {
   data: StakeholderEntity
   status: 200
 }

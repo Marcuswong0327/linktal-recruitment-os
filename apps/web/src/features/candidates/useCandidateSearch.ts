@@ -41,7 +41,6 @@ export interface CandidateFilterState {
   industryIds: string[];
   jobRoleTypeIds: string[];
   specializationIds: string[];
-  consultantIds: string[];
   submissionStatuses: GetCandidatesSubmissionStatusesItem[];
   placementStatuses: GetCandidatesPlacementStatusesItem[];
   /** Hierarchical — matches this node and every descendant via the location tree's ancestor path. */
@@ -57,7 +56,6 @@ const EMPTY_STATE: CandidateFilterState = {
   industryIds: [],
   jobRoleTypeIds: [],
   specializationIds: [],
-  consultantIds: [],
   submissionStatuses: [],
   placementStatuses: [],
   locationIds: [],
@@ -72,7 +70,6 @@ const ARRAY_KEYS = [
   'industryIds',
   'jobRoleTypeIds',
   'specializationIds',
-  'consultantIds',
   'submissionStatuses',
   'placementStatuses',
   'locationIds',
@@ -127,7 +124,6 @@ export interface ChipLabelResolvers {
   industryName: (id: string) => string;
   jobRoleTypeName: (id: string) => string;
   specializationName: (id: string) => string;
-  consultantName: (id: string) => string;
   locationName: (id: string) => string;
 }
 
@@ -210,9 +206,6 @@ export function useCandidateSearch(resolvers: ChipLabelResolvers) {
         remove: () => removeFromArray('specializationIds', id),
       }),
     );
-    filters.consultantIds.forEach((id) =>
-      list.push({ key: `consultant:${id}`, label: `Consultant: ${resolvers.consultantName(id)}`, remove: () => removeFromArray('consultantIds', id) }),
-    );
     filters.submissionStatuses.forEach((status) =>
       list.push({
         key: `submission:${status}`,
@@ -247,7 +240,6 @@ export function useCandidateSearch(resolvers: ChipLabelResolvers) {
       industryIds: filters.industryIds.length ? filters.industryIds : undefined,
       jobRoleTypeIds: filters.jobRoleTypeIds.length ? filters.jobRoleTypeIds : undefined,
       specializationIds: filters.specializationIds.length ? filters.specializationIds : undefined,
-      consultantIds: filters.consultantIds.length ? filters.consultantIds : undefined,
       submissionStatuses: filters.submissionStatuses.length ? filters.submissionStatuses : undefined,
       placementStatuses: filters.placementStatuses.length ? filters.placementStatuses : undefined,
       locationIds: filters.locationIds.length ? filters.locationIds : undefined,

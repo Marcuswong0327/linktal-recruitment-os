@@ -41,6 +41,4 @@ export interface CreateCandidateDto {
   specializationIds?: string[];
   /** Status; defaults to COLD when omitted */
   status?: CreateCandidateDtoStatus;
-  /** Owning consultant ID */
-  consultantId?: string;
 }

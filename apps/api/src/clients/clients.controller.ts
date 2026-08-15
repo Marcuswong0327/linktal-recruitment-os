@@ -1,9 +1,12 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, StreamableFile } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiProduces, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ClientsService } from './clients.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
+import { ExportClientsDto } from './dto/export-clients.dto';
+import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
+import { XLSX_CONTENT_TYPE, exportFilename } from '../common/xlsx-export';
 import { ClientEntity } from './entities/client.entity';
 import { PaginatedClientsEntity } from './entities/paginated-clients.entity';
 import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
@@ -36,6 +39,38 @@ export class ClientsController {
   @ApiResponse({ status: 200, description: 'Client found', type: ClientEntity })
   findByDisplayId(@Param('displayId') displayId: string) {
     return this.clients.findByDisplayId(displayId);
+  }
+
+  @Get('export')
+  @RequirePermission('client', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportClients',
+    summary: 'Export every client matching the current filters as an .xlsx file — unbounded, not paginated',
+  })
+  @ApiResponse({ status: 200, description: 'Clients workbook' })
+  async exportAll(@Query() query: ExportClientsDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.clients.exportAll(query, user);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('companies')}"`,
+    });
+  }
+
+  @Post('export')
+  @RequirePermission('client', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportClientsByIds',
+    summary: 'Export an explicit set of clients (by id) as an .xlsx file',
+  })
+  @ApiResponse({ status: 201, description: 'Clients workbook' })
+  async exportByIds(@Body() dto: ExportByIdsDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.clients.exportByIds(dto.ids, user, dto.timezone);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('companies')}"`,
+    });
   }
 
   @Get(':id')

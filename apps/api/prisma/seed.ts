@@ -124,8 +124,8 @@ const ROLE_PERMISSIONS: Record<string, { resources: string[]; actions: string[] 
     { resources: ["report"], actions: ["create"] },
   ],
   consultant: [
-    // CRUD on core recruitment entities only. No consultant/role/permission
-    // read: the consultant directory and the role editor are admin/manager only.
+    // CRUD on core recruitment entities only. The role editor stays
+    // admin/manager only (no `role`/`permission` read).
     { resources: [...BUSINESS_ENTITIES], actions: [...ACTIONS] },
     // Editing a stakeholder's role type, a candidate's role type, or a job
     // title needs to list and add to the catalog, same as anyone who can update
@@ -134,6 +134,12 @@ const ROLE_PERMISSIONS: Record<string, { resources: string[]; actions: string[] 
     // Read-only on the scope-bearing catalogs: a consultant picks from
     // location/industry/specialization but must not grow them.
     { resources: [...SCOPE_BEARING_CATALOGS], actions: ["read"] },
+    // Read-only roster + grants: needed to pick teammates by name (and see
+    // their industry/location) when assigning multiple consultants to a job
+    // order (PUT /job-orders/:id/consultants) — see docs/scope-explained.md.
+    // Still no write access to any of this; assigning a consultant's own
+    // scope stays admin/manager only.
+    { resources: ["consultant", ...SCOPE_GRANTS], actions: ["read"] },
   ],
   finance: [
     // Read access to the commercial side, plus reports.
@@ -147,6 +153,9 @@ const ROLE_PERMISSIONS: Record<string, { resources: string[]; actions: string[] 
     { resources: ["job_order", "submission", "placement"], actions: ["read"] },
     { resources: COMBOBOX_CATALOGS, actions: ["create", "read"] },
     { resources: [...SCOPE_BEARING_CATALOGS], actions: ["read"] },
+    // Same roster + grants read access as consultant, and for the same
+    // reason — researchers can also be added to a job order's consultant list.
+    { resources: ["consultant", ...SCOPE_GRANTS], actions: ["read"] },
   ],
   viewer: [
     // Read-only access
