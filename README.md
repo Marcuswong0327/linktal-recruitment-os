@@ -104,6 +104,12 @@ the workflow itself.
 branch/DB you provision yourself — it never touches production directly;
 promoting a restore to production stays a deliberate manual step.
 
+`.github/workflows/keep-alive.yml` pushes one trivial commit monthly, purely
+so GitHub's 60-day-inactivity auto-disable (which would otherwise silently
+turn off the nightly backup schedule during a long quiet period) never
+kicks in — a schedule *running* doesn't reset that clock, only a real push
+does.
+
 Full runbook, required secrets, and the restore procedure: `docs/migrations.md` §8.
 
 ## Deployment (Railway)
