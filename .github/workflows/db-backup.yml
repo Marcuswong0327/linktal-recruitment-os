@@ -7,9 +7,11 @@ name: DB Backup
 # See docs/migrations.md §8.
 on:
   schedule:
-    # 17:00 UTC daily. GitHub's scheduler is best-effort and can run a few
-    # minutes late under load — that's fine for a nightly job.
-    - cron: '0 17 * * *'
+    # 16:00 UTC daily = midnight Malaysia Time (UTC+8, no DST). GitHub Actions
+    # cron always runs in UTC — there's no timezone setting. The scheduler is
+    # also best-effort and can run a few minutes late under load, which is
+    # fine for a nightly job.
+    - cron: '0 16 * * *'
   workflow_dispatch: {}
 
 concurrency:
