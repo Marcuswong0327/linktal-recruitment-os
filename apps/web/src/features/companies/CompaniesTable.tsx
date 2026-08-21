@@ -55,13 +55,16 @@ import {
   deleteClient,
   getExportClientsByIdsUrl,
   getExportClientsUrl,
+  getGetClientImportTemplateUrl,
   getGetClientsQueryKey,
   restoreClient,
   updateClient,
   useCreateClient,
   useGetClients,
+  useImportClients,
   useUpdateClient,
 } from '@/lib/api/generated/clients/clients';
+import { ImportDialog } from '@/components/ImportDialog';
 import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@/lib/api/generated/industries/industries';
 import {
   getGetSpecializationsQueryKey,
@@ -163,6 +166,7 @@ export function CompaniesTable({
   const [selected, setSelected] = React.useState<Company[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isExporting, setIsExporting] = React.useState(false);
+  const importClients = useImportClients();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
 
@@ -464,6 +468,21 @@ export function CompaniesTable({
               <Download />
               {isExporting ? 'Exporting…' : 'Export to Excel'}
             </Button>
+            {canCreate && canUpdate ? (
+              <ImportDialog
+                entityLabel="Companies"
+                templateUrl={getGetClientImportTemplateUrl()}
+                upload={async (file, commit) => {
+                  // customFetch throws on any non-2xx response, so a resolved
+                  // call is always the 201 envelope — this guard is just for
+                  // TypeScript's discriminated-union narrowing.
+                  const res = await importClients.mutateAsync({ data: { file, commit } });
+                  if (res.status !== 201) throw new Error('Import failed');
+                  return res.data;
+                }}
+                onImported={() => queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey() })}
+              />
+            ) : null}
             {selected.length > 0 ? (
               <DropdownMenu>
                 <DropdownMenuTrigger

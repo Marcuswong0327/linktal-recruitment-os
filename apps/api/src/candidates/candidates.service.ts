@@ -62,6 +62,8 @@ const CANDIDATE_INCLUDE = {
       outreachCampaignNotes: true,
       contactedAt: true,
       contactedBy: { select: { fullName: true } },
+      currentSalary: true,
+      expectedSalary: true,
     },
   },
   industry: { select: { name: true } },
@@ -81,6 +83,8 @@ type CandidateWithRelations = {
     outreachCampaignNotes: string | null;
     contactedAt: Date;
     contactedBy: { fullName: string } | null;
+    currentSalary: string | null;
+    expectedSalary: string | null;
   }[];
   industry: { name: string } | null;
   jobRoleType: { name: string } | null;
@@ -128,12 +132,36 @@ function toEntity<T extends CandidateWithRelations>(candidate: T) {
     // exactly the field it also sorts/filters by, or a row can display "3
     // months ago" while a "3+ months" filter silently excludes it.
     lastContactDate: latest?.contactedAt ?? null,
+    // Same latest-contact row, same free-text-not-numbers reasoning as the
+    // column comment on CandidateContactHistory — display-only, no sort/filter.
+    currentSalary: latest?.currentSalary ?? null,
+    expectedSalary: latest?.expectedSalary ?? null,
   };
 }
 
 /** contains/insensitive text filter — undefined when the value is empty, so it's omitted from `where` rather than matching everything. */
 function contains(value?: string) {
   return value ? { contains: value, mode: Prisma.QueryMode.insensitive } : undefined;
+}
+
+/**
+ * Split the JSON columns and the specializationIds relation out of the DTO.
+ * Class instances don't structurally satisfy Prisma's `InputJsonValue` (no
+ * index signature), so JSON fields are cast explicitly while the scalar
+ * fields keep their compile-time checks. `specializationIds` is a nested
+ * relation write, not a column — callers (create/update) build that part
+ * of the payload themselves from `dto.specializationIds` directly. Exported
+ * (not a private method) for the same reason as ClientsService's — doesn't
+ * touch `this`, so hoisting is a zero-risk move.
+ */
+export function toPrismaData<T extends CreateCandidateDto | UpdateCandidateDto>(dto: T) {
+  const { workHistory, specializationIds: _specializationIds, ...rest } = dto;
+  return {
+    ...rest,
+    ...(workHistory !== undefined
+      ? { workHistory: workHistory as unknown as Prisma.InputJsonValue }
+      : {}),
+  };
 }
 
 @Injectable()
@@ -397,7 +425,7 @@ export class CandidatesService {
     // displayId is assigned by the DB (Candidate_displayId_seq default).
     const candidate = await this.prisma.candidate.create({
       data: {
-        ...this.toPrismaData(dto),
+        ...toPrismaData(dto),
         ...(dto.specializationIds !== undefined
           ? { specializations: { create: dto.specializationIds.map((specializationId) => ({ specializationId })) } }
           : {}),
@@ -413,7 +441,7 @@ export class CandidatesService {
     const candidate = await this.prisma.candidate.update({
       where: { id },
       data: {
-        ...this.toPrismaData(dto),
+        ...toPrismaData(dto),
         // Specializations is a to-many join, not a scalar column — a full
         // list replace (clear then recreate) is simplest and correct here;
         // a candidate's specialization list is short, so there's no need for
@@ -526,10 +554,12 @@ export class CandidatesService {
   }
 
   /** Every logged contact for this candidate, newest first — there's no other way to see the full history, only the denormalized "latest contact" fields on the candidate itself. */
-  async listContactHistory(candidateId: string) {
+  /** Newest first, capped at `limit` (default 5, see QueryContactHistoryDto) — the FE only needs to pass it to see further back. */
+  async listContactHistory(candidateId: string, limit: number) {
     return this.prisma.candidateContactHistory.findMany({
       where: { candidateId },
       orderBy: { contactedAt: 'desc' },
+      take: limit,
     });
   }
 
@@ -592,21 +622,4 @@ export class CandidatesService {
     }
   }
 
-  /**
-   * Split the JSON columns and the specializationIds relation out of the DTO.
-   * Class instances don't structurally satisfy Prisma's `InputJsonValue` (no
-   * index signature), so JSON fields are cast explicitly while the scalar
-   * fields keep their compile-time checks. `specializationIds` is a nested
-   * relation write, not a column — callers (create/update) build that part
-   * of the payload themselves from `dto.specializationIds` directly.
-   */
-  private toPrismaData<T extends CreateCandidateDto | UpdateCandidateDto>(dto: T) {
-    const { workHistory, specializationIds: _specializationIds, ...rest } = dto;
-    return {
-      ...rest,
-      ...(workHistory !== undefined
-        ? { workHistory: workHistory as unknown as Prisma.InputJsonValue }
-        : {}),
-    };
-  }
 }

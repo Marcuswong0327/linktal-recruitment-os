@@ -119,6 +119,20 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
       "Resolved live from the latest CandidateContactHistory row (see lastContactType/lastContactedBy) — distinct from lastContactedAt, which is a denormalized column left null on imported history. Sort/filter by lastContactedAt; display this.",
   })
   lastContactDate!: Date | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Free text, from the most recent CandidateContactHistory row — e.g. "35 per hour". Null if never contacted. Display-only, no sort/filter.',
+  })
+  currentSalary!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Free text, from the most recent CandidateContactHistory row — e.g. "above 47". Null if never contacted. Display-only, no sort/filter.',
+  })
+  expectedSalary!: string | null;
   @ApiProperty() createdAt!: Date;
   @ApiProperty() updatedAt!: Date;
 }

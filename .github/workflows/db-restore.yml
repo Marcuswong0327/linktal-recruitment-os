@@ -1,0 +1,64 @@
+name: DB Restore (manual)
+
+# Manual-only, on purpose: restoring is destructive to whatever it targets,
+# so a human always picks the date and reviews the result. This workflow
+# never touches Railway's env vars or production traffic — it only restores
+# into RESTORE_TARGET_URL, which you must point at a scratch Neon
+# branch/database you provision yourself before running this. Promoting a
+# restored DB to production is a separate, manual step. See
+# docs/migrations.md §8 for the full runbook.
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Backup date to restore, YYYY-MM-DD (matches backups/<date>.dump in R2)'
+        required: true
+        type: string
+
+jobs:
+  restore:
+    name: Restore a backup into RESTORE_TARGET_URL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl ca-certificates gnupg lsb-release
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+
+      - name: Restore
+        run: pnpm --filter @linktal/api run restore:db -- --date=${{ inputs.date }}
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          # Update this secret to point at your scratch Neon branch/database
+          # BEFORE running this workflow — never the live prod DB.
+          RESTORE_TARGET_URL: ${{ secrets.RESTORE_TARGET_URL }}
+
+      - name: Post-restore sanity check (eyeball this before trusting the restore)
+        run: psql "$RESTORE_TARGET_URL" -c "select relname, n_live_tup from pg_stat_user_tables order by n_live_tup desc limit 10;"
+        env:
+          RESTORE_TARGET_URL: ${{ secrets.RESTORE_TARGET_URL }}

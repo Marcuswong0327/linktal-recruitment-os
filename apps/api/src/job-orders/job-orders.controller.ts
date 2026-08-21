@@ -9,16 +9,28 @@ import {
   Post,
   Put,
   Query,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiProduces, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { BadRequestException } from '@nestjs/common';
 import { JobOrdersService } from './job-orders.service';
+import { JobOrdersImportService } from './job-orders-import.service';
 import { CreateJobOrderDto } from './dto/create-job-order.dto';
 import { UpdateJobOrderDto } from './dto/update-job-order.dto';
 import { QueryJobOrdersDto } from './dto/query-job-orders.dto';
+import { ExportJobOrdersDto } from './dto/export-job-orders.dto';
 import { SetJobOrderConsultantsDto } from './dto/set-job-order-consultants.dto';
+import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
+import { ImportOptionsDto } from '../common/dto/import-options.dto';
+import { XLSX_CONTENT_TYPE, exportFilename } from '../common/xlsx-export';
+import { MAX_IMPORT_FILE_BYTES } from '../common/xlsx-import';
 import { JobOrderEntity } from './entities/job-order.entity';
 import { PaginatedJobOrdersEntity } from './entities/paginated-job-orders.entity';
-import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
+import { ImportResultEntity } from '../common/entities/import-result.entity';
+import { CurrentUser, RequirePermission, RequirePermissions } from '../auth/auth.decorators';
 import { AuthUser } from '../auth/auth.types';
 import { AuditService } from '../audit/audit.service';
 import { PipelineTimelineEventEntity } from '../audit/entities/pipeline-timeline-event.entity';
@@ -29,6 +41,7 @@ import { PipelineTimelineEventEntity } from '../audit/entities/pipeline-timeline
 export class JobOrdersController {
   constructor(
     private readonly jobOrders: JobOrdersService,
+    private readonly jobOrdersImport: JobOrdersImportService,
     private readonly audit: AuditService,
   ) {}
 
@@ -49,6 +62,78 @@ export class JobOrdersController {
   @ApiResponse({ status: 200, description: 'Job order found', type: JobOrderEntity })
   findByDisplayId(@Param('displayId') displayId: string) {
     return this.jobOrders.findByDisplayId(displayId);
+  }
+
+  @Get('export')
+  @RequirePermission('job_order', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportJobOrders',
+    summary: 'Export every job order matching the current filters as an .xlsx file — unbounded, not paginated',
+  })
+  @ApiResponse({ status: 200, description: 'Job orders workbook' })
+  async exportAll(@Query() query: ExportJobOrdersDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.jobOrders.exportAll(query, user);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('job-orders')}"`,
+    });
+  }
+
+  @Post('export')
+  @RequirePermission('job_order', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportJobOrdersByIds',
+    summary: 'Export an explicit set of job orders (by id) as an .xlsx file',
+  })
+  @ApiResponse({ status: 201, description: 'Job orders workbook' })
+  async exportByIds(@Body() dto: ExportByIdsDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.jobOrders.exportByIds(dto.ids, user, dto.timezone);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('job-orders')}"`,
+    });
+  }
+
+  @Get('import/template')
+  @RequirePermission('job_order', 'create')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'getJobOrderImportTemplate',
+    summary: 'Download the .xlsx template for bulk-importing/updating job orders',
+  })
+  @ApiResponse({ status: 200, description: 'Job orders import template' })
+  async downloadImportTemplate() {
+    const buffer = await this.jobOrdersImport.buildTemplate();
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: 'attachment; filename="job-orders-import-template.xlsx"',
+    });
+  }
+
+  @Post('import')
+  @RequirePermissions({ resource: 'job_order', action: 'create' }, { resource: 'job_order', action: 'update' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_FILE_BYTES } }))
+  @ApiOperation({
+    operationId: 'importJobOrders',
+    summary:
+      'Preview (commit=false, default) or commit (commit=true) a bulk job order import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' }, commit: { type: 'boolean', default: false } },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Import result', type: ImportResultEntity })
+  async import(@UploadedFile() file: Express.Multer.File | undefined, @Body() options: ImportOptionsDto) {
+    if (!file) {
+      throw new BadRequestException({ code: 'FILE_REQUIRED', message: 'Upload an .xlsx file as "file".' });
+    }
+    return this.jobOrdersImport.importFromWorkbook(file.buffer, options.commit ?? false, file.originalname);
   }
 
   @Get(':id')

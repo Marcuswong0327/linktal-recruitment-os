@@ -113,6 +113,16 @@ export interface CandidateEntity {
      * @nullable
      */
   lastContactDate: string | null;
+  /**
+     * Free text, from the most recent CandidateContactHistory row — e.g. "35 per hour". Null if never contacted. Display-only, no sort/filter.
+     * @nullable
+     */
+  currentSalary: string | null;
+  /**
+     * Free text, from the most recent CandidateContactHistory row — e.g. "above 47". Null if never contacted. Display-only, no sort/filter.
+     * @nullable
+     */
+  expectedSalary: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,4 +1,4 @@
-import { CandidateStatus, ClientQuality, ClientStatus } from '@prisma/client';
+import { CandidateStatus, ClientQuality, ClientStatus, JobOrderQuality, JobOrderStatus } from '@prisma/client';
 
 // Mirrors the frontend's display labels (apps/web/src/features/candidates/schema.ts,
 // apps/web/src/features/companies/schema.ts) — duplicated here because export sheets
@@ -19,6 +19,19 @@ export const clientStatusLabels: Record<ClientStatus, string> = {
 };
 
 export const clientQualityLabels: Record<ClientQuality, string> = {
+  LOW: 'Low',
+  MEDIUM: 'Medium',
+  HIGH: 'High',
+};
+
+export const jobOrderStatusLabels: Record<JobOrderStatus, string> = {
+  ACTIVE: 'Active',
+  PLACED: 'Placed',
+  ON_HOLD: 'On Hold',
+  CLOSED: 'Closed',
+};
+
+export const jobOrderQualityLabels: Record<JobOrderQuality, string> = {
   LOW: 'Low',
   MEDIUM: 'Medium',
   HIGH: 'High',

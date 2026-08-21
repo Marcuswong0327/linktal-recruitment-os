@@ -1,12 +1,34 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, SubmissionStatus } from '@prisma/client';
+import { JobOrderQuality, JobOrderStatus, Prisma, SubmissionStatus } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
+import { PrismaService } from '../prisma/prisma.service';
 import { isScoped, jobOrderScope } from '../common/scope';
 import { AuthUser } from '../auth/auth.types';
 import { CreateJobOrderDto } from './dto/create-job-order.dto';
 import { UpdateJobOrderDto } from './dto/update-job-order.dto';
 import { QueryJobOrdersDto } from './dto/query-job-orders.dto';
+import { ExportJobOrdersDto } from './dto/export-job-orders.dto';
+import { buildWorkbook, formatExportDate, resolveTimeZone, ExportColumn } from '../common/xlsx-export';
+import { logExport } from '../common/audit-export';
+import { jobOrderStatusLabels, jobOrderQualityLabels } from '../common/export-labels';
+
+/** The subset of QueryJobOrdersDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination but still satisfies this structurally. */
+type JobOrderFilterFields = Pick<
+  QueryJobOrdersDto,
+  | 'q'
+  | 'statuses'
+  | 'qualities'
+  | 'clientId'
+  | 'consultantIds'
+  | 'jobTitleIds'
+  | 'jobRoleTypeIds'
+  | 'location'
+  | 'locationIds'
+  | 'priorityLevels'
+  | 'salaryMin'
+  | 'salaryMax'
+>;
 
 // Feeds the Job Orders sheet's Submissions/Interviewing/Placed pipeline
 // columns (and the dedicated page's pipeline popover). `deletedAt: null` is
@@ -78,6 +100,31 @@ function displayName(candidate: { firstName: string | null; lastName: string | n
   return name || 'Unknown candidate';
 }
 
+/** The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept separate from the generic `toEntity<T>` return type, which erases extra fields when used across a second generic boundary (same reasoning as ClientExportRow). */
+type JobOrderExportRow = {
+  displayId: string;
+  clientName: string | null;
+  clientDisplayId: string | null;
+  jobTitle: string | null;
+  jobRoleType: string | null;
+  location: string | null;
+  status: JobOrderStatus;
+  quality: JobOrderQuality;
+  priorityLevel: number | null;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryCurrency: string | null;
+  estimatedValue: number | null;
+  openings: number;
+  filledCount: number;
+  consultants: { id: string; name: string }[];
+  description: string | null;
+  requirements: string | null;
+  notes: string | null;
+  receivedAt: Date;
+  closedAt: Date | null;
+};
+
 function toEntity<T extends JobOrderWithRelations>(jobOrder: T) {
   const { submissions, client, consultants, jobTitle, jobRoleType, location, ...rest } = jobOrder;
   return {
@@ -108,11 +155,20 @@ function toEntity<T extends JobOrderWithRelations>(jobOrder: T) {
 
 @Injectable()
 export class JobOrdersService {
-  constructor(@Inject(EXTENDED_PRISMA) private readonly prisma: ExtendedPrismaClient) {}
+  constructor(
+    @Inject(EXTENDED_PRISMA) private readonly prisma: ExtendedPrismaClient,
+    // Base (unfiltered) client — needed for logExport, same reasoning as
+    // every other entity's export endpoint.
+    private readonly base: PrismaService,
+  ) {}
 
-  async findAll(query: QueryJobOrdersDto, user: AuthUser) {
-    const { page, pageSize, sortBy, sortOrder, q } = query;
-
+  /**
+   * Shared by `findAll` and the export endpoint — every list/export read
+   * against JobOrder applies the same filters and scope, just with a
+   * different set of rows selected out of the result.
+   */
+  private buildWhere(query: JobOrderFilterFields, user: AuthUser): Prisma.JobOrderWhereInput {
+    const { q } = query;
     const where: Prisma.JobOrderWhereInput = {};
 
     if (query.statuses?.length) {
@@ -189,14 +245,26 @@ export class JobOrdersService {
       where.AND = and;
     }
 
+    return where;
+  }
+
+  /** Shared by `findAll` and `exportAll` so the exported sheet mirrors the grid's current sort exactly. */
+  private buildOrderBy(
+    sortBy: QueryJobOrdersDto['sortBy'],
+    sortOrder: QueryJobOrdersDto['sortOrder'],
+  ): Prisma.JobOrderOrderByWithRelationInput[] {
     // Default: Active first. JobOrderStatus is declared ACTIVE/PLACED/CLOSED/
     // ON_HOLD (see schema.prisma), and Postgres native enums sort by
     // declaration order — so `status asc` already puts Active first, same
     // trick used for Client.quality. Received-date is the secondary sort so
     // same-status rows still land in a stable, useful order.
-    const orderBy: Prisma.JobOrderOrderByWithRelationInput[] = sortBy
-      ? [{ [sortBy]: sortOrder }]
-      : [{ status: 'asc' }, { receivedAt: 'desc' }];
+    return sortBy ? [{ [sortBy]: sortOrder }] : [{ status: 'asc' }, { receivedAt: 'desc' }];
+  }
+
+  async findAll(query: QueryJobOrdersDto, user: AuthUser) {
+    const { page, pageSize, sortBy, sortOrder } = query;
+    const where = this.buildWhere(query, user);
+    const orderBy = this.buildOrderBy(sortBy, sortOrder);
 
     // Parallel, not $transaction: these two reads don't need one consistent
     // DB snapshot, and running them concurrently instead of sequentially
@@ -219,6 +287,77 @@ export class JobOrdersService {
       pageSize,
       pageCount: Math.ceil(total / pageSize),
     };
+  }
+
+  /** Every row matching the current filters, unbounded — no `skip`/`take`. */
+  async exportAll(query: ExportJobOrdersDto, user: AuthUser): Promise<Buffer> {
+    const where = this.buildWhere(query, user);
+    const orderBy = this.buildOrderBy(query.sortBy, query.sortOrder);
+    const jobOrders = await this.prisma.jobOrder.findMany({ where, orderBy, include: JOB_ORDER_INCLUDE });
+    const { timezone: _timezone, ...filters } = query;
+    await logExport(this.base, 'JobOrder', { count: jobOrders.length, filters });
+    return this.buildExportWorkbook(jobOrders.map((jo) => toEntity(jo)), query.timezone);
+  }
+
+  /** An explicit row selection — scope is still re-applied server-side (defense-in-depth), so an out-of-scope id is silently dropped rather than exported. */
+  async exportByIds(ids: string[], user: AuthUser, timezone?: string): Promise<Buffer> {
+    const and: Prisma.JobOrderWhereInput[] = [{ id: { in: ids } }];
+    if (isScoped(user)) and.push(jobOrderScope(user));
+    const jobOrders = await this.prisma.jobOrder.findMany({ where: { AND: and }, include: JOB_ORDER_INCLUDE });
+    await logExport(this.base, 'JobOrder', { count: jobOrders.length, requestedIds: ids });
+    return this.buildExportWorkbook(jobOrders.map((jo) => toEntity(jo)), timezone);
+  }
+
+  private buildExportWorkbook(jobOrders: JobOrderExportRow[], timezone?: string): Promise<Buffer> {
+    const tz = resolveTimeZone(timezone);
+    const columns: ExportColumn[] = [
+      { header: 'Display ID', key: 'displayId' },
+      { header: 'Client', key: 'clientName' },
+      { header: 'Client Display ID', key: 'clientDisplayId' },
+      { header: 'Job Title', key: 'jobTitle' },
+      { header: 'Job Role Type', key: 'jobRoleType' },
+      { header: 'Location', key: 'location' },
+      { header: 'Status', key: 'status' },
+      { header: 'Quality', key: 'quality' },
+      { header: 'Priority', key: 'priorityLevel' },
+      { header: 'Salary Min', key: 'salaryMin' },
+      { header: 'Salary Max', key: 'salaryMax' },
+      { header: 'Currency', key: 'salaryCurrency' },
+      { header: 'Estimated Value', key: 'estimatedValue' },
+      { header: 'Openings', key: 'openings' },
+      { header: 'Filled', key: 'filledCount' },
+      { header: 'Consultants', key: 'consultants' },
+      { header: 'Description', key: 'description', wrap: true },
+      { header: 'Requirements', key: 'requirements', wrap: true },
+      { header: 'Notes', key: 'notes', wrap: true },
+      { header: 'Received', key: 'receivedAt' },
+      { header: 'Closed', key: 'closedAt' },
+    ];
+    const priorityLabels: Record<number, string> = { 1: 'High', 2: 'Medium', 3: 'Low' };
+    const rows = jobOrders.map((jo) => ({
+      displayId: jo.displayId,
+      clientName: jo.clientName ?? '',
+      clientDisplayId: jo.clientDisplayId ?? '',
+      jobTitle: jo.jobTitle ?? '',
+      jobRoleType: jo.jobRoleType ?? '',
+      location: jo.location ?? '',
+      status: jobOrderStatusLabels[jo.status],
+      quality: jobOrderQualityLabels[jo.quality],
+      priorityLevel: jo.priorityLevel != null ? (priorityLabels[jo.priorityLevel] ?? jo.priorityLevel) : '',
+      salaryMin: jo.salaryMin ?? '',
+      salaryMax: jo.salaryMax ?? '',
+      salaryCurrency: jo.salaryCurrency ?? '',
+      estimatedValue: jo.estimatedValue ?? '',
+      openings: jo.openings,
+      filledCount: jo.filledCount,
+      consultants: jo.consultants.map((c) => c.name).join(', '),
+      description: jo.description ?? '',
+      requirements: jo.requirements ?? '',
+      notes: jo.notes ?? '',
+      receivedAt: formatExportDate(jo.receivedAt, tz),
+      closedAt: formatExportDate(jo.closedAt, tz),
+    }));
+    return buildWorkbook('Job Orders', columns, rows);
   }
 
   /**

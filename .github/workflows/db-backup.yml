@@ -1,0 +1,68 @@
+name: DB Backup
+
+# Nightly production snapshot -> R2. Runs unconditionally (no change
+# detection — a same-content dump costs pennies; a missed snapshot on a day
+# that DID change is the one failure mode this exists to prevent). 30-day
+# retention is enforced by an R2 bucket lifecycle rule, not by this workflow.
+# See docs/migrations.md §8.
+on:
+  schedule:
+    # 16:00 UTC daily = midnight Malaysia Time (UTC+8, no DST). GitHub Actions
+    # cron always runs in UTC — there's no timezone setting. The scheduler is
+    # also best-effort and can run a few minutes late under load, which is
+    # fine for a nightly job.
+    - cron: '0 16 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Backup production DB to R2
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Neon runs PostgreSQL 18 — the distro's default postgresql-client
+      # (16 on Ubuntu 24.04) is older than the server, which pg_dump does not
+      # reliably support. Pull the matching client from the official PGDG apt
+      # repo instead of the distro default.
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl ca-certificates gnupg lsb-release
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+
+      - name: Run backup
+        run: pnpm --filter @linktal/api run backup:db
+        env:
+          # PROD_DIRECT_URL, not DIRECT_URL — named deliberately so this can
+          # never be mistaken for the shared dev DB's connection string when
+          # someone's setting up secrets. Must be the *unpooled* Neon
+          # connection string (pg_dump needs one stable session).
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}

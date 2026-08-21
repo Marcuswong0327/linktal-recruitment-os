@@ -26,11 +26,14 @@ import {
   getCandidates,
   getExportCandidatesByIdsUrl,
   getExportCandidatesUrl,
+  getGetCandidateImportTemplateUrl,
   getGetCandidatesQueryKey,
   restoreCandidate as restoreCandidateRequest,
   updateCandidate as updateCandidateRequest,
   useGetCandidates,
+  useImportCandidates,
 } from '@/lib/api/generated/candidates/candidates';
+import { ImportDialog } from '@/components/ImportDialog';
 import type { GetCandidatesSortBy, UpdateCandidateDto } from '@/lib/api/generated/types';
 import { type Candidate, candidateStatuses, candidateStatusLabels, candidateStatusVariants } from './schema';
 import { candidateColumns } from './columns';
@@ -66,6 +69,7 @@ export function CandidatesTable({
   const [selectedCandidates, setSelectedCandidates] = React.useState<Candidate[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isExporting, setIsExporting] = React.useState(false);
+  const importCandidates = useImportCandidates();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   // Selection is normally page-scoped (see DataGrid's onSelectionChange doc)
   // — this flips on once the user explicitly asks to extend it to every row
@@ -298,6 +302,18 @@ export function CandidatesTable({
               <Download />
               {isExporting ? 'Exporting…' : 'Export to Excel'}
             </Button>
+            {canCreate && canUpdate ? (
+              <ImportDialog
+                entityLabel="Candidates"
+                templateUrl={getGetCandidateImportTemplateUrl()}
+                upload={async (file, commit) => {
+                  const res = await importCandidates.mutateAsync({ data: { file, commit } });
+                  if (res.status !== 201) throw new Error('Import failed');
+                  return res.data;
+                }}
+                onImported={() => queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() })}
+              />
+            ) : null}
 
             {selectedCandidates.length > 0 ? (
               <>

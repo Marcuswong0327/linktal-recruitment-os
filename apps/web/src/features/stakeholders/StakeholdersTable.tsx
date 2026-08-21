@@ -54,13 +54,16 @@ import {
   deleteStakeholder,
   getExportStakeholdersByIdsUrl,
   getExportStakeholdersUrl,
+  getGetStakeholderImportTemplateUrl,
   getGetStakeholdersQueryKey,
   updateStakeholder,
   useAddStakeholderContactHistory,
   useCreateStakeholder,
   useGetStakeholders,
+  useImportStakeholders,
   useUpdateStakeholder,
 } from '@/lib/api/generated/stakeholders/stakeholders';
+import { ImportDialog } from '@/components/ImportDialog';
 import {
   useCreateStakeholderRoleType,
   useGetStakeholderRoleTypes,
@@ -166,6 +169,7 @@ export function StakeholdersTable({
   const [selected, setSelected] = React.useState<StakeholderEntity[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isExporting, setIsExporting] = React.useState(false);
+  const importStakeholders = useImportStakeholders();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
   const [loggingContactFor, setLoggingContactFor] = React.useState<StakeholderEntity | null>(null);
@@ -513,6 +517,18 @@ export function StakeholdersTable({
               <Download />
               {isExporting ? 'Exporting…' : 'Export to Excel'}
             </Button>
+            {canCreate && canUpdate ? (
+              <ImportDialog
+                entityLabel="Stakeholders"
+                templateUrl={getGetStakeholderImportTemplateUrl()}
+                upload={async (file, commit) => {
+                  const res = await importStakeholders.mutateAsync({ data: { file, commit } });
+                  if (res.status !== 201) throw new Error('Import failed');
+                  return res.data;
+                }}
+                onImported={() => queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() })}
+              />
+            ) : null}
             {selected.length > 0 ? (
               <DropdownMenu>
                 <DropdownMenuTrigger
