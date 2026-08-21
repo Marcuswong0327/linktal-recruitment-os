@@ -9,11 +9,15 @@ name: DB Backup
 # R2 bucket lifecycle rule, not by this workflow. See docs/migrations.md §8.
 on:
   schedule:
-    # 16:00 UTC daily = midnight Malaysia Time (UTC+8, no DST). GitHub Actions
-    # cron always runs in UTC — there's no timezone setting. The scheduler is
-    # also best-effort and can run a few minutes late under load, which is
-    # fine for a nightly job.
-    - cron: '0 16 * * *'
+    # 16:07 UTC daily = just after midnight Malaysia Time (UTC+8, no DST).
+    # GitHub Actions cron always runs in UTC — there's no timezone setting.
+    # Deliberately NOT :00 — GitHub's own docs warn the schedule event is
+    # delayed most during "the start of every hour," the most congested
+    # minute on all of GitHub's infra. A few minutes off the hour clears most
+    # of that queueing. The scheduler is still best-effort and can run some
+    # minutes late regardless — db-backup-check.yml is the safety net for
+    # "did last night's run actually happen at all."
+    - cron: '7 16 * * *'
   workflow_dispatch: {}
 
 concurrency:

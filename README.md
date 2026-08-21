@@ -73,6 +73,7 @@ Target a single app with a filter, e.g. `pnpm --filter @linktal/api dev`.
 ├── .github/workflows/
 │   ├── ci.yml                # lint · typecheck · build · test
 │   ├── db-backup.yml         # nightly production DB backup -> R2
+│   ├── db-backup-check.yml   # daily: alerts if the last backup is stale
 │   ├── db-restore.yml        # manual-trigger restore into a scratch DB
 │   └── keep-alive.yml        # monthly commit, keeps scheduled workflows enabled
 ├── turbo.json
@@ -93,11 +94,19 @@ Target a single app with a filter, e.g. `pnpm --filter @linktal/api dev`.
 ### Automated backups
 
 `.github/workflows/db-backup.yml` snapshots the **production** Neon DB to
-Cloudflare R2 every night (16:00 UTC = midnight Malaysia Time), unconditionally
-— no change-detection, since a same-content dump costs pennies while a missed
-snapshot on a day that did change is the failure this exists to prevent.
-30-day rolling retention is enforced by an R2 bucket lifecycle rule, not by
-the workflow itself.
+Cloudflare R2 every night (16:07 UTC, just after midnight Malaysia Time — a
+few minutes off the hour on purpose, since GitHub's scheduler queues hardest
+right on the hour), unconditionally — no change-detection, since a
+same-content dump costs pennies while a missed snapshot on a day that did
+change is the failure this exists to prevent. 30-day rolling retention is
+enforced by an R2 bucket lifecycle rule, not by the workflow itself.
+
+`.github/workflows/db-backup-check.yml` runs daily and fails on purpose if
+the last successful backup is more than 36h old — a `schedule` trigger can be
+delayed or, rarely, dropped by GitHub with no notification, so this is what
+actually catches a silently-missed night. A failing scheduled run triggers
+GitHub's own notification to anyone watching the repo — no extra alerting
+service needed.
 
 `.github/workflows/db-restore.yml` is manual-trigger-only
 (`workflow_dispatch`, pick a date) and restores into a scratch Neon
