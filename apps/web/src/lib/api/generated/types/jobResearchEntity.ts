@@ -16,6 +16,11 @@ export interface JobResearchEntity {
      * @nullable
      */
   companyName: string | null;
+  /**
+     * Resolved client Display ID
+     * @nullable
+     */
+  clientDisplayId: string | null;
   /** @nullable */
   consultantId: string | null;
   /**
