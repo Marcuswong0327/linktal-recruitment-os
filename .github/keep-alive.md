@@ -10,4 +10,4 @@ every month — comfortably under that 60-day window — purely so every
 scheduled workflow in this repo stays enabled, even during a long quiet
 period with no other commits. See `docs/migrations.md` §8.
 
-Last touched: (updated automatically — do not edit by hand)
+Last touched: 2026-08-21T08:32:20Z
