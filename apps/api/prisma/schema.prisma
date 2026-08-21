@@ -204,6 +204,8 @@ model Consultant {
   tobsRepresented     Tob[]
   jobResearch         ClientJobResearch[]
   jobOrderAssignments JobOrderConsultant[] // Which job orders this consultant is working — see SCOPING below and JobOrderConsultant.
+  emailTemplates      EmailTemplate[] // See the OUTREACH CAMPAIGNS section below.
+  outreachCampaigns   OutreachCampaign[]
 
   // The two arms of the visibility scope — see the "SCOPING" note below.
   industries      ConsultantIndustry[]
@@ -604,7 +606,8 @@ model Stakeholder {
   deletedAt         DateTime? // Soft delete: null = live
   deletedById       String? // Logical ref to Consultant.id (no FK)
 
-  contactHistory StakeholderContactHistory[]
+  contactHistory             StakeholderContactHistory[]
+  outreachCampaignRecipients OutreachCampaignRecipient[] // See the OUTREACH CAMPAIGNS section below.
 
   @@index([clientId])
   @@index([deletedAt])
@@ -732,8 +735,8 @@ model Candidate {
 
   lastContactedAt   DateTime? // Denormalized: max(CandidateContactHistory.contactedAt).
   lastContactedById String? // Logical ref to Consultant.id (no FK) — denormalized, mirrors lastContactedAt.
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
   deletedAt         DateTime? // Soft delete: null = live
   deletedById       String? // Logical ref to Consultant.id (no FK)
 
@@ -785,13 +788,13 @@ model CandidateContactHistory {
   contactType   String? // Channel: email, call, meeting, linkedin
   category      ContactCategory // SCREENING or OUTREACH.
   contactedById String? // Consultant who made this specific contact.
-  contactedBy   Consultant? @relation(fields: [contactedById], references: [id], onDelete: SetNull)
-  contactedAt   DateTime    @default(now())
+  contactedBy   Consultant?     @relation(fields: [contactedById], references: [id], onDelete: SetNull)
+  contactedAt   DateTime        @default(now())
 
   outreachChannel       OutreachChannel? // Which channel an OUTREACH contact used — only set when category is OUTREACH.
   outreachCampaignNotes String? // Free-text campaign context — filled when category is OUTREACH. Independent of outreachChannel: this is "which campaign/job", not "which channel".
   screeningNotes        String? // The actual screening call content — filled when category is SCREENING. Renamed from conversationSummary. Editable (author-or-admin, optimistic concurrency — see editedAt/editedById); every other field on this row is an immutable factual record once logged.
-  status                CandidateStatus @default(WARM) // Snapshot of the candidate's status at the time of this contact, not a live reference.
+  status                CandidateStatus  @default(WARM) // Snapshot of the candidate's status at the time of this contact, not a live reference.
   suburb                String?
 
   editedAt   DateTime? // Set only when screeningNotes has been edited after creation.
@@ -1004,4 +1007,82 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([actorId])
   @@index([createdAt])
+}
+
+// ============================================================================
+// OUTREACH CAMPAIGNS (mail-merge campaigns to Stakeholders, via Smartlead)
+// ============================================================================
+//
+// These three tables + this enum were built and applied directly to the
+// shared dev database (via `db push` or raw SQL, not a committed migration),
+// so they existed live with real data before ever landing in this repo. This
+// block backfills the schema + a migration to close that drift — see
+// `20260821000000_backfill_outreach_campaigns` for the migration itself.
+//
+// No NestJS module/controller/service for this feature exists anywhere in
+// this repo yet — only the schema. Whoever owns this feature still needs to
+// bring the actual application code over.
+
+enum OutreachCampaignStatus {
+  DRAFT
+  QUEUED
+  SENDING
+  COMPLETED
+  FAILED
+}
+
+model EmailTemplate {
+  id          String      @id @default(cuid())
+  displayId   String      @unique @default(dbgenerated("display_id('EMT-'::text, '\"EmailTemplate_displayId_seq\"'::regclass)")) // Auto: EMT-000###
+  name        String
+  subject     String
+  bodyHtml    String
+  createdById String? // Logical: Consultant who created this template.
+  createdBy   Consultant? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([createdById])
+  @@index([updatedAt])
+}
+
+model OutreachCampaign {
+  id                  String                      @id @default(cuid())
+  displayId           String                      @unique @default(dbgenerated("display_id('OCH-'::text, '\"OutreachCampaign_displayId_seq\"'::regclass)")) // Auto: OCH-000###
+  name                String
+  subject             String
+  bodyHtml            String
+  timezoneRegion      String                      @default("MY")
+  sendDaysPerWeek     Int                         @default(5)
+  senderAccountIds    Json                        @default("[]") // JSONB array of sending-account ids — not a relation, no EmailConnection/sender-account model exists in this repo.
+  status              OutreachCampaignStatus      @default(DRAFT)
+  smartleadCampaignId String? // Third-party (Smartlead) campaign id once launched.
+  createdById         String
+  createdBy           Consultant                  @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  launchedAt          DateTime?
+  totalRecipients     Int                         @default(0)
+  sentCount           Int                         @default(0)
+  errorMessage        String?
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+  recipients          OutreachCampaignRecipient[]
+
+  @@index([createdAt])
+  @@index([createdById])
+  @@index([status])
+}
+
+model OutreachCampaignRecipient {
+  id              String           @id @default(cuid())
+  campaignId      String
+  campaign        OutreachCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  stakeholderId   String?
+  stakeholder     Stakeholder?     @relation(fields: [stakeholderId], references: [id], onDelete: SetNull)
+  firstName       String?
+  email           String
+  emailNormalized String
+  createdAt       DateTime         @default(now())
+
+  @@unique([campaignId, emailNormalized])
+  @@index([stakeholderId])
 }
