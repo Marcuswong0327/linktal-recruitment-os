@@ -226,12 +226,11 @@ historically **1,643 of 1,645 clients carried a specialization, but only 205 of
 missing candidate tags would narrow candidate lists sharply with no code
 change — worth deciding deliberately rather than discovering.
 
-**Submission industry guard** (applies to *every* role, not just scoped
-consultants): `POST /candidate-submissions` rejects a candidate/job-order pair
-whose industries differ (`400 SUBMISSION_INDUSTRY_MISMATCH`) — a data-integrity
-rule about whether the pairing makes sense at all, independent of who's creating
-it. Since a Job Order's industry is only reachable via its Client, this is really
-"does the candidate's industry match the job order's client's industry".
+**No submission industry guard.** `POST /candidate-submissions` allows a
+candidate to be submitted to a job order outside their tagged industry —
+cross-industry submissions are a legitimate part of the workflow (e.g. a job
+order consultant deliberately working an out-of-scope client), not a data
+error to block.
 
 **Latency.** `industryIds`, `specializationIds` and `locationIds` are minted into
 the access token at login/refresh, same as `roleName`/`permissions` — a

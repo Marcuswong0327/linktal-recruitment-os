@@ -38,10 +38,16 @@ export const customFetch = async <T>(
   url: string,
   options?: RequestInit,
 ): Promise<T> => {
+  // A FormData body (the generated multipart-upload hooks, e.g. importClients)
+  // must NOT get an explicit Content-Type here — the browser computes its own
+  // `multipart/form-data; boundary=...` from the FormData instance, and an
+  // explicit header (even the "default" below) overrides that and breaks the
+  // multipart body's boundary marker, which the server can't then parse.
+  const isFormData = options?.body instanceof FormData;
   const response = await fetch(`${BASE_URL}${url}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...options?.headers,
     },
     credentials: 'include', // send the session cookie so proxy.ts can auth us

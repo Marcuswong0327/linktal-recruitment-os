@@ -31,7 +31,10 @@ import type {
   ErrorResponse,
   ExportByIdsDto,
   ExportClientsParams,
+  GetClientContactHistoryParams,
   GetClientsParams,
+  ImportClientsBody,
+  ImportResultEntity,
   PaginatedClientsEntity,
   UpdateClientDto
 } from '../types';
@@ -653,6 +656,229 @@ export const useExportClientsByIds = <TError = ErrorResponse,
       > => {
       return useMutation(getExportClientsByIdsMutationOptions(options), queryClient);
     }
+    export type getClientImportTemplateResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getClientImportTemplateResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getClientImportTemplateResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getClientImportTemplateResponseSuccess = (getClientImportTemplateResponse200) & {
+  headers: Headers;
+};
+export type getClientImportTemplateResponseError = (getClientImportTemplateResponse400 | getClientImportTemplateResponse500) & {
+  headers: Headers;
+};
+
+export type getClientImportTemplateResponse = (getClientImportTemplateResponseSuccess | getClientImportTemplateResponseError)
+
+export const getGetClientImportTemplateUrl = () => {
+
+
+
+
+  return `/clients/import/template`
+}
+
+/**
+ * @summary Download the .xlsx template for bulk-importing/updating companies
+ */
+export const getClientImportTemplate = async ( options?: RequestInit): Promise<getClientImportTemplateResponse> => {
+
+  return customFetch<getClientImportTemplateResponse>(getGetClientImportTemplateUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClientImportTemplateQueryKey = () => {
+    return [
+    `/clients/import/template`
+    ] as const;
+    }
+
+
+export const getGetClientImportTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getClientImportTemplate>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClientImportTemplateQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientImportTemplate>>> = ({ signal }) => getClientImportTemplate({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClientImportTemplate>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetClientImportTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getClientImportTemplate>>>
+export type GetClientImportTemplateQueryError = ErrorResponse
+
+
+export function useGetClientImportTemplate<TData = Awaited<ReturnType<typeof getClientImportTemplate>>, TError = ErrorResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientImportTemplate>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getClientImportTemplate>>,
+          TError,
+          Awaited<ReturnType<typeof getClientImportTemplate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetClientImportTemplate<TData = Awaited<ReturnType<typeof getClientImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientImportTemplate>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getClientImportTemplate>>,
+          TError,
+          Awaited<ReturnType<typeof getClientImportTemplate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetClientImportTemplate<TData = Awaited<ReturnType<typeof getClientImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Download the .xlsx template for bulk-importing/updating companies
+ */
+
+export function useGetClientImportTemplate<TData = Awaited<ReturnType<typeof getClientImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetClientImportTemplateQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type importClientsResponse201 = {
+  data: ImportResultEntity
+  status: 201
+}
+
+export type importClientsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type importClientsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type importClientsResponseSuccess = (importClientsResponse201) & {
+  headers: Headers;
+};
+export type importClientsResponseError = (importClientsResponse400 | importClientsResponse500) & {
+  headers: Headers;
+};
+
+export type importClientsResponse = (importClientsResponseSuccess | importClientsResponseError)
+
+export const getImportClientsUrl = () => {
+
+
+
+
+  return `/clients/import`
+}
+
+/**
+ * @summary Preview (commit=false, default) or commit (commit=true) a bulk company import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.
+ */
+export const importClients = async (importClientsBody: ImportClientsBody, options?: RequestInit): Promise<importClientsResponse> => {
+    const formData = new FormData();
+formData.append(`file`, importClientsBody.file);
+if(importClientsBody.commit !== undefined) {
+ formData.append(`commit`, importClientsBody.commit.toString())
+ }
+
+  return customFetch<importClientsResponse>(getImportClientsUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getImportClientsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importClients>>, TError,{data: ImportClientsBody}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importClients>>, TError,{data: ImportClientsBody}, TContext> => {
+
+const mutationKey = ['importClients'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importClients>>, {data: ImportClientsBody}> = (props) => {
+          const {data} = props ?? {};
+
+          return  importClients(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportClientsMutationResult = NonNullable<Awaited<ReturnType<typeof importClients>>>
+    export type ImportClientsMutationBody = ImportClientsBody
+    export type ImportClientsMutationError = ErrorResponse
+
+    /**
+ * @summary Preview (commit=false, default) or commit (commit=true) a bulk company import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.
+ */
+export const useImportClients = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importClients>>, TError,{data: ImportClientsBody}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof importClients>>,
+        TError,
+        {data: ImportClientsBody},
+        TContext
+      > => {
+      return useMutation(getImportClientsMutationOptions(options), queryClient);
+    }
     export type getClientResponse200 = {
   data: ClientEntity
   status: 200
@@ -1010,20 +1236,29 @@ export type getClientContactHistoryResponseError = (getClientContactHistoryRespo
 
 export type getClientContactHistoryResponse = (getClientContactHistoryResponseSuccess | getClientContactHistoryResponseError)
 
-export const getGetClientContactHistoryUrl = (id: string,) => {
+export const getGetClientContactHistoryUrl = (id: string,
+    params?: GetClientContactHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/clients/${id}/contact-history`
+  return stringifiedParams.length > 0 ? `/clients/${id}/contact-history?${stringifiedParams}` : `/clients/${id}/contact-history`
 }
 
 /**
- * @summary Every logged contact across this client's stakeholders, newest first
+ * @summary Most recent logged contacts across this client's stakeholders, newest first (5 unless `limit` says otherwise)
  */
-export const getClientContactHistory = async (id: string, options?: RequestInit): Promise<getClientContactHistoryResponse> => {
+export const getClientContactHistory = async (id: string,
+    params?: GetClientContactHistoryParams, options?: RequestInit): Promise<getClientContactHistoryResponse> => {
 
-  return customFetch<getClientContactHistoryResponse>(getGetClientContactHistoryUrl(id),
+  return customFetch<getClientContactHistoryResponse>(getGetClientContactHistoryUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -1036,23 +1271,25 @@ export const getClientContactHistory = async (id: string, options?: RequestInit)
 
 
 
-export const getGetClientContactHistoryQueryKey = (id: string,) => {
+export const getGetClientContactHistoryQueryKey = (id: string,
+    params?: GetClientContactHistoryParams,) => {
     return [
-    `/clients/${id}/contact-history`
+    `/clients/${id}/contact-history`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetClientContactHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+export const getGetClientContactHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(id: string,
+    params?: GetClientContactHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetClientContactHistoryQueryKey(id);
+  const queryKey =  queryOptions?.queryKey ?? getGetClientContactHistoryQueryKey(id,params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientContactHistory>>> = ({ signal }) => getClientContactHistory(id, { signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClientContactHistory>>> = ({ signal }) => getClientContactHistory(id,params, { signal, ...requestOptions });
 
 
 
@@ -1066,7 +1303,8 @@ export type GetClientContactHistoryQueryError = ErrorResponse
 
 
 export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(
- id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>> & Pick<
+ id: string,
+    params: undefined |  GetClientContactHistoryParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getClientContactHistory>>,
           TError,
@@ -1076,7 +1314,8 @@ export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof get
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(
- id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>> & Pick<
+ id: string,
+    params?: GetClientContactHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getClientContactHistory>>,
           TError,
@@ -1086,19 +1325,21 @@ export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof get
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(
- id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ id: string,
+    params?: GetClientContactHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Every logged contact across this client's stakeholders, newest first
+ * @summary Most recent logged contacts across this client's stakeholders, newest first (5 unless `limit` says otherwise)
  */
 
 export function useGetClientContactHistory<TData = Awaited<ReturnType<typeof getClientContactHistory>>, TError = ErrorResponse>(
- id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ id: string,
+    params?: GetClientContactHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getClientContactHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetClientContactHistoryQueryOptions(id,options)
+  const queryOptions = getGetClientContactHistoryQueryOptions(id,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

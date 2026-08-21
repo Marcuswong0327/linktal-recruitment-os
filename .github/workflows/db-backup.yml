@@ -1,0 +1,86 @@
+name: DB Backup
+
+# Nightly production snapshot -> R2. No app toolchain involved — just
+# pg_dump piped straight through the AWS CLI (preinstalled on GitHub's
+# runners; R2 is S3-API-compatible) to the bucket, no local file ever
+# staged. Runs unconditionally (no change detection — a same-content dump
+# costs pennies; a missed snapshot on a day that DID change is the one
+# failure mode this exists to prevent). 30-day retention is enforced by an
+# R2 bucket lifecycle rule, not by this workflow. See docs/migrations.md §8.
+on:
+  schedule:
+    # 16:00 UTC daily = midnight Malaysia Time (UTC+8, no DST). GitHub Actions
+    # cron always runs in UTC — there's no timezone setting. The scheduler is
+    # also best-effort and can run a few minutes late under load, which is
+    # fine for a nightly job.
+    - cron: '0 16 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: Backup production DB to R2
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Neon runs PostgreSQL 18 — the distro's default postgresql-client
+      # (16 on Ubuntu 24.04) is older than the server, which pg_dump does not
+      # reliably support. Pull the matching client from the official PGDG apt
+      # repo instead of the distro default.
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl ca-certificates gnupg lsb-release
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+
+          # Ask the package itself where it put pg_dump, rather than
+          # assuming a path — the runner image ships an older
+          # postgresql-client ahead of this one on PATH, so the bare
+          # `pg_dump` command silently resolves to the wrong version
+          # otherwise. This also fails loudly here, with a clear message,
+          # if that assumption is ever wrong, instead of failing confusingly
+          # in the next step.
+          PG_BIN_DIR=$(dirname "$(dpkg -L postgresql-client-18 | grep -E '/bin/pg_dump$')")
+          echo "Resolved PostgreSQL 18 client: $PG_BIN_DIR"
+          "$PG_BIN_DIR/pg_dump" --version
+          echo "PG_BIN_DIR=$PG_BIN_DIR" >> "$GITHUB_ENV"
+
+      - name: Dump and upload to R2
+        run: |
+          set -euo pipefail
+          DATE=$(date -u +%F)
+          echo "Backing up production -> r2://$R2_BUCKET/backups/$DATE.dump"
+
+          # --no-owner/--no-privileges: the restore target (a fresh Neon
+          # branch/DB, possibly in a different project) won't share the
+          # source's exact role definitions — stripping ownership/grants
+          # keeps the dump portable.
+          "$PG_BIN_DIR/pg_dump" -Fc --no-owner --no-privileges -d "$DIRECT_URL" \
+            | aws s3 cp - "s3://$R2_BUCKET/backups/$DATE.dump" \
+                --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+
+          # A tiny marker a future staleness check can read ("is the last
+          # successful backup older than ~36h?") without listing/parsing the
+          # whole bucket.
+          date -u +%FT%TZ \
+            | aws s3 cp - "s3://$R2_BUCKET/backups/_last-success" \
+                --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+
+          echo "Backup complete."
+        env:
+          # PROD_DIRECT_URL, not DIRECT_URL — named deliberately so this can
+          # never be mistaken for the shared dev DB's connection string when
+          # someone's setting up secrets. Must be the *unpooled* Neon
+          # connection string (pg_dump needs one stable session).
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto

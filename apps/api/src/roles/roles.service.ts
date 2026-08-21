@@ -11,6 +11,7 @@ import { AuthUser } from '../auth/auth.types';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { QueryRolesDto } from './dto/query-roles.dto';
+import { RestoreRoleDto } from './dto/restore-role.dto';
 
 /** Include the role's granted permissions + how many consultants hold it. */
 const withPermissions = {
@@ -181,6 +182,80 @@ export class RolesService {
       ...(reassign ? { reassignedTo: reassign.toName, reassignedCount: reassign.count } : {}),
     });
     return deleted;
+  }
+
+  /**
+   * This role's saved versions, newest first — reshaped from its own
+   * CREATE/UPDATE `AuditLog` rows rather than a dedicated versioning table:
+   * every save already writes the full resulting name/description/
+   * permissionIds (see `logRoleChange`'s callers), so each row here is
+   * already a complete, restorable snapshot, not a diff. The first entry is
+   * always the role's current state.
+   */
+  async history(id: string, limit: number) {
+    const role = await this.prisma.role.findUnique({ where: { id }, select: { id: true } });
+    if (!role) {
+      throw new NotFoundException(`Role ${id} not found`);
+    }
+
+    const logs = await this.prisma.auditLog.findMany({
+      where: { entityType: 'Role', entityId: id, action: { in: ['CREATE', 'UPDATE'] } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+
+    // One shared actor lookup for the whole page, same shape as
+    // AuditService.getPipelineTimeline's — not the full LabelResolverService,
+    // which resolves many different foreign-key-shaped fields across every
+    // entity type; here there's exactly one (actorId).
+    const actorIds = [...new Set(logs.map((l) => l.actorId).filter((v): v is string => !!v))];
+    const actors = actorIds.length
+      ? await this.prisma.consultant.findMany({ where: { id: { in: actorIds } }, select: { id: true, fullName: true } })
+      : [];
+    const actorNameById = new Map(actors.map((a) => [a.id, a.fullName]));
+
+    return logs.map((log) => {
+      const changes = log.changes as { name?: string; description?: string; permissionIds?: string[] } | null;
+      return {
+        id: log.id,
+        action: log.action,
+        actorId: log.actorId,
+        actorName: log.actorId ? (actorNameById.get(log.actorId) ?? null) : null,
+        name: changes?.name ?? null,
+        description: changes?.description ?? null,
+        permissionIds: changes?.permissionIds ?? null,
+        createdAt: log.createdAt,
+      };
+    });
+  }
+
+  /**
+   * Rolls back to a past save by replaying its snapshot through `update()` —
+   * reuses every existing guard there (immutable/protected roles, the
+   * escalation check) for free, and writes an ordinary new UPDATE audit row.
+   * A restore is deliberately just another forward-moving, fully-audited
+   * edit, not a destructive revert — nothing about the row being restored
+   * from is touched or removed.
+   */
+  async restore(id: string, dto: RestoreRoleDto, actor: AuthUser) {
+    const log = await this.prisma.auditLog.findUnique({ where: { id: dto.auditLogId } });
+    if (!log || log.entityType !== 'Role' || log.entityId !== id) {
+      throw new NotFoundException(`Version ${dto.auditLogId} not found for role ${id}`);
+    }
+
+    const changes = log.changes as { name?: string; description?: string; permissionIds?: string[] } | null;
+    if (!changes?.permissionIds) {
+      throw new BadRequestException({
+        code: 'NOT_RESTORABLE',
+        message: "This version didn't capture a permission set (a name/description-only save) and can't be restored.",
+      });
+    }
+
+    return this.update(
+      id,
+      { name: changes.name, description: changes.description, permissionIds: changes.permissionIds },
+      actor,
+    );
   }
 
   /**

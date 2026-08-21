@@ -13,7 +13,7 @@ function contextFor(user?: Partial<AuthUser>): ExecutionContext {
 }
 
 function guardWithRequired(
-  required: { resource: string; action: string } | undefined,
+  required: { resource: string; action: string } | { resource: string; action: string }[] | undefined,
 ): PermissionsGuard {
   const reflector = {
     getAllAndOverride: (key: string) =>
@@ -45,5 +45,39 @@ describe('PermissionsGuard', () => {
     expect(() => guard.canActivate(contextFor(undefined))).toThrow(
       ForbiddenException,
     );
+  });
+
+  // @RequirePermissions (plural, array form) — see auth.decorators.ts's doc:
+  // two stacked @RequirePermission decorators would silently overwrite
+  // rather than combine, so this array form is the only correct way to
+  // require more than one permission (e.g. import endpoints need both
+  // `:create` and `:update`).
+  describe('array requirement (RequirePermissions)', () => {
+    it('allows when the user holds every required permission', () => {
+      const guard = guardWithRequired([
+        { resource: 'client', action: 'create' },
+        { resource: 'client', action: 'update' },
+      ]);
+      const user = { permissions: new Set(['client:create', 'client:update']) };
+      expect(guard.canActivate(contextFor(user))).toBe(true);
+    });
+
+    it('forbids when the user is missing just one of several required permissions', () => {
+      const guard = guardWithRequired([
+        { resource: 'client', action: 'create' },
+        { resource: 'client', action: 'update' },
+      ]);
+      const user = { permissions: new Set(['client:create']) };
+      expect(() => guard.canActivate(contextFor(user))).toThrow(ForbiddenException);
+    });
+
+    it('forbids when the user holds neither required permission', () => {
+      const guard = guardWithRequired([
+        { resource: 'client', action: 'create' },
+        { resource: 'client', action: 'update' },
+      ]);
+      const user = { permissions: new Set(['candidate:read']) };
+      expect(() => guard.canActivate(contextFor(user))).toThrow(ForbiddenException);
+    });
   });
 });

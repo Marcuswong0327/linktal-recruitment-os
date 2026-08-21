@@ -28,9 +28,12 @@ import type {
   CreateRoleDto,
   DeleteRoleParams,
   ErrorResponse,
+  GetRoleHistoryParams,
   GetRolesParams,
   PaginatedRolesEntity,
+  RestoreRoleDto,
   RoleEntity,
+  RoleHistoryEntryEntity,
   UpdateRoleDto
 } from '../types';
 
@@ -617,4 +620,248 @@ export const useDeleteRole = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getDeleteRoleMutationOptions(options), queryClient);
+    }
+    export type getRoleHistoryResponse200 = {
+  data: RoleHistoryEntryEntity[]
+  status: 200
+}
+
+export type getRoleHistoryResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getRoleHistoryResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type getRoleHistoryResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getRoleHistoryResponseSuccess = (getRoleHistoryResponse200) & {
+  headers: Headers;
+};
+export type getRoleHistoryResponseError = (getRoleHistoryResponse400 | getRoleHistoryResponse404 | getRoleHistoryResponse500) & {
+  headers: Headers;
+};
+
+export type getRoleHistoryResponse = (getRoleHistoryResponseSuccess | getRoleHistoryResponseError)
+
+export const getGetRoleHistoryUrl = (id: string,
+    params?: GetRoleHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/roles/${id}/history?${stringifiedParams}` : `/roles/${id}/history`
+}
+
+/**
+ * @summary This role's saved versions, newest first (10 unless `limit` says otherwise) — each one restorable
+ */
+export const getRoleHistory = async (id: string,
+    params?: GetRoleHistoryParams, options?: RequestInit): Promise<getRoleHistoryResponse> => {
+
+  return customFetch<getRoleHistoryResponse>(getGetRoleHistoryUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetRoleHistoryQueryKey = (id: string,
+    params?: GetRoleHistoryParams,) => {
+    return [
+    `/roles/${id}/history`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetRoleHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getRoleHistory>>, TError = ErrorResponse>(id: string,
+    params?: GetRoleHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoleHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRoleHistoryQueryKey(id,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRoleHistory>>> = ({ signal }) => getRoleHistory(id,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRoleHistory>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetRoleHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getRoleHistory>>>
+export type GetRoleHistoryQueryError = ErrorResponse
+
+
+export function useGetRoleHistory<TData = Awaited<ReturnType<typeof getRoleHistory>>, TError = ErrorResponse>(
+ id: string,
+    params: undefined |  GetRoleHistoryParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoleHistory>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRoleHistory>>,
+          TError,
+          Awaited<ReturnType<typeof getRoleHistory>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRoleHistory<TData = Awaited<ReturnType<typeof getRoleHistory>>, TError = ErrorResponse>(
+ id: string,
+    params?: GetRoleHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoleHistory>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getRoleHistory>>,
+          TError,
+          Awaited<ReturnType<typeof getRoleHistory>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetRoleHistory<TData = Awaited<ReturnType<typeof getRoleHistory>>, TError = ErrorResponse>(
+ id: string,
+    params?: GetRoleHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoleHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary This role's saved versions, newest first (10 unless `limit` says otherwise) — each one restorable
+ */
+
+export function useGetRoleHistory<TData = Awaited<ReturnType<typeof getRoleHistory>>, TError = ErrorResponse>(
+ id: string,
+    params?: GetRoleHistoryParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getRoleHistory>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetRoleHistoryQueryOptions(id,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type restoreRoleResponse200 = {
+  data: RoleEntity
+  status: 200
+}
+
+export type restoreRoleResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type restoreRoleResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type restoreRoleResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type restoreRoleResponseSuccess = (restoreRoleResponse200) & {
+  headers: Headers;
+};
+export type restoreRoleResponseError = (restoreRoleResponse400 | restoreRoleResponse404 | restoreRoleResponse500) & {
+  headers: Headers;
+};
+
+export type restoreRoleResponse = (restoreRoleResponseSuccess | restoreRoleResponseError)
+
+export const getRestoreRoleUrl = (id: string,) => {
+
+
+
+
+  return `/roles/${id}/restore`
+}
+
+/**
+ * @summary Roll back this role's name/description/permissions to a past version from GET .../history
+ */
+export const restoreRole = async (id: string,
+    restoreRoleDto: RestoreRoleDto, options?: RequestInit): Promise<restoreRoleResponse> => {
+
+  return customFetch<restoreRoleResponse>(getRestoreRoleUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(restoreRoleDto)
+  }
+);}
+
+
+
+
+
+export const getRestoreRoleMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreRole>>, TError,{id: string;data: RestoreRoleDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restoreRole>>, TError,{id: string;data: RestoreRoleDto}, TContext> => {
+
+const mutationKey = ['restoreRole'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restoreRole>>, {id: string;data: RestoreRoleDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  restoreRole(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestoreRoleMutationResult = NonNullable<Awaited<ReturnType<typeof restoreRole>>>
+    export type RestoreRoleMutationBody = RestoreRoleDto
+    export type RestoreRoleMutationError = ErrorResponse
+
+    /**
+ * @summary Roll back this role's name/description/permissions to a past version from GET .../history
+ */
+export const useRestoreRole = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restoreRole>>, TError,{id: string;data: RestoreRoleDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof restoreRole>>,
+        TError,
+        {id: string;data: RestoreRoleDto},
+        TContext
+      > => {
+      return useMutation(getRestoreRoleMutationOptions(options), queryClient);
     }

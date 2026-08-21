@@ -15,11 +15,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
+  getGetRoleHistoryQueryKey,
   getGetRolesQueryKey,
   useCreateRole,
   useUpdateRole,
 } from '@/lib/api/generated/roles/roles';
 import { PermissionPicker } from './PermissionPicker';
+import { RoleHistoryPanel } from './RoleHistoryPanel';
 import { type Role, isBuiltin, isImmutable } from './schema';
 
 const inputClass =
@@ -56,7 +58,13 @@ function Body({ role, onClose }: { role: Role | null; onClose: () => void }) {
     new Set(role?.permissions.map((p) => p.id) ?? []),
   );
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: getGetRolesQueryKey() });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: getGetRolesQueryKey() });
+    // A save writes a new AuditLog row too (see RolesService.update) — without
+    // this, reopening the sheet within the 30s staleTime window shows the
+    // version history from before this save, missing the entry just written.
+    if (isEdit) queryClient.invalidateQueries({ queryKey: getGetRoleHistoryQueryKey(role.id) });
+  };
   const create = useCreateRole();
   const update = useUpdateRole();
   const pending = create.isPending || update.isPending;
@@ -121,6 +129,16 @@ function Body({ role, onClose }: { role: Role | null; onClose: () => void }) {
           <Label>Permissions</Label>
           <PermissionPicker value={permissionIds} onChange={setPermissionIds} disabled={readOnly} />
         </div>
+
+        {isEdit ? (
+          <div className="space-y-1.5">
+            <Label>Version history</Label>
+            {/* A restore lands via the mutation, not local state — closing
+                here (like a normal save) avoids this form's own name/
+                description/permissionIds state going stale against it. */}
+            <RoleHistoryPanel roleId={role.id} readOnly={readOnly} onRestored={onClose} />
+          </div>
+        ) : null}
       </div>
 
       <SheetFooter>

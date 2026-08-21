@@ -13,6 +13,7 @@ export default async function JobOrdersPage() {
       {hasPermission(session, 'job_order', 'read') ? (
         <JobOrdersTable
           canCreate={hasPermission(session, 'job_order', 'create')}
+          canUpdate={hasPermission(session, 'job_order', 'update')}
           canDelete={hasPermission(session, 'job_order', 'delete')}
         />
       ) : (
