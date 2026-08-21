@@ -49,7 +49,12 @@ jobs:
           # branch/DB, possibly in a different project) won't share the
           # source's exact role definitions — stripping ownership/grants
           # keeps the dump portable.
-          pg_dump -Fc --no-owner --no-privileges -d "$DIRECT_URL" \
+          #
+          # Full path, not bare `pg_dump`: the runner image already has an
+          # older postgresql-client on PATH ahead of the one just installed,
+          # so the bare command silently picks the wrong version and
+          # pg_dump refuses to run against a newer server.
+          /usr/lib/postgresql/18/bin/pg_dump -Fc --no-owner --no-privileges -d "$DIRECT_URL" \
             | aws s3 cp - "s3://$R2_BUCKET/backups/$DATE.dump" \
                 --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
 

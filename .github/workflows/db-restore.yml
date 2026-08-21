@@ -46,8 +46,11 @@ jobs:
           echo "Restoring into RESTORE_TARGET_URL (never the live prod DB — verify this points at a scratch DB)..."
           # --clean --if-exists: safe to re-run into the same scratch DB.
           # --no-owner/--no-privileges: mirrors the backup's dump flags.
+          # Full path, not bare `pg_restore` — see the matching comment in
+          # db-backup.yml: the runner's preinstalled older client otherwise
+          # wins on PATH over the one just installed.
           set +e
-          pg_restore --clean --if-exists --no-owner --no-privileges -j 4 -d "$RESTORE_TARGET_URL" restore.dump
+          /usr/lib/postgresql/18/bin/pg_restore --clean --if-exists --no-owner --no-privileges -j 4 -d "$RESTORE_TARGET_URL" restore.dump
           rc=$?
           set -e
 
@@ -68,6 +71,6 @@ jobs:
           RESTORE_TARGET_URL: ${{ secrets.RESTORE_TARGET_URL }}
 
       - name: Post-restore sanity check (eyeball this before trusting the restore)
-        run: psql "$RESTORE_TARGET_URL" -c "select relname, n_live_tup from pg_stat_user_tables order by n_live_tup desc limit 10;"
+        run: /usr/lib/postgresql/18/bin/psql "$RESTORE_TARGET_URL" -c "select relname, n_live_tup from pg_stat_user_tables order by n_live_tup desc limit 10;"
         env:
           RESTORE_TARGET_URL: ${{ secrets.RESTORE_TARGET_URL }}
