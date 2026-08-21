@@ -14,8 +14,11 @@ import { RolesService } from './roles.service';
 import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { QueryRolesDto } from './dto/query-roles.dto';
+import { QueryRoleHistoryDto } from './dto/query-role-history.dto';
+import { RestoreRoleDto } from './dto/restore-role.dto';
 import { RoleEntity } from './entities/role.entity';
 import { PaginatedRolesEntity } from './entities/paginated-roles.entity';
+import { RoleHistoryEntryEntity } from './entities/role-history-entry.entity';
 import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
 import { AuthUser } from '../auth/auth.types';
 
@@ -60,6 +63,28 @@ export class RolesController {
   @ApiResponse({ status: 200, description: 'Role updated', type: RoleEntity })
   update(@Param('id') id: string, @Body() dto: UpdateRoleDto, @CurrentUser() user: AuthUser) {
     return this.roles.update(id, dto, user);
+  }
+
+  @Get(':id/history')
+  @RequirePermission('role', 'read')
+  @ApiOperation({
+    operationId: 'getRoleHistory',
+    summary: "This role's saved versions, newest first (10 unless `limit` says otherwise) — each one restorable",
+  })
+  @ApiResponse({ status: 200, description: 'Version history', type: RoleHistoryEntryEntity, isArray: true })
+  history(@Param('id') id: string, @Query() query: QueryRoleHistoryDto) {
+    return this.roles.history(id, query.limit);
+  }
+
+  @Post(':id/restore')
+  @RequirePermission('role', 'update')
+  @ApiOperation({
+    operationId: 'restoreRole',
+    summary: "Roll back this role's name/description/permissions to a past version from GET .../history",
+  })
+  @ApiResponse({ status: 200, description: 'Role restored', type: RoleEntity })
+  restore(@Param('id') id: string, @Body() dto: RestoreRoleDto, @CurrentUser() user: AuthUser) {
+    return this.roles.restore(id, dto, user);
   }
 
   @Delete(':id')

@@ -1096,6 +1096,116 @@
         ]
       }
     },
+    "/candidates/import/template": {
+      "get": {
+        "operationId": "getCandidateImportTemplate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Candidates import template"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Download the .xlsx template for bulk-importing/updating candidates",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
+    "/candidates/import": {
+      "post": {
+        "operationId": "importCandidates",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "commit": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Import result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResultEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Preview (commit=false, default) or commit (commit=true) a bulk candidate import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.",
+        "tags": [
+          "Candidates"
+        ]
+      }
+    },
     "/candidates/{id}": {
       "get": {
         "operationId": "getCandidate",
@@ -1498,6 +1608,18 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Most recent rows to return, newest first. The caller only needs to pass this to see further back.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 5,
+              "type": "number"
+            }
           }
         ],
         "responses": {
@@ -1550,7 +1672,7 @@
             "bearer": []
           }
         ],
-        "summary": "This candidate's full logged-contact history, newest first",
+        "summary": "This candidate's most recent logged contacts, newest first (5 unless `limit` says otherwise)",
         "tags": [
           "Candidates"
         ]
@@ -2442,6 +2564,116 @@
         ]
       }
     },
+    "/clients/import/template": {
+      "get": {
+        "operationId": "getClientImportTemplate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Companies import template"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Download the .xlsx template for bulk-importing/updating companies",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/import": {
+      "post": {
+        "operationId": "importClients",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "commit": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Import result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResultEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Preview (commit=false, default) or commit (commit=true) a bulk company import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
     "/clients/{id}": {
       "get": {
         "operationId": "getClient",
@@ -2650,6 +2882,18 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Most recent rows to return, newest first. The caller only needs to pass this to see further back.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 5,
+              "type": "number"
+            }
           }
         ],
         "responses": {
@@ -2702,7 +2946,7 @@
             "bearer": []
           }
         ],
-        "summary": "Every logged contact across this client's stakeholders, newest first",
+        "summary": "Most recent logged contacts across this client's stakeholders, newest first (5 unless `limit` says otherwise)",
         "tags": [
           "Clients"
         ]
@@ -3360,6 +3604,116 @@
           }
         ],
         "summary": "Export an explicit set of stakeholders (by id) as an .xlsx file",
+        "tags": [
+          "Stakeholders"
+        ]
+      }
+    },
+    "/stakeholders/import/template": {
+      "get": {
+        "operationId": "getStakeholderImportTemplate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Stakeholders import template"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Download the .xlsx template for bulk-importing/updating stakeholders",
+        "tags": [
+          "Stakeholders"
+        ]
+      }
+    },
+    "/stakeholders/import": {
+      "post": {
+        "operationId": "importStakeholders",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "commit": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Import result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResultEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Preview (commit=false, default) or commit (commit=true) a bulk stakeholder import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.",
         "tags": [
           "Stakeholders"
         ]
@@ -4580,6 +4934,388 @@
           }
         ],
         "summary": "Get job order by display ID",
+        "tags": [
+          "Job Orders"
+        ]
+      }
+    },
+    "/job-orders/export": {
+      "get": {
+        "operationId": "exportJobOrders",
+        "parameters": [
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to status ascending (Active first — JobOrderStatus is declared ACTIVE/PLACED/CLOSED/ON_HOLD, so a native-enum sort already puts Active first) then most recently received.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "displayId",
+                "openings",
+                "filledCount",
+                "salaryMin",
+                "salaryMax",
+                "receivedAt",
+                "closedAt",
+                "createdAt"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across jobTitle, displayId and description",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by status (one or more). Omit for all statuses.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "ACTIVE",
+                  "PLACED",
+                  "CLOSED",
+                  "ON_HOLD"
+                ]
+              }
+            }
+          },
+          {
+            "name": "qualities",
+            "required": false,
+            "in": "query",
+            "description": "Filter by quality (one or more). Omit for all qualities.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "LOW",
+                  "MEDIUM",
+                  "HIGH"
+                ]
+              }
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by client ID (exact match)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "consultantIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by assigned consultant ID(s) — matches a job order any of these consultants are working.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobTitleIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by job title ID(s) (see /job-titles)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobRoleTypeIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by job role type ID(s) (see /job-role-types)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "location",
+            "required": false,
+            "in": "query",
+            "description": "Filter by location name (contains, case-insensitive) — matches the job order's own node only. Use locationIds to match descendants too.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Location id(s). Selecting a country or state matches every job order beneath it, via the ancestor path.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "priorityLevels",
+            "required": false,
+            "in": "query",
+            "description": "Filter by priority level(s) (1=High, 2=Medium, 3=Low). Omit for all.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "salaryMin",
+            "required": false,
+            "in": "query",
+            "description": "Minimum salary (matches salaryMax >= value)",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "salaryMax",
+            "required": false,
+            "in": "query",
+            "description": "Maximum salary (matches salaryMin <= value)",
+            "schema": {
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "timezone",
+            "required": false,
+            "in": "query",
+            "description": "IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job orders workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export every job order matching the current filters as an .xlsx file — unbounded, not paginated",
+        "tags": [
+          "Job Orders"
+        ]
+      },
+      "post": {
+        "operationId": "exportJobOrdersByIds",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportByIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Job orders workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export an explicit set of job orders (by id) as an .xlsx file",
+        "tags": [
+          "Job Orders"
+        ]
+      }
+    },
+    "/job-orders/import/template": {
+      "get": {
+        "operationId": "getJobOrderImportTemplate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Job orders import template"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Download the .xlsx template for bulk-importing/updating job orders",
+        "tags": [
+          "Job Orders"
+        ]
+      }
+    },
+    "/job-orders/import": {
+      "post": {
+        "operationId": "importJobOrders",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "commit": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Import result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResultEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Preview (commit=false, default) or commit (commit=true) a bulk job order import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.",
         "tags": [
           "Job Orders"
         ]
@@ -6910,6 +7646,163 @@
           }
         ],
         "summary": "Delete a custom role (built-ins protected). If consultants hold it, pass ?reassignTo=<roleId> to move them to a fallback role first.",
+        "tags": [
+          "Roles"
+        ]
+      }
+    },
+    "/roles/{id}/history": {
+      "get": {
+        "operationId": "getRoleHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Most recent saved versions to return, newest first. The caller only needs to pass this to see further back — every save already left a full, restorable snapshot in AuditLog.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Version history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoleHistoryEntryEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "This role's saved versions, newest first (10 unless `limit` says otherwise) — each one restorable",
+        "tags": [
+          "Roles"
+        ]
+      }
+    },
+    "/roles/{id}/restore": {
+      "post": {
+        "operationId": "restoreRole",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Role restored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Roll back this role's name/description/permissions to a past version from GET .../history",
         "tags": [
           "Roles"
         ]
@@ -9441,6 +10334,16 @@
             "nullable": true,
             "description": "Resolved live from the latest CandidateContactHistory row (see lastContactType/lastContactedBy) — distinct from lastContactedAt, which is a denormalized column left null on imported history. Sort/filter by lastContactedAt; display this."
           },
+          "currentSalary": {
+            "type": "string",
+            "nullable": true,
+            "description": "Free text, from the most recent CandidateContactHistory row — e.g. \"35 per hour\". Null if never contacted. Display-only, no sort/filter."
+          },
+          "expectedSalary": {
+            "type": "string",
+            "nullable": true,
+            "description": "Free text, from the most recent CandidateContactHistory row — e.g. \"above 47\". Null if never contacted. Display-only, no sort/filter."
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -9481,6 +10384,8 @@
           "lastContactNotes",
           "lastContactedBy",
           "lastContactDate",
+          "currentSalary",
+          "expectedSalary",
           "createdAt",
           "updatedAt"
         ]
@@ -9561,6 +10466,61 @@
         },
         "required": [
           "ids"
+        ]
+      },
+      "ImportRowErrorEntity": {
+        "type": "object",
+        "properties": {
+          "row": {
+            "type": "number",
+            "description": "The literal Excel row number (header is row 1) this error is on"
+          },
+          "column": {
+            "type": "string",
+            "description": "Which column the error is on"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "row",
+          "column",
+          "message"
+        ]
+      },
+      "ImportResultEntity": {
+        "type": "object",
+        "properties": {
+          "totalRows": {
+            "type": "number",
+            "description": "Data rows found in the uploaded file (excluding the header)"
+          },
+          "insertCount": {
+            "type": "number",
+            "description": "How many rows would be (or were) inserted as new records"
+          },
+          "updateCount": {
+            "type": "number",
+            "description": "How many rows would be (or were) applied as updates to an existing record"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportRowErrorEntity"
+            }
+          },
+          "committed": {
+            "type": "boolean",
+            "description": "True only when every row was actually written. False for a preview (commit=false) or when any row failed validation — in both cases nothing was written."
+          }
+        },
+        "required": [
+          "totalRows",
+          "insertCount",
+          "updateCount",
+          "errors",
+          "committed"
         ]
       },
       "PipelineTimelineEventEntity": {
@@ -12653,6 +13613,74 @@
             }
           }
         }
+      },
+      "RoleHistoryEntryEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The underlying AuditLog row id — pass this to POST /roles/:id/restore"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "CREATE",
+              "UPDATE"
+            ]
+          },
+          "actorId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant.id who made this save; null for system/import"
+          },
+          "actorName": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved name of the consultant who made this save"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "permissionIds": {
+            "nullable": true,
+            "description": "The full permission set as of this save. Null when this particular save didn't touch permissions (name/description-only edit) — such a row can't be restored, since it isn't a complete snapshot.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "actorId",
+          "actorName",
+          "name",
+          "description",
+          "permissionIds",
+          "createdAt"
+        ]
+      },
+      "RestoreRoleDto": {
+        "type": "object",
+        "properties": {
+          "auditLogId": {
+            "type": "string",
+            "description": "AuditLog row id (from GET .../history) to restore this role's name/description/permissions to"
+          }
+        },
+        "required": [
+          "auditLogId"
+        ]
       },
       "PermissionEntity": {
         "type": "object",

@@ -86,6 +86,47 @@ type StakeholderExportRow = {
   lastContactNotes: string | null;
 };
 
+/**
+ * Looks up (or creates) the catalog row for a keyword-classified jobTitle.
+ * Only called when the caller doesn't explicitly set `roleTypeId` — an
+ * explicit value (including `null`, to clear it) always wins. Exported (not
+ * a private method) so StakeholdersImportService can reuse this exact rule
+ * inside its own transaction, passing `tx` instead of the live-request base
+ * client — StakeholderRoleType is combobox-growable by anyone (see
+ * schema.prisma), so an import row naming an unseen one auto-creates it,
+ * same as this classifier already does for a jobTitle-derived guess.
+ */
+export async function classifyRoleTypeId(
+  db: PrismaService | Prisma.TransactionClient,
+  jobTitle: string | null | undefined,
+): Promise<string> {
+  const name = classifyJobTitle(jobTitle);
+  const roleType = await db.stakeholderRoleType.upsert({
+    where: { name },
+    create: { name },
+    update: {},
+  });
+  return roleType.id;
+}
+
+/**
+ * The catalog title's text, for the keyword classifier above — job titles
+ * arrive as ids, but classification reads words ("Finance Director" ->
+ * Finance). Returns null for an unset or unknown id, which the classifier
+ * treats as "Other". Exported for the same reason as `classifyRoleTypeId`.
+ */
+export async function jobTitleName(
+  db: PrismaService | Prisma.TransactionClient,
+  jobTitleId: string | null | undefined,
+): Promise<string | null> {
+  if (!jobTitleId) return null;
+  const row = await db.jobTitle.findUnique({
+    where: { id: jobTitleId },
+    select: { name: true },
+  });
+  return row?.name ?? null;
+}
+
 function toEntity<T extends StakeholderWithRelations>(stakeholder: T) {
   const { client, jobTitle, stakeholderRoleType, coverage, contactHistory, ...rest } = stakeholder;
   const latest = contactHistory[0];
@@ -114,36 +155,6 @@ export class StakeholdersService {
     // the soft-delete/audit wrapper.
     private readonly base: PrismaService,
   ) {}
-
-  /**
-   * Looks up (or creates) the catalog row for a keyword-classified jobTitle.
-   * Only called when the caller doesn't explicitly set `roleTypeId` — an
-   * explicit value (including `null`, to clear it) always wins.
-   */
-  private async classifyRoleTypeId(jobTitle: string | null | undefined): Promise<string> {
-    const name = classifyJobTitle(jobTitle);
-    const roleType = await this.base.stakeholderRoleType.upsert({
-      where: { name },
-      create: { name },
-      update: {},
-    });
-    return roleType.id;
-  }
-
-  /**
-   * The catalog title's text, for the keyword classifier above — job titles
-   * arrive as ids, but classification reads words ("Finance Director" ->
-   * Finance). Returns null for an unset or unknown id, which the classifier
-   * treats as "Other".
-   */
-  private async jobTitleName(jobTitleId: string | null | undefined): Promise<string | null> {
-    if (!jobTitleId) return null;
-    const row = await this.base.jobTitle.findUnique({
-      where: { id: jobTitleId },
-      select: { name: true },
-    });
-    return row?.name ?? null;
-  }
 
   /**
    * Shared by `findAll` and the export endpoint — every list/export read
@@ -359,7 +370,7 @@ export class StakeholdersService {
     const data: Prisma.StakeholderUncheckedCreateInput = { ...scalars };
     // An explicit role type always wins; otherwise derive one from the title.
     data.stakeholderRoleTypeId =
-      roleTypeId ?? (await this.classifyRoleTypeId(await this.jobTitleName(dto.jobTitleId)));
+      roleTypeId ?? (await classifyRoleTypeId(this.base, await jobTitleName(this.base, dto.jobTitleId)));
     if (coverageLocationIds !== undefined) {
       data.coverage = { create: coverageLocationIds.map((locationId) => ({ locationId })) };
     }
@@ -382,7 +393,7 @@ export class StakeholdersService {
     if (roleTypeId !== undefined) {
       data.stakeholderRoleTypeId = roleTypeId;
     } else if (dto.jobTitleId !== undefined) {
-      data.stakeholderRoleTypeId = await this.classifyRoleTypeId(await this.jobTitleName(dto.jobTitleId));
+      data.stakeholderRoleTypeId = await classifyRoleTypeId(this.base, await jobTitleName(this.base, dto.jobTitleId));
     }
     // Coverage is a to-many join, not a scalar — full list replace is simplest
     // and correct; a stakeholder's coverage list is short.

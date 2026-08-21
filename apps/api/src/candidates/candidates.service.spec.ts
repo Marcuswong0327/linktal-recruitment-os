@@ -75,6 +75,8 @@ describe('CandidatesService.create', () => {
       lastContactNotes: null,
       lastContactedBy: null,
       lastContactDate: null,
+      currentSalary: null,
+      expectedSalary: null,
     });
   });
 

@@ -46,6 +46,12 @@ type SubmissionsCardProps =
       mode: 'candidate';
       candidateId: string;
       jobOrders: JobOrderEntity[];
+      /** This candidate's own industry — compared against the picked job order's client industry for a non-blocking mismatch warning. */
+      candidateIndustryId?: string;
+      /** This candidate's own location — compared against the picked job order's location for the same warning. */
+      candidateLocationId?: string;
+      /** A job order carries no industry of its own (only via its client), so the caller resolves it. Its location is on the entity directly, no resolver needed. */
+      jobOrderClientIndustryId?: (jobOrderId: string) => string | undefined;
       /** Also refetch e.g. the pipeline timeline, which shares the same underlying audit trail. */
       onChanged?: () => void;
     }
@@ -54,6 +60,10 @@ type SubmissionsCardProps =
       mode: 'jobOrder';
       jobOrderId: string;
       candidates: CandidateEntity[];
+      /** This job order's client's industry — compared against the picked candidate's industry for a non-blocking mismatch warning. */
+      clientIndustryId?: string;
+      /** This job order's own location — compared against the picked candidate's location for the same warning. */
+      jobOrderLocationId?: string | null;
       onChanged?: () => void;
     };
 
@@ -83,9 +93,13 @@ export function SubmissionsCard(props: SubmissionsCardProps) {
 
   const createSubmission = useCreateSubmission({
     mutation: {
+      // The success toast itself (plain "Submitted" vs. the industry/location
+      // mismatch warning) is decided per-call in `handleAdd` — it depends on
+      // the picked candidate/job order, which this hook-level callback can't
+      // see. Never fire both: a second toast stacking on the first just
+      // buries the warning behind a redundant "Submitted".
       onSuccess: () => {
         invalidateAll();
-        toast.success('Submitted');
         setPickerValue('');
         setAdding(false);
       },
@@ -105,13 +119,56 @@ export function SubmissionsCard(props: SubmissionsCardProps) {
 
   const deleteSubmission = useDeleteSubmission();
 
+  // Non-blocking: does the picked candidate's industry and/or location differ
+  // from the job order's (industry via its client; location on the job order
+  // itself)? There's no gate on submitting across either — both are a
+  // legitimate part of the workflow — this is purely a heads-up so whoever's
+  // submitting notices and can double-check it's intentional.
+  function mismatchedFields(pickedId: string): Array<'industry' | 'location'> {
+    const fields: Array<'industry' | 'location'> = [];
+    if (props.mode === 'jobOrder') {
+      const candidate = props.candidates.find((c) => c.id === pickedId);
+      if (!candidate) return fields;
+      if (props.clientIndustryId && candidate.industryId !== props.clientIndustryId) fields.push('industry');
+      if (props.jobOrderLocationId && candidate.locationId !== props.jobOrderLocationId) fields.push('location');
+      return fields;
+    }
+    const jobOrder = props.jobOrders.find((j) => j.id === pickedId);
+    if (!jobOrder) return fields;
+    const jobOrderClientIndustryId = props.jobOrderClientIndustryId?.(pickedId);
+    if (props.candidateIndustryId && jobOrderClientIndustryId && jobOrderClientIndustryId !== props.candidateIndustryId) {
+      fields.push('industry');
+    }
+    if (props.candidateLocationId && jobOrder.locationId && jobOrder.locationId !== props.candidateLocationId) {
+      fields.push('location');
+    }
+    return fields;
+  }
+
+  function mismatchWarning(fields: Array<'industry' | 'location'>): string {
+    const label = fields.length === 2 ? 'industry and location' : fields[0];
+    return `This candidate's ${label} doesn't match the job order's — still fine to submit, just a heads-up to double-check the fit.`;
+  }
+
   function handleAdd() {
     if (!pickerValue) return;
     const data: CreateSubmissionDto =
       props.mode === 'candidate'
         ? { candidateId: subjectId, jobOrderId: pickerValue }
         : { candidateId: pickerValue, jobOrderId: subjectId };
-    createSubmission.mutate({ data });
+    const mismatches = mismatchedFields(pickerValue);
+    createSubmission.mutate(
+      { data },
+      {
+        onSuccess: () => {
+          if (mismatches.length > 0) {
+            toast.warning(mismatchWarning(mismatches));
+          } else {
+            toast.success('Submitted');
+          }
+        },
+      },
+    );
   }
 
   function handleRemove(submission: SubmissionEntity) {

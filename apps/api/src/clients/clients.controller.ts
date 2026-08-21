@@ -1,24 +1,46 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, StreamableFile } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiProduces, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Patch,
+  Post,
+  Query,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiProduces, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ClientsService } from './clients.service';
+import { ClientsImportService } from './clients-import.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
 import { ExportClientsDto } from './dto/export-clients.dto';
 import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
+import { QueryContactHistoryDto } from '../common/dto/query-contact-history.dto';
+import { ImportOptionsDto } from '../common/dto/import-options.dto';
 import { XLSX_CONTENT_TYPE, exportFilename } from '../common/xlsx-export';
+import { MAX_IMPORT_FILE_BYTES } from '../common/xlsx-import';
 import { ClientEntity } from './entities/client.entity';
 import { ClientContactHistoryEntity } from './entities/client-contact-history.entity';
 import { PaginatedClientsEntity } from './entities/paginated-clients.entity';
-import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
+import { ImportResultEntity } from '../common/entities/import-result.entity';
+import { CurrentUser, RequirePermission, RequirePermissions } from '../auth/auth.decorators';
 import { AuthUser } from '../auth/auth.types';
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, BadRequestException } from '@nestjs/common';
 
 @ApiTags('Clients')
 @ApiBearerAuth()
 @Controller('clients')
 export class ClientsController {
-  constructor(private readonly clients: ClientsService) {}
+  constructor(
+    private readonly clients: ClientsService,
+    private readonly clientsImport: ClientsImportService,
+  ) {}
 
   @Get()
   @RequirePermission('client', 'read')
@@ -74,6 +96,52 @@ export class ClientsController {
     });
   }
 
+  @Get('import/template')
+  @RequirePermission('client', 'create')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'getClientImportTemplate',
+    summary: 'Download the .xlsx template for bulk-importing/updating companies',
+  })
+  @ApiResponse({ status: 200, description: 'Companies import template' })
+  async downloadImportTemplate() {
+    const buffer = await this.clientsImport.buildTemplate();
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: 'attachment; filename="companies-import-template.xlsx"',
+    });
+  }
+
+  // Requires BOTH create and update — see RequirePermissions's doc: an import
+  // inserts new rows and updates matched ones in the same request, and a
+  // consultant might hold only one of the two.
+  @Post('import')
+  @RequirePermissions({ resource: 'client', action: 'create' }, { resource: 'client', action: 'update' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_FILE_BYTES } }))
+  @ApiOperation({
+    operationId: 'importClients',
+    summary:
+      'Preview (commit=false, default) or commit (commit=true) a bulk company import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+        commit: { type: 'boolean', default: false },
+      },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Import result', type: ImportResultEntity })
+  async import(@UploadedFile() file: Express.Multer.File | undefined, @Body() options: ImportOptionsDto) {
+    if (!file) {
+      throw new BadRequestException({ code: 'FILE_REQUIRED', message: 'Upload an .xlsx file as "file".' });
+    }
+    return this.clientsImport.importFromWorkbook(file.buffer, options.commit ?? false, file.originalname);
+  }
+
   @Get(':id')
   @RequirePermission('client', 'read')
   @ApiOperation({ operationId: 'getClient', summary: 'Get client by ID' })
@@ -106,11 +174,11 @@ export class ClientsController {
   @RequirePermission('stakeholder', 'read')
   @ApiOperation({
     operationId: 'getClientContactHistory',
-    summary: "Every logged contact across this client's stakeholders, newest first",
+    summary: "Most recent logged contacts across this client's stakeholders, newest first (5 unless `limit` says otherwise)",
   })
   @ApiResponse({ status: 200, description: 'Contact history', type: ClientContactHistoryEntity, isArray: true })
-  listContactHistory(@Param('id') id: string) {
-    return this.clients.listContactHistory(id);
+  listContactHistory(@Param('id') id: string, @Query() query: QueryContactHistoryDto) {
+    return this.clients.listContactHistory(id, query.limit);
   }
 
   @Delete(':id')

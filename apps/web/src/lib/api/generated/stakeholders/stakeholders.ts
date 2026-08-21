@@ -31,6 +31,8 @@ import type {
   ExportByIdsDto,
   ExportStakeholdersParams,
   GetStakeholdersParams,
+  ImportResultEntity,
+  ImportStakeholdersBody,
   PaginatedStakeholdersEntity,
   StakeholderContactHistoryEntity,
   StakeholderEntity,
@@ -653,6 +655,229 @@ export const useExportStakeholdersByIds = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getExportStakeholdersByIdsMutationOptions(options), queryClient);
+    }
+    export type getStakeholderImportTemplateResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getStakeholderImportTemplateResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getStakeholderImportTemplateResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getStakeholderImportTemplateResponseSuccess = (getStakeholderImportTemplateResponse200) & {
+  headers: Headers;
+};
+export type getStakeholderImportTemplateResponseError = (getStakeholderImportTemplateResponse400 | getStakeholderImportTemplateResponse500) & {
+  headers: Headers;
+};
+
+export type getStakeholderImportTemplateResponse = (getStakeholderImportTemplateResponseSuccess | getStakeholderImportTemplateResponseError)
+
+export const getGetStakeholderImportTemplateUrl = () => {
+
+
+
+
+  return `/stakeholders/import/template`
+}
+
+/**
+ * @summary Download the .xlsx template for bulk-importing/updating stakeholders
+ */
+export const getStakeholderImportTemplate = async ( options?: RequestInit): Promise<getStakeholderImportTemplateResponse> => {
+
+  return customFetch<getStakeholderImportTemplateResponse>(getGetStakeholderImportTemplateUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStakeholderImportTemplateQueryKey = () => {
+    return [
+    `/stakeholders/import/template`
+    ] as const;
+    }
+
+
+export const getGetStakeholderImportTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStakeholderImportTemplateQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStakeholderImportTemplate>>> = ({ signal }) => getStakeholderImportTemplate({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetStakeholderImportTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getStakeholderImportTemplate>>>
+export type GetStakeholderImportTemplateQueryError = ErrorResponse
+
+
+export function useGetStakeholderImportTemplate<TData = Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError = ErrorResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStakeholderImportTemplate>>,
+          TError,
+          Awaited<ReturnType<typeof getStakeholderImportTemplate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStakeholderImportTemplate<TData = Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStakeholderImportTemplate>>,
+          TError,
+          Awaited<ReturnType<typeof getStakeholderImportTemplate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStakeholderImportTemplate<TData = Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Download the .xlsx template for bulk-importing/updating stakeholders
+ */
+
+export function useGetStakeholderImportTemplate<TData = Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetStakeholderImportTemplateQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type importStakeholdersResponse201 = {
+  data: ImportResultEntity
+  status: 201
+}
+
+export type importStakeholdersResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type importStakeholdersResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type importStakeholdersResponseSuccess = (importStakeholdersResponse201) & {
+  headers: Headers;
+};
+export type importStakeholdersResponseError = (importStakeholdersResponse400 | importStakeholdersResponse500) & {
+  headers: Headers;
+};
+
+export type importStakeholdersResponse = (importStakeholdersResponseSuccess | importStakeholdersResponseError)
+
+export const getImportStakeholdersUrl = () => {
+
+
+
+
+  return `/stakeholders/import`
+}
+
+/**
+ * @summary Preview (commit=false, default) or commit (commit=true) a bulk stakeholder import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.
+ */
+export const importStakeholders = async (importStakeholdersBody: ImportStakeholdersBody, options?: RequestInit): Promise<importStakeholdersResponse> => {
+    const formData = new FormData();
+formData.append(`file`, importStakeholdersBody.file);
+if(importStakeholdersBody.commit !== undefined) {
+ formData.append(`commit`, importStakeholdersBody.commit.toString())
+ }
+
+  return customFetch<importStakeholdersResponse>(getImportStakeholdersUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getImportStakeholdersMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importStakeholders>>, TError,{data: ImportStakeholdersBody}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importStakeholders>>, TError,{data: ImportStakeholdersBody}, TContext> => {
+
+const mutationKey = ['importStakeholders'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importStakeholders>>, {data: ImportStakeholdersBody}> = (props) => {
+          const {data} = props ?? {};
+
+          return  importStakeholders(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportStakeholdersMutationResult = NonNullable<Awaited<ReturnType<typeof importStakeholders>>>
+    export type ImportStakeholdersMutationBody = ImportStakeholdersBody
+    export type ImportStakeholdersMutationError = ErrorResponse
+
+    /**
+ * @summary Preview (commit=false, default) or commit (commit=true) a bulk stakeholder import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.
+ */
+export const useImportStakeholders = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importStakeholders>>, TError,{data: ImportStakeholdersBody}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof importStakeholders>>,
+        TError,
+        {data: ImportStakeholdersBody},
+        TContext
+      > => {
+      return useMutation(getImportStakeholdersMutationOptions(options), queryClient);
     }
     export type getStakeholderResponse200 = {
   data: StakeholderEntity

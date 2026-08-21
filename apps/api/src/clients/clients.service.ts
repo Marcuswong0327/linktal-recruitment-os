@@ -88,6 +88,44 @@ type ClientWithRelations = {
   }[];
 };
 
+/**
+ * Splits the `locationIds` relation and the JSON columns out of the DTO.
+ * Class instances don't structurally satisfy Prisma's `InputJsonValue` (no
+ * index signature), so the JSON fields are cast explicitly while the scalar
+ * fields keep their compile-time checks. `locationIds` is a nested relation
+ * write, not a column — create/update build that part themselves.
+ *
+ * Exported (not a private method) so ClientsImportService can build the
+ * exact same write shape a normal create/update would, without duplicating
+ * this — it doesn't touch `this`, so hoisting is a pure, zero-risk move.
+ */
+export function toPrismaData<T extends CreateClientDto | UpdateClientDto>(dto: T) {
+  const { locationIds: _locationIds, addresses, suburbsAndPostcodes, ...rest } = dto;
+  return {
+    ...rest,
+    ...(addresses !== undefined ? { addresses: addresses as Prisma.InputJsonValue } : {}),
+    ...(suburbsAndPostcodes !== undefined
+      ? { suburbsAndPostcodes: suburbsAndPostcodes as Prisma.InputJsonValue }
+      : {}),
+  };
+}
+
+/**
+ * A client must always cover at least one Location node (country level at
+ * minimum) — the schema can't express "non-empty relation", so it's enforced
+ * here. Without it the location arm of the scope resolver has nothing to
+ * match on and the client falls out of every consultant's patch. Exported
+ * for the same reason as `toPrismaData` above.
+ */
+export function assertHasLocations(locationIds: string[] | undefined): asserts locationIds is string[] {
+  if (!locationIds || locationIds.length === 0) {
+    throw new BadRequestException({
+      code: 'CLIENT_LOCATION_REQUIRED',
+      message: 'A client must cover at least one location.',
+    });
+  }
+}
+
 function latestContact(rows: LatestContactRow[]): LatestContactRow | undefined {
   return rows.reduce<LatestContactRow | undefined>(
     (max, row) => (!max || row.contactedAt > max.contactedAt ? row : max),
@@ -142,39 +180,6 @@ export class ClientsService {
     // Base (unfiltered) client — needed to see/erase soft-deleted rows (restore/purge).
     private readonly base: PrismaService,
   ) {}
-
-  /**
-   * Splits the `locationIds` relation and the JSON columns out of the DTO.
-   * Class instances don't structurally satisfy Prisma's `InputJsonValue` (no
-   * index signature), so the JSON fields are cast explicitly while the scalar
-   * fields keep their compile-time checks. `locationIds` is a nested relation
-   * write, not a column — create/update build that part themselves.
-   */
-  private toPrismaData<T extends CreateClientDto | UpdateClientDto>(dto: T) {
-    const { locationIds: _locationIds, addresses, suburbsAndPostcodes, ...rest } = dto;
-    return {
-      ...rest,
-      ...(addresses !== undefined ? { addresses: addresses as Prisma.InputJsonValue } : {}),
-      ...(suburbsAndPostcodes !== undefined
-        ? { suburbsAndPostcodes: suburbsAndPostcodes as Prisma.InputJsonValue }
-        : {}),
-    };
-  }
-
-  /**
-   * A client must always cover at least one Location node (country level at
-   * minimum) — the schema can't express "non-empty relation", so it's enforced
-   * here. Without it the location arm of the scope resolver has nothing to
-   * match on and the client falls out of every consultant's patch.
-   */
-  private assertHasLocations(locationIds: string[] | undefined): asserts locationIds is string[] {
-    if (!locationIds || locationIds.length === 0) {
-      throw new BadRequestException({
-        code: 'CLIENT_LOCATION_REQUIRED',
-        message: 'A client must cover at least one location.',
-      });
-    }
-  }
 
   /**
    * Shared by `findAll` and the export endpoint — every list/export read
@@ -392,11 +397,13 @@ export class ClientsService {
    * this client into one newest-first list, flattened with which stakeholder
    * each row was actually with.
    */
-  async listContactHistory(clientId: string) {
+  /** Newest first, capped at `limit` (default 5, see QueryContactHistoryDto) — the FE only needs to pass it to see further back. */
+  async listContactHistory(clientId: string, limit: number) {
     const rows = await this.prisma.stakeholderContactHistory.findMany({
       where: { stakeholder: { clientId, deletedAt: null } },
       include: { stakeholder: { select: { firstName: true, lastName: true } } },
       orderBy: { contactedAt: 'desc' },
+      take: limit,
     });
     return rows.map(({ stakeholder, ...rest }) => ({
       ...rest,
@@ -405,11 +412,11 @@ export class ClientsService {
   }
 
   async create(dto: CreateClientDto, _user: AuthUser) {
-    this.assertHasLocations(dto.locationIds);
+    assertHasLocations(dto.locationIds);
     // displayId is assigned by the DB (Client_displayId_seq default).
     const client = await this.prisma.client.create({
       data: {
-        ...this.toPrismaData(dto),
+        ...toPrismaData(dto),
         locations: { create: dto.locationIds.map((locationId) => ({ locationId })) },
       },
       include: CLIENT_INCLUDE,
@@ -423,13 +430,13 @@ export class ClientsService {
     // A location list can be replaced, but never emptied — same reasoning as
     // on create.
     if (dto.locationIds !== undefined) {
-      this.assertHasLocations(dto.locationIds);
+      assertHasLocations(dto.locationIds);
     }
 
     const client = await this.prisma.client.update({
       where: { id },
       data: {
-        ...this.toPrismaData(dto),
+        ...toPrismaData(dto),
         // Locations is a to-many join, not a scalar column — a full list
         // replace (clear then recreate) is simplest and correct here; a
         // client's market list is short.

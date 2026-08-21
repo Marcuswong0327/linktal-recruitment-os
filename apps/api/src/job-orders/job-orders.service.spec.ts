@@ -1,6 +1,11 @@
 import { JobOrdersService } from './job-orders.service';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
+import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth.types';
+
+// `base` is only read by exportAll/exportByIds (for logExport), neither of
+// which any test in this file exercises — a bare stand-in is enough.
+const base = {} as unknown as PrismaService;
 
 function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
@@ -37,7 +42,7 @@ describe('JobOrdersService.create', () => {
       withRelations({ id: 'j1', displayId: 'JO-0069', jobTitle: { name: 'Production Manager' } }),
     );
     const prisma = { jobOrder: { create } } as unknown as ExtendedPrismaClient;
-    const service = new JobOrdersService(prisma);
+    const service = new JobOrdersService(prisma, base);
 
     const result = await service.create({ clientId: 'cl1', jobTitleId: 'jt-1' }, makeUser());
 
@@ -54,7 +59,7 @@ describe('JobOrdersService.create', () => {
   it('passes the catalog ids straight through without touching the catalog', async () => {
     const create = jest.fn().mockResolvedValue(withRelations({ id: 'j1' }));
     const prisma = { jobOrder: { create } } as unknown as ExtendedPrismaClient;
-    const service = new JobOrdersService(prisma);
+    const service = new JobOrdersService(prisma, base);
 
     await service.create({ clientId: 'cl1', jobTitleId: 'jt-1', jobRoleTypeId: 'jrt-1' }, makeUser());
 
@@ -68,7 +73,7 @@ describe('JobOrdersService.create', () => {
   it('nests consultantIds as a create on the join relation', async () => {
     const create = jest.fn().mockResolvedValue(withRelations({ id: 'j1' }));
     const prisma = { jobOrder: { create } } as unknown as ExtendedPrismaClient;
-    const service = new JobOrdersService(prisma);
+    const service = new JobOrdersService(prisma, base);
 
     await service.create(
       { clientId: 'cl1', jobTitleId: 'jt-1', consultantIds: ['c1', 'c2'] },
@@ -84,7 +89,7 @@ describe('JobOrdersService.create', () => {
   it('omits the consultants relation write entirely when none are given', async () => {
     const create = jest.fn().mockResolvedValue(withRelations({ id: 'j1' }));
     const prisma = { jobOrder: { create } } as unknown as ExtendedPrismaClient;
-    const service = new JobOrdersService(prisma);
+    const service = new JobOrdersService(prisma, base);
 
     await service.create({ clientId: 'cl1' }, makeUser());
 
@@ -103,7 +108,7 @@ describe('JobOrdersService.remove', () => {
         delete: jest.fn().mockResolvedValue({ id: 'j1' }),
       },
     };
-    const service = new JobOrdersService(prisma as unknown as ExtendedPrismaClient);
+    const service = new JobOrdersService(prisma as unknown as ExtendedPrismaClient, base);
 
     await service.remove('j1', makeUser());
 
@@ -117,7 +122,7 @@ describe('JobOrdersService.findAll — filters', () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const count = jest.fn().mockResolvedValue(0);
     const prisma = { jobOrder: { findMany, count } } as unknown as ExtendedPrismaClient;
-    return { findMany, service: new JobOrdersService(prisma) };
+    return { findMany, service: new JobOrdersService(prisma, base) };
   }
 
   const baseQuery = { page: 1, pageSize: 20, sortOrder: 'asc' } as unknown as Record<string, unknown>;
@@ -184,7 +189,7 @@ describe('JobOrdersService.findAll — scope', () => {
     const findMany = jest.fn().mockResolvedValue([]);
     const count = jest.fn().mockResolvedValue(0);
     const prisma = { jobOrder: { findMany, count } } as unknown as ExtendedPrismaClient;
-    return { findMany, service: new JobOrdersService(prisma) };
+    return { findMany, service: new JobOrdersService(prisma, base) };
   }
 
   const baseQuery = { page: 1, pageSize: 20, sortOrder: 'asc' } as unknown as Record<string, unknown>;
@@ -240,7 +245,7 @@ describe('JobOrdersService.findOne', () => {
   function makeService(jobOrder: unknown) {
     const findUnique = jest.fn().mockResolvedValue(jobOrder);
     const prisma = { jobOrder: { findUnique } } as unknown as ExtendedPrismaClient;
-    return { service: new JobOrdersService(prisma) };
+    return { service: new JobOrdersService(prisma, base) };
   }
 
   it('returns the record for a scoped consultant even when no arm matches', async () => {
@@ -286,7 +291,7 @@ describe('JobOrdersService.update', () => {
     const findUnique = jest.fn().mockResolvedValue(existing);
     const update = jest.fn().mockResolvedValue(withRelations({ id: 'j1', clientId: 'cl2' }));
     const prisma = { jobOrder: { findUnique, update } } as unknown as ExtendedPrismaClient;
-    return { service: new JobOrdersService(prisma), update };
+    return { service: new JobOrdersService(prisma, base), update };
   }
 
   it('re-links to a different client with no follow-up write and no guard', async () => {
@@ -321,14 +326,14 @@ describe('JobOrdersService.setConsultants', () => {
       },
       consultant: { findMany: jest.fn().mockResolvedValue(consultantRows) },
     } as unknown as ExtendedPrismaClient;
-    return { service: new JobOrdersService(prisma), jobOrderConsultantDelete, jobOrderConsultantCreate };
+    return { service: new JobOrdersService(prisma, base), jobOrderConsultantDelete, jobOrderConsultantCreate };
   }
 
   it('404s when the job order does not exist', async () => {
     const prisma = {
       jobOrder: { findUnique: jest.fn().mockResolvedValue(null) },
     } as unknown as ExtendedPrismaClient;
-    const service = new JobOrdersService(prisma);
+    const service = new JobOrdersService(prisma, base);
     await expect(service.setConsultants('missing', ['c1'], makeUser())).rejects.toThrow(
       'Job order missing not found',
     );

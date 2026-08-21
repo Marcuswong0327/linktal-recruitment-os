@@ -51,6 +51,7 @@ import {
   getGetCandidateContactHistoryQueryKey,
   getGetCandidatePipelineTimelineQueryKey,
 } from '@/lib/api/generated/candidates/candidates';
+import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import { useGetJobOrders } from '@/lib/api/generated/job-orders/job-orders';
 import {
@@ -171,6 +172,22 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
   const { data: jobOrdersData } = useGetJobOrders({ pageSize: 100 });
   const jobOrders = jobOrdersData?.status === 200 ? jobOrdersData.data.data : [];
+
+  // A job order carries no industry of its own, only via its client — needed
+  // for the Submissions card's non-blocking industry-mismatch warning.
+  const { data: clientsData } = useGetClients({ pageSize: 100 });
+  const clients = clientsData?.status === 200 ? clientsData.data.data : [];
+  const clientIndustryById = React.useMemo(
+    () => new Map(clients.map((c) => [c.id, c.industryId])),
+    [clients],
+  );
+  const jobOrderClientIndustryId = React.useCallback(
+    (jobOrderId: string) => {
+      const jobOrder = jobOrders.find((j) => j.id === jobOrderId);
+      return jobOrder ? clientIndustryById.get(jobOrder.clientId) : undefined;
+    },
+    [jobOrders, clientIndustryById],
+  );
   // Mirrors the server-side check in CandidatesService.updateContactHistory —
   // only a SCREENING row has editable content, and only its own author (or
   // an admin) may edit it.
@@ -613,6 +630,9 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   mode="candidate"
                   candidateId={candidate.id}
                   jobOrders={jobOrders}
+                  candidateIndustryId={candidate.industryId}
+                  candidateLocationId={candidate.locationId}
+                  jobOrderClientIndustryId={jobOrderClientIndustryId}
                   onChanged={() =>
                     queryClient.invalidateQueries({
                       queryKey: getGetCandidatePipelineTimelineQueryKey(candidate.id),

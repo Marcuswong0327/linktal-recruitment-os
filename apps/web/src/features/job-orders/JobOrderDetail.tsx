@@ -31,7 +31,7 @@ import { SubmissionsCard } from '@/components/SubmissionsCard';
 import { PageLayout } from '@/components/app-shell/PageLayout';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { useGetCandidates } from '@/lib/api/generated/candidates/candidates';
-import { useGetClients } from '@/lib/api/generated/clients/clients';
+import { useGetClient, useGetClients } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import { useGetLocation } from '@/lib/api/generated/locations/locations';
 import {
@@ -188,14 +188,32 @@ function JobOrderEditForm({
 
   // A job order isn't contacted independently — you contact stakeholders at
   // the client company — so "last contacted" here is just a read of the
-  // client's own (org-wide) value, already in `clients` from the combobox
-  // fetch above; no separate job-order-level tracking.
-  const client = clients.find((c) => c.id === jobOrder.clientId);
+  // client's own (org-wide) value. Fetched directly by id rather than found
+  // in `clients` above: that list is capped at pageSize 100 for the
+  // ClientCombobox picker, and with 1,645 clients this job order's own
+  // client routinely falls outside that window — `find` would silently
+  // return undefined and blank out this card (and the industry-mismatch
+  // warning below) for most job orders.
+  const { data: ownClientData } = useGetClient(jobOrder.clientId);
+  const client = ownClientData?.status === 200 ? ownClientData.data : undefined;
+
+  // Same capped-list problem for anything else keyed off `clients`: the
+  // ClientCombobox's label lookup and the industry check just below both
+  // `.find()` in that same 100-row page, so they'd show "Unknown"/null for
+  // this exact client too. Merging the directly-fetched `client` in fixes
+  // both for the common case (the currently-assigned client) without
+  // changing what the picker's search can offer — that's the deeper,
+  // pre-existing "can't pick a client past page 1" limitation, unrelated to
+  // this bug.
+  const clientsWithCurrent = React.useMemo(() => {
+    if (!client || clients.some((c) => c.id === client.id)) return clients;
+    return [client, ...clients];
+  }, [clients, client]);
 
   // Industry-first: a Job Order has no industry of its own, only via its
   // (possibly just-changed) Client — reacts to the live `clientId` selection,
   // not the original `jobOrder.clientId`.
-  const selectedClientIndustryId = clients.find((c) => c.id === clientId)?.industryId ?? null;
+  const selectedClientIndustryId = clientsWithCurrent.find((c) => c.id === clientId)?.industryId ?? null;
 
   // The job order's own location's ancestor path — needed to check a
   // candidate consultant's location grants the same way the backend does
@@ -330,7 +348,7 @@ function JobOrderEditForm({
                   />
                 </FormField>
                 <FormField label="Client" htmlFor="clientId">
-                  <ClientCombobox id="clientId" value={clientId} onValueChange={setClientId} clients={clients} />
+                  <ClientCombobox id="clientId" value={clientId} onValueChange={setClientId} clients={clientsWithCurrent} />
                 </FormField>
                 <div className="sm:col-span-2">
                   <FormField
@@ -486,6 +504,8 @@ function JobOrderEditForm({
                   mode="jobOrder"
                   jobOrderId={jobOrder.id}
                   candidates={candidates}
+                  clientIndustryId={client?.industryId}
+                  jobOrderLocationId={jobOrder.locationId}
                   onChanged={() =>
                     queryClient.invalidateQueries({
                       queryKey: getGetJobOrderPipelineTimelineQueryKey(jobOrder.id),

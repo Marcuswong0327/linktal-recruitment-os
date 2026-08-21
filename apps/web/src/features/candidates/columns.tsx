@@ -111,6 +111,23 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     cell: ({ row }) => <MutedCell value={row.original.lastContactNotes} className="block truncate" />,
   },
   {
+    accessorKey: 'currentSalary',
+    header: 'Current Salary',
+    // Free text, resolved from the latest CandidateContactHistory row (see
+    // CandidateEntity.currentSalary) — not a real Candidate column, so not a
+    // CandidateSortField and never a filter, same as Notes above.
+    enableSorting: false,
+    size: 130,
+    cell: ({ row }) => <MutedCell value={row.original.currentSalary} className="block truncate" />,
+  },
+  {
+    accessorKey: 'expectedSalary',
+    header: 'Expected Salary',
+    enableSorting: false,
+    size: 130,
+    cell: ({ row }) => <MutedCell value={row.original.expectedSalary} className="block truncate" />,
+  },
+  {
     id: 'lastContactedAt',
     header: 'Last Contacted At',
     enableSorting: true,
