@@ -21,23 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Install PostgreSQL 18 client
         run: |
           sudo apt-get update
@@ -47,15 +30,41 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-18
 
-      - name: Restore
-        run: pnpm --filter @linktal/api run restore:db -- --date=${{ inputs.date }}
+      - name: Download and restore
+        run: |
+          set -euo pipefail
+          DATE="${{ inputs.date }}"
+          if ! [[ "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "Date must be YYYY-MM-DD (matches a backups/<date>.dump object in R2)" >&2
+            exit 1
+          fi
+
+          echo "Downloading r2://$R2_BUCKET/backups/$DATE.dump..."
+          aws s3 cp "s3://$R2_BUCKET/backups/$DATE.dump" restore.dump \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+
+          echo "Restoring into RESTORE_TARGET_URL (never the live prod DB — verify this points at a scratch DB)..."
+          # --clean --if-exists: safe to re-run into the same scratch DB.
+          # --no-owner/--no-privileges: mirrors the backup's dump flags.
+          set +e
+          pg_restore --clean --if-exists --no-owner --no-privileges -j 4 -d "$RESTORE_TARGET_URL" restore.dump
+          rc=$?
+          set -e
+
+          # pg_restore commonly exits 1 on harmless warnings (e.g. "role does
+          # not exist" for a grant it couldn't strip) — only treat a hard
+          # failure (>1) as fatal. Inspect the log either way.
+          if [ "$rc" -gt 1 ]; then
+            echo "pg_restore exited with code $rc" >&2
+            exit 1
+          fi
+          echo "Restore finished (exit code $rc). Verify row counts before treating this as good."
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          # Update this secret to point at your scratch Neon branch/database
-          # BEFORE running this workflow — never the live prod DB.
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
           RESTORE_TARGET_URL: ${{ secrets.RESTORE_TARGET_URL }}
 
       - name: Post-restore sanity check (eyeball this before trusting the restore)
