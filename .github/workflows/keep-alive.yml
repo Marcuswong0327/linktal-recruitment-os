@@ -1,0 +1,36 @@
+name: Keep Alive
+
+# GitHub auto-disables a repo's scheduled workflows (like db-backup.yml)
+# after 60 days with zero repository push activity — a schedule *running*
+# does not reset that clock, only an actual push does. This workflow's only
+# job is to make one trivial, real commit well under that window so the
+# backup schedule (and any other scheduled workflow here) never silently
+# goes dark during a long quiet period. See docs/migrations.md §8.
+on:
+  schedule:
+    # Monthly (1st of the month, 00:00 UTC) — comfortable margin under
+    # GitHub's 60-day inactivity cutoff.
+    - cron: '0 0 1 * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  keep-alive:
+    name: Push a timestamp commit to keep scheduled workflows enabled
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update keep-alive timestamp and push
+        run: |
+          set -euo pipefail
+          sed -i "s/^Last touched:.*/Last touched: $(date -u +%FT%TZ)/" .github/keep-alive.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/keep-alive.md
+          git commit -m "chore: keep-alive commit to prevent scheduled workflow disablement"
+          git push
