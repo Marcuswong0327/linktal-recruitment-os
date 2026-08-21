@@ -1,19 +1,22 @@
 import { Building2, Contact, type LucideIcon } from 'lucide-react';
-import { navGroups, type RequiredPermission } from '@/config/nav';
+import { navGroups, type NavItem, type RequiredPermission } from '@/config/nav';
 
 export type PageCommand = {
   title: string;
   href: string;
-  icon: LucideIcon;
+  icon?: LucideIcon | null;
   hidden?: boolean;
   disabled?: boolean;
   adminOnly?: boolean;
   requiredPermission?: RequiredPermission;
 };
 
+/** `NavParentItem`s aren't navigable — only their leaf children are. */
+const flattenNavItems = (items: NavItem[]) => items.flatMap((item) => (item.items ? item.items : [item]));
+
 /** Flattened, palette-friendly view of `navGroups` — one entry per page. */
 export const pageCommands: PageCommand[] = navGroups.flatMap((group) =>
-  group.items.map((item) => ({
+  flattenNavItems(group.items).map((item) => ({
     ...item,
     adminOnly: group.adminOnly,
     requiredPermission: item.requiredPermission ?? group.requiredPermission,
