@@ -30,6 +30,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y postgresql-client-18
 
+          # Ask the package itself where it put its binaries, rather than
+          # assuming a path — see the matching comment in db-backup.yml.
+          PG_BIN_DIR=$(dirname "$(dpkg -L postgresql-client-18 | grep -E '/bin/pg_dump$')")
+          echo "Resolved PostgreSQL 18 client: $PG_BIN_DIR"
+          "$PG_BIN_DIR/pg_restore" --version
+          echo "PG_BIN_DIR=$PG_BIN_DIR" >> "$GITHUB_ENV"
+
       - name: Download and restore
         run: |
           set -euo pipefail
@@ -47,7 +54,7 @@ jobs:
           # --clean --if-exists: safe to re-run into the same scratch DB.
           # --no-owner/--no-privileges: mirrors the backup's dump flags.
           set +e
-          pg_restore --clean --if-exists --no-owner --no-privileges -j 4 -d "$RESTORE_TARGET_URL" restore.dump
+          "$PG_BIN_DIR/pg_restore" --clean --if-exists --no-owner --no-privileges -j 4 -d "$RESTORE_TARGET_URL" restore.dump
           rc=$?
           set -e
 
@@ -68,6 +75,7 @@ jobs:
           RESTORE_TARGET_URL: ${{ secrets.RESTORE_TARGET_URL }}
 
       - name: Post-restore sanity check (eyeball this before trusting the restore)
-        run: psql "$RESTORE_TARGET_URL" -c "select relname, n_live_tup from pg_stat_user_tables order by n_live_tup desc limit 10;"
+        run: |
+          "$PG_BIN_DIR/psql" "$RESTORE_TARGET_URL" -c "select relname, n_live_tup from pg_stat_user_tables order by n_live_tup desc limit 10;"
         env:
           RESTORE_TARGET_URL: ${{ secrets.RESTORE_TARGET_URL }}
