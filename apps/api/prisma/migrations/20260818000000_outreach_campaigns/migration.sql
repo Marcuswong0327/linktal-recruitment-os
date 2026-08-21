@@ -1,16 +1,22 @@
--- Backfills the migration history for the outreach-campaigns feature
--- (EmailTemplate, OutreachCampaign, OutreachCampaignRecipient), which was
--- already applied directly to the shared dev database (via `db push` or raw
--- SQL, not `migrate dev`) before this migration existed — `prisma migrate
--- status` already shows the tracked history as up to date, and this file's
--- CREATE statements match the live DB's actual structure exactly (verified
--- via `prisma migrate diff` against it, zero remaining difference).
+-- Backfills the migration file for the outreach-campaigns feature
+-- (EmailTemplate, OutreachCampaign, OutreachCampaignRecipient, the
+-- OutreachCampaignStatus enum). This migration WAS run for real via
+-- `prisma migrate dev` against the shared dev database on 2026-08-18 — the
+-- DB's own `_prisma_migrations` table already has a real, properly-applied
+-- row named exactly `20260818000000_outreach_campaigns`, with a real
+-- checksum and applied_steps_count — it just never got committed to this
+-- repo, on any branch. This file recreates that migration's SQL from the
+-- live DB's actual structure (verified via `prisma migrate diff` against
+-- it — zero remaining difference), named to match the tracked row exactly.
 --
--- On the shared dev DB, this migration is applied via `prisma migrate
--- resolve --applied` (bookkeeping only — the tables already exist, so this
--- SQL is never actually executed there). On a genuinely fresh database (a
--- new environment, CI, someone's first `migrate deploy`), this SQL runs for
--- real and creates the tables from scratch, same as any other migration.
+-- Because the DB already carries an applied row for this exact name, no
+-- `migrate resolve` step was needed here — this file just needed to exist
+-- with a name Prisma already recognises as satisfied. (Do not delete/rename
+-- this file without also reconciling `_prisma_migrations` on the shared
+-- DB — its checksum won't byte-for-byte match this reconstruction, only
+-- structurally; if `migrate status` ever flags that mismatch, resolve it
+-- with `prisma migrate resolve --applied 20260818000000_outreach_campaigns`
+-- again, not by re-running this file's SQL.)
 --
 -- No NestJS module/controller/service for this feature exists in this repo
 -- yet — only the schema. See schema.prisma's OUTREACH CAMPAIGNS section.
