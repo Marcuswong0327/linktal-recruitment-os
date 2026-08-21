@@ -377,15 +377,17 @@ up by this job.
 
 ### What runs
 
-`.github/workflows/db-backup.yml` — scheduled nightly (17:00 UTC) plus
-`workflow_dispatch` for an on-demand run. It streams `pg_dump -Fc` straight
-into R2 (`apps/api/scripts/backup-db.ts`) — no local file is ever staged on
-the runner, so this scales to a much larger DB than today's without changing
-anything. It snapshots **unconditionally, every night, with no
-change-detection**: a same-content dump costs pennies in compressed object
-storage, while a missed snapshot on a day that *did* change is exactly the
-failure this system exists to prevent — the two risks aren't remotely
-symmetric, so there's no attempt to skip "unchanged" days.
+`.github/workflows/db-backup.yml` — scheduled nightly (16:00 UTC = midnight
+Malaysia Time) plus `workflow_dispatch` for an on-demand run. It's plain
+shell, no app toolchain: `pg_dump -Fc` piped straight through the AWS CLI
+(preinstalled on GitHub's runners; R2 is S3-API-compatible) into R2, no local
+file ever staged on the runner. The only setup step is installing a matching
+PostgreSQL 18 client (Neon's server version) from the official PGDG apt repo.
+It snapshots **unconditionally, every night, with no change-detection**: a
+same-content dump costs pennies in compressed object storage, while a missed
+snapshot on a day that *did* change is exactly the failure this system exists
+to prevent — the two risks aren't remotely symmetric, so there's no attempt
+to skip "unchanged" days.
 
 30-day retention is enforced by an **R2 bucket lifecycle rule** (Cloudflare
 dashboard → the bucket → Lifecycle Rules → expire objects under the
