@@ -27,7 +27,11 @@ import type {
 import type {
   CreateJobResearchDto,
   ErrorResponse,
+  ExportByIdsDto,
+  ExportJobResearchParams,
   GetJobResearchParams,
+  ImportJobResearchBody,
+  ImportResultEntity,
   JobResearchEntity,
   MarkContactedDto,
   PaginatedJobResearchEntity,
@@ -84,7 +88,7 @@ export const getGetJobResearchUrl = (params?: GetJobResearchParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["clientIds","consultantIds","jobTitleIds","jobRoleTypeIds","locationIds","statuses"];
+    const explodeParameters = ["clientIds","consultantIds","industryIds","specializationIds","jobTitleIds","jobRoleTypeIds","locationIds","statuses"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
@@ -418,7 +422,463 @@ export function useGetJobResearchByDisplayId<TData = Awaited<ReturnType<typeof g
 
 
 
-export type getJobResearchByIdResponse200 = {
+export type exportJobResearchResponse200 = {
+  data: void
+  status: 200
+}
+
+export type exportJobResearchResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportJobResearchResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportJobResearchResponseSuccess = (exportJobResearchResponse200) & {
+  headers: Headers;
+};
+export type exportJobResearchResponseError = (exportJobResearchResponse400 | exportJobResearchResponse500) & {
+  headers: Headers;
+};
+
+export type exportJobResearchResponse = (exportJobResearchResponseSuccess | exportJobResearchResponseError)
+
+export const getExportJobResearchUrl = (params?: ExportJobResearchParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["clientIds","consultantIds","industryIds","specializationIds","jobTitleIds","jobRoleTypeIds","locationIds","statuses"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/job-research/export?${stringifiedParams}` : `/job-research/export`
+}
+
+/**
+ * @summary Export every research row matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+export const exportJobResearch = async (params?: ExportJobResearchParams, options?: RequestInit): Promise<exportJobResearchResponse> => {
+
+  return customFetch<exportJobResearchResponse>(getExportJobResearchUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportJobResearchQueryKey = (params?: ExportJobResearchParams,) => {
+    return [
+    `/job-research/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportJobResearchQueryOptions = <TData = Awaited<ReturnType<typeof exportJobResearch>>, TError = ErrorResponse>(params?: ExportJobResearchParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportJobResearch>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportJobResearchQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportJobResearch>>> = ({ signal }) => exportJobResearch(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportJobResearch>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportJobResearchQueryResult = NonNullable<Awaited<ReturnType<typeof exportJobResearch>>>
+export type ExportJobResearchQueryError = ErrorResponse
+
+
+export function useExportJobResearch<TData = Awaited<ReturnType<typeof exportJobResearch>>, TError = ErrorResponse>(
+ params: undefined |  ExportJobResearchParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportJobResearch>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportJobResearch>>,
+          TError,
+          Awaited<ReturnType<typeof exportJobResearch>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportJobResearch<TData = Awaited<ReturnType<typeof exportJobResearch>>, TError = ErrorResponse>(
+ params?: ExportJobResearchParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportJobResearch>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportJobResearch>>,
+          TError,
+          Awaited<ReturnType<typeof exportJobResearch>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportJobResearch<TData = Awaited<ReturnType<typeof exportJobResearch>>, TError = ErrorResponse>(
+ params?: ExportJobResearchParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportJobResearch>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Export every research row matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+
+export function useExportJobResearch<TData = Awaited<ReturnType<typeof exportJobResearch>>, TError = ErrorResponse>(
+ params?: ExportJobResearchParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportJobResearch>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getExportJobResearchQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type exportJobResearchByIdsResponse201 = {
+  data: void
+  status: 201
+}
+
+export type exportJobResearchByIdsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportJobResearchByIdsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportJobResearchByIdsResponseSuccess = (exportJobResearchByIdsResponse201) & {
+  headers: Headers;
+};
+export type exportJobResearchByIdsResponseError = (exportJobResearchByIdsResponse400 | exportJobResearchByIdsResponse500) & {
+  headers: Headers;
+};
+
+export type exportJobResearchByIdsResponse = (exportJobResearchByIdsResponseSuccess | exportJobResearchByIdsResponseError)
+
+export const getExportJobResearchByIdsUrl = () => {
+
+
+
+
+  return `/job-research/export`
+}
+
+/**
+ * @summary Export an explicit set of research rows (by id) as an .xlsx file
+ */
+export const exportJobResearchByIds = async (exportByIdsDto: ExportByIdsDto, options?: RequestInit): Promise<exportJobResearchByIdsResponse> => {
+
+  return customFetch<exportJobResearchByIdsResponse>(getExportJobResearchByIdsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(exportByIdsDto)
+  }
+);}
+
+
+
+
+
+export const getExportJobResearchByIdsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportJobResearchByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportJobResearchByIds>>, TError,{data: ExportByIdsDto}, TContext> => {
+
+const mutationKey = ['exportJobResearchByIds'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportJobResearchByIds>>, {data: ExportByIdsDto}> = (props) => {
+          const {data} = props ?? {};
+
+          return  exportJobResearchByIds(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportJobResearchByIdsMutationResult = NonNullable<Awaited<ReturnType<typeof exportJobResearchByIds>>>
+    export type ExportJobResearchByIdsMutationBody = ExportByIdsDto
+    export type ExportJobResearchByIdsMutationError = ErrorResponse
+
+    /**
+ * @summary Export an explicit set of research rows (by id) as an .xlsx file
+ */
+export const useExportJobResearchByIds = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportJobResearchByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof exportJobResearchByIds>>,
+        TError,
+        {data: ExportByIdsDto},
+        TContext
+      > => {
+      return useMutation(getExportJobResearchByIdsMutationOptions(options), queryClient);
+    }
+    export type getJobResearchImportTemplateResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getJobResearchImportTemplateResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getJobResearchImportTemplateResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getJobResearchImportTemplateResponseSuccess = (getJobResearchImportTemplateResponse200) & {
+  headers: Headers;
+};
+export type getJobResearchImportTemplateResponseError = (getJobResearchImportTemplateResponse400 | getJobResearchImportTemplateResponse500) & {
+  headers: Headers;
+};
+
+export type getJobResearchImportTemplateResponse = (getJobResearchImportTemplateResponseSuccess | getJobResearchImportTemplateResponseError)
+
+export const getGetJobResearchImportTemplateUrl = () => {
+
+
+
+
+  return `/job-research/import/template`
+}
+
+/**
+ * @summary Download the .xlsx template for bulk-importing/updating job research rows
+ */
+export const getJobResearchImportTemplate = async ( options?: RequestInit): Promise<getJobResearchImportTemplateResponse> => {
+
+  return customFetch<getJobResearchImportTemplateResponse>(getGetJobResearchImportTemplateUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetJobResearchImportTemplateQueryKey = () => {
+    return [
+    `/job-research/import/template`
+    ] as const;
+    }
+
+
+export const getGetJobResearchImportTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getJobResearchImportTemplate>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobResearchImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetJobResearchImportTemplateQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getJobResearchImportTemplate>>> = ({ signal }) => getJobResearchImportTemplate({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getJobResearchImportTemplate>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetJobResearchImportTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getJobResearchImportTemplate>>>
+export type GetJobResearchImportTemplateQueryError = ErrorResponse
+
+
+export function useGetJobResearchImportTemplate<TData = Awaited<ReturnType<typeof getJobResearchImportTemplate>>, TError = ErrorResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobResearchImportTemplate>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getJobResearchImportTemplate>>,
+          TError,
+          Awaited<ReturnType<typeof getJobResearchImportTemplate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetJobResearchImportTemplate<TData = Awaited<ReturnType<typeof getJobResearchImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobResearchImportTemplate>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getJobResearchImportTemplate>>,
+          TError,
+          Awaited<ReturnType<typeof getJobResearchImportTemplate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetJobResearchImportTemplate<TData = Awaited<ReturnType<typeof getJobResearchImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobResearchImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Download the .xlsx template for bulk-importing/updating job research rows
+ */
+
+export function useGetJobResearchImportTemplate<TData = Awaited<ReturnType<typeof getJobResearchImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobResearchImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetJobResearchImportTemplateQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type importJobResearchResponse201 = {
+  data: ImportResultEntity
+  status: 201
+}
+
+export type importJobResearchResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type importJobResearchResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type importJobResearchResponseSuccess = (importJobResearchResponse201) & {
+  headers: Headers;
+};
+export type importJobResearchResponseError = (importJobResearchResponse400 | importJobResearchResponse500) & {
+  headers: Headers;
+};
+
+export type importJobResearchResponse = (importJobResearchResponseSuccess | importJobResearchResponseError)
+
+export const getImportJobResearchUrl = () => {
+
+
+
+
+  return `/job-research/import`
+}
+
+/**
+ * @summary Preview (commit=false, default) or commit (commit=true) a bulk job research import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.
+ */
+export const importJobResearch = async (importJobResearchBody: ImportJobResearchBody, options?: RequestInit): Promise<importJobResearchResponse> => {
+    const formData = new FormData();
+formData.append(`file`, importJobResearchBody.file);
+if(importJobResearchBody.commit !== undefined) {
+ formData.append(`commit`, importJobResearchBody.commit.toString())
+ }
+
+  return customFetch<importJobResearchResponse>(getImportJobResearchUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getImportJobResearchMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importJobResearch>>, TError,{data: ImportJobResearchBody}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importJobResearch>>, TError,{data: ImportJobResearchBody}, TContext> => {
+
+const mutationKey = ['importJobResearch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importJobResearch>>, {data: ImportJobResearchBody}> = (props) => {
+          const {data} = props ?? {};
+
+          return  importJobResearch(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportJobResearchMutationResult = NonNullable<Awaited<ReturnType<typeof importJobResearch>>>
+    export type ImportJobResearchMutationBody = ImportJobResearchBody
+    export type ImportJobResearchMutationError = ErrorResponse
+
+    /**
+ * @summary Preview (commit=false, default) or commit (commit=true) a bulk job research import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.
+ */
+export const useImportJobResearch = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importJobResearch>>, TError,{data: ImportJobResearchBody}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof importJobResearch>>,
+        TError,
+        {data: ImportJobResearchBody},
+        TContext
+      > => {
+      return useMutation(getImportJobResearchMutationOptions(options), queryClient);
+    }
+    export type getJobResearchByIdResponse200 = {
   data: JobResearchEntity
   status: 200
 }

@@ -5762,6 +5762,30 @@
             }
           },
           {
+            "name": "industryIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the researched company's Industry id(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "specializationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the researched company's Specialization id(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "name": "jobTitleIds",
             "required": false,
             "in": "query",
@@ -6001,6 +6025,389 @@
           }
         ],
         "summary": "Get a research row by display ID (JR-XXXX)",
+        "tags": [
+          "Job Research"
+        ]
+      }
+    },
+    "/job-research/export": {
+      "get": {
+        "operationId": "exportJobResearch",
+        "parameters": [
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to most recently researched.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "displayId",
+                "researchedAt",
+                "postedDate",
+                "lastContactedAt",
+                "createdAt"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across jobTitle, displayId, notes and contactEmailFromAd",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by client ID (exact match)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by multiple client IDs at once",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "consultantIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the consultant who conducted the research. Ignored for the consultant role, which is scoped to its own patch instead.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "industryIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the researched company's Industry id(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "specializationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the researched company's Specialization id(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobTitleIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by JobTitle id(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobRoleTypeIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by JobRoleType id(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Location id(s). A node matches itself plus everything beneath it, so selecting a state returns every ad in its cities.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "location",
+            "required": false,
+            "in": "query",
+            "description": "Filter by location name (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the client-status snapshot taken when the ad was logged (one or more)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "TRADED"
+                ]
+              }
+            }
+          },
+          {
+            "name": "isContacted",
+            "required": false,
+            "in": "query",
+            "description": "Filter by whether the advertiser has been approached yet",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "hasJobOrder",
+            "required": false,
+            "in": "query",
+            "description": "Filter by whether the research has since been converted into a Job Order — the research funnel’s conversion column",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "timezone",
+            "required": false,
+            "in": "query",
+            "description": "IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job research workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export every research row matching the current filters as an .xlsx file — unbounded, not paginated",
+        "tags": [
+          "Job Research"
+        ]
+      },
+      "post": {
+        "operationId": "exportJobResearchByIds",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportByIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Job research workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export an explicit set of research rows (by id) as an .xlsx file",
+        "tags": [
+          "Job Research"
+        ]
+      }
+    },
+    "/job-research/import/template": {
+      "get": {
+        "operationId": "getJobResearchImportTemplate",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Job research import template"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Download the .xlsx template for bulk-importing/updating job research rows",
+        "tags": [
+          "Job Research"
+        ]
+      }
+    },
+    "/job-research/import": {
+      "post": {
+        "operationId": "importJobResearch",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "commit": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Import result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResultEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Preview (commit=false, default) or commit (commit=true) a bulk job research import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.",
         "tags": [
           "Job Research"
         ]
@@ -12785,6 +13192,11 @@
             "nullable": true,
             "description": "Resolved client company name"
           },
+          "clientDisplayId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Resolved client Display ID"
+          },
           "consultantId": {
             "type": "string",
             "nullable": true
@@ -12900,6 +13312,7 @@
           "displayId",
           "clientId",
           "companyName",
+          "clientDisplayId",
           "consultantId",
           "consultant",
           "locationId",

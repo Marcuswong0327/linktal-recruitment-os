@@ -9,22 +9,37 @@ import {
   Patch,
   Post,
   Query,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { BadRequestException } from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiProduces, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { JobResearchService } from './job-research.service';
+import { JobResearchImportService } from './job-research-import.service';
 import { CreateJobResearchDto, MarkContactedDto } from './dto/create-job-research.dto';
 import { UpdateJobResearchDto } from './dto/update-job-research.dto';
 import { QueryJobResearchDto } from './dto/query-job-research.dto';
+import { ExportJobResearchDto } from './dto/export-job-research.dto';
+import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
+import { ImportOptionsDto } from '../common/dto/import-options.dto';
+import { XLSX_CONTENT_TYPE, exportFilename } from '../common/xlsx-export';
+import { MAX_IMPORT_FILE_BYTES } from '../common/xlsx-import';
 import { JobResearchEntity } from './entities/job-research.entity';
 import { PaginatedJobResearchEntity } from './entities/paginated-job-research.entity';
-import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
+import { ImportResultEntity } from '../common/entities/import-result.entity';
+import { CurrentUser, RequirePermission, RequirePermissions } from '../auth/auth.decorators';
 import { AuthUser } from '../auth/auth.types';
 
 @ApiTags('Job Research')
 @ApiBearerAuth()
 @Controller('job-research')
 export class JobResearchController {
-  constructor(private readonly research: JobResearchService) {}
+  constructor(
+    private readonly research: JobResearchService,
+    private readonly researchImport: JobResearchImportService,
+  ) {}
 
   @Get()
   @RequirePermission('job_research', 'read')
@@ -46,6 +61,78 @@ export class JobResearchController {
   @ApiResponse({ status: 200, description: 'Research row found', type: JobResearchEntity })
   findByDisplayId(@Param('displayId') displayId: string) {
     return this.research.findByDisplayId(displayId);
+  }
+
+  @Get('export')
+  @RequirePermission('job_research', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportJobResearch',
+    summary: 'Export every research row matching the current filters as an .xlsx file — unbounded, not paginated',
+  })
+  @ApiResponse({ status: 200, description: 'Job research workbook' })
+  async exportAll(@Query() query: ExportJobResearchDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.research.exportAll(query, user);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('job-research')}"`,
+    });
+  }
+
+  @Post('export')
+  @RequirePermission('job_research', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportJobResearchByIds',
+    summary: 'Export an explicit set of research rows (by id) as an .xlsx file',
+  })
+  @ApiResponse({ status: 201, description: 'Job research workbook' })
+  async exportByIds(@Body() dto: ExportByIdsDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.research.exportByIds(dto.ids, user, dto.timezone);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('job-research')}"`,
+    });
+  }
+
+  @Get('import/template')
+  @RequirePermission('job_research', 'create')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'getJobResearchImportTemplate',
+    summary: 'Download the .xlsx template for bulk-importing/updating job research rows',
+  })
+  @ApiResponse({ status: 200, description: 'Job research import template' })
+  async downloadImportTemplate() {
+    const buffer = await this.researchImport.buildTemplate();
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: 'attachment; filename="job-research-import-template.xlsx"',
+    });
+  }
+
+  @Post('import')
+  @RequirePermissions({ resource: 'job_research', action: 'create' }, { resource: 'job_research', action: 'update' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_FILE_BYTES } }))
+  @ApiOperation({
+    operationId: 'importJobResearch',
+    summary:
+      'Preview (commit=false, default) or commit (commit=true) a bulk job research import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' }, commit: { type: 'boolean', default: false } },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Import result', type: ImportResultEntity })
+  async import(@UploadedFile() file: Express.Multer.File | undefined, @Body() options: ImportOptionsDto) {
+    if (!file) {
+      throw new BadRequestException({ code: 'FILE_REQUIRED', message: 'Upload an .xlsx file as "file".' });
+    }
+    return this.researchImport.importFromWorkbook(file.buffer, options.commit ?? false, file.originalname);
   }
 
   @Get(':id')

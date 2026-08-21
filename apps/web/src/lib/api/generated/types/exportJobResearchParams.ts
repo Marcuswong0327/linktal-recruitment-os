@@ -5,27 +5,16 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
-import type { GetJobResearchSortBy } from './getJobResearchSortBy';
-import type { GetJobResearchSortOrder } from './getJobResearchSortOrder';
-import type { GetJobResearchStatusesItem } from './getJobResearchStatusesItem';
+import type { ExportJobResearchSortBy } from './exportJobResearchSortBy';
+import type { ExportJobResearchSortOrder } from './exportJobResearchSortOrder';
+import type { ExportJobResearchStatusesItem } from './exportJobResearchStatusesItem';
 
-export type GetJobResearchParams = {
-/**
- * Page number (1-based)
- * @minimum 1
- */
-page?: number;
-/**
- * Items per page
- * @minimum 1
- * @maximum 100
- */
-pageSize?: number;
+export type ExportJobResearchParams = {
 /**
  * Column to sort by. Defaults to most recently researched.
  */
-sortBy?: GetJobResearchSortBy;
-sortOrder?: GetJobResearchSortOrder;
+sortBy?: ExportJobResearchSortBy;
+sortOrder?: ExportJobResearchSortOrder;
 /**
  * Free-text search across jobTitle, displayId, notes and contactEmailFromAd
  */
@@ -69,7 +58,7 @@ location?: string;
 /**
  * Filter by the client-status snapshot taken when the ad was logged (one or more)
  */
-statuses?: GetJobResearchStatusesItem[];
+statuses?: ExportJobResearchStatusesItem[];
 /**
  * Filter by whether the advertiser has been approached yet
  */
@@ -78,4 +67,8 @@ isContacted?: boolean;
  * Filter by whether the research has since been converted into a Job Order — the research funnel’s conversion column
  */
 hasJobOrder?: boolean;
+/**
+ * IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid.
+ */
+timezone?: string;
 };
