@@ -70,7 +70,11 @@ Target a single app with a filter, e.g. `pnpm --filter @linktal/api dev`.
 │           ├── candidates/   # controller · service · DTOs
 │           ├── prisma/       # global Prisma module + service
 │           └── health/
-├── .github/workflows/ci.yml  # lint · typecheck · build · test
+├── .github/workflows/
+│   ├── ci.yml                # lint · typecheck · build · test
+│   ├── db-backup.yml         # nightly production DB backup -> R2
+│   ├── db-restore.yml        # manual-trigger restore into a scratch DB
+│   └── keep-alive.yml        # monthly commit, keeps scheduled workflows enabled
 ├── turbo.json
 ├── pnpm-workspace.yaml
 └── tsconfig.base.json
@@ -85,6 +89,22 @@ Target a single app with a filter, e.g. `pnpm --filter @linktal/api dev`.
    - `DATABASE_URL` — the **pooled** string (host contains `-pooler`), used at runtime.
    - `DIRECT_URL` — the **direct/unpooled** string, used by Prisma Migrate.
 3. Apply migrations locally with `pnpm --filter @linktal/api prisma:migrate`.
+
+### Automated backups
+
+`.github/workflows/db-backup.yml` snapshots the **production** Neon DB to
+Cloudflare R2 every night (16:00 UTC = midnight Malaysia Time), unconditionally
+— no change-detection, since a same-content dump costs pennies while a missed
+snapshot on a day that did change is the failure this exists to prevent.
+30-day rolling retention is enforced by an R2 bucket lifecycle rule, not by
+the workflow itself.
+
+`.github/workflows/db-restore.yml` is manual-trigger-only
+(`workflow_dispatch`, pick a date) and restores into a scratch Neon
+branch/DB you provision yourself — it never touches production directly;
+promoting a restore to production stays a deliberate manual step.
+
+Full runbook, required secrets, and the restore procedure: `docs/migrations.md` §8.
 
 ## Deployment (Railway)
 
@@ -140,5 +160,7 @@ For **both** the `web` and `api` services, in the service **Settings**:
 
 ### CI Flow
 
-`.github/workflows/ci.yml` runs on every push/PR to `main`: install → build →
-lint → typecheck → test. Railway handles the actual deploy on merge to `main`.
+`.github/workflows/ci.yml` runs on every push/PR to `main` or `dev`: install →
+build → lint → typecheck → test. Railway handles the actual deploy on merge
+to `main` (production) or `dev` (the shared dev environment — see
+`docs/migrations.md` for why it skips `prisma migrate deploy`).
