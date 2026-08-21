@@ -377,22 +377,44 @@ up by this job.
 
 ### What runs
 
-`.github/workflows/db-backup.yml` — scheduled nightly (16:00 UTC = midnight
-Malaysia Time) plus `workflow_dispatch` for an on-demand run. It's plain
-shell, no app toolchain: `pg_dump -Fc` piped straight through the AWS CLI
-(preinstalled on GitHub's runners; R2 is S3-API-compatible) into R2, no local
-file ever staged on the runner. The only setup step is installing a matching
-PostgreSQL 18 client (Neon's server version) from the official PGDG apt repo.
-It snapshots **unconditionally, every night, with no change-detection**: a
-same-content dump costs pennies in compressed object storage, while a missed
-snapshot on a day that *did* change is exactly the failure this system exists
-to prevent — the two risks aren't remotely symmetric, so there's no attempt
-to skip "unchanged" days.
+`.github/workflows/db-backup.yml` — scheduled nightly (16:07 UTC = just after
+midnight Malaysia Time) plus `workflow_dispatch` for an on-demand run. It's
+plain shell, no app toolchain: `pg_dump -Fc` piped straight through the AWS
+CLI (preinstalled on GitHub's runners; R2 is S3-API-compatible) into R2, no
+local file ever staged on the runner. The only setup step is installing a
+matching PostgreSQL 18 client (Neon's server version) from the official PGDG
+apt repo. It snapshots **unconditionally, every night, with no
+change-detection**: a same-content dump costs pennies in compressed object
+storage, while a missed snapshot on a day that *did* change is exactly the
+failure this system exists to prevent — the two risks aren't remotely
+symmetric, so there's no attempt to skip "unchanged" days.
+
+The cron is `7 16 * * *`, not `0 16 * * *` — deliberately off the hour.
+GitHub's own docs warn the `schedule` event is delayed most "at the start of
+every hour," the single most congested minute across all of GitHub Actions; a
+few minutes off it clears most of that queueing.
 
 30-day retention is enforced by an **R2 bucket lifecycle rule** (Cloudflare
 dashboard → the bucket → Lifecycle Rules → expire objects under the
 `backups/` prefix after 30 days) — not by anything in this repo. One less
 script to trust.
+
+### Is it actually running? (`db-backup-check.yml`)
+
+`schedule` triggers are best-effort — GitHub can delay one, and rarely, drop
+one entirely, with **no notification either way**. `db-backup-check.yml`
+closes that gap: it runs daily (08:00 UTC = 16:00 Malaysia Time, well after
+the previous midnight's backup should have landed) and reads the
+`backups/_last-success` marker `db-backup.yml` writes on every successful
+run. If that marker is more than 36h old, the check job fails on purpose.
+
+A **failing scheduled GitHub Actions run notifies you automatically** —
+email/GitHub notifications, per your own notification settings for this repo
+— so this needs no separate Slack webhook or alerting service; a red run in
+the Actions tab (and the notification GitHub already sends for it) *is* the
+alert. If it fires: check `db-backup.yml`'s own run history for what went
+wrong, then trigger it manually (`workflow_dispatch`) to catch up immediately
+rather than waiting for the next scheduled attempt.
 
 ### Secrets this needs (GitHub → repo → Settings → Secrets and variables → Actions)
 
@@ -444,4 +466,5 @@ fire) — an untested backup isn't a backup.
 | Mark failed migration rolled back | `npx prisma migrate resolve --rolled-back <name>` |
 | Run a backup manually | GitHub → Actions → "DB Backup" → Run workflow |
 | Restore a backup into a scratch DB | GitHub → Actions → "DB Restore (manual)" → Run workflow, enter the date |
+| Check whether the last backup is stale right now | GitHub → Actions → "DB Backup Staleness Check" → Run workflow |
 | Baseline an existing migration as applied | `npx prisma migrate resolve --applied <name>` |

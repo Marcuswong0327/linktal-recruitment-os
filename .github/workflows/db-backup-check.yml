@@ -1,0 +1,57 @@
+name: DB Backup Staleness Check
+
+# db-backup.yml's schedule is best-effort — GitHub can delay or, rarely, drop
+# a scheduled trigger entirely, with no notification either way. This is the
+# only way to actually know a night got silently skipped instead of assuming
+# "delayed, not missed." Reads the tiny `_last-success` marker db-backup.yml
+# already writes on every successful run and fails loudly if it's stale.
+#
+# A failing scheduled GitHub Actions run automatically notifies (email/GitHub
+# notifications, per each user's own notification settings) anyone watching
+# this repo — that's the alert, no separate Slack/webhook/email integration
+# needed. See docs/migrations.md §8.
+on:
+  schedule:
+    # 08:00 UTC daily = 16:00 Malaysia Time. Comfortably after the previous
+    # midnight backup's normal completion (so a normal few-minutes-late run
+    # never false-positives), but early enough that if last night's backup
+    # was skipped entirely, the gap back to the prior night's success already
+    # exceeds the 36h threshold below by the time this runs — see the
+    # threshold math in the step itself.
+    - cron: '0 8 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    name: Verify the last DB backup isn't stale
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check backups/_last-success age
+        run: |
+          set -euo pipefail
+          LAST_SUCCESS=$(aws s3 cp "s3://$R2_BUCKET/backups/_last-success" - \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com")
+          echo "Last successful backup: $LAST_SUCCESS"
+
+          LAST_EPOCH=$(date -u -d "$LAST_SUCCESS" +%s)
+          NOW_EPOCH=$(date -u +%s)
+          AGE_HOURS=$(( (NOW_EPOCH - LAST_EPOCH) / 3600 ))
+          echo "Age: ${AGE_HOURS}h"
+
+          # 36h, not 24h: backups run daily, so a normal night's run is never
+          # more than ~16h old when this check runs (00:07 MYT backup ->
+          # 16:00 MYT check). A fully-skipped night pushes that to ~40h,
+          # comfortably clearing 36h without the threshold being so tight
+          # that ordinary scheduling jitter trips a false alarm.
+          if [ "$AGE_HOURS" -gt 36 ]; then
+            echo "::error::Last successful DB backup is ${AGE_HOURS}h old (>36h) — a nightly backup was likely missed. Check the DB Backup workflow's run history, then trigger it manually (workflow_dispatch) to catch up."
+            exit 1
+          fi
+          echo "OK — last backup is within the expected window."
+        env:
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
