@@ -362,6 +362,74 @@ migrations with no drift warnings.
 
 ---
 
+## 8. Automated backups (R2, 30-day rolling retention)
+
+§4c's Neon branch/PITR guidance is the *surgical* tool: taken deliberately,
+right before a specific risky migration. This section is the *standing*
+tool: an unattended nightly job that guarantees a rollback point exists for
+**any** of the last 30 days, whether or not anyone remembered to branch first.
+Neither replaces the other — keep branching before destructive migrations
+even with this in place.
+
+**Production only.** The shared dev DB (§3) is expected to be messy and
+frequently reset — that's normal there, not an incident, so it isn't backed
+up by this job.
+
+### What runs
+
+`.github/workflows/db-backup.yml` — scheduled nightly (17:00 UTC) plus
+`workflow_dispatch` for an on-demand run. It streams `pg_dump -Fc` straight
+into R2 (`apps/api/scripts/backup-db.ts`) — no local file is ever staged on
+the runner, so this scales to a much larger DB than today's without changing
+anything. It snapshots **unconditionally, every night, with no
+change-detection**: a same-content dump costs pennies in compressed object
+storage, while a missed snapshot on a day that *did* change is exactly the
+failure this system exists to prevent — the two risks aren't remotely
+symmetric, so there's no attempt to skip "unchanged" days.
+
+30-day retention is enforced by an **R2 bucket lifecycle rule** (Cloudflare
+dashboard → the bucket → Lifecycle Rules → expire objects under the
+`backups/` prefix after 30 days) — not by anything in this repo. One less
+script to trust.
+
+### Secrets this needs (GitHub → repo → Settings → Secrets and variables → Actions)
+
+| Secret | What it is |
+|---|---|
+| `PROD_DIRECT_URL` | Production Neon's **unpooled** connection string. Named `PROD_…`, not reused from `DIRECT_URL`, specifically so it can never be confused with the shared dev DB's connection string when someone's setting this up. |
+| `R2_ACCOUNT_ID` | Cloudflare account ID (used to build the R2 endpoint URL). |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | An R2 API token scoped to just the backup bucket (Cloudflare dashboard → R2 → Manage API Tokens). |
+| `R2_BUCKET` | The bucket name. |
+| `RESTORE_TARGET_URL` | Restore-only (see below) — update it right before each restore run. |
+
+GitHub secrets are **write-only**: once saved, nobody — including the repo
+owner — can view the value again, only overwrite it. If a credential is lost,
+generate a new one at the source (Cloudflare, Neon) and overwrite the secret;
+there's no "retrieve."
+
+### Restore runbook
+
+Restoring is manual-trigger-only (`db-restore.yml`, `workflow_dispatch` with
+a `date` input) and deliberately never touches production directly:
+
+1. In the Neon console, create a scratch branch/database to restore into.
+2. Update the `RESTORE_TARGET_URL` secret to that scratch DB's connection
+   string.
+3. Run `db-restore.yml` with the date you want (`YYYY-MM-DD`, matching a
+   `backups/<date>.dump` object in R2).
+4. The job downloads that dump and runs `pg_restore` into
+   `RESTORE_TARGET_URL`, then prints a row-count summary — **review this
+   before trusting the restore.**
+5. If it looks right, promote it by hand: update Railway's `DATABASE_URL`/
+   `DIRECT_URL` env vars to the scratch DB and redeploy the API service.
+   This step is intentionally not automated — a bad restore should never be
+   able to silently become live traffic.
+
+Do one real test restore periodically (not just when something's already on
+fire) — an untested backup isn't a backup.
+
+---
+
 ## Quick reference
 
 | Goal | Command |
@@ -372,4 +440,6 @@ migrations with no drift warnings.
 | Check history vs DB | `npx prisma migrate status` |
 | Detect drift (DB vs schema) | `npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code` |
 | Mark failed migration rolled back | `npx prisma migrate resolve --rolled-back <name>` |
+| Run a backup manually | GitHub → Actions → "DB Backup" → Run workflow |
+| Restore a backup into a scratch DB | GitHub → Actions → "DB Restore (manual)" → Run workflow, enter the date |
 | Baseline an existing migration as applied | `npx prisma migrate resolve --applied <name>` |

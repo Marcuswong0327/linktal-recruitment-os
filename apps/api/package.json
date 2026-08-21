@@ -25,9 +25,13 @@
     "import:users": "ts-node scripts/import-users.ts",
     "backfill:ancestors": "ts-node scripts/backfill-ancestors.ts",
     "renumber:display-ids": "ts-node scripts/display-ids.ts --renumber",
-    "resync:display-ids": "ts-node scripts/display-ids.ts"
+    "resync:display-ids": "ts-node scripts/display-ids.ts",
+    "backup:db": "ts-node scripts/backup-db.ts",
+    "restore:db": "ts-node scripts/restore-db.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@aws-sdk/lib-storage": "^3.600.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.0",
     "@nestjs/core": "^11.0.1",
