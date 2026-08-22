@@ -25,8 +25,16 @@ describe('SubmissionsService.create', () => {
       },
       jobOrder: {
         findUnique: jest.fn().mockResolvedValue('jobOrder' in opts ? opts.jobOrder : { id: 'j1' }),
+        // Stubbed for recomputeJobOrderCounters, fired after every
+        // create/update/remove — not itself under test here.
+        update: jest.fn().mockResolvedValue({}),
       },
-      candidateSubmission: { create, update },
+      candidateSubmission: {
+        create,
+        update,
+        count: jest.fn().mockResolvedValue(0),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
     } as unknown as ExtendedPrismaClient;
     const base = {
       candidateSubmission: {

@@ -2024,6 +2024,7 @@
               "type": "string",
               "enum": [
                 "displayId",
+                "companyName",
                 "createdAt",
                 "lastContactedAt",
                 "quality"
@@ -2064,7 +2065,8 @@
                 "enum": [
                   "COLD",
                   "WARM",
-                  "TRADED"
+                  "TRADED",
+                  "UNS"
                 ]
               }
             }
@@ -2336,6 +2338,7 @@
               "type": "string",
               "enum": [
                 "displayId",
+                "companyName",
                 "createdAt",
                 "lastContactedAt",
                 "quality"
@@ -2376,7 +2379,8 @@
                 "enum": [
                   "COLD",
                   "WARM",
-                  "TRADED"
+                  "TRADED",
+                  "UNS"
                 ]
               }
             }
@@ -4609,13 +4613,16 @@
               "type": "string",
               "enum": [
                 "displayId",
+                "jobTitle",
                 "openings",
                 "filledCount",
                 "salaryMin",
                 "salaryMax",
                 "receivedAt",
                 "closedAt",
-                "createdAt"
+                "createdAt",
+                "activeSubmissionCount",
+                "lastSubmittedAt"
               ]
             }
           },
@@ -4655,23 +4662,6 @@
                   "PLACED",
                   "CLOSED",
                   "ON_HOLD"
-                ]
-              }
-            }
-          },
-          {
-            "name": "qualities",
-            "required": false,
-            "in": "query",
-            "description": "Filter by quality (one or more). Omit for all qualities.",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": [
-                  "LOW",
-                  "MEDIUM",
-                  "HIGH"
                 ]
               }
             }
@@ -4952,13 +4942,16 @@
               "type": "string",
               "enum": [
                 "displayId",
+                "jobTitle",
                 "openings",
                 "filledCount",
                 "salaryMin",
                 "salaryMax",
                 "receivedAt",
                 "closedAt",
-                "createdAt"
+                "createdAt",
+                "activeSubmissionCount",
+                "lastSubmittedAt"
               ]
             }
           },
@@ -4998,23 +4991,6 @@
                   "PLACED",
                   "CLOSED",
                   "ON_HOLD"
-                ]
-              }
-            }
-          },
-          {
-            "name": "qualities",
-            "required": false,
-            "in": "query",
-            "description": "Filter by quality (one or more). Omit for all qualities.",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": [
-                  "LOW",
-                  "MEDIUM",
-                  "HIGH"
                 ]
               }
             }
@@ -5842,7 +5818,8 @@
                 "enum": [
                   "COLD",
                   "WARM",
-                  "TRADED"
+                  "TRADED",
+                  "UNS"
                 ]
               }
             }
@@ -11677,7 +11654,8 @@
             "enum": [
               "COLD",
               "WARM",
-              "TRADED"
+              "TRADED",
+              "UNS"
             ]
           },
           "quality": {
@@ -11854,7 +11832,8 @@
             "enum": [
               "COLD",
               "WARM",
-              "TRADED"
+              "TRADED",
+              "UNS"
             ],
             "example": "COLD"
           },
@@ -11935,7 +11914,8 @@
             "enum": [
               "COLD",
               "WARM",
-              "TRADED"
+              "TRADED",
+              "UNS"
             ],
             "example": "COLD"
           },
@@ -12836,6 +12816,17 @@
             "type": "number",
             "example": 0
           },
+          "activeSubmissionCount": {
+            "type": "number",
+            "example": 0,
+            "description": "Denormalized: submissions on this job order with status != REJECTED, not soft-deleted. Exists so the list can sort by it (see JobOrderSortField) — not otherwise meaningful on its own, since pipelineSubmissions below already carries the live per-candidate breakdown."
+          },
+          "lastSubmittedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "Denormalized: latest submittedAt across not-soft-deleted submissions. Sort-only, same reasoning as activeSubmissionCount."
+          },
           "description": {
             "type": "string",
             "nullable": true
@@ -12916,6 +12907,8 @@
           "estimatedValue",
           "openings",
           "filledCount",
+          "activeSubmissionCount",
+          "lastSubmittedAt",
           "description",
           "requirements",
           "notes",
@@ -13243,7 +13236,8 @@
             "enum": [
               "COLD",
               "WARM",
-              "TRADED"
+              "TRADED",
+              "UNS"
             ],
             "nullable": true,
             "description": "Snapshot of the client’s status when logged — not a live reference to Client.status"
@@ -13405,7 +13399,8 @@
             "enum": [
               "COLD",
               "WARM",
-              "TRADED"
+              "TRADED",
+              "UNS"
             ]
           },
           "seekUrl": {
@@ -13475,7 +13470,8 @@
             "enum": [
               "COLD",
               "WARM",
-              "TRADED"
+              "TRADED",
+              "UNS"
             ]
           },
           "seekUrl": {

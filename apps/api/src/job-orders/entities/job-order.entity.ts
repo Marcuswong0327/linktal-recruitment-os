@@ -106,6 +106,18 @@ export class JobOrderEntity implements Omit<JobOrder, 'deletedAt' | 'deletedById
   estimatedValue!: number | null;
   @ApiProperty({ example: 1 }) openings!: number;
   @ApiProperty({ example: 0 }) filledCount!: number;
+  @ApiProperty({
+    example: 0,
+    description:
+      'Denormalized: submissions on this job order with status != REJECTED, not soft-deleted. Exists so the list can sort by it (see JobOrderSortField) — not otherwise meaningful on its own, since pipelineSubmissions below already carries the live per-candidate breakdown.',
+  })
+  activeSubmissionCount!: number;
+  @ApiProperty({
+    type: Date,
+    nullable: true,
+    description: 'Denormalized: latest submittedAt across not-soft-deleted submissions. Sort-only, same reasoning as activeSubmissionCount.',
+  })
+  lastSubmittedAt!: Date | null;
   @ApiProperty({ type: String, nullable: true }) description!: string | null;
   @ApiProperty({ type: String, nullable: true }) requirements!: string | null;
   @ApiProperty({

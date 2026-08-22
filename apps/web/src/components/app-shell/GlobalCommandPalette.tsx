@@ -94,7 +94,7 @@ export function CommandPaletteProvider({
                   onSelect={() => go(page.href)}
                 >
                   <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground group-data-selected/command-item:bg-primary/15 group-data-selected/command-item:text-primary">
-                    <page.icon className="size-4" />
+                    {page.icon && <page.icon className="size-4" />}
                   </span>
                   <span className="flex-1 truncate">{page.title}</span>
                   <span className="text-xs text-muted-foreground group-data-selected/command-item:text-primary/70">

@@ -11,6 +11,7 @@ export type ExportJobOrdersSortBy = typeof ExportJobOrdersSortBy[keyof typeof Ex
 
 export const ExportJobOrdersSortBy = {
   displayId: 'displayId',
+  jobTitle: 'jobTitle',
   openings: 'openings',
   filledCount: 'filledCount',
   salaryMin: 'salaryMin',
@@ -18,4 +19,6 @@ export const ExportJobOrdersSortBy = {
   receivedAt: 'receivedAt',
   closedAt: 'closedAt',
   createdAt: 'createdAt',
+  activeSubmissionCount: 'activeSubmissionCount',
+  lastSubmittedAt: 'lastSubmittedAt',
 } as const;

@@ -71,6 +71,13 @@ export interface JobOrderEntity {
   estimatedValue: number | null;
   openings: number;
   filledCount: number;
+  /** Denormalized: submissions on this job order with status != REJECTED, not soft-deleted. Exists so the list can sort by it (see JobOrderSortField) — not otherwise meaningful on its own, since pipelineSubmissions below already carries the live per-candidate breakdown. */
+  activeSubmissionCount: number;
+  /**
+     * Denormalized: latest submittedAt across not-soft-deleted submissions. Sort-only, same reasoning as activeSubmissionCount.
+     * @nullable
+     */
+  lastSubmittedAt: string | null;
   /** @nullable */
   description: string | null;
   /** @nullable */

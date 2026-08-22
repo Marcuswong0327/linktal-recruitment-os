@@ -18,7 +18,6 @@ type JobOrderFilterFields = Pick<
   QueryJobOrdersDto,
   | 'q'
   | 'statuses'
-  | 'qualities'
   | 'clientId'
   | 'consultantIds'
   | 'jobTitleIds'
@@ -175,10 +174,6 @@ export class JobOrdersService {
       where.status = { in: query.statuses };
     }
 
-    if (query.qualities?.length) {
-      where.quality = { in: query.qualities };
-    }
-
     if (query.clientId) {
       where.clientId = query.clientId;
     }
@@ -258,7 +253,11 @@ export class JobOrdersService {
     // declaration order — so `status asc` already puts Active first, same
     // trick used for Client.quality. Received-date is the secondary sort so
     // same-status rows still land in a stable, useful order.
-    return sortBy ? [{ [sortBy]: sortOrder }] : [{ status: 'asc' }, { receivedAt: 'desc' }];
+    if (!sortBy) return [{ status: 'asc' }, { receivedAt: 'desc' }];
+    // jobTitle is a relation (JobOrder.jobTitleId -> JobTitle.name), not a
+    // scalar column, so it can't key `orderBy` the same way as the rest.
+    if (sortBy === 'jobTitle') return [{ jobTitle: { name: sortOrder } }];
+    return [{ [sortBy]: sortOrder }];
   }
 
   async findAll(query: QueryJobOrdersDto, user: AuthUser) {

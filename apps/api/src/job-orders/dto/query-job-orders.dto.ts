@@ -1,17 +1,21 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { IsArray, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
-import { JobOrderQuality, JobOrderStatus } from '@prisma/client';
+import { JobOrderStatus } from '@prisma/client';
 
 /**
- * Columns the list may be sorted by. Deliberately narrow: ID, numeric counts,
- * salary bounds, and dates — the things with a meaningful order. Categorical /
- * free-text columns (jobTitle, jobRoleType, location, status, priorityLevel,
- * quality) are exposed as filters instead, since sorting by them only yields
- * arbitrary alphabetical groupings.
+ * Columns the list may be sorted by. Mostly ID, numeric counts, salary bounds,
+ * and dates — the things with a meaningful order. Categorical columns
+ * (jobRoleType, location, status, priorityLevel) are exposed as filters
+ * instead, since sorting by them only yields arbitrary groupings.
+ * `jobTitle` is the deliberate exception — an alphabetical sort of role names
+ * is a real ask (Job Orders table's Role column) — and is handled specially
+ * in the service since it's a relation (JobOrder.jobTitleId -> JobTitle.name),
+ * not a scalar column `orderBy` can key on directly.
  */
 export enum JobOrderSortField {
   displayId = 'displayId',
+  jobTitle = 'jobTitle',
   openings = 'openings',
   filledCount = 'filledCount',
   salaryMin = 'salaryMin',
@@ -19,6 +23,11 @@ export enum JobOrderSortField {
   receivedAt = 'receivedAt',
   closedAt = 'closedAt',
   createdAt = 'createdAt',
+  // Denormalized on JobOrder, kept in sync by
+  // SubmissionsService.recomputeJobOrderCounters — see that field's own
+  // schema.prisma comment for why a plain relation aggregate can't do this.
+  activeSubmissionCount = 'activeSubmissionCount',
+  lastSubmittedAt = 'lastSubmittedAt',
 }
 
 export enum SortOrder {
@@ -72,13 +81,6 @@ export class QueryJobOrdersDto {
   @IsArray()
   @IsEnum(JobOrderStatus, { each: true })
   statuses?: JobOrderStatus[];
-
-  @ApiPropertyOptional({ description: 'Filter by quality (one or more). Omit for all qualities.', enum: JobOrderQuality, isArray: true })
-  @IsOptional()
-  @Transform(toArray)
-  @IsArray()
-  @IsEnum(JobOrderQuality, { each: true })
-  qualities?: JobOrderQuality[];
 
   @ApiPropertyOptional({ description: 'Filter by client ID (exact match)' })
   @IsOptional()

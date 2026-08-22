@@ -3,10 +3,11 @@
 import * as React from 'react';
 import { Combobox } from '@base-ui/react/combobox';
 import { keepPreviousData } from '@tanstack/react-query';
-import { Check, ListFilter, Loader2, X } from 'lucide-react';
+import { Check, ChevronDown, ListFilter, Loader2, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useGetLocations } from '@/lib/api/generated/locations/locations';
 import type { LocationEntity } from '@/lib/api/generated/types';
 import { LocationEntityLevel } from '@/lib/api/generated/types/locationEntityLevel';
@@ -248,14 +249,39 @@ export interface LocationFilterButtonProps {
    */
   onResolve?: (id: string, name: string, level: LocationEntity['level']) => void;
   title?: string;
+  /** Narrows the search to one rung of the tree (e.g. only countries, only cities) — omit to search across all levels. */
+  level?: LocationEntity['level'];
+  /**
+   * Loads a default list (`level` + empty query) instead of requiring
+   * `MIN_QUERY_LENGTH` characters first — sane for a small, browsable rung
+   * like Country; leave off for a huge one like City, which must be typed.
+   */
+  browsable?: boolean;
+  /** Icon-only trigger (default) for a `DataGridFilter` header slot, vs a full dashed-pill dropdown field for an action-bar filter row. */
+  compact?: boolean;
+  /** Trigger label/placeholder text when `compact` is false. */
+  placeholder?: string;
+  /** Resolves an already-selected id to a display name when it's not in the current search results — same reasoning as `LocationFilter`'s `labelFor`. Only used when `compact` is false. */
+  labelFor?: (id: string) => string;
 }
 
 /**
- * Compact icon-button variant of `LocationMultiSelect` for a `DataGridFilter`
- * header slot — same server-searched multi-select, matching
- * `DataGridFacetedFilter`'s `compact` trigger look instead of a full field.
+ * Server-searched multi-select over the Location catalog. Defaults to a
+ * compact icon-button variant of `LocationMultiSelect` for a `DataGridFilter`
+ * header slot; set `compact={false}` for a full dashed-pill dropdown field
+ * (an action-bar filter row), optionally scoped to one `level`.
  */
-export function LocationFilterButton({ selected, onChange, onResolve, title = 'Location' }: LocationFilterButtonProps) {
+export function LocationFilterButton({
+  selected,
+  onChange,
+  onResolve,
+  title = 'Location',
+  level,
+  browsable = false,
+  compact = true,
+  placeholder,
+  labelFor,
+}: LocationFilterButtonProps) {
   const [inputValue, setInputValue] = React.useState('');
   const [debouncedQuery, setDebouncedQuery] = React.useState('');
 
@@ -264,9 +290,9 @@ export function LocationFilterButton({ selected, onChange, onResolve, title = 'L
     return () => clearTimeout(timer);
   }, [inputValue]);
 
-  const searchEnabled = debouncedQuery.length >= MIN_QUERY_LENGTH;
+  const searchEnabled = browsable || debouncedQuery.length >= MIN_QUERY_LENGTH;
   const { data, isFetching } = useGetLocations(
-    { q: debouncedQuery, take: 20 },
+    { q: debouncedQuery || undefined, level, take: 20 },
     { query: { enabled: searchEnabled, placeholderData: keepPreviousData } },
   );
   const results: LocationEntity[] = searchEnabled && data?.status === 200 ? data.data : [];
@@ -278,6 +304,8 @@ export function LocationFilterButton({ selected, onChange, onResolve, title = 'L
     for (const r of results) onResolve(r.id, r.name, r.level);
   }, [results, onResolve]);
 
+  const resolveLabel = (id: string) => resultsById.get(id)?.name ?? labelFor?.(id) ?? id;
+
   return (
     <Combobox.Root
       items={items}
@@ -287,20 +315,43 @@ export function LocationFilterButton({ selected, onChange, onResolve, title = 'L
       onValueChange={onChange}
       inputValue={inputValue}
       onInputValueChange={setInputValue}
-      itemToStringLabel={(id: string) => resultsById.get(id)?.name ?? id}
+      itemToStringLabel={resolveLabel}
       itemToStringValue={(id: string) => id}
     >
-      <Combobox.Trigger
-        aria-label={`Filter ${title}`}
-        title={`Filter ${title}`}
-        onClick={(e) => e.stopPropagation()}
-        className={cn(
-          'inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground',
-          selected.length > 0 && 'text-primary',
-        )}
-      >
-        <ListFilter className={cn('size-4', selected.length === 0 && 'opacity-60')} />
-      </Combobox.Trigger>
+      {compact ? (
+        <Combobox.Trigger
+          aria-label={`Filter ${title}`}
+          title={`Filter ${title}`}
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            'inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground',
+            selected.length > 0 && 'text-primary',
+          )}
+        >
+          <ListFilter className={cn('size-4', selected.length === 0 && 'opacity-60')} />
+        </Combobox.Trigger>
+      ) : (
+        <Combobox.Trigger
+          render={
+            <Button
+              variant="outline"
+              className={cn(
+                'w-full justify-between rounded-lg border-dashed border-foreground/40 aria-expanded:border-solid dark:bg-input/50 dark:hover:bg-input/70',
+                selected.length > 0 && 'border-solid',
+              )}
+            />
+          }
+        >
+          <span className={cn('min-w-0 flex-1 truncate text-left', selected.length === 0 && 'text-muted-foreground')}>
+            {selected.length === 0
+              ? (placeholder ?? title)
+              : selected.length === 1
+                ? resolveLabel(selected[0])
+                : `${selected.length} selected`}
+          </span>
+          <ChevronDown className="ml-auto shrink-0 opacity-50" />
+        </Combobox.Trigger>
+      )}
 
       <Combobox.Portal>
         <Combobox.Positioner align="start" sideOffset={4} className="isolate z-50">
