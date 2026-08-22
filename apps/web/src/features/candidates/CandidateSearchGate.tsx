@@ -1,25 +1,34 @@
 'use client';
 
 import * as React from 'react';
-import { ChevronDown, SlidersHorizontal, X } from 'lucide-react';
+import { Search, User, X } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { PageHeader } from '@/components/app-shell/PageLayout';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
-import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { EnumSelect } from '@/components/EnumSelect';
+import { LocationFilterButton } from '@/components/LocationMultiSelect';
+import { SpecializationFilterButton } from '@/components/SpecializationPicker';
 import { useGetIndustries } from '@/lib/api/generated/industries/industries';
 import { useGetJobRoleTypes } from '@/lib/api/generated/job-role-types/job-role-types';
+import { useGetMe } from '@/lib/api/generated/consultants/consultants';
+import { getLocation } from '@/lib/api/generated/locations/locations';
 import { useGetCandidateJobRoleTypeFacets } from '@/lib/api/generated/candidates/candidates';
-import type { GetCandidatesParams, JobRoleTypeFacetEntity } from '@/lib/api/generated/types';
-import { CandidateSearchBar } from './CandidateSearchBar';
+import type { GetCandidatesParams } from '@/lib/api/generated/types';
 import { RoleTypeFilter } from './RoleTypeFilter';
-import { LocationFilter } from './LocationFilter';
-import { CatalogMultiSelectFilter } from './CatalogMultiSelectFilter';
 import { CandidatesTable } from './CandidatesTable';
-import { candidateStatuses, candidateStatusLabels, candidateStatusVariants } from './schema';
-import { type CandidateFilterState, useCandidateSearch } from './useCandidateSearch';
+import {
+  candidateStatuses,
+  candidateStatusLabels,
+  candidateStatusVariants,
+  sortByOptions,
+  type CandidateAppliedFilters,
+  type CandidateStatus,
+  type SortByValue,
+} from './schema';
+
+/** How long Reset fades the results area + its own button out before actually clearing state. */
+const RESET_FADE_MS = 200;
 
 const statusOptions = candidateStatuses.map((value) => ({
   value,
@@ -27,307 +36,310 @@ const statusOptions = candidateStatuses.map((value) => ({
   variant: candidateStatusVariants[value],
 }));
 
-/** Unions array fields, overwrites scalar ones — how a picked search-bar suggestion layers onto whatever's already active (adding "Fitter" from the search bar adds to Role Type, it doesn't replace the whole search). */
-function mergeAdditive(prev: CandidateFilterState, patch: Partial<CandidateFilterState>): Partial<CandidateFilterState> {
-  const merged: Partial<CandidateFilterState> = { ...patch };
-  for (const key of Object.keys(patch) as (keyof CandidateFilterState)[]) {
-    const value = patch[key];
-    if (Array.isArray(value)) {
-      const existing = (prev[key] as unknown as string[] | undefined) ?? [];
-      (merged as Record<string, unknown>)[key] = Array.from(new Set([...existing, ...value]));
-    }
-  }
-  return merged;
+/** Label + control, stacked — same shape as CompaniesSearchGate's inline filter labels. */
+function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {children}
+    </div>
+  );
 }
 
+/**
+ * Candidates is search-gated, same as Companies: the table never mounts (so
+ * no query ever fires) until the user explicitly commits the action bar's
+ * selections with "Search" — this dataset is large enough (~4k rows) that
+ * landing on an unfiltered "everything" page isn't a useful default.
+ * Re-clicking Search with the same selections still counts as a fresh commit
+ * (a new `filters` object, even if shallow-equal) — see CandidatesTable's
+ * page-reset effect.
+ */
 export function CandidateSearchGate({
   canCreate,
-  canDelete,
   canUpdate,
+  canDelete,
 }: {
   canCreate: boolean;
-  canDelete: boolean;
   canUpdate: boolean;
+  canDelete: boolean;
 }) {
+  const [countryIds, setCountryIds] = React.useState<string[]>([]);
+  const [cityIds, setCityIds] = React.useState<string[]>([]);
+  const [industryIds, setIndustryIds] = React.useState<string[]>([]);
+  const [specializationIds, setSpecializationIds] = React.useState<string[]>([]);
+  const [jobRoleTypeIds, setJobRoleTypeIds] = React.useState<string[]>([]);
+  const [statuses, setStatuses] = React.useState<string[]>([]);
+  const [sortByValue, setSortByValue] = React.useState<SortByValue | ''>('');
+
+  // Country/City/Specialization are server-searched (see LocationFilterButton
+  // /SpecializationFilterButton) — the API only returns a name alongside a
+  // live search result, not by id, so each is cached here as the user
+  // searches, same reasoning as CompaniesSearchGate's resolver maps.
+  const [countryNames, setCountryNames] = React.useState<Record<string, string>>({});
+  const registerCountryName = React.useCallback(
+    (id: string, name: string) => setCountryNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
+    [],
+  );
+  const [cityNames, setCityNames] = React.useState<Record<string, string>>({});
+  const registerCityName = React.useCallback(
+    (id: string, name: string) => setCityNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
+    [],
+  );
+  const [specializationNames, setSpecializationNames] = React.useState<Record<string, string>>({});
+  const registerSpecializationName = React.useCallback(
+    (id: string, name: string) =>
+      setSpecializationNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
+    [],
+  );
+
   const { data: industriesData } = useGetIndustries();
   const industries = industriesData?.status === 200 ? industriesData.data : [];
+  const industryOptions = React.useMemo(() => industries.map((i) => ({ value: i.id, label: i.name })), [industries]);
+
   // `take: 200` (the endpoint's max) rather than the 50 default — this
-  // catalog is 259 rows and genuinely paginated by design (the API doc:
-  // "the combobox asks for a page ... not the whole table"), so this is
-  // still a best-effort fallback, not a guarantee. `facets` below (an
-  // unbounded groupBy) is the one that actually has to be complete, since
-  // it's what resolves the Active Filters chip label for whatever's picked.
+  // catalog is 259 rows; `jobRoleTypeFacets` below is the one that actually
+  // has to be complete for chip/trigger labels, this is just a fallback.
   const { data: roleTypesData } = useGetJobRoleTypes({ take: 200 });
   const roleTypes = roleTypesData?.status === 200 ? roleTypesData.data : [];
 
-  // Location and Specialization aren't preloaded (~2k location nodes;
-  // Specialization is 775+ rows and growing — see CatalogMultiSelectFilter's
-  // doc) — both are server-searched as the user types, so chip/trigger
-  // labels for an already-selected id cache whatever the respective picker
-  // has resolved so far, rather than joining against a full list that
-  // doesn't exist client-side.
-  const [locationNames, setLocationNames] = React.useState<Record<string, string>>({});
-  const registerLocationName = React.useCallback((id: string, name: string) => {
-    setLocationNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name }));
-  }, []);
-  const [specializationNames, setSpecializationNames] = React.useState<Record<string, string>>({});
-  const registerSpecializationName = React.useCallback((id: string, name: string) => {
-    setSpecializationNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name }));
-  }, []);
-
-  // Job Role Type facets need the current filter state (`search.queryParams`)
-  // to compute, but `search` itself needs `resolvers` (below) as an
-  // argument — so the fetch can't happen before `search` exists. Broken via
-  // one extra render: seed from state (starts empty), fetch once `search` is
-  // available further down, and sync the result back into this state so
-  // `resolvers` picks up a fresh reference and the Active Filters chip
-  // relabels correctly once facets resolve.
-  const [jobRoleTypeFacets, setJobRoleTypeFacets] = React.useState<JobRoleTypeFacetEntity[]>([]);
-
-  const resolvers = React.useMemo(
-    () => ({
-      industryName: (id: string) => industries.find((i) => i.id === id)?.name ?? id,
-      // Facets (unbounded — every role type with >=1 current match) resolve
-      // first; the plain catalog (paginated at up to 200/259) is only a
-      // fallback for the rare case of a selection with zero current matches
-      // under every other active filter.
-      jobRoleTypeName: (id: string) =>
-        jobRoleTypeFacets.find((f) => f.id === id)?.name ?? roleTypes.find((r) => r.id === id)?.name ?? id,
-      specializationName: (id: string) => specializationNames[id] ?? id,
-      locationName: (id: string) => locationNames[id] ?? id,
-    }),
-    [industries, jobRoleTypeFacets, roleTypes, locationNames, specializationNames],
-  );
-
-  const search = useCandidateSearch(resolvers);
-  const [searchText, setSearchText] = React.useState('');
-
+  // Job Role Type option counts reflect the draft selections in this bar,
+  // live — "if I also picked this" — computed server-side against every
+  // other field currently set, same as the field's own doc.
   const jobRoleTypeFacetQuery: GetCandidatesParams = {
-    q: search.queryParams.q,
-    statuses: search.queryParams.statuses,
-    industryIds: search.queryParams.industryIds,
-    specializationIds: search.queryParams.specializationIds,
-    submissionStatuses: search.queryParams.submissionStatuses,
-    placementStatuses: search.queryParams.placementStatuses,
-    locationIds: search.queryParams.locationIds,
-    lastContactedFrom: search.queryParams.lastContactedFrom,
-    lastContactedTo: search.queryParams.lastContactedTo,
+    statuses: statuses.length ? (statuses as CandidateStatus[]) : undefined,
+    industryIds: industryIds.length ? industryIds : undefined,
+    specializationIds: specializationIds.length ? specializationIds : undefined,
+    locationIds: countryIds.length || cityIds.length ? [...countryIds, ...cityIds] : undefined,
   };
   const { data: jobRoleTypeFacetsData } = useGetCandidateJobRoleTypeFacets(jobRoleTypeFacetQuery);
-  const fetchedJobRoleTypeFacets = React.useMemo(
+  const jobRoleTypeFacets = React.useMemo(
     () => (jobRoleTypeFacetsData?.status === 200 ? jobRoleTypeFacetsData.data : []),
     [jobRoleTypeFacetsData],
   );
+  const jobRoleTypeName = React.useCallback(
+    (id: string) => jobRoleTypeFacets.find((f) => f.id === id)?.name ?? roleTypes.find((r) => r.id === id)?.name ?? id,
+    [jobRoleTypeFacets, roleTypes],
+  );
+
+  // Default the action bar's selections (not the search itself — the user
+  // still clicks Search) to the logged-in consultant's own scope grants
+  // (Industry/Specialization/Location — see docs/scope-explained.md), so
+  // their own patch is one click away instead of built from scratch.
+  // No-ops for admin/manager/etc., whose grant arrays are normally empty
+  // (scoping only restricts the `consultant` role). Ref-guarded to run
+  // exactly once — after that, the fields are the user's to change freely.
+  const seededFromScopeRef = React.useRef(false);
+  const { data: meData } = useGetMe();
+  const me = meData?.status === 200 ? meData.data : undefined;
+
   React.useEffect(() => {
-    setJobRoleTypeFacets(fetchedJobRoleTypeFacets);
-  }, [fetchedJobRoleTypeFacets]);
+    if (!me || seededFromScopeRef.current) return;
+    seededFromScopeRef.current = true;
 
-  function handleSearchSubmit() {
-    const trimmed = searchText.trim();
-    if (!trimmed) return;
-    // Replaces `q` rather than appending — searching "Smith" after "John"
-    // used to concatenate into the literal substring "John Smith", which
-    // matches nobody. A second search should replace the first, not stack.
-    search.applyFilters({ q: trimmed });
-    setSearchText('');
+    const scopeIndustryIds = me.industryIds ?? [];
+    const scopeSpecializationIds = me.specializationIds ?? [];
+    const scopeSpecializationNames = me.specializations ?? [];
+    const scopeLocationIds = me.locationIds ?? [];
+    const scopeLocationNames = me.locations ?? [];
+    if (scopeIndustryIds.length === 0 && scopeSpecializationIds.length === 0 && scopeLocationIds.length === 0) return;
+
+    setIndustryIds(scopeIndustryIds);
+    setSpecializationIds(scopeSpecializationIds);
+    scopeSpecializationIds.forEach((id, i) => {
+      if (scopeSpecializationNames[i]) registerSpecializationName(id, scopeSpecializationNames[i]);
+    });
+
+    let cancelled = false;
+    // Location grants carry no level of their own here (Consultant.locations
+    // is a flat, mixed-rung list) — the Country/City dropdowns are
+    // level-scoped, so each grant needs a lookup to know which one it
+    // belongs in. STATE/SUBURB grants aren't representable in this
+    // two-dropdown bar and are left out of the default seed (still pickable
+    // by hand).
+    Promise.all(scopeLocationIds.map((id) => getLocation(id).catch(() => null))).then((results) => {
+      if (cancelled) return;
+      const nextCountryIds: string[] = [];
+      const nextCityIds: string[] = [];
+      results.forEach((res, i) => {
+        const id = scopeLocationIds[i];
+        const location = res?.status === 200 ? res.data : undefined;
+        const name = location?.name ?? scopeLocationNames[i];
+        if (location?.level === 'COUNTRY') {
+          nextCountryIds.push(id);
+          if (name) registerCountryName(id, name);
+        } else if (location?.level === 'CITY') {
+          nextCityIds.push(id);
+          if (name) registerCityName(id, name);
+        }
+      });
+      setCountryIds(nextCountryIds);
+      setCityIds(nextCityIds);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [me, registerSpecializationName, registerCountryName, registerCityName]);
+
+  const hasActiveFilters =
+    countryIds.length > 0 ||
+    cityIds.length > 0 ||
+    industryIds.length > 0 ||
+    specializationIds.length > 0 ||
+    jobRoleTypeIds.length > 0 ||
+    statuses.length > 0 ||
+    sortByValue !== '';
+
+  const [appliedFilters, setAppliedFilters] = React.useState<CandidateAppliedFilters | null>(null);
+
+  function handleSearch() {
+    const locationIds = [...countryIds, ...cityIds];
+    const sort = sortByOptions.find((o) => o.value === sortByValue);
+    setAppliedFilters({
+      statuses: statuses.length ? (statuses as CandidateStatus[]) : undefined,
+      industryIds: industryIds.length ? industryIds : undefined,
+      jobRoleTypeIds: jobRoleTypeIds.length ? jobRoleTypeIds : undefined,
+      specializationIds: specializationIds.length ? specializationIds : undefined,
+      locationIds: locationIds.length ? locationIds : undefined,
+      sortBy: sort?.sortBy,
+      sortOrder: sort?.sortOrder,
+    });
   }
 
-  function handleApplySuggestion(patch: Partial<CandidateFilterState>) {
-    search.applyFilters(mergeAdditive(search.filters, patch));
+  // Undoes the search entirely, not just the draft selections — leaving
+  // results on screen for filters the action bar no longer shows as active
+  // would be confusing, so this drops back to the "no candidates displayed
+  // yet" gate state too. Fades the results area and the Reset button itself
+  // out first, then clears state once the fade finishes (RESET_FADE_MS) —
+  // clearing immediately would just snap both away with no transition to
+  // actually see.
+  const [isResetting, setIsResetting] = React.useState(false);
+  function handleReset() {
+    if (isResetting) return;
+    setIsResetting(true);
+    window.setTimeout(() => {
+      setCountryIds([]);
+      setCityIds([]);
+      setIndustryIds([]);
+      setSpecializationIds([]);
+      setJobRoleTypeIds([]);
+      setStatuses([]);
+      setSortByValue('');
+      setAppliedFilters(null);
+      setIsResetting(false);
+    }, RESET_FADE_MS);
   }
-
-  function applyPreset(preset: 'recentlyAdded' | 'warm') {
-    search.clearAll();
-    if (preset === 'warm') search.set('statuses', ['WARM']);
-  }
-
-  const moreFiltersCount =
-    search.filters.industryIds.length +
-    search.filters.specializationIds.length +
-    search.filters.submissionStatuses.length +
-    search.filters.placementStatuses.length;
 
   return (
     <div className="flex flex-col gap-4">
-      <PageHeader
-        title="Search Candidates"
-        description="Browse every candidate in scope, or narrow with the filters below."
-      />
-
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-        <div className="flex items-center gap-2">
-          <CandidateSearchBar
-            value={searchText}
-            onChange={setSearchText}
-            onSubmit={handleSearchSubmit}
-            onApplyFilter={handleApplySuggestion}
-            lookups={{
-              jobRoleTypes: roleTypes,
-              industries,
-            }}
-          />
-          <Button onClick={handleSearchSubmit} disabled={!searchText.trim()}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+          <FilterField label="Country">
+            <LocationFilterButton
+              selected={countryIds}
+              onChange={setCountryIds}
+              level="COUNTRY"
+              browsable
+              compact={false}
+              placeholder="All countries"
+              title="Country"
+              labelFor={(id) => countryNames[id] ?? id}
+              onResolve={registerCountryName}
+            />
+          </FilterField>
+          <FilterField label="Industry">
+            <DataGridFacetedFilter
+              title="Industry"
+              options={industryOptions}
+              selected={industryIds}
+              onChange={setIndustryIds}
+              triggerClassName="w-full justify-between"
+            />
+          </FilterField>
+          <FilterField label="Specialization">
+            <SpecializationFilterButton
+              selected={specializationIds}
+              onChange={setSpecializationIds}
+              compact={false}
+              placeholder="All specializations"
+              title="Specialization"
+              labelFor={(id) => specializationNames[id] ?? id}
+              onResolve={registerSpecializationName}
+            />
+          </FilterField>
+          <FilterField label="City">
+            <LocationFilterButton
+              selected={cityIds}
+              onChange={setCityIds}
+              level="CITY"
+              compact={false}
+              placeholder="All cities"
+              title="City"
+              labelFor={(id) => cityNames[id] ?? id}
+              onResolve={registerCityName}
+            />
+          </FilterField>
+          <FilterField label="Role Type">
+            <RoleTypeFilter
+              selected={jobRoleTypeIds}
+              onChange={setJobRoleTypeIds}
+              facets={jobRoleTypeFacets}
+              labelFor={jobRoleTypeName}
+            />
+          </FilterField>
+          <FilterField label="Status">
+            <DataGridFacetedFilter
+              title="Status"
+              options={statusOptions}
+              selected={statuses}
+              onChange={setStatuses}
+              triggerClassName="w-full justify-between"
+            />
+          </FilterField>
+          <FilterField label="Sorted By">
+            <EnumSelect
+              id="candidates-sort"
+              value={sortByValue}
+              onValueChange={(v) => setSortByValue(v as SortByValue)}
+              options={sortByOptions}
+              placeholder="Select sorting"
+            />
+          </FilterField>
+        </div>
+        <div className="flex justify-end gap-2">
+          {hasActiveFilters ? (
+            <Button
+              variant="outline"
+              onClick={handleReset}
+              disabled={isResetting}
+              className={cn('transition-opacity duration-200', isResetting && 'pointer-events-none opacity-0')}
+            >
+              <X />
+              Reset
+            </Button>
+          ) : null}
+          <Button onClick={handleSearch}>
+            <Search />
             Search
           </Button>
         </div>
-
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="flex min-w-64 flex-1 flex-col gap-1">
-            <span className="text-xs font-medium text-muted-foreground">Role Type</span>
-            <RoleTypeFilter
-              selected={search.filters.jobRoleTypeIds}
-              onChange={(values) => search.set('jobRoleTypeIds', values)}
-              facets={fetchedJobRoleTypeFacets}
-              labelFor={resolvers.jobRoleTypeName}
-            />
-          </div>
-          <DataGridFacetedFilter
-            title="Status"
-            options={statusOptions}
-            selected={search.filters.statuses}
-            onChange={(values) => search.set('statuses', values as typeof search.filters.statuses)}
-          />
-          <LocationFilter
-            selected={search.filters.locationIds}
-            onChange={(values) => search.set('locationIds', values)}
-            labelFor={resolvers.locationName}
-            registerLabel={registerLocationName}
-          />
-          <DateRangeFilter
-            title="Last contacted"
-            from={search.filters.lastContactedFrom}
-            to={search.filters.lastContactedTo}
-            onChange={({ from, to }) => {
-              search.set('lastContactedFrom', from);
-              search.set('lastContactedTo', to);
-            }}
-          />
-
-          <Popover>
-            <PopoverTrigger
-              render={
-                <Button variant="outline" className="rounded-lg border-dashed border-foreground/40 data-popup-open:border-solid" />
-              }
-            >
-              <SlidersHorizontal className="opacity-60" />
-              More filters
-              {moreFiltersCount > 0 ? (
-                <>
-                  <span className="mx-0.5 h-4 w-px bg-border" />
-                  <Badge variant="muted" className="rounded-sm px-1 font-normal">
-                    {moreFiltersCount}
-                  </Badge>
-                </>
-              ) : null}
-              <ChevronDown className="opacity-50" />
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-80">
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium">Industry</span>
-                  <DataGridFacetedFilter
-                    title="Select industry"
-                    options={industries.map((i) => ({ value: i.id, label: i.name }))}
-                    selected={search.filters.industryIds}
-                    onChange={(values) => search.set('industryIds', values)}
-                    triggerClassName="w-full justify-between"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium">Specialization</span>
-                  <CatalogMultiSelectFilter
-                    title="Specialization"
-                    selected={search.filters.specializationIds}
-                    onChange={(values) => search.set('specializationIds', values)}
-                    labelFor={resolvers.specializationName}
-                    registerLabel={registerSpecializationName}
-                  />
-                  {search.filters.specializationIds.length > 0 ? (
-                    <p className="text-xs text-warning">
-                      Only ~5% of candidates have a specialization tagged — this can hide most matches.
-                    </p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Rarely tagged (~5% of candidates) — use Role Type first.</p>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium">Submission status</span>
-                  <DataGridFacetedFilter
-                    title="Select submission status"
-                    options={[
-                      { value: 'SUBMITTED', label: 'Submitted' },
-                      { value: 'INTERVIEWING', label: 'Interviewing' },
-                      { value: 'REJECTED', label: 'Rejected' },
-                      { value: 'PLACED', label: 'Placed' },
-                    ]}
-                    selected={search.filters.submissionStatuses}
-                    onChange={(values) => search.set('submissionStatuses', values as typeof search.filters.submissionStatuses)}
-                    triggerClassName="w-full justify-between"
-                  />
-                  <p className="text-xs text-muted-foreground">Very few candidates have a submission yet.</p>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium">Placement status</span>
-                  <DataGridFacetedFilter
-                    title="Select placement status"
-                    options={[
-                      { value: 'ACTIVE', label: 'Active' },
-                      { value: 'COMPLETED', label: 'Completed' },
-                      { value: 'FAILED', label: 'Failed' },
-                    ]}
-                    selected={search.filters.placementStatuses}
-                    onChange={(values) => search.set('placementStatuses', values as typeof search.filters.placementStatuses)}
-                    triggerClassName="w-full justify-between"
-                  />
-                  <p className="text-xs text-muted-foreground">No candidates have a placement yet.</p>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-        </div>
-
-        <div className="flex items-center gap-1.5 text-sm">
-          <span className="mr-0.5 text-muted-foreground">Quick views:</span>
-          <button
-            type="button"
-            onClick={() => applyPreset('recentlyAdded')}
-            className="rounded-md px-2 py-1 text-primary transition-colors hover:bg-primary/10"
-          >
-            Recently added
-          </button>
-          <button
-            type="button"
-            onClick={() => applyPreset('warm')}
-            className="rounded-md px-2 py-1 text-primary transition-colors hover:bg-primary/10"
-          >
-            Warm candidates
-          </button>
-        </div>
       </div>
 
-      {search.chips.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-4">
-          <span className="text-sm font-medium">Active Filters</span>
-          {search.chips.map((chip) => (
-            <Badge key={chip.key} variant={chip.variant ?? 'secondary'} className="gap-1 py-1">
-              {chip.label}
-              <button type="button" onClick={chip.remove} aria-label={`Remove ${chip.label}`}>
-                <X className="size-3" />
-              </button>
-            </Badge>
-          ))}
-          <button
-            type="button"
-            onClick={search.clearAll}
-            className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground hover:text-destructive"
-          >
-            <X className="size-4" />
-            Clear All
-          </button>
-        </div>
-      ) : null}
-
-      <CandidatesTable canCreate={canCreate} canDelete={canDelete} canUpdate={canUpdate} search={search} />
+      <div className={cn('transition-opacity duration-200', isResetting && 'pointer-events-none opacity-0')}>
+        {appliedFilters ? (
+          <CandidatesTable filters={appliedFilters} canCreate={canCreate} canUpdate={canUpdate} canDelete={canDelete} />
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card py-24 text-center">
+            <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <User className="size-6" />
+            </span>
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-medium text-foreground">No candidates displayed yet</p>
+              <p className="text-sm text-muted-foreground">Select your preferences to view matching candidates.</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
