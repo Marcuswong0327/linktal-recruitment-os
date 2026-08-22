@@ -1,21 +1,34 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, User, X } from 'lucide-react';
+import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { EnumSelect } from '@/components/EnumSelect';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
-import { useGetIndustries } from '@/lib/api/generated/industries/industries';
-import { useGetJobRoleTypes } from '@/lib/api/generated/job-role-types/job-role-types';
+import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@/lib/api/generated/industries/industries';
+import {
+  getGetJobRoleTypesQueryKey,
+  useCreateJobRoleType,
+  useGetJobRoleTypes,
+} from '@/lib/api/generated/job-role-types/job-role-types';
 import { useGetMe } from '@/lib/api/generated/consultants/consultants';
 import { getLocation } from '@/lib/api/generated/locations/locations';
-import { useGetCandidateJobRoleTypeFacets } from '@/lib/api/generated/candidates/candidates';
+import {
+  getGetCandidatesQueryKey,
+  useCreateCandidate,
+  useGetCandidateJobRoleTypeFacets,
+} from '@/lib/api/generated/candidates/candidates';
 import type { GetCandidatesParams } from '@/lib/api/generated/types';
 import { RoleTypeFilter } from './RoleTypeFilter';
+import { buildCandidatePayload, CandidateForm, type CandidateFormValues } from './CandidateForm';
 import { CandidatesTable } from './CandidatesTable';
 import {
   candidateStatuses,
@@ -64,6 +77,10 @@ export function CandidateSearchGate({
   canUpdate: boolean;
   canDelete: boolean;
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+
   const [countryIds, setCountryIds] = React.useState<string[]>([]);
   const [cityIds, setCityIds] = React.useState<string[]>([]);
   const [industryIds, setIndustryIds] = React.useState<string[]>([]);
@@ -102,6 +119,59 @@ export function CandidateSearchGate({
   // has to be complete for chip/trigger labels, this is just a fallback.
   const { data: roleTypesData } = useGetJobRoleTypes({ take: 200 });
   const roleTypes = roleTypesData?.status === 200 ? roleTypesData.data : [];
+
+  // Add-candidate lives here (not CandidatesTable) specifically so the global
+  // header's "Add Candidate" button works even before the gate's own table
+  // has ever mounted — same reasoning as CompaniesSearchGate's create sheet.
+  const [creating, setCreating] = React.useState(false);
+
+  // Opened via the global header's "Add Candidate" button, or the command
+  // palette's "Add a Candidate" action (both navigate to `/candidates?new=1`)
+  // — strip the param immediately so refresh/back doesn't reopen the sheet.
+  React.useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setCreating(true);
+      router.replace('/candidates');
+    }
+  }, [searchParams, router]);
+
+  const createIndustry = useCreateIndustry({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetIndustriesQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to add industry'),
+    },
+  });
+  async function handleCreateIndustry(name: string) {
+    const res = await createIndustry.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add industry');
+    return res.data;
+  }
+
+  const createRoleType = useCreateJobRoleType({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetJobRoleTypesQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to add role type'),
+    },
+  });
+  async function handleCreateRoleType(name: string) {
+    const res = await createRoleType.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add role type');
+    return res.data;
+  }
+
+  const createCandidateMutation = useCreateCandidate({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
+        toast.success('Candidate added');
+        setCreating(false);
+      },
+      onError: (err) => toast.error(err.message || 'Failed to add candidate'),
+    },
+  });
+  function handleCreate(values: CandidateFormValues) {
+    createCandidateMutation.mutate({ data: buildCandidatePayload(values) });
+  }
 
   // Job Role Type option counts reflect the draft selections in this bar,
   // live — "if I also picked this" — computed server-side against every
@@ -340,6 +410,24 @@ export function CandidateSearchGate({
           </div>
         )}
       </div>
+
+      <Sheet open={creating} onOpenChange={setCreating}>
+        <SheetContent className="w-full sm:max-w-md">
+          {creating ? (
+            <CandidateForm
+              title="Add candidate"
+              description="Add a new candidate."
+              industries={industries}
+              roleTypes={roleTypes}
+              onCreateIndustry={handleCreateIndustry}
+              onCreateRoleType={handleCreateRoleType}
+              isSaving={createCandidateMutation.isPending}
+              onSave={handleCreate}
+              onCancel={() => setCreating(false)}
+            />
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

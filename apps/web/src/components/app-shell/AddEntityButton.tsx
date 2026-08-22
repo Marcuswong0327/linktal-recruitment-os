@@ -26,6 +26,12 @@ interface PageCreateAction {
 const PAGE_CREATE_ACTIONS: PageCreateAction[] = [
   { pathname: '/companies', label: 'Add Company', requiredPermission: { resource: 'client', action: 'create' }, mode: 'sheet' },
   {
+    pathname: '/candidates',
+    label: 'Add Candidate',
+    requiredPermission: { resource: 'candidate', action: 'create' },
+    mode: 'sheet',
+  },
+  {
     pathname: '/job-orders',
     label: 'Add Job Order',
     requiredPermission: { resource: 'job_order', action: 'create' },
