@@ -130,6 +130,7 @@ export class SubmissionsService {
           include: SUBMISSION_INCLUDE,
         });
 
+    await this.recomputeJobOrderCounters(dto.jobOrderId);
     return toEntity(submission);
   }
 
@@ -140,12 +141,41 @@ export class SubmissionsService {
       data: dto,
       include: SUBMISSION_INCLUDE,
     });
+    await this.recomputeJobOrderCounters(submission.jobOrderId);
     return toEntity(submission);
   }
 
   /** Soft-deletes the submission — "removed from job order" in the pipeline timeline. */
   async remove(id: string) {
-    await this.findOne(id);
-    return this.prisma.candidateSubmission.delete({ where: { id } });
+    const existing = await this.findOne(id);
+    const removed = await this.prisma.candidateSubmission.delete({ where: { id } });
+    await this.recomputeJobOrderCounters(existing.jobOrderId);
+    return removed;
+  }
+
+  /**
+   * Recomputes JobOrder.activeSubmissionCount/lastSubmittedAt from scratch
+   * rather than incrementing/decrementing in place — a status edit (e.g.
+   * into or out of REJECTED) changes the active count without any row being
+   * created or removed, so there's no single call site where a delta alone
+   * would be correct. Called after every create/update/remove; see the two
+   * fields' own schema.prisma comment for why a plain relation aggregate
+   * can't stand in for this (no `where` on Prisma's orderBy aggregates).
+   */
+  private async recomputeJobOrderCounters(jobOrderId: string) {
+    const [activeSubmissionCount, lastSubmission] = await Promise.all([
+      this.prisma.candidateSubmission.count({
+        where: { jobOrderId, status: { not: 'REJECTED' } },
+      }),
+      this.prisma.candidateSubmission.findFirst({
+        where: { jobOrderId },
+        orderBy: { submittedAt: 'desc' },
+        select: { submittedAt: true },
+      }),
+    ]);
+    await this.prisma.jobOrder.update({
+      where: { id: jobOrderId },
+      data: { activeSubmissionCount, lastSubmittedAt: lastSubmission?.submittedAt ?? null },
+    });
   }
 }

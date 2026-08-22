@@ -856,6 +856,14 @@ model JobOrder {
   requirements String?
   notes        String? // "Briefing Notes" — internal recruiter notes, distinct from description/requirements (public-facing job-ad copy).
 
+  // Denormalized, kept in sync by SubmissionsService.recomputeJobOrderCounters
+  // on every submission create/update/remove. Exist purely so the Job Orders
+  // list can sort by them: Prisma's orderBy relation aggregates (_count/_max)
+  // take no `where`, so they can't express "exclude REJECTED" or "exclude
+  // soft-deleted rows" — see JobOrdersService.findAll's sortBy handling.
+  activeSubmissionCount Int       @default(0) // submissions.count(status != REJECTED, not soft-deleted)
+  lastSubmittedAt       DateTime? // max(submittedAt) across not-soft-deleted submissions
+
   status        JobOrderStatus  @default(ACTIVE)
   quality       JobOrderQuality @default(MEDIUM)
   priorityLevel Int?            @default(2) // 1=High, 2=Medium, 3=Low

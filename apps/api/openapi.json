@@ -4613,13 +4613,16 @@
               "type": "string",
               "enum": [
                 "displayId",
+                "jobTitle",
                 "openings",
                 "filledCount",
                 "salaryMin",
                 "salaryMax",
                 "receivedAt",
                 "closedAt",
-                "createdAt"
+                "createdAt",
+                "activeSubmissionCount",
+                "lastSubmittedAt"
               ]
             }
           },
@@ -4956,13 +4959,16 @@
               "type": "string",
               "enum": [
                 "displayId",
+                "jobTitle",
                 "openings",
                 "filledCount",
                 "salaryMin",
                 "salaryMax",
                 "receivedAt",
                 "closedAt",
-                "createdAt"
+                "createdAt",
+                "activeSubmissionCount",
+                "lastSubmittedAt"
               ]
             }
           },
@@ -12437,6 +12443,17 @@
             "type": "number",
             "example": 0
           },
+          "activeSubmissionCount": {
+            "type": "number",
+            "example": 0,
+            "description": "Denormalized: submissions on this job order with status != REJECTED, not soft-deleted. Exists so the list can sort by it (see JobOrderSortField) — not otherwise meaningful on its own, since pipelineSubmissions below already carries the live per-candidate breakdown."
+          },
+          "lastSubmittedAt": {
+            "format": "date-time",
+            "type": "string",
+            "nullable": true,
+            "description": "Denormalized: latest submittedAt across not-soft-deleted submissions. Sort-only, same reasoning as activeSubmissionCount."
+          },
           "description": {
             "type": "string",
             "nullable": true
@@ -12517,6 +12534,8 @@
           "estimatedValue",
           "openings",
           "filledCount",
+          "activeSubmissionCount",
+          "lastSubmittedAt",
           "description",
           "requirements",
           "notes",

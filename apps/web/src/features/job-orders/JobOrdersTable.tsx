@@ -24,11 +24,11 @@ import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/
 import { ImportDialog } from '@/components/ImportDialog';
 import {
   ConsultantComboboxPopup,
+  ConsultantFilterButton,
   useConsultantLookup,
 } from '@/components/ConsultantCombobox';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
-import { useGetCandidates } from '@/lib/api/generated/candidates/candidates';
 import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import {
@@ -45,6 +45,8 @@ import {
 import type {
   ConsultantEntity,
   GetJobOrdersQualitiesItem,
+  GetJobOrdersSortBy,
+  GetJobOrdersSortOrder,
   GetJobOrdersStatusesItem,
   UpdateJobOrderDto,
 } from '@/lib/api/generated/types';
@@ -83,6 +85,8 @@ export function JobOrdersTable({
   const [qualities, setQualities] = React.useState<GetJobOrdersQualitiesItem[] | undefined>();
   const [priorityLevels, setPriorityLevels] = React.useState<number[] | undefined>();
   const [consultantIds, setConsultantIds] = React.useState<string[] | undefined>();
+  const [sortBy, setSortBy] = React.useState<GetJobOrdersSortBy | undefined>();
+  const [sortOrder, setSortOrder] = React.useState<GetJobOrdersSortOrder | undefined>();
   const [selectedJobOrders, setSelectedJobOrders] = React.useState<JobOrder[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isExporting, setIsExporting] = React.useState(false);
@@ -92,7 +96,7 @@ export function JobOrdersTable({
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
 
   const { data, isLoading, isFetching, isError, error } = useGetJobOrders(
-    { page, pageSize: PAGE_SIZE, q: search, statuses, qualities, priorityLevels, consultantIds },
+    { page, pageSize: PAGE_SIZE, q: search, statuses, qualities, priorityLevels, consultantIds, sortBy, sortOrder },
     { query: { placeholderData: keepPreviousData } },
   );
 
@@ -112,10 +116,6 @@ export function JobOrdersTable({
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
 
-  // For the Candidates column's multi-select picker.
-  const { data: candidatesData } = useGetCandidates({ pageSize: 100 });
-  const candidates = candidatesData?.status === 200 ? candidatesData.data.data : [];
-
   const consultantFilterOptions = React.useMemo(
     () => consultants.map((c) => ({ value: c.id, label: c.fullName })),
     [consultants],
@@ -130,28 +130,44 @@ export function JobOrdersTable({
       { columnId: 'status', title: 'Status', options: statusOptions, inHeader: true },
       { columnId: 'quality', title: 'Quality', options: qualityOptions, inHeader: true },
       { columnId: 'priorityLevel', title: 'Priority', options: priorityOptions, inHeader: true },
-      { columnId: 'consultantId', title: 'Consultant', options: consultantFilterOptions, inHeader: true },
+      {
+        columnId: 'consultants',
+        title: 'Consultant',
+        options: consultantFilterOptions,
+        inHeader: true,
+        // Searchable, avatar-rowed popup instead of a plain checkbox list —
+        // same ConsultantFilterButton used for the roster already fetched
+        // here, matching the Location/Specialization filters on the
+        // Companies table (see CompaniesTable's use of LocationFilterButton/
+        // SpecializationFilterButton).
+        render: ({ selected, onChange }) => (
+          <ConsultantFilterButton selected={selected} onChange={onChange} consultants={consultants} title="Consultant" />
+        ),
+      },
     ],
-    [consultantFilterOptions],
+    [consultantFilterOptions, consultants],
   );
 
   const result = data?.status === 200 ? data.data : undefined;
   const jobOrders = result?.data ?? [];
 
-  function handleQueryChange({ search, columnFilters }: DataGridQuery) {
+  function handleQueryChange({ search, columnFilters, sorting }: DataGridQuery) {
     const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as
       string[] | undefined;
     const qualityFilter = columnFilters.find((f) => f.id === 'quality')?.value as
       string[] | undefined;
     const priorityFilter = columnFilters.find((f) => f.id === 'priorityLevel')?.value as
       string[] | undefined;
-    const consultantFilter = columnFilters.find((f) => f.id === 'consultantId')?.value as
+    const consultantFilter = columnFilters.find((f) => f.id === 'consultants')?.value as
       string[] | undefined;
+    const sort = sorting[0];
     setSearch(search.trim() || undefined);
     setStatuses(statusFilter?.length ? (statusFilter as GetJobOrdersStatusesItem[]) : undefined);
     setQualities(qualityFilter?.length ? (qualityFilter as GetJobOrdersQualitiesItem[]) : undefined);
     setPriorityLevels(priorityFilter?.length ? priorityFilter.map(Number) : undefined);
     setConsultantIds(consultantFilter?.length ? consultantFilter : undefined);
+    setSortBy(sort ? (sort.id as GetJobOrdersSortBy) : undefined);
+    setSortOrder(sort ? (sort.desc ? 'desc' : 'asc') : undefined);
     setPage(1);
   }
 
@@ -236,10 +252,15 @@ export function JobOrdersTable({
     setSelectedJobOrders([]);
   }
 
-  const columns = React.useMemo(
-    () => getJobOrderColumns({ clientName, candidates }),
-    [clientName, candidates],
-  );
+  const columns = React.useMemo(() => getJobOrderColumns({ clientName }), [clientName]);
+
+  // Drag-select is the only way rows get picked (checkboxes stay hidden, same
+  // as the Candidates table) — mousedown on a row and drag to range-select,
+  // like a spreadsheet. onRowClick still navigates on a plain click; a real
+  // drag suppresses it (see DataGrid's enableRowRangeSelect doc).
+  function handleSelectionChange(rows: JobOrder[]) {
+    setSelectedJobOrders(rows);
+  }
 
   if (isError) {
     return (
@@ -258,11 +279,18 @@ export function JobOrdersTable({
         isFetching={isFetching}
         searchPlaceholder="Search job orders…"
         filters={jobOrderFilters}
+        // Size to actual content instead of stretching to fill leftover
+        // viewport height when there aren't enough rows — see DataGrid's
+        // fillHeight doc.
+        fillHeight={false}
         // Job Order info isn't directly editable from the main sheet (2.2) —
         // every row (not just the title link) opens the dedicated page.
         onRowClick={(jobOrder) => router.push(`/job-orders/${jobOrder.id}`)}
         emptyState="No job orders yet. Create one against a client to get started."
         getRowId={(j) => j.id}
+        enableRowRangeSelect
+        hideSelectColumn
+        onSelectionChange={handleSelectionChange}
         toolbar={
           <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
             <Button size="lg" variant="outline" onClick={handleExport} disabled={isExporting}>
