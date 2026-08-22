@@ -1,4 +1,4 @@
-import { Building2, Contact, User, type LucideIcon } from 'lucide-react';
+import { BookA, Building2, Contact, User, type LucideIcon } from 'lucide-react';
 import { navGroups, type NavItem, type RequiredPermission } from '@/config/nav';
 
 export type PageCommand = {
@@ -58,5 +58,12 @@ export const actionCommands: ActionCommand[] = [
     href: '/stakeholders?new=1',
     icon: Contact,
     requiredPermission: { resource: 'stakeholder', action: 'create' },
+  },
+  {
+    title: 'Add Job Orders Research',
+    description: 'Log a job ad found in the market',
+    href: '/job-orders-search?new=1',
+    icon: BookA,
+    requiredPermission: { resource: 'job_research', action: 'create' },
   },
 ];

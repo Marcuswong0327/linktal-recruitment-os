@@ -1,0 +1,87 @@
+'use client';
+
+import type { ColumnDef } from '@tanstack/react-table';
+import { Globe } from 'lucide-react';
+
+import { SeekIcon } from '@/components/BrandIcons';
+import { cityLabel, formatDate, suburbLabel, type JobResearch } from './schema';
+
+export function getJobResearchColumns(): ColumnDef<JobResearch>[] {
+  return [
+    {
+      id: 'city',
+      enableSorting: false,
+      header: 'City',
+      cell: ({ row }) => <span>{cityLabel(row.original)}</span>,
+    },
+    {
+      id: 'suburb',
+      enableSorting: false,
+      header: 'Suburb',
+      cell: ({ row }) => <span>{suburbLabel(row.original)}</span>,
+    },
+    {
+      accessorKey: 'jobTitle',
+      enableSorting: false,
+      header: 'Job Title',
+      cell: ({ row }) => <span className="font-medium text-foreground">{row.original.jobTitle ?? '—'}</span>,
+    },
+    {
+      accessorKey: 'companyName',
+      enableSorting: false,
+      header: 'Company',
+      cell: ({ row }) => <span>{row.original.companyName ?? '—'}</span>,
+    },
+    {
+      accessorKey: 'salaryRange',
+      enableSorting: false,
+      header: 'Salary',
+      cell: ({ row }) => <span className="text-muted-foreground">{row.original.salaryRange ?? '—'}</span>,
+    },
+    {
+      accessorKey: 'postedDate',
+      header: 'Posted Date',
+      cell: ({ row }) => <span className="text-muted-foreground">{formatDate(row.original.postedDate)}</span>,
+    },
+    {
+      id: 'links',
+      enableSorting: false,
+      header: 'Links',
+      cell: ({ row }) => {
+        const { seekUrl, permanentUrl } = row.original;
+        if (!seekUrl && !permanentUrl) return <span className="text-muted-foreground">—</span>;
+        return (
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            {seekUrl ? (
+              <a
+                href={seekUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Seek listing"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <SeekIcon className="size-3.5" />
+              </a>
+            ) : null}
+            {permanentUrl ? (
+              <a
+                href={permanentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Permanent/archived link"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <Globe className="size-3.5" />
+              </a>
+            ) : null}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'lastContactedAt',
+      header: 'Contacted Date',
+      cell: ({ row }) => <span className="text-muted-foreground">{formatDate(row.original.lastContactedAt)}</span>,
+    },
+  ];
+}

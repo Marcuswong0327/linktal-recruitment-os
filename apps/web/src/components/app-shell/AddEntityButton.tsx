@@ -38,6 +38,12 @@ const PAGE_CREATE_ACTIONS: PageCreateAction[] = [
     mode: 'link',
     href: '/job-orders/new',
   },
+  {
+    pathname: '/job-orders-search',
+    label: 'Add Job Orders Research',
+    requiredPermission: { resource: 'job_research', action: 'create' },
+    mode: 'sheet',
+  },
 ];
 
 /**
