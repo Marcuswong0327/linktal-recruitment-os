@@ -16,6 +16,7 @@ export const clientStatusLabels: Record<ClientStatus, string> = {
   COLD: 'Cold',
   WARM: 'Warm',
   TRADED: 'Traded',
+  UNS: 'UNS',
 };
 
 export const clientQualityLabels: Record<ClientQuality, string> = {

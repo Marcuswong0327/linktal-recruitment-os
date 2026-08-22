@@ -11,6 +11,7 @@ export type GetClientsSortBy = typeof GetClientsSortBy[keyof typeof GetClientsSo
 
 export const GetClientsSortBy = {
   displayId: 'displayId',
+  companyName: 'companyName',
   createdAt: 'createdAt',
   lastContactedAt: 'lastContactedAt',
   quality: 'quality',

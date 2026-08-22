@@ -23,10 +23,14 @@ enum UserStatus {
   SUSPENDED
 }
 
+// UNS ("unsuccessful") sits last on purpose — same declaration-order-is-
+// sort-order trick as ClientQuality/CandidateStatus — since it's a dead end
+// rather than a warmer stage than TRADED.
 enum ClientStatus {
   COLD
   WARM
   TRADED
+  UNS
 }
 
 // Declaration order matters: Postgres native enums sort by declaration

@@ -5,6 +5,7 @@ import { ExternalLink } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { ComboboxSelect } from '@/components/ComboboxSelect';
+import { ConsultantAvatar } from '@/components/ConsultantCombobox';
 import { LocationBadgeList } from '@/components/LocationBadgeList';
 import { formatDate, qualityOptions, statusOptions, type Company } from './schema';
 
@@ -64,12 +65,6 @@ export function getCompanyColumns({
       },
     },
     {
-      accessorKey: 'industry',
-      header: 'Industry',
-      enableSorting: false,
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.industry ?? '—'}</span>,
-    },
-    {
       accessorKey: 'specialization',
       header: 'Specialization',
       enableSorting: false,
@@ -80,6 +75,32 @@ export function getCompanyColumns({
       header: 'Market',
       enableSorting: false,
       cell: ({ row }) => <LocationBadgeList locations={row.original.locations} />,
+    },
+    {
+      accessorKey: 'lastContactedAt',
+      header: 'Last contacted',
+      enableSorting: false,
+      cell: ({ row }) => <span className="text-muted-foreground">{formatDate(row.original.lastContactedAt)}</span>,
+    },
+    {
+      accessorKey: 'lastContactedBy',
+      header: 'Last contacted by',
+      // Resolved from the latest StakeholderContactHistory row, not a real
+      // column on Client itself — not a GetClientsSortBy field. Same avatar +
+      // name treatment as Stakeholders'/Candidates' equivalent column.
+      enableSorting: false,
+      cell: ({ row }) => {
+        const { lastContactedById, lastContactedBy } = row.original;
+        if (!lastContactedById) {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        return (
+          <div className="flex min-w-0 items-center gap-2">
+            <ConsultantAvatar consultantId={lastContactedById} name={lastContactedBy ?? undefined} size={5} />
+            <span className="truncate text-muted-foreground">{lastContactedBy ?? 'Unknown'}</span>
+          </div>
+        );
+      },
     },
     {
       accessorKey: 'status',
@@ -110,6 +131,7 @@ export function getCompanyColumns({
     {
       accessorKey: 'quality',
       header: 'Quality',
+      enableSorting: false,
       meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => {
         const client = row.original;
@@ -130,11 +152,6 @@ export function getCompanyColumns({
           </div>
         );
       },
-    },
-    {
-      accessorKey: 'lastContactedAt',
-      header: 'Last contacted',
-      cell: ({ row }) => <span className="text-muted-foreground">{formatDate(row.original.lastContactedAt)}</span>,
     },
   ];
 }

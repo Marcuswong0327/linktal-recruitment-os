@@ -132,6 +132,66 @@ function OptionalContextMenu({
   );
 }
 
+/**
+ * One body row, split out and memoized so that dragging a range-select
+ * across many rows only re-renders the rows whose `isSelected` actually
+ * flipped, instead of every visible row on every `mouseenter` — with
+ * cell content as heavy as a couple of Comboboxes per row (e.g. Companies'
+ * Status/Quality pickers), re-rendering the *whole* visible set on each
+ * pixel of a drag is what read as laggy. Correctness relies on `row` staying
+ * referentially stable across a pure-selection-state re-render, which it
+ * does here: `data`/`tableColumns` don't change mid-drag, so tanstack's own
+ * row-model memoization keeps returning the same `Row` objects — only the
+ * `isSelected` prop (computed by the caller via `row.getIsSelected()`)
+ * actually changes for the rows whose selection state moved.
+ */
+function DataGridBodyRowInner<TData>({
+  row,
+  isSelected,
+  enableRowRangeSelect,
+  onMouseDown,
+  onMouseEnterRow,
+  hasContextMenu,
+  onRowContextMenu,
+  onRowClick,
+}: {
+  row: Row<TData>;
+  isSelected: boolean;
+  enableRowRangeSelect: boolean;
+  onMouseDown: (e: React.MouseEvent, row: Row<TData>) => void;
+  onMouseEnterRow: (row: Row<TData>) => void;
+  hasContextMenu: boolean;
+  onRowContextMenu: (row: Row<TData>) => void;
+  /** Already resolved to "suppress the click after a drag" — undefined when the caller has no row-click behavior at all. */
+  onRowClick?: (row: Row<TData>) => void;
+}) {
+  return (
+    <TableRow
+      data-row-id={row.id}
+      data-state={isSelected ? 'selected' : undefined}
+      // Capture, not bubble — a popup's own "click outside closes it" logic
+      // commonly runs in the capture phase too, and can strip its
+      // [data-open] marker before a bubble-phase handler here would even
+      // see it. Running in capture as well means this always checks that
+      // marker while it's still accurate.
+      onMouseDownCapture={enableRowRangeSelect ? (e) => onMouseDown(e, row) : undefined}
+      onMouseEnter={enableRowRangeSelect ? () => onMouseEnterRow(row) : undefined}
+      onContextMenu={hasContextMenu ? () => onRowContextMenu(row) : undefined}
+      onClick={onRowClick ? () => onRowClick(row) : undefined}
+      className={cn(onRowClick && 'cursor-pointer')}
+    >
+      {row.getVisibleCells().map((cell) => (
+        <TableCell key={cell.id} className={columnAlignClass(cell.column.columnDef.meta)}>
+          <span data-measure-column={cell.column.id} className="inline-block max-w-full">
+            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          </span>
+        </TableCell>
+      ))}
+    </TableRow>
+  );
+}
+const DataGridBodyRow = React.memo(DataGridBodyRowInner) as typeof DataGridBodyRowInner;
+
 /** Search/sort/filter state reported to the caller in server mode. */
 export interface DataGridQuery {
   search: string;
@@ -624,6 +684,16 @@ export function DataGrid<TData>({
     if (autoScrollFrameRef.current !== null) return; // already running
     const EDGE_ZONE = 48; // px from the container's top/bottom edge
     const MAX_SCROLL_SPEED = 16; // px per frame, at the very edge
+    // Looked up once per drag, not per frame — this element doesn't move
+    // during the drag, and re-querying it 60x/sec was needless DOM work on
+    // every tick regardless of whether anything below actually needed it.
+    const scrollElOrNull = gridContainerRef.current?.querySelector<HTMLElement>(
+      '[data-slot="table-container"]',
+    );
+    if (!scrollElOrNull) return;
+    // Re-bound to a non-nullable type — TS doesn't retain the narrowing from
+    // the guard above across the closure boundary into `tick` below.
+    const scrollEl: HTMLElement = scrollElOrNull;
     // Seeded with the anchor row, not null — otherwise the very first tick
     // (pointer still sitting wherever mousedown happened, before any actual
     // movement) always counts as a "new" hit against `null` and immediately
@@ -642,17 +712,29 @@ export function DataGrid<TData>({
       }
       autoScrollFrameRef.current = requestAnimationFrame(tick);
 
-      const scrollEl = gridContainerRef.current?.querySelector<HTMLElement>(
-        '[data-slot="table-container"]',
-      );
-      if (!scrollEl) return;
+      // getBoundingClientRect alone is a cheap read most frames (no forced
+      // layout unless something upstream is already dirty) — this is the
+      // one per-frame cost paid regardless of edge proximity, just to know
+      // whether the rest of this tick has anything to do.
       const rect = scrollEl.getBoundingClientRect();
-
       const distFromTop = pointer.y - rect.top;
       const distFromBottom = rect.bottom - pointer.y;
-      if (distFromTop >= 0 && distFromTop < EDGE_ZONE) {
+      const nearTop = distFromTop >= 0 && distFromTop < EDGE_ZONE;
+      const nearBottom = distFromBottom >= 0 && distFromBottom < EDGE_ZONE;
+      // Not near either edge: normal `mouseenter` already extends the
+      // selection for pointer movement inside the visible rows — this loop
+      // only exists to keep extending it while auto-scroll slides rows
+      // under a *stationary* cursor, so there's nothing for it to do here.
+      // Skipping this is what actually matters: `elementFromPoint` below
+      // forces a synchronous hit-test (and, right after a `scrollTop`
+      // write, a synchronous layout flush) — paying that unconditionally on
+      // every one of ~60 frames/sec for the whole drag, not just the frames
+      // actually auto-scrolling, is what read as laggy.
+      if (!nearTop && !nearBottom) return;
+
+      if (nearTop) {
         scrollEl.scrollTop -= MAX_SCROLL_SPEED * (1 - distFromTop / EDGE_ZONE);
-      } else if (distFromBottom >= 0 && distFromBottom < EDGE_ZONE) {
+      } else {
         scrollEl.scrollTop += MAX_SCROLL_SPEED * (1 - distFromBottom / EDGE_ZONE);
       }
 
@@ -709,11 +791,22 @@ export function DataGrid<TData>({
       // the trigger's own mousedown is caught by data-no-row-drag, but
       // choosing an option afterward is a *second*, separate mousedown, and
       // this is what stops that one from anchoring a drag here instead.
+      //
+      // Excludes the sidebar subtree (`[data-slot="sidebar"]`): base-ui's
+      // `Collapsible` (used for the sidebar's expandable nav groups) stamps
+      // the exact same `data-open` on its panel while expanded — not a
+      // transient overlay, just the current page's own nav section sitting
+      // open, which it normally is. Left unscoped, that alone permanently
+      // matched this query and silently disabled drag range-select
+      // everywhere, any time the active section happened to be expanded.
+      const hasOpenPopup = Array.from(document.querySelectorAll('[data-open]')).some(
+        (el) => !el.closest('[data-slot="sidebar"]'),
+      );
       if (
         (e.target as HTMLElement).closest(
           '[data-no-row-drag], [role="menu"], [role="dialog"], [role="alertdialog"], [role="listbox"], [role="option"], [role="tooltip"]',
         ) ||
-        document.querySelector('[data-open]')
+        hasOpenPopup
       ) {
         return;
       }
@@ -739,6 +832,21 @@ export function DataGrid<TData>({
       }
     },
     [selectionContextMenu, setRowSelection],
+  );
+
+  // Stable wrapper around `onRowClick` (the caller's own prop, e.g. "open the
+  // detail page") — kept as a `useCallback` rather than inlined per-row so
+  // `DataGridBodyRow`'s memo actually holds during a drag, when `onRowClick`
+  // itself doesn't change identity between renders.
+  const handleRowClick = React.useCallback(
+    (row: Row<TData>) => {
+      if (suppressNextClickRef.current) {
+        suppressNextClickRef.current = false;
+        return;
+      }
+      onRowClick?.(row.original);
+    },
+    [onRowClick],
   );
 
   // Tracks pointer position during a drag — the auto-scroll loop needs it on
@@ -1122,50 +1230,17 @@ export function DataGrid<TData>({
             ) : rows.length > 0 ? (
               <>
                 {rows.map((row) => (
-                  <TableRow
+                  <DataGridBodyRow
                     key={row.id}
-                    data-row-id={row.id}
-                    data-state={row.getIsSelected() ? 'selected' : undefined}
-                    // Capture, not bubble — a popup's own "click outside
-                    // closes it" logic commonly runs in the capture phase
-                    // too, and can strip its [data-open] marker before a
-                    // bubble-phase handler here would even see it. Running
-                    // in capture as well means this always checks that
-                    // marker while it's still accurate.
-                    onMouseDownCapture={
-                      enableRowRangeSelect ? (e) => handleRowMouseDown(e, row) : undefined
-                    }
-                    onMouseEnter={enableRowRangeSelect ? () => handleRowMouseEnter(row) : undefined}
-                    onContextMenu={
-                      selectionContextMenu ? () => handleRowContextMenu(row) : undefined
-                    }
-                    onClick={
-                      onRowClick
-                        ? () => {
-                            if (suppressNextClickRef.current) {
-                              suppressNextClickRef.current = false;
-                              return;
-                            }
-                            onRowClick(row.original);
-                          }
-                        : undefined
-                    }
-                    className={cn(onRowClick && 'cursor-pointer')}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <TableCell
-                        key={cell.id}
-                        className={columnAlignClass(cell.column.columnDef.meta)}
-                      >
-                        <span
-                          data-measure-column={cell.column.id}
-                          className="inline-block max-w-full"
-                        >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </span>
-                      </TableCell>
-                    ))}
-                  </TableRow>
+                    row={row}
+                    isSelected={row.getIsSelected()}
+                    enableRowRangeSelect={enableRowRangeSelect}
+                    onMouseDown={handleRowMouseDown}
+                    onMouseEnterRow={handleRowMouseEnter}
+                    hasContextMenu={!!selectionContextMenu}
+                    onRowContextMenu={handleRowContextMenu}
+                    onRowClick={onRowClick ? handleRowClick : undefined}
+                  />
                 ))}
                 {server?.infiniteScroll && server.page < server.pageCount ? (
                   <TableRow ref={loadMoreRef}>

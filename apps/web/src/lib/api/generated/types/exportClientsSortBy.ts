@@ -11,6 +11,7 @@ export type ExportClientsSortBy = typeof ExportClientsSortBy[keyof typeof Export
 
 export const ExportClientsSortBy = {
   displayId: 'displayId',
+  companyName: 'companyName',
   createdAt: 'createdAt',
   lastContactedAt: 'lastContactedAt',
   quality: 'quality',

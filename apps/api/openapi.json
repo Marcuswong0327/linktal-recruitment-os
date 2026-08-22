@@ -2024,6 +2024,7 @@
               "type": "string",
               "enum": [
                 "displayId",
+                "companyName",
                 "createdAt",
                 "lastContactedAt",
                 "quality"
@@ -2064,7 +2065,8 @@
                 "enum": [
                   "COLD",
                   "WARM",
-                  "TRADED"
+                  "TRADED",
+                  "UNS"
                 ]
               }
             }
@@ -2336,6 +2338,7 @@
               "type": "string",
               "enum": [
                 "displayId",
+                "companyName",
                 "createdAt",
                 "lastContactedAt",
                 "quality"
@@ -2376,7 +2379,8 @@
                 "enum": [
                   "COLD",
                   "WARM",
-                  "TRADED"
+                  "TRADED",
+                  "UNS"
                 ]
               }
             }
@@ -5818,7 +5822,8 @@
                 "enum": [
                   "COLD",
                   "WARM",
-                  "TRADED"
+                  "TRADED",
+                  "UNS"
                 ]
               }
             }
@@ -11270,7 +11275,8 @@
             "enum": [
               "COLD",
               "WARM",
-              "TRADED"
+              "TRADED",
+              "UNS"
             ]
           },
           "quality": {
@@ -11447,7 +11453,8 @@
             "enum": [
               "COLD",
               "WARM",
-              "TRADED"
+              "TRADED",
+              "UNS"
             ],
             "example": "COLD"
           },
@@ -11528,7 +11535,8 @@
             "enum": [
               "COLD",
               "WARM",
-              "TRADED"
+              "TRADED",
+              "UNS"
             ],
             "example": "COLD"
           },
@@ -12831,7 +12839,8 @@
             "enum": [
               "COLD",
               "WARM",
-              "TRADED"
+              "TRADED",
+              "UNS"
             ],
             "nullable": true,
             "description": "Snapshot of the client’s status when logged — not a live reference to Client.status"
@@ -12992,7 +13001,8 @@
             "enum": [
               "COLD",
               "WARM",
-              "TRADED"
+              "TRADED",
+              "UNS"
             ]
           },
           "seekUrl": {
@@ -13062,7 +13072,8 @@
             "enum": [
               "COLD",
               "WARM",
-              "TRADED"
+              "TRADED",
+              "UNS"
             ]
           },
           "seekUrl": {
