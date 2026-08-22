@@ -85,6 +85,26 @@ export class QueryJobResearchDto {
   @IsString({ each: true })
   consultantIds?: string[];
 
+  @ApiPropertyOptional({
+    description: "Filter by the researched company's Industry id(s)",
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  industryIds?: string[];
+
+  @ApiPropertyOptional({
+    description: "Filter by the researched company's Specialization id(s)",
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  specializationIds?: string[];
+
   @ApiPropertyOptional({ description: 'Filter by JobTitle id(s)', type: [String] })
   @IsOptional()
   @Transform(toArray)

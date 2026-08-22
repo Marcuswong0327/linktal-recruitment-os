@@ -29,7 +29,7 @@ function baseQuery(overrides: Partial<QueryJobResearchDto> = {}): QueryJobResear
 /** The relation keys JOB_RESEARCH_INCLUDE pulls in — `toEntity` destructures all of them. */
 function withRelations(row: Record<string, unknown> = {}) {
   return {
-    client: { companyName: 'Acme Corp', industryId: 'ind1' },
+    client: { companyName: 'Acme Corp', displayId: 'CLI-000001', industryId: 'ind1' },
     consultant: null,
     jobTitle: null,
     jobRoleType: null,
@@ -66,6 +66,7 @@ describe('JobResearchService.create', () => {
       clientId: 'cl1',
       isContacted: false,
       companyName: 'Acme Corp',
+      clientDisplayId: 'CLI-000001',
       consultant: 'Rita Researcher',
       jobTitle: 'Maintenance Fitter',
       jobRoleType: 'Mechanical Fitter',
@@ -155,6 +156,19 @@ describe('JobResearchService.findAll', () => {
     });
   });
 
+  // A research row has no industry/specialization of its own — both filter
+  // through the researched Client, same relation the scope resolver walks.
+  it('filters by the researched company\'s industry and specialization', async () => {
+    const { service, findMany } = setup();
+    await service.findAll(baseQuery({ industryIds: ['ind1'], specializationIds: ['spec1'] }), makeUser());
+    expect(findMany.mock.calls[0][0].where.AND).toEqual(
+      expect.arrayContaining([
+        { client: { industryId: { in: ['ind1'] } } },
+        { client: { specializationId: { in: ['spec1'] } } },
+      ]),
+    );
+  });
+
   // Research is market intelligence, not an assignment: a researcher logs the
   // ads and whoever covers that patch works them. An own-book filter (which
   // Client and JobOrder both apply) would hide exactly the leads this step
@@ -185,6 +199,39 @@ describe('JobResearchService.findAll', () => {
     expect(and).toHaveLength(2);
     expect(and[0].OR).toHaveLength(4);
     expect(and[1].OR).toBeDefined();
+  });
+});
+
+describe('JobResearchService.exportAll / exportByIds', () => {
+  function setup(rows: Record<string, unknown>[] = []) {
+    const findMany = jest.fn().mockResolvedValue(rows.map((r) => withRelations(r)));
+    const auditCreate = jest.fn().mockResolvedValue({});
+    const prisma = { clientJobResearch: { findMany } } as unknown as ExtendedPrismaClient;
+    const base = { auditLog: { create: auditCreate } } as unknown as PrismaService;
+    return { service: new JobResearchService(prisma, base), findMany, auditCreate };
+  }
+
+  it('exportAll applies the same filters/sort as findAll and logs a bulk EXPORT audit row', async () => {
+    const { service, findMany, auditCreate } = setup([{ id: 'jr1' }]);
+    await service.exportAll(baseQuery({ industryIds: ['ind1'] }) as any, makeUser());
+
+    expect(findMany.mock.calls[0][0].where.AND).toEqual(
+      expect.arrayContaining([{ client: { industryId: { in: ['ind1'] } } }]),
+    );
+    expect(auditCreate.mock.calls[0][0].data).toMatchObject({
+      action: 'EXPORT',
+      entityType: 'ClientJobResearch',
+      entityId: '(bulk)',
+    });
+  });
+
+  it('exportByIds re-applies scope server-side rather than trusting the requested id list', async () => {
+    const { service, findMany } = setup([{ id: 'jr1' }]);
+    await service.exportByIds(['jr1', 'jr2'], makeUser({ roleName: 'consultant', industryIds: ['ind1'] }));
+
+    const and = findMany.mock.calls[0][0].where.AND;
+    expect(and[0]).toEqual({ id: { in: ['jr1', 'jr2'] } });
+    expect(and).toHaveLength(2);
   });
 });
 
