@@ -5,7 +5,6 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
-import type { GetJobOrdersQualitiesItem } from './getJobOrdersQualitiesItem';
 import type { GetJobOrdersSortBy } from './getJobOrdersSortBy';
 import type { GetJobOrdersSortOrder } from './getJobOrdersSortOrder';
 import type { GetJobOrdersStatusesItem } from './getJobOrdersStatusesItem';
@@ -35,10 +34,6 @@ q?: string;
  * Filter by status (one or more). Omit for all statuses.
  */
 statuses?: GetJobOrdersStatusesItem[];
-/**
- * Filter by quality (one or more). Omit for all qualities.
- */
-qualities?: GetJobOrdersQualitiesItem[];
 /**
  * Filter by client ID (exact match)
  */

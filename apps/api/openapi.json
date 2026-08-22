@@ -4667,23 +4667,6 @@
             }
           },
           {
-            "name": "qualities",
-            "required": false,
-            "in": "query",
-            "description": "Filter by quality (one or more). Omit for all qualities.",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": [
-                  "LOW",
-                  "MEDIUM",
-                  "HIGH"
-                ]
-              }
-            }
-          },
-          {
             "name": "clientId",
             "required": false,
             "in": "query",
@@ -5008,23 +4991,6 @@
                   "PLACED",
                   "CLOSED",
                   "ON_HOLD"
-                ]
-              }
-            }
-          },
-          {
-            "name": "qualities",
-            "required": false,
-            "in": "query",
-            "description": "Filter by quality (one or more). Omit for all qualities.",
-            "schema": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "enum": [
-                  "LOW",
-                  "MEDIUM",
-                  "HIGH"
                 ]
               }
             }
