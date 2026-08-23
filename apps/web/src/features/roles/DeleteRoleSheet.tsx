@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -85,6 +86,11 @@ function Body({ role, allRoles, onClose }: { role: Role; allRoles: Role[]; onClo
             : 'This role has no consultants and will be permanently deleted.'}
         </SheetDescription>
       </SheetHeader>
+
+      <div className="mx-4 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+        <span>This is permanent and can’t be undone — there’s no restore for a deleted role.</span>
+      </div>
 
       {hasHolders && (
         <div className="space-y-1.5 px-4">
