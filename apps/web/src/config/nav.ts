@@ -74,7 +74,7 @@ export const navGroups: NavGroup[] = [
         items: [
           { title: 'Companies', href: '/companies', icon: Building2 },
           { title: 'Stakeholders', href: '/stakeholders', icon: Contact },
-          { title: 'Job Orders Search', href: '/job-orders-search', icon: BookA },
+          { title: 'Job Opening Search', href: '/job-opening-search', icon: BookA },
         ],
       },
       { title: 'Candidates', href: '/candidates', icon: UsersRound },

@@ -1,7 +1,6 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { ExternalLink } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { ComboboxSelect } from '@/components/ComboboxSelect';
@@ -48,18 +47,6 @@ export function getCompanyColumns({
               {initials(client.companyName)}
             </span>
             <span className="truncate font-medium text-foreground">{client.companyName}</span>
-            {client.website ? (
-              <a
-                href={client.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Open ${client.companyName}'s website`}
-                className="shrink-0 text-muted-foreground hover:text-foreground"
-              >
-                <ExternalLink className="size-3.5" />
-              </a>
-            ) : null}
           </div>
         );
       },
