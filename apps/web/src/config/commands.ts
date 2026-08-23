@@ -1,4 +1,4 @@
-import { Building2, Contact, type LucideIcon } from 'lucide-react';
+import { BookA, Building2, Contact, User, type LucideIcon } from 'lucide-react';
 import { navGroups, type NavItem, type RequiredPermission } from '@/config/nav';
 
 export type PageCommand = {
@@ -33,10 +33,9 @@ export type ActionCommand = {
 
 /**
  * Explicit, hand-picked list of "do something" commands (as opposed to plain
- * page navigation) — the GCP/AWS-style "Add a Stakeholder" entries.
- * Companies and Stakeholders have working create flows; Candidates/Job
- * Orders' add buttons are still `disabled` in their tables, so this stays a
- * short list until those ship.
+ * page navigation) — the GCP/AWS-style "Add a Stakeholder" entries. Job
+ * Orders' add button is still `disabled` in its table, so it stays off this
+ * list until that ships.
  */
 export const actionCommands: ActionCommand[] = [
   {
@@ -47,10 +46,24 @@ export const actionCommands: ActionCommand[] = [
     requiredPermission: { resource: 'client', action: 'create' },
   },
   {
+    title: 'Add Candidate',
+    description: 'Create a new candidate',
+    href: '/candidates?new=1',
+    icon: User,
+    requiredPermission: { resource: 'candidate', action: 'create' },
+  },
+  {
     title: 'Add Stakeholder',
     description: 'Create a new client contact',
     href: '/stakeholders?new=1',
     icon: Contact,
     requiredPermission: { resource: 'stakeholder', action: 'create' },
+  },
+  {
+    title: 'Add Job Orders Research',
+    description: 'Log a job ad found in the market',
+    href: '/job-orders-search?new=1',
+    icon: BookA,
+    requiredPermission: { resource: 'job_research', action: 'create' },
   },
 ];

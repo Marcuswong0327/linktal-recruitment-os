@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, StakeholderStatus } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,7 +17,7 @@ import { logExport } from '../common/audit-export';
 /** The subset of QueryStakeholdersDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination/sort but still satisfies this structurally. */
 type StakeholderFilterFields = Pick<
   QueryStakeholdersDto,
-  'q' | 'clientId' | 'clientIds' | 'jobTitle' | 'roleTypeIds' | 'jobTitleIds' | 'locationIds' | 'accuracy'
+  'q' | 'clientId' | 'clientIds' | 'jobTitle' | 'roleTypeIds' | 'jobTitleIds' | 'locationIds' | 'accuracy' | 'statuses'
 >;
 
 // roleType/client are FK relations — every read needs this to get the
@@ -69,6 +69,13 @@ type StakeholderWithRelations = {
   }[];
 };
 
+const STAKEHOLDER_STATUS_LABELS: Record<StakeholderStatus, string> = {
+  COLD: 'Cold',
+  WARM: 'Warm',
+  UNS: 'UNS',
+  DATA_NOT_ACCURATE: 'Data Not Accurate',
+};
+
 /** The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept separate from the generic `toEntity<T>` return type, which erases extra fields when used across a second generic boundary. */
 type StakeholderExportRow = {
   firstName: string | null;
@@ -79,6 +86,7 @@ type StakeholderExportRow = {
   jobTitle: string | null;
   email: string | null;
   mobile: string | null;
+  status: StakeholderStatus;
   isAccurate: boolean | null;
   lastContactedAt: Date | null;
   lastContactType: string | null;
@@ -223,6 +231,10 @@ export class StakeholdersService {
       and.push({ OR: accuracyConditions });
     }
 
+    if (query.statuses?.length) {
+      where.status = { in: query.statuses };
+    }
+
     if (isScoped(user)) {
       and.push(stakeholderScope(user));
     }
@@ -311,6 +323,7 @@ export class StakeholdersService {
       { header: 'Email', key: 'email' },
       { header: 'Mobile', key: 'mobile' },
       { header: 'Details accurate', key: 'detailsAccurate' },
+      { header: 'Status', key: 'status' },
       { header: 'Last Contacted Date', key: 'lastContactedDate' },
       { header: 'Last Contacted Time', key: 'lastContactedTime' },
       { header: 'Last Contact Method', key: 'lastContactType' },
@@ -328,6 +341,7 @@ export class StakeholdersService {
         email: s.email ?? '',
         mobile: s.mobile ?? '',
         detailsAccurate: s.isAccurate === null ? 'Unchecked' : s.isAccurate ? 'Yes' : 'No',
+        status: STAKEHOLDER_STATUS_LABELS[s.status],
         lastContactedDate: date,
         lastContactedTime: time,
         lastContactType: s.lastContactType ?? '',

@@ -2,9 +2,9 @@
 
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, User, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { BookA, Search, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -13,40 +13,34 @@ import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { EnumSelect } from '@/components/EnumSelect';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
-import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@/lib/api/generated/industries/industries';
+import { getGetClientsQueryKey, useGetClients } from '@/lib/api/generated/clients/clients';
+import { useGetIndustries } from '@/lib/api/generated/industries/industries';
 import {
-  getGetJobRoleTypesQueryKey,
-  useCreateJobRoleType,
-  useGetJobRoleTypes,
-} from '@/lib/api/generated/job-role-types/job-role-types';
+  getGetJobResearchQueryKey,
+  useCreateJobResearch,
+} from '@/lib/api/generated/job-research/job-research';
+import { getGetJobTitlesQueryKey, useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
 import { useGetMe } from '@/lib/api/generated/consultants/consultants';
 import { getLocation } from '@/lib/api/generated/locations/locations';
+import { buildJobResearchPayload, JobResearchForm, type JobResearchFormValues } from './JobResearchForm';
+import { JobResearchTable } from './JobResearchTable';
 import {
-  getGetCandidatesQueryKey,
-  useCreateCandidate,
-  useGetCandidateJobRoleTypeFacets,
-} from '@/lib/api/generated/candidates/candidates';
-import type { GetCandidatesParams } from '@/lib/api/generated/types';
-import { RoleTypeFilter } from './RoleTypeFilter';
-import { buildCandidatePayload, CandidateForm, type CandidateFormValues } from './CandidateForm';
-import { CandidatesTable } from './CandidatesTable';
-import {
-  candidateStatuses,
-  candidateStatusLabels,
-  candidateStatusVariants,
+  jobResearchStatusLabels,
+  jobResearchStatusVariants,
+  jobResearchStatuses,
   sortByOptions,
-  type CandidateAppliedFilters,
-  type CandidateStatus,
+  type JobResearchAppliedFilters,
+  type JobResearchStatus,
   type SortByValue,
 } from './schema';
 
 /** How long Reset fades the results area + its own button out before actually clearing state. */
 const RESET_FADE_MS = 200;
 
-const statusOptions = candidateStatuses.map((value) => ({
+const statusOptions = jobResearchStatuses.map((value) => ({
   value,
-  label: candidateStatusLabels[value],
-  variant: candidateStatusVariants[value],
+  label: jobResearchStatusLabels[value],
+  variant: jobResearchStatusVariants[value],
 }));
 
 /** Label + control, stacked — same shape as CompaniesSearchGate's inline filter labels. */
@@ -60,23 +54,13 @@ function FilterField({ label, children }: { label: string; children: React.React
 }
 
 /**
- * Candidates is search-gated, same as Companies: the table never mounts (so
- * no query ever fires) until the user explicitly commits the action bar's
- * selections with "Search" — this dataset is large enough (~4k rows) that
- * landing on an unfiltered "everything" page isn't a useful default.
- * Re-clicking Search with the same selections still counts as a fresh commit
- * (a new `filters` object, even if shallow-equal) — see CandidatesTable's
- * page-reset effect.
+ * Job Orders Search is search-gated, same as Companies: the table never
+ * mounts (so no query ever fires) until the user explicitly commits the
+ * action bar's selections with "View" — same reasoning as
+ * CompaniesSearchGate, labeled "View" rather than "Search" since this list is
+ * market research (job ads found online), not a name-searchable roster.
  */
-export function CandidateSearchGate({
-  canCreate,
-  canUpdate,
-  canDelete,
-}: {
-  canCreate: boolean;
-  canUpdate: boolean;
-  canDelete: boolean;
-}) {
+export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -85,7 +69,6 @@ export function CandidateSearchGate({
   const [cityIds, setCityIds] = React.useState<string[]>([]);
   const [industryIds, setIndustryIds] = React.useState<string[]>([]);
   const [specializationIds, setSpecializationIds] = React.useState<string[]>([]);
-  const [jobRoleTypeIds, setJobRoleTypeIds] = React.useState<string[]>([]);
   const [statuses, setStatuses] = React.useState<string[]>([]);
   const [sortByValue, setSortByValue] = React.useState<SortByValue | ''>('');
 
@@ -114,86 +97,61 @@ export function CandidateSearchGate({
   const industries = industriesData?.status === 200 ? industriesData.data : [];
   const industryOptions = React.useMemo(() => industries.map((i) => ({ value: i.id, label: i.name })), [industries]);
 
-  // `take: 200` (the endpoint's max) rather than the 50 default — this
-  // catalog is 259 rows; `jobRoleTypeFacets` below is the one that actually
-  // has to be complete for chip/trigger labels, this is just a fallback.
-  const { data: roleTypesData } = useGetJobRoleTypes({ take: 200 });
-  const roleTypes = roleTypesData?.status === 200 ? roleTypesData.data : [];
+  // `take: 200` (the endpoint's max) rather than the 50 default — same
+  // fallback-catalog reasoning as CandidateForm's role type picker.
+  const { data: jobTitlesData } = useGetJobTitles({ take: 200 });
+  const jobTitles = jobTitlesData?.status === 200 ? jobTitlesData.data : [];
 
-  // Add-candidate lives here (not CandidatesTable) specifically so the global
-  // header's "Add Candidate" button works even before the gate's own table
-  // has ever mounted — same reasoning as CompaniesSearchGate's create sheet.
+  const { data: clientsData } = useGetClients({ pageSize: 100 });
+  const clients = clientsData?.status === 200 ? clientsData.data.data : [];
+
+  // Add-job-order lives here (not JobResearchTable) specifically so the
+  // global header's "Add Job Order" button works even before the gate's own
+  // table has ever mounted — same reasoning as CompaniesSearchGate's create sheet.
   const [creating, setCreating] = React.useState(false);
 
-  // Opened via the global header's "Add Candidate" button, or the command
-  // palette's "Add a Candidate" action (both navigate to `/candidates?new=1`)
-  // — strip the param immediately so refresh/back doesn't reopen the sheet.
+  // Opened via the global header's "Add Job Order" button, or the command
+  // palette's "Add a Job Order" action (both navigate to
+  // `/job-orders-search?new=1`) — strip the param immediately so
+  // refresh/back doesn't reopen the sheet.
   React.useEffect(() => {
-    if (searchParams.get('new') === '1') {
+    if (canCreate && searchParams.get('new') === '1') {
       setCreating(true);
-      router.replace('/candidates');
+      router.replace('/job-orders-search');
     }
-  }, [searchParams, router]);
+  }, [canCreate, searchParams, router]);
 
-  const createIndustry = useCreateIndustry({
+  const createJobTitle = useCreateJobTitle({
     mutation: {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetIndustriesQueryKey() }),
-      onError: (err) => toast.error(err.message || 'Failed to add industry'),
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetJobTitlesQueryKey() }),
+      onError: (err) => toast.error(err.message || 'Failed to add job title'),
     },
   });
-  async function handleCreateIndustry(name: string) {
-    const res = await createIndustry.mutateAsync({ data: { name } });
-    if (res.status !== 201) throw new Error('Failed to add industry');
+  async function handleCreateJobTitle(name: string) {
+    const res = await createJobTitle.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add job title');
     return res.data;
   }
 
-  const createRoleType = useCreateJobRoleType({
-    mutation: {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetJobRoleTypesQueryKey() }),
-      onError: (err) => toast.error(err.message || 'Failed to add role type'),
-    },
-  });
-  async function handleCreateRoleType(name: string) {
-    const res = await createRoleType.mutateAsync({ data: { name } });
-    if (res.status !== 201) throw new Error('Failed to add role type');
-    return res.data;
-  }
-
-  const createCandidateMutation = useCreateCandidate({
+  const createJobResearchMutation = useCreateJobResearch({
     mutation: {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
-        toast.success('Candidate added');
+        queryClient.invalidateQueries({ queryKey: getGetJobResearchQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey() });
+        toast.success('Job order added');
         setCreating(false);
       },
-      onError: (err) => toast.error(err.message || 'Failed to add candidate'),
+      onError: (err) => toast.error(err.message || 'Failed to add job order'),
     },
   });
-  function handleCreate(values: CandidateFormValues) {
-    createCandidateMutation.mutate({ data: buildCandidatePayload(values) });
+  function handleCreate(values: JobResearchFormValues) {
+    createJobResearchMutation.mutate({ data: buildJobResearchPayload(values) });
   }
 
-  // Job Role Type option counts reflect the draft selections in this bar,
-  // live — "if I also picked this" — computed server-side against every
-  // other field currently set, same as the field's own doc.
-  const jobRoleTypeFacetQuery: GetCandidatesParams = {
-    statuses: statuses.length ? (statuses as CandidateStatus[]) : undefined,
-    industryIds: industryIds.length ? industryIds : undefined,
-    specializationIds: specializationIds.length ? specializationIds : undefined,
-    locationIds: countryIds.length || cityIds.length ? [...countryIds, ...cityIds] : undefined,
-  };
-  const { data: jobRoleTypeFacetsData } = useGetCandidateJobRoleTypeFacets(jobRoleTypeFacetQuery);
-  const jobRoleTypeFacets = React.useMemo(
-    () => (jobRoleTypeFacetsData?.status === 200 ? jobRoleTypeFacetsData.data : []),
-    [jobRoleTypeFacetsData],
-  );
-  const jobRoleTypeName = React.useCallback(
-    (id: string) => jobRoleTypeFacets.find((f) => f.id === id)?.name ?? roleTypes.find((r) => r.id === id)?.name ?? id,
-    [jobRoleTypeFacets, roleTypes],
-  );
+  const [appliedFilters, setAppliedFilters] = React.useState<JobResearchAppliedFilters | null>(null);
 
   // Default the action bar's selections (not the search itself — the user
-  // still clicks Search) to the logged-in consultant's own scope grants
+  // still clicks View) to the logged-in consultant's own scope grants
   // (Industry/Specialization/Location — see docs/scope-explained.md), so
   // their own patch is one click away instead of built from scratch.
   // No-ops for admin/manager/etc., whose grant arrays are normally empty
@@ -222,9 +180,9 @@ export function CandidateSearchGate({
 
     let cancelled = false;
     // Location grants carry no level of their own here (Consultant.locations
-    // is a flat, mixed-rung list) — the Country/City dropdowns are
-    // level-scoped, so each grant needs a lookup to know which one it
-    // belongs in. STATE/SUBURB grants aren't representable in this
+    // is a flat, mixed-rung list — see the schema doc) — the Country/City
+    // dropdowns are level-scoped, so each grant needs a lookup to know which
+    // one it belongs in. STATE/SUBURB grants aren't representable in this
     // two-dropdown bar and are left out of the default seed (still pickable
     // by hand).
     Promise.all(scopeLocationIds.map((id) => getLocation(id).catch(() => null))).then((results) => {
@@ -256,19 +214,15 @@ export function CandidateSearchGate({
     cityIds.length > 0 ||
     industryIds.length > 0 ||
     specializationIds.length > 0 ||
-    jobRoleTypeIds.length > 0 ||
     statuses.length > 0 ||
     sortByValue !== '';
 
-  const [appliedFilters, setAppliedFilters] = React.useState<CandidateAppliedFilters | null>(null);
-
-  function handleSearch() {
+  function handleView() {
     const locationIds = [...countryIds, ...cityIds];
     const sort = sortByOptions.find((o) => o.value === sortByValue);
     setAppliedFilters({
-      statuses: statuses.length ? (statuses as CandidateStatus[]) : undefined,
+      statuses: statuses.length ? (statuses as JobResearchStatus[]) : undefined,
       industryIds: industryIds.length ? industryIds : undefined,
-      jobRoleTypeIds: jobRoleTypeIds.length ? jobRoleTypeIds : undefined,
       specializationIds: specializationIds.length ? specializationIds : undefined,
       locationIds: locationIds.length ? locationIds : undefined,
       sortBy: sort?.sortBy,
@@ -278,7 +232,7 @@ export function CandidateSearchGate({
 
   // Undoes the search entirely, not just the draft selections — leaving
   // results on screen for filters the action bar no longer shows as active
-  // would be confusing, so this drops back to the "no candidates displayed
+  // would be confusing, so this drops back to the "no job orders displayed
   // yet" gate state too. Fades the results area and the Reset button itself
   // out first, then clears state once the fade finishes (RESET_FADE_MS) —
   // clearing immediately would just snap both away with no transition to
@@ -292,7 +246,6 @@ export function CandidateSearchGate({
       setCityIds([]);
       setIndustryIds([]);
       setSpecializationIds([]);
-      setJobRoleTypeIds([]);
       setStatuses([]);
       setSortByValue('');
       setAppliedFilters(null);
@@ -303,7 +256,7 @@ export function CandidateSearchGate({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <FilterField label="Country">
             <LocationFilterButton
               selected={countryIds}
@@ -349,14 +302,6 @@ export function CandidateSearchGate({
               onResolve={registerCityName}
             />
           </FilterField>
-          <FilterField label="Role Type">
-            <RoleTypeFilter
-              selected={jobRoleTypeIds}
-              onChange={setJobRoleTypeIds}
-              facets={jobRoleTypeFacets}
-              labelFor={jobRoleTypeName}
-            />
-          </FilterField>
           <FilterField label="Status">
             <DataGridFacetedFilter
               title="Status"
@@ -368,7 +313,7 @@ export function CandidateSearchGate({
           </FilterField>
           <FilterField label="Sorted By">
             <EnumSelect
-              id="candidates-sort"
+              id="job-research-sort"
               value={sortByValue}
               onValueChange={(v) => setSortByValue(v as SortByValue)}
               options={sortByOptions}
@@ -388,24 +333,24 @@ export function CandidateSearchGate({
               Reset
             </Button>
           ) : null}
-          <Button onClick={handleSearch}>
+          <Button onClick={handleView}>
             <Search />
-            Search
+            View
           </Button>
         </div>
       </div>
 
       <div className={cn('transition-opacity duration-200', isResetting && 'pointer-events-none opacity-0')}>
         {appliedFilters ? (
-          <CandidatesTable filters={appliedFilters} canCreate={canCreate} canUpdate={canUpdate} canDelete={canDelete} />
+          <JobResearchTable filters={appliedFilters} />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card py-24 text-center">
             <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <User className="size-6" />
+              <BookA className="size-6" />
             </span>
             <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium text-foreground">No candidates displayed yet</p>
-              <p className="text-sm text-muted-foreground">Select your preferences to view matching candidates.</p>
+              <p className="text-sm font-medium text-foreground">No job orders displayed yet</p>
+              <p className="text-sm text-muted-foreground">Select your preferences above to view matching job orders.</p>
             </div>
           </div>
         )}
@@ -414,14 +359,13 @@ export function CandidateSearchGate({
       <Sheet open={creating} onOpenChange={setCreating}>
         <SheetContent className="w-full sm:max-w-md">
           {creating ? (
-            <CandidateForm
-              title="Add candidate"
-              description="Add a new candidate."
-              industries={industries}
-              roleTypes={roleTypes}
-              onCreateIndustry={handleCreateIndustry}
-              onCreateRoleType={handleCreateRoleType}
-              isSaving={createCandidateMutation.isPending}
+            <JobResearchForm
+              title="Add Job Orders Research"
+              description="Log a job ad found in the market."
+              clients={clients}
+              jobTitles={jobTitles}
+              onCreateJobTitle={handleCreateJobTitle}
+              isSaving={createJobResearchMutation.isPending}
               onSave={handleCreate}
               onCancel={() => setCreating(false)}
             />

@@ -1,10 +1,7 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import Link from 'next/link';
-import { History } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { ConsultantAvatar } from '@/components/ConsultantCombobox';
 import { ContactMethodsCell } from '@/components/ContactMethodsCell';
 import { LocationBadgeList } from '@/components/LocationBadgeList';
@@ -19,14 +16,18 @@ function MutedCell({ value, className }: { value: string | null; className?: str
   );
 }
 
+// Last Contacted At is deliberately the only sortable column header — it's
+// the one CandidateSortField the recruiter worklist actually triages by
+// (see the field's own doc). Role Type/Specialization are categorical
+// (sorting would just be an arbitrary alphabetical grouping); Contact/Notes/
+// Salary are denormalized or free text with no CandidateSortField at all;
+// First/Family Name are sortable server-side (the gate's "Sorted By ->
+// Alphabetical" preset uses it) but not exposed as a clickable header, to
+// keep exactly one sort affordance in the grid itself.
 export const candidateColumns: ColumnDef<Candidate>[] = [
   {
     accessorKey: 'jobRoleType',
     header: 'Role Type',
-    // JobRoleType is categorical/filter-only server-side (see
-    // CandidateSortField's doc — sorting by it would just be an arbitrary
-    // alphabetical grouping), so there's no sort to wire up here even though
-    // it's the best-populated classifier in the dataset.
     enableSorting: false,
     size: 140,
     cell: ({ row }) => <MutedCell value={row.original.jobRoleType} className="block truncate" />,
@@ -34,8 +35,7 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
   {
     id: 'specialization',
     header: 'Specialization',
-    // Not a CandidateSortField — same reasoning as Role Type. Only tagged
-    // on ~5% of candidates (see CLAUDE.md), so "—" is the common case.
+    // Only tagged on ~5% of candidates (see CLAUDE.md), so "—" is the common case.
     enableSorting: false,
     size: 170,
     cell: ({ row }) => <LocationBadgeList locations={row.original.specializations} />,
@@ -63,7 +63,7 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
   {
     accessorKey: 'firstName',
     header: 'First Name',
-    enableSorting: true,
+    enableSorting: false,
     size: 130,
     cell: ({ row }) => (
       <span className="truncate font-medium text-foreground" title={row.original.firstName ?? undefined}>
@@ -74,7 +74,7 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
   {
     accessorKey: 'lastName',
     header: 'Family Name',
-    enableSorting: true,
+    enableSorting: false,
     size: 130,
     cell: ({ row }) => (
       <span className="truncate font-medium text-foreground" title={row.original.lastName ?? undefined}>
@@ -85,9 +85,10 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
   {
     id: 'contact',
     header: 'Contact',
-    // Email/Mobile/LinkedIn/Seek aren't independently sortable server-side
-    // (see CandidateSortField) — same shape and reasoning as Stakeholders'
-    // Contact column (minus Seek, which has no Stakeholder equivalent).
+    // Email/Mobile/LinkedIn/Seek aren't independently sortable server-side —
+    // same shape and reasoning as Stakeholders' Contact column (minus Seek,
+    // which has no Stakeholder equivalent). Each button copies its value on
+    // click (see ContactMethodsCell).
     enableSorting: false,
     size: 140,
     meta: { align: 'center' },
@@ -101,6 +102,23 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     ),
   },
   {
+    accessorKey: 'currentSalary',
+    header: 'Salary Current',
+    // Free text, resolved from the latest CandidateContactHistory row (see
+    // CandidateEntity.currentSalary) — not a real Candidate column, never
+    // sortable or a filter.
+    enableSorting: false,
+    size: 130,
+    cell: ({ row }) => <MutedCell value={row.original.currentSalary} className="block truncate" />,
+  },
+  {
+    accessorKey: 'expectedSalary',
+    header: 'Salary Expected',
+    enableSorting: false,
+    size: 130,
+    cell: ({ row }) => <MutedCell value={row.original.expectedSalary} className="block truncate" />,
+  },
+  {
     id: 'notes',
     header: 'Notes',
     // Resolved from the latest CandidateContactHistory row, not a
@@ -109,23 +127,6 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     enableSorting: false,
     size: 200,
     cell: ({ row }) => <MutedCell value={row.original.lastContactNotes} className="block truncate" />,
-  },
-  {
-    accessorKey: 'currentSalary',
-    header: 'Current Salary',
-    // Free text, resolved from the latest CandidateContactHistory row (see
-    // CandidateEntity.currentSalary) — not a real Candidate column, so not a
-    // CandidateSortField and never a filter, same as Notes above.
-    enableSorting: false,
-    size: 130,
-    cell: ({ row }) => <MutedCell value={row.original.currentSalary} className="block truncate" />,
-  },
-  {
-    accessorKey: 'expectedSalary',
-    header: 'Expected Salary',
-    enableSorting: false,
-    size: 130,
-    cell: ({ row }) => <MutedCell value={row.original.expectedSalary} className="block truncate" />,
   },
   {
     id: 'lastContactedAt',
@@ -143,7 +144,7 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     header: 'Last Contacted By',
     // Resolved from the latest CandidateContactHistory row, not a real
     // column on Candidate itself — not a CandidateSortField. Same avatar +
-    // name treatment as Stakeholders' equivalent column.
+    // name treatment as Stakeholders'/Companies' equivalent column.
     enableSorting: false,
     size: 160,
     cell: ({ row }) => {
@@ -158,29 +159,5 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
         </div>
       );
     },
-  },
-  {
-    id: 'history',
-    header: '',
-    enableSorting: false,
-    size: 56,
-    meta: { align: 'center' },
-    // No API endpoint lists a candidate's full contact history — only the
-    // denormalized "latest contact" fields above. This just opens the
-    // candidate detail page, where the notes timeline and work history live.
-    cell: ({ row }) => (
-      <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
-        <Button
-          variant="ghost"
-          size="icon"
-          nativeButton={false}
-          title="View history"
-          aria-label="View history"
-          render={<Link href={`/candidates/${row.original.id}`} />}
-        >
-          <History className="text-muted-foreground" />
-        </Button>
-      </div>
-    ),
   },
 ];

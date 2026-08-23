@@ -6,22 +6,28 @@
  * OpenAPI spec version: 1.0
  */
 import {
+  useMutation,
   useQuery
 } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
   ErrorResponse,
+  ExportAuditLogsParams,
+  ExportByIdsDto,
   GetAuditLogsParams,
   PaginatedAuditLogsEntity
 } from '../types';
@@ -179,3 +185,228 @@ export function useGetAuditLogs<TData = Awaited<ReturnType<typeof getAuditLogs>>
 
 
 
+export type exportAuditLogsResponse200 = {
+  data: void
+  status: 200
+}
+
+export type exportAuditLogsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportAuditLogsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportAuditLogsResponseSuccess = (exportAuditLogsResponse200) & {
+  headers: Headers;
+};
+export type exportAuditLogsResponseError = (exportAuditLogsResponse400 | exportAuditLogsResponse500) & {
+  headers: Headers;
+};
+
+export type exportAuditLogsResponse = (exportAuditLogsResponseSuccess | exportAuditLogsResponseError)
+
+export const getExportAuditLogsUrl = (params?: ExportAuditLogsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/audit-logs/export?${stringifiedParams}` : `/audit-logs/export`
+}
+
+/**
+ * @summary Export every activity-log entry matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+export const exportAuditLogs = async (params?: ExportAuditLogsParams, options?: RequestInit): Promise<exportAuditLogsResponse> => {
+
+  return customFetch<exportAuditLogsResponse>(getExportAuditLogsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportAuditLogsQueryKey = (params?: ExportAuditLogsParams,) => {
+    return [
+    `/audit-logs/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportAuditLogsQueryOptions = <TData = Awaited<ReturnType<typeof exportAuditLogs>>, TError = ErrorResponse>(params?: ExportAuditLogsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportAuditLogs>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportAuditLogsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportAuditLogs>>> = ({ signal }) => exportAuditLogs(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportAuditLogs>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportAuditLogsQueryResult = NonNullable<Awaited<ReturnType<typeof exportAuditLogs>>>
+export type ExportAuditLogsQueryError = ErrorResponse
+
+
+export function useExportAuditLogs<TData = Awaited<ReturnType<typeof exportAuditLogs>>, TError = ErrorResponse>(
+ params: undefined |  ExportAuditLogsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportAuditLogs>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportAuditLogs>>,
+          TError,
+          Awaited<ReturnType<typeof exportAuditLogs>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportAuditLogs<TData = Awaited<ReturnType<typeof exportAuditLogs>>, TError = ErrorResponse>(
+ params?: ExportAuditLogsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportAuditLogs>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportAuditLogs>>,
+          TError,
+          Awaited<ReturnType<typeof exportAuditLogs>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportAuditLogs<TData = Awaited<ReturnType<typeof exportAuditLogs>>, TError = ErrorResponse>(
+ params?: ExportAuditLogsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportAuditLogs>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Export every activity-log entry matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+
+export function useExportAuditLogs<TData = Awaited<ReturnType<typeof exportAuditLogs>>, TError = ErrorResponse>(
+ params?: ExportAuditLogsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportAuditLogs>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getExportAuditLogsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type exportAuditLogsByIdsResponse201 = {
+  data: void
+  status: 201
+}
+
+export type exportAuditLogsByIdsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportAuditLogsByIdsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportAuditLogsByIdsResponseSuccess = (exportAuditLogsByIdsResponse201) & {
+  headers: Headers;
+};
+export type exportAuditLogsByIdsResponseError = (exportAuditLogsByIdsResponse400 | exportAuditLogsByIdsResponse500) & {
+  headers: Headers;
+};
+
+export type exportAuditLogsByIdsResponse = (exportAuditLogsByIdsResponseSuccess | exportAuditLogsByIdsResponseError)
+
+export const getExportAuditLogsByIdsUrl = () => {
+
+
+
+
+  return `/audit-logs/export`
+}
+
+/**
+ * @summary Export an explicit set of activity-log entries (by id) as an .xlsx file
+ */
+export const exportAuditLogsByIds = async (exportByIdsDto: ExportByIdsDto, options?: RequestInit): Promise<exportAuditLogsByIdsResponse> => {
+
+  return customFetch<exportAuditLogsByIdsResponse>(getExportAuditLogsByIdsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(exportByIdsDto)
+  }
+);}
+
+
+
+
+
+export const getExportAuditLogsByIdsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportAuditLogsByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportAuditLogsByIds>>, TError,{data: ExportByIdsDto}, TContext> => {
+
+const mutationKey = ['exportAuditLogsByIds'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportAuditLogsByIds>>, {data: ExportByIdsDto}> = (props) => {
+          const {data} = props ?? {};
+
+          return  exportAuditLogsByIds(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportAuditLogsByIdsMutationResult = NonNullable<Awaited<ReturnType<typeof exportAuditLogsByIds>>>
+    export type ExportAuditLogsByIdsMutationBody = ExportByIdsDto
+    export type ExportAuditLogsByIdsMutationError = ErrorResponse
+
+    /**
+ * @summary Export an explicit set of activity-log entries (by id) as an .xlsx file
+ */
+export const useExportAuditLogsByIds = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportAuditLogsByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof exportAuditLogsByIds>>,
+        TError,
+        {data: ExportByIdsDto},
+        TContext
+      > => {
+      return useMutation(getExportAuditLogsByIdsMutationOptions(options), queryClient);
+    }

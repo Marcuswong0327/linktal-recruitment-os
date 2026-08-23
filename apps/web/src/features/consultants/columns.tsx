@@ -172,6 +172,9 @@ export function getConsultantColumns({
       id: 'roleName',
       accessorFn: (user) => user.role?.name ?? '',
       header: 'Role',
+      // Not a GetConsultantsSortBy field — sortable through the header-based
+      // faceted filter instead (see roleStatusFilters in ConsultantsTable).
+      enableSorting: false,
       meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => {
         const user = row.original;
@@ -204,10 +207,28 @@ export function getConsultantColumns({
                 </button>
               }
             />
-            <TooltipContent>
-              Active consultants can sign in and access the app; inactive consultants are blocked
-              from signing in. A row marked "Pending approval" has never signed in — approve it by
-              switching to Active, or leave it if it should be rejected.
+            {/* Structured as a term/definition legend rather than one run-on
+                paragraph — three states, three lines, each scannable on its
+                own instead of requiring the whole sentence to parse "Pending
+                approval". Overrides TooltipContent's default single-line
+                `items-center` row so the dl can stack. */}
+            <TooltipContent className="max-w-72 items-start">
+              <dl className="flex flex-col gap-1.5 py-0.5">
+                <div className="flex items-baseline gap-1.5">
+                  <dt className="shrink-0 font-semibold">Active</dt>
+                  <dd className="text-background/80">can sign in and use the app.</dd>
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <dt className="shrink-0 font-semibold">Inactive</dt>
+                  <dd className="text-background/80">blocked from signing in.</dd>
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <dt className="shrink-0 font-semibold">Pending approval</dt>
+                  <dd className="text-background/80">
+                    never signed in — switch to Active to approve, or leave as-is to reject.
+                  </dd>
+                </div>
+              </dl>
             </TooltipContent>
           </Tooltip>
         </span>

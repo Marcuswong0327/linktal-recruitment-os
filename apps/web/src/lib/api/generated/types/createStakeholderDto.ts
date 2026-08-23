@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { CreateStakeholderDtoStatus } from './createStakeholderDtoStatus';
 
 export interface CreateStakeholderDto {
   /** Client ID this stakeholder belongs to */
@@ -25,6 +26,8 @@ export interface CreateStakeholderDto {
   mobile?: string;
   /** Location ids this stakeholder covers. Matched against a consultant's scope on its own, independent of where the client sits. */
   coverageLocationIds?: string[];
+  /** Relationship-warmth status; defaults to COLD when omitted. Distinct from isAccurate below. */
+  status?: CreateStakeholderDtoStatus;
   /** Whether these details have been verified. Omit for 'not yet checked' — which isn't the same as false. */
   isAccurate?: boolean;
   /** What is wrong with the details, when isAccurate is false */

@@ -1988,6 +1988,185 @@
         ]
       }
     },
+    "/audit-logs/export": {
+      "get": {
+        "operationId": "exportAuditLogs",
+        "parameters": [
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to createdAt.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "action",
+                "entityType"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "description": "Filter by action",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CREATE",
+                "UPDATE",
+                "SOFT_DELETE",
+                "RESTORE",
+                "DEACTIVATE",
+                "HARD_DELETE",
+                "EXPORT"
+              ]
+            }
+          },
+          {
+            "name": "entityType",
+            "required": false,
+            "in": "query",
+            "description": "Filter by entity type, e.g. \"Candidate\"",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the acting consultant id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Only entries at/after this ISO date-time",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Only entries at/before this ISO date-time",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "timezone",
+            "required": false,
+            "in": "query",
+            "description": "IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Activity log workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export every activity-log entry matching the current filters as an .xlsx file — unbounded, not paginated",
+        "tags": [
+          "Audit"
+        ]
+      },
+      "post": {
+        "operationId": "exportAuditLogsByIds",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportByIdsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Activity log workbook"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export an explicit set of activity-log entries (by id) as an .xlsx file",
+        "tags": [
+          "Audit"
+        ]
+      }
+    },
     "/clients": {
       "get": {
         "operationId": "getClients",
@@ -3228,6 +3407,24 @@
                 ]
               }
             }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by relationship-warmth status (one or more). Omit for all.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "UNS",
+                  "DATA_NOT_ACCURATE"
+                ]
+              }
+            }
           }
         ],
         "responses": {
@@ -3515,6 +3712,24 @@
                   "true",
                   "false",
                   "unchecked"
+                ]
+              }
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by relationship-warmth status (one or more). Omit for all.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "UNS",
+                  "DATA_NOT_ACCURATE"
                 ]
               }
             }
@@ -6163,7 +6378,8 @@
                 "enum": [
                   "COLD",
                   "WARM",
-                  "TRADED"
+                  "TRADED",
+                  "UNS"
                 ]
               }
             }
@@ -12074,6 +12290,16 @@
             "nullable": true,
             "description": "Consultant who made the most recent contact"
           },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COLD",
+              "WARM",
+              "UNS",
+              "DATA_NOT_ACCURATE"
+            ],
+            "description": "Relationship-warmth status; defaults to COLD. Distinct from isAccurate below."
+          },
           "lastContactType": {
             "type": "string",
             "nullable": true,
@@ -12131,6 +12357,7 @@
           "coverageLocationIds",
           "lastContactedAt",
           "lastContactedById",
+          "status",
           "lastContactType",
           "lastContactCategory",
           "lastContactNotes",
@@ -12225,6 +12452,17 @@
               "type": "string"
             }
           },
+          "status": {
+            "type": "string",
+            "description": "Relationship-warmth status; defaults to COLD when omitted. Distinct from isAccurate below.",
+            "enum": [
+              "COLD",
+              "WARM",
+              "UNS",
+              "DATA_NOT_ACCURATE"
+            ],
+            "example": "COLD"
+          },
           "isAccurate": {
             "type": "boolean",
             "description": "Whether these details have been verified. Omit for 'not yet checked' — which isn't the same as false."
@@ -12283,6 +12521,17 @@
             "items": {
               "type": "string"
             }
+          },
+          "status": {
+            "type": "string",
+            "description": "Relationship-warmth status; defaults to COLD when omitted. Distinct from isAccurate below.",
+            "enum": [
+              "COLD",
+              "WARM",
+              "UNS",
+              "DATA_NOT_ACCURATE"
+            ],
+            "example": "COLD"
           },
           "isAccurate": {
             "type": "boolean",

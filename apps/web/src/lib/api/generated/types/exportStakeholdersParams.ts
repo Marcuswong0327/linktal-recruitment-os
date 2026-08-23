@@ -8,6 +8,7 @@
 import type { ExportStakeholdersAccuracyItem } from './exportStakeholdersAccuracyItem';
 import type { ExportStakeholdersSortBy } from './exportStakeholdersSortBy';
 import type { ExportStakeholdersSortOrder } from './exportStakeholdersSortOrder';
+import type { ExportStakeholdersStatusesItem } from './exportStakeholdersStatusesItem';
 
 export type ExportStakeholdersParams = {
 /**
@@ -47,6 +48,10 @@ locationIds?: string[];
  * Filter by verification state (one or more): 'true' (Accurate), 'false' (Inaccurate), 'unchecked' (not yet verified). Omit for all.
  */
 accuracy?: ExportStakeholdersAccuracyItem[];
+/**
+ * Filter by relationship-warmth status (one or more). Omit for all.
+ */
+statuses?: ExportStakeholdersStatusesItem[];
 /**
  * IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid.
  */
