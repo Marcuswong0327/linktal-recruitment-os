@@ -5,16 +5,19 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
-  Building2,
+  ChevronDown,
   Contact,
   CornerDownLeft,
-  FileText,
-  MapPin,
+  EllipsisVertical,
+  Globe,
+  Mail,
+  Phone,
   Plus,
   Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { Collapsible } from '@base-ui/react/collapsible';
 
 import {
   AlertDialog,
@@ -29,16 +32,24 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { LinkedinIcon, SeekIcon } from '@/components/BrandIcons';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import { ConsultantCombobox, useConsultantLookup } from '@/components/ConsultantCombobox';
+import { ConsultantAvatar, useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
-import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
+import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
 import { SpecializationCombobox } from '@/components/SpecializationPicker';
 import { UrlField } from '@/components/UrlField';
 import { PageLayout } from '@/components/app-shell/PageLayout';
@@ -46,7 +57,9 @@ import { useIsMac } from '@/hooks/use-is-mac';
 import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shortcut';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
+import { cn } from '@/lib/utils';
 import {
+  getGetClientContactHistoryQueryKey,
   getGetClientQueryKey,
   getGetClientsQueryKey,
   useDeleteClient,
@@ -61,14 +74,18 @@ import {
   useCreateIndustry,
   useGetIndustries,
 } from '@/lib/api/generated/industries/industries';
+import { useGetJobOrders } from '@/lib/api/generated/job-orders/job-orders';
 import {
   getGetSpecializationsQueryKey,
   useCreateSpecialization,
 } from '@/lib/api/generated/specializations/specializations';
-import { useGetStakeholders } from '@/lib/api/generated/stakeholders/stakeholders';
-import { getGetTobsQueryKey, useCreateTob, useGetTobs } from '@/lib/api/generated/tobs/tobs';
-import type { ClientEntity, CreateTobDto, UpdateClientDto } from '@/lib/api/generated/types';
-import { qualityOptions, statusOptions, type ClientQuality, type ClientStatus } from './schema';
+import {
+  getGetStakeholdersQueryKey,
+  useAddStakeholderContactHistory,
+  useGetStakeholders,
+} from '@/lib/api/generated/stakeholders/stakeholders';
+import type { ClientEntity, CreateStakeholderContactHistoryDto, UpdateClientDto } from '@/lib/api/generated/types';
+import { qualityOptions, statusOptions } from './schema';
 
 const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
@@ -86,6 +103,99 @@ function initials(name: string) {
     .slice(0, 2)
     .join('')
     .toUpperCase();
+}
+
+/** One icon per external link (Website/LinkedIn/Seek) — click opens it in a new tab. A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. */
+function LinkIconButton({
+  icon: Icon,
+  url,
+  label,
+  activeClassName = 'text-muted-foreground hover:text-foreground',
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  url?: string | null;
+  label: string;
+  /** Icon color when a value is on file — overridable for brand colors (e.g. LinkedIn blue). Disabled state ignores this and always renders greyed-out. */
+  activeClassName?: string;
+}) {
+  const disabled = !url;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <a
+            href={url ?? undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-disabled={disabled}
+            onClick={disabled ? (e) => e.preventDefault() : undefined}
+            aria-label={disabled ? `No ${label.toLowerCase()} on file` : `Open ${label.toLowerCase()}`}
+            className={cn(
+              'flex size-7 items-center justify-center rounded-md transition-colors',
+              disabled ? 'cursor-not-allowed text-muted-foreground' : cn(activeClassName, 'hover:bg-accent'),
+            )}
+          >
+            <Icon className={cn('size-4', disabled && 'opacity-30 grayscale')} />
+          </a>
+        }
+      />
+      <TooltipContent>{disabled ? `No ${label.toLowerCase()} on file` : label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function copyValue(value: string, label: string) {
+  navigator.clipboard.writeText(value).then(
+    () => toast.success(`${label} copied`),
+    () => toast.error(`Couldn't copy ${label.toLowerCase()}`),
+  );
+}
+
+/** Row actions for a stakeholder — a single kebab menu instead of separate buttons, since these are copy actions rather than links out. Website is the company's, not the stakeholder's — Stakeholder carries no site of its own. */
+function StakeholderActionsMenu({
+  email,
+  mobile,
+  linkedinUrl,
+  website,
+}: {
+  email?: string | null;
+  mobile?: string | null;
+  linkedinUrl?: string | null;
+  website?: string | null;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <button
+            type="button"
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label="Contact actions"
+          >
+            <EllipsisVertical className="size-4" />
+          </button>
+        }
+      />
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem disabled={!email} onClick={() => email && copyValue(email, 'Email')}>
+          <Mail />
+          {email ? 'Copy email' : 'No email on file'}
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={!mobile} onClick={() => mobile && copyValue(mobile, 'Mobile')}>
+          <Phone />
+          {mobile ? 'Copy mobile' : 'No mobile on file'}
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={!linkedinUrl} onClick={() => linkedinUrl && copyValue(linkedinUrl, 'LinkedIn')}>
+          <LinkedinIcon />
+          {linkedinUrl ? 'Copy LinkedIn' : 'No LinkedIn on file'}
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={!website} onClick={() => website && copyValue(website, 'Website')}>
+          <Globe />
+          {website ? "Copy company's website" : 'No website on file'}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 export function CompanyDetail({
@@ -155,11 +265,9 @@ function CompanyEditForm({
   const [website, setWebsite] = React.useState(company.website ?? '');
   const [seekJobMarketUrl, setSeekJobMarketUrl] = React.useState(company.seekJobMarketUrl ?? '');
   const [linkedinJobMarketUrl, setLinkedinJobMarketUrl] = React.useState(company.linkedinJobMarketUrl ?? '');
-  const [generalDescription, setGeneralDescription] = React.useState(company.generalDescription ?? '');
-  const [status, setStatus] = React.useState<ClientStatus>(company.status);
-  const [quality, setQuality] = React.useState<ClientQuality>(company.quality);
+  // Purely a display toggle for the links row below — not part of isDirty.
+  const [editingLinks, setEditingLinks] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
-  const [addingTob, setAddingTob] = React.useState(false);
 
   const locationIdsKey = (ids: string[]) => [...ids].sort().join(',');
   const initialLocationIdsKey = locationIdsKey(company.locationIds);
@@ -175,10 +283,7 @@ function CompanyEditForm({
     suburbsAndPostcodes !== initialSuburbs ||
     website !== (company.website ?? '') ||
     seekJobMarketUrl !== (company.seekJobMarketUrl ?? '') ||
-    linkedinJobMarketUrl !== (company.linkedinJobMarketUrl ?? '') ||
-    generalDescription !== (company.generalDescription ?? '') ||
-    status !== company.status ||
-    quality !== company.quality;
+    linkedinJobMarketUrl !== (company.linkedinJobMarketUrl ?? '');
 
   const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty && canEdit);
 
@@ -240,18 +345,51 @@ function CompanyEditForm({
   const { data: stakeholdersData } = useGetStakeholders({ clientId: company.id, pageSize: 50 });
   const stakeholders = stakeholdersData?.status === 200 ? stakeholdersData.data.data : [];
 
-  const { data: tobsData } = useGetTobs({ clientId: company.id, pageSize: 50 });
-  const tobs = tobsData?.status === 200 ? tobsData.data.data : [];
-  const createTob = useCreateTob({
+  const [logContactOpen, setLogContactOpen] = React.useState(false);
+  const [logContactStakeholderId, setLogContactStakeholderId] = React.useState('');
+  const addStakeholderContactHistory = useAddStakeholderContactHistory({
     mutation: {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetTobsQueryKey() });
-        toast.success('Terms of Business added');
-        setAddingTob(false);
+        queryClient.invalidateQueries({ queryKey: getGetClientContactHistoryQueryKey(company.id) });
+        queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
+        toast.success('Contact logged');
+        setLogContactOpen(false);
       },
-      onError: (err) => toast.error(err.message || 'Failed to add Terms of Business'),
+      onError: (err) => toast.error(err.message || 'Failed to log contact'),
     },
   });
+  const stakeholderOptions = stakeholders.map((s) => ({
+    value: s.id,
+    label: [s.firstName, s.lastName].filter(Boolean).join(' ') || 'Unnamed contact',
+  }));
+  function openLogContact() {
+    setLogContactStakeholderId('');
+    setLogContactOpen(true);
+  }
+  function handleLogContact(values: LogContactValues) {
+    if (!logContactStakeholderId) return;
+    addStakeholderContactHistory.mutate({
+      id: logContactStakeholderId,
+      data: {
+        contactType: values.contactType,
+        contactedAt: values.contactedAt,
+        ...(values.notes ? { notes: values.notes } : {}),
+      } as unknown as CreateStakeholderContactHistoryDto,
+    });
+  }
+
+  // No per-record "owning consultant" on Client (deliberately removed —
+  // see the SCOPING note in schema.prisma). The closest real answer to "who's
+  // dealing with this company" is whoever's on this client's job orders.
+  const { data: jobOrdersData } = useGetJobOrders({ clientId: company.id, pageSize: 50 });
+  const jobOrders = jobOrdersData?.status === 200 ? jobOrdersData.data.data : [];
+  const dealingConsultants = React.useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const jo of jobOrders) {
+      for (const c of jo.consultants) byId.set(c.id, c.name);
+    }
+    return Array.from(byId, ([id, name]) => ({ id, name }));
+  }, [jobOrders]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -275,11 +413,9 @@ function CompanyEditForm({
       website: website || undefined,
       seekJobMarketUrl: seekJobMarketUrl || undefined,
       linkedinJobMarketUrl: linkedinJobMarketUrl || undefined,
-      generalDescription: generalDescription || undefined,
-      status,
-      quality,
     };
     updateCompany.mutate({ id: company.id, data });
+    setEditingLinks(false);
   }
 
   function handleDelete() {
@@ -388,13 +524,167 @@ function CompanyEditForm({
           <div className="flex flex-col gap-5 lg:col-span-2">
             <Card>
               <CardHeader className="border-b">
-                <CardTitle className="flex items-center gap-2">
-                  <Building2 className="size-4 text-muted-foreground" />
-                  Company
-                </CardTitle>
-                <CardDescription>Basic identity, industry and relationship status.</CardDescription>
+                <CardTitle>Contact history</CardTitle>
+                <CardDescription>Every logged contact, across all of this company's stakeholders.</CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
+              <CardContent>
+                {contactHistory.length === 0 && !canEdit ? (
+                  <p className="p-4 text-sm text-muted-foreground">No contact logged yet.</p>
+                ) : (
+                  <div className="max-h-96 overflow-auto rounded-md border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="divide-x divide-border">
+                          <TableHead>Content</TableHead>
+                          <TableHead>With</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>By</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {contactHistory.map((row) => (
+                          <TableRow key={row.id} className="divide-x divide-border">
+                            <TableCell className="max-w-xs whitespace-normal break-words">
+                              {row.notes ? (
+                                <p className="whitespace-pre-wrap">{row.notes}</p>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">{row.stakeholderName}</TableCell>
+                            <TableCell>{contactDateFormatter.format(new Date(row.contactedAt))}</TableCell>
+                            <TableCell className="whitespace-normal">
+                              {row.contactedById ? (
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <ConsultantAvatar
+                                    consultantId={row.contactedById}
+                                    name={consultantLabelFor(row.contactedById)}
+                                    size={5}
+                                  />
+                                  <span className="truncate">{consultantLabelFor(row.contactedById)}</span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">Imported</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {canEdit ? (
+                          <TableRow>
+                            <TableCell colSpan={4} className="p-0">
+                              <button
+                                type="button"
+                                disabled={stakeholders.length === 0}
+                                onClick={openLogContact}
+                                aria-label="Log a new contact"
+                                className="flex w-full items-center justify-center py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                              >
+                                <Plus className="size-4" />
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                        ) : null}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex border-b flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Contact className="size-4 text-muted-foreground" />
+                    Stakeholders
+                  </CardTitle>
+                </div>
+                {canEdit && stakeholders.length > 0 ? (
+                  <Button type="button" variant="outline" size="sm" onClick={openLogContact}>
+                    <Phone />
+                    Log Contact History
+                  </Button>
+                ) : null}
+              </CardHeader>
+              <CardContent>
+                {stakeholders.length > 0 ? (
+                  <div className="max-h-96 overflow-auto rounded-md border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="divide-x divide-border">
+                          <TableHead>Name</TableHead>
+                          <TableHead>Title</TableHead>
+                          <TableHead>Contact</TableHead>
+                          <TableHead>Latest Contact Date</TableHead>
+                          <TableHead className="text-center">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {stakeholders.map((s) => (
+                          <TableRow key={s.id} className="divide-x divide-border">
+                            <TableCell className="whitespace-normal">
+                              <Link href={`/stakeholders/${s.id}`} className="text-foreground hover:underline">
+                                {[s.firstName, s.lastName].filter(Boolean).join(' ') || 'Unnamed contact'}
+                              </Link>
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {s.roleType ? (
+                                <Badge variant="muted">{s.roleType}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {s.lastContactedById ? (
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <ConsultantAvatar
+                                    consultantId={s.lastContactedById}
+                                    name={s.lastContactedBy ?? undefined}
+                                    size={5}
+                                  />
+                                  <span className="truncate">{s.lastContactedBy}</span>
+                                </div>
+                              ) : s.lastContactedAt ? (
+                                <span className="text-muted-foreground">Imported</span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {s.lastContactedAt ? (
+                                contactDateFormatter.format(new Date(s.lastContactedAt))
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center justify-center">
+                                <StakeholderActionsMenu
+                                  email={s.email}
+                                  mobile={s.mobile}
+                                  linkedinUrl={s.linkedinUrl}
+                                  website={company.website}
+                                />
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No stakeholders logged for this company yet.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="flex flex-col gap-5">
+            <Card>
+              <CardHeader className="border-b">
+                <CardTitle className="flex items-center gap-2">Information</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-4">
                 <FormField label="Company name" htmlFor="companyName" required>
                   <Input
                     id="companyName"
@@ -402,9 +692,6 @@ function CompanyEditForm({
                     onChange={(e) => setCompanyName(e.target.value)}
                     disabled={!canEdit}
                   />
-                </FormField>
-                <FormField label="Website" htmlFor="website">
-                  <UrlField id="website" value={website} onChange={setWebsite} disabled={!canEdit} />
                 </FormField>
                 <FormField label="Industry" htmlFor="industry" required>
                   <CreatableCombobox
@@ -435,76 +722,93 @@ function CompanyEditForm({
                     clearable
                   />
                 </FormField>
-                <FormField label="Status" htmlFor="status">
-                  <EnumSelect
-                    id="status"
-                    value={status}
-                    onValueChange={(v) => setStatus(v as ClientStatus)}
-                    options={statusOptions}
-                    disabled={!canEdit}
-                  />
-                </FormField>
-                <FormField label="Quality" htmlFor="quality">
-                  <EnumSelect
-                    id="quality"
-                    value={quality}
-                    onValueChange={(v) => setQuality(v as ClientQuality)}
-                    options={qualityOptions}
-                    disabled={!canEdit}
-                  />
-                </FormField>
-                <FormField label="Seek/JobStreet URL" htmlFor="seekJobMarketUrl">
-                  <UrlField
-                    id="seekJobMarketUrl"
-                    value={seekJobMarketUrl}
-                    onChange={setSeekJobMarketUrl}
-                    disabled={!canEdit}
-                  />
-                </FormField>
-                <FormField label="LinkedIn Job Market URL" htmlFor="linkedinJobMarketUrl">
-                  <UrlField
-                    id="linkedinJobMarketUrl"
-                    value={linkedinJobMarketUrl}
-                    onChange={setLinkedinJobMarketUrl}
-                    disabled={!canEdit}
-                  />
-                </FormField>
-              </CardContent>
-              <CardContent className="grid gap-4 border-t pt-4">
-                <FormField label="Description" htmlFor="generalDescription">
-                  <textarea
-                    id="generalDescription"
-                    value={generalDescription}
-                    onChange={(e) => setGeneralDescription(e.target.value)}
-                    disabled={!canEdit}
-                    className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-                  />
-                </FormField>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium">Consultants</span>
+                  {dealingConsultants.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {dealingConsultants.map((c) => (
+                        <div
+                          key={c.id}
+                          className="flex items-center gap-1.5 rounded-full bg-muted/50 py-1 pr-2.5 pl-1 text-sm"
+                        >
+                          <ConsultantAvatar consultantId={c.id} name={c.name} size={5} />
+                          <span>{c.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">None yet — assigned via this company's job orders.</p>
+                  )}
+                </div>
+                <Collapsible.Root
+                  open={editingLinks}
+                  onOpenChange={setEditingLinks}
+                  className="group/links flex flex-col gap-1.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">Website</span>
+                    <div className="flex items-center gap-1">
+                      <LinkIconButton icon={Globe} url={website} label="Website" />
+                      <LinkIconButton
+                        icon={LinkedinIcon}
+                        url={linkedinJobMarketUrl}
+                        label="LinkedIn job market"
+                        activeClassName="text-[#0A66C2]"
+                      />
+                      <LinkIconButton icon={SeekIcon} url={seekJobMarketUrl} label="Seek/JobStreet" />
+                      {canEdit ? (
+                        <Collapsible.Trigger
+                          render={
+                            <button
+                              type="button"
+                              className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                              aria-label={editingLinks ? 'Collapse links' : 'Expand links'}
+                            >
+                              <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[panel-open]/links:rotate-180" />
+                            </button>
+                          }
+                        />
+                      ) : null}
+                    </div>
+                  </div>
+                  <Collapsible.Panel className="flex flex-col gap-3 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
+                    <FormField label="Company Website" htmlFor="website">
+                      <UrlField id="website" value={website} onChange={setWebsite} disabled={!canEdit} icon={Globe} />
+                    </FormField>
+                    <FormField label="LinkedIn Job Market URL" htmlFor="linkedinJobMarketUrl">
+                      <UrlField
+                        id="linkedinJobMarketUrl"
+                        value={linkedinJobMarketUrl}
+                        onChange={setLinkedinJobMarketUrl}
+                        disabled={!canEdit}
+                        icon={LinkedinIcon}
+                      />
+                    </FormField>
+                    <FormField label="Seek/JobStreet URL" htmlFor="seekJobMarketUrl">
+                      <UrlField
+                        id="seekJobMarketUrl"
+                        value={seekJobMarketUrl}
+                        onChange={setSeekJobMarketUrl}
+                        disabled={!canEdit}
+                        icon={SeekIcon}
+                      />
+                    </FormField>
+                  </Collapsible.Panel>
+                </Collapsible.Root>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="border-b">
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="size-4 text-muted-foreground" />
-                  Market
-                </CardTitle>
-                <CardDescription>
-                  Which places this client hires from — its market, not its office address. A broader pick (a whole
-                  state or country) covers everywhere inside it. At least one is required.
-                </CardDescription>
+                <CardTitle className="flex items-center gap-2">Market</CardTitle>
               </CardHeader>
               <CardContent>
                 <LocationMultiSelect selected={locations} onChange={setLocations} disabled={!canEdit} />
               </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle>Office addresses</CardTitle>
-                <CardDescription>Distinct from Market above — the client's own physical location(s).</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
+              <CardContent className="grid gap-4 border-t pt-4">
+                <div>
+                  <span className="text-sm font-medium">Office addresses</span>
+                </div>
                 <FormField label="Address(es)" htmlFor="addresses" description="One per line.">
                   <textarea
                     id="addresses"
@@ -523,115 +827,6 @@ function CompanyEditForm({
                     className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
                   />
                 </FormField>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="border-b flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="size-4 text-muted-foreground" />
-                    Terms of Business
-                  </CardTitle>
-                  <CardDescription>Signed agreements on file for this client.</CardDescription>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => setAddingTob(true)}>
-                  <Plus />
-                  Add TOB
-                </Button>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                {tobs.length > 0 ? (
-                  tobs.map((tob) => (
-                    <div key={tob.id} className="flex flex-col gap-1 rounded-lg bg-muted/50 p-3 text-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium text-foreground">{tob.displayId}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {tob.guaranteePeriod != null ? `${tob.guaranteePeriod}-day guarantee` : null}
-                        </span>
-                      </div>
-                      {tob.pricing ? <p className="text-muted-foreground">{tob.pricing}</p> : null}
-                      <div className="flex flex-wrap gap-x-4 text-xs text-muted-foreground">
-                        {tob.linktalRepresentative ? <span>Linktal rep: {tob.linktalRepresentative}</span> : null}
-                        {tob.clientTobRepresentative ? <span>Client rep: {tob.clientTobRepresentative}</span> : null}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">No Terms of Business on file yet.</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="flex flex-col gap-5">
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle>Contact history</CardTitle>
-                <CardDescription>Every logged contact, across all of this company's stakeholders.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                {contactHistory.length > 0 ? (
-                  <ul className="flex max-h-96 flex-col gap-3 overflow-auto">
-                    {contactHistory.map((row) => (
-                      <li key={row.id} className="flex flex-col gap-1 rounded-md border border-border bg-muted/30 px-3 py-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-sm font-medium">{row.stakeholderName}</span>
-                          {row.category ? (
-                            <Badge variant="muted" className="shrink-0">
-                              {row.category}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        {row.notes ? <p className="text-sm whitespace-pre-wrap text-muted-foreground">{row.notes}</p> : null}
-                        <span className="text-xs text-muted-foreground">
-                          {row.contactedById ? consultantLabelFor(row.contactedById) : 'Imported'} ·{' '}
-                          {contactDateFormatter.format(new Date(row.contactedAt))}
-                          {row.contactType ? ` · ${row.contactType}` : ''}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No contact logged yet.</p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="border-b flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Contact className="size-4 text-muted-foreground" />
-                    Stakeholders
-                  </CardTitle>
-                  <CardDescription>Contacts at this company.</CardDescription>
-                </div>
-                <Button variant="ghost" size="sm" nativeButton={false} render={<Link href={`/stakeholders?new=1`} />}>
-                  <Plus />
-                </Button>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-1">
-                {stakeholders.length > 0 ? (
-                  stakeholders.map((s) => (
-                    <Link
-                      key={s.id}
-                      href={`/stakeholders/${s.id}`}
-                      className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-accent"
-                    >
-                      <span className="truncate">
-                        {[s.firstName, s.lastName].filter(Boolean).join(' ') || 'Unnamed contact'}
-                      </span>
-                      {s.roleType ? (
-                        <Badge variant="muted" className="shrink-0">
-                          {s.roleType}
-                        </Badge>
-                      ) : null}
-                    </Link>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">No stakeholders logged for this company yet.</p>
-                )}
               </CardContent>
             </Card>
           </div>
@@ -659,118 +854,19 @@ function CompanyEditForm({
         </AlertDialogContent>
       </AlertDialog>
 
-      <Sheet open={addingTob} onOpenChange={setAddingTob}>
-        <SheetContent className="w-full sm:max-w-md">
-          {addingTob ? (
-            <TobForm
-              isSaving={createTob.isPending}
-              onSave={(values) => createTob.mutate({ data: { ...values, clientId: company.id } })}
-              onCancel={() => setAddingTob(false)}
-              consultants={consultants}
-            />
-          ) : null}
-        </SheetContent>
-      </Sheet>
+      <LogContactSheet
+        open={logContactOpen}
+        onOpenChange={setLogContactOpen}
+        isSaving={addStakeholderContactHistory.isPending}
+        onSave={handleLogContact}
+        subjectPicker={{
+          label: 'Stakeholder',
+          placeholder: 'Pick a stakeholder…',
+          options: stakeholderOptions,
+          value: logContactStakeholderId,
+          onValueChange: setLogContactStakeholderId,
+        }}
+      />
     </PageLayout>
-  );
-}
-
-function TobForm({
-  isSaving,
-  onSave,
-  onCancel,
-  consultants,
-}: {
-  isSaving: boolean;
-  onSave: (values: Omit<CreateTobDto, 'clientId'>) => void;
-  onCancel: () => void;
-  consultants: React.ComponentProps<typeof ConsultantCombobox>['consultants'];
-}) {
-  const [pricing, setPricing] = React.useState('');
-  const [guaranteePeriod, setGuaranteePeriod] = React.useState('');
-  const [paymentTerm, setPaymentTerm] = React.useState('');
-  const [clientTobRepresentative, setClientTobRepresentative] = React.useState('');
-  const [linktalRepresentativeId, setLinktalRepresentativeId] = React.useState('');
-  const [invoiceContactName, setInvoiceContactName] = React.useState('');
-  const [invoiceContactEmail, setInvoiceContactEmail] = React.useState('');
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    onSave({
-      pricing: pricing || undefined,
-      guaranteePeriod: guaranteePeriod ? Number(guaranteePeriod) : undefined,
-      paymentTerm: paymentTerm || undefined,
-      clientTobRepresentative: clientTobRepresentative || undefined,
-      linktalRepresentativeId: linktalRepresentativeId || undefined,
-      invoiceContactName: invoiceContactName || undefined,
-      invoiceContactEmail: invoiceContactEmail || undefined,
-    });
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="flex h-full flex-col">
-      <SheetHeader>
-        <SheetTitle>Add Terms of Business</SheetTitle>
-        <SheetDescription>Record a signed agreement for this client.</SheetDescription>
-      </SheetHeader>
-
-      <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
-        <FormField label="Pricing" htmlFor="tob-pricing" description="Free text — real values are tiered.">
-          <Input id="tob-pricing" value={pricing} onChange={(e) => setPricing(e.target.value)} />
-        </FormField>
-        <FormField label="Guarantee period (days)" htmlFor="tob-guarantee">
-          <Input
-            id="tob-guarantee"
-            type="number"
-            min={0}
-            max={3650}
-            value={guaranteePeriod}
-            onChange={(e) => setGuaranteePeriod(e.target.value)}
-          />
-        </FormField>
-        <FormField label="Payment term" htmlFor="tob-payment-term">
-          <Input id="tob-payment-term" value={paymentTerm} onChange={(e) => setPaymentTerm(e.target.value)} />
-        </FormField>
-        <FormField label="Client representative" htmlFor="tob-client-rep">
-          <Input
-            id="tob-client-rep"
-            value={clientTobRepresentative}
-            onChange={(e) => setClientTobRepresentative(e.target.value)}
-          />
-        </FormField>
-        <FormField label="Linktal representative" htmlFor="tob-linktal-rep">
-          <ConsultantCombobox
-            id="tob-linktal-rep"
-            value={linktalRepresentativeId}
-            onValueChange={setLinktalRepresentativeId}
-            consultants={consultants}
-          />
-        </FormField>
-        <FormField label="Invoice contact name" htmlFor="tob-invoice-name">
-          <Input
-            id="tob-invoice-name"
-            value={invoiceContactName}
-            onChange={(e) => setInvoiceContactName(e.target.value)}
-          />
-        </FormField>
-        <FormField label="Invoice contact email" htmlFor="tob-invoice-email">
-          <Input
-            id="tob-invoice-email"
-            type="email"
-            value={invoiceContactEmail}
-            onChange={(e) => setInvoiceContactEmail(e.target.value)}
-          />
-        </FormField>
-      </div>
-
-      <SheetFooter className="flex-row justify-end">
-        <Button type="button" variant="outline" size="lg" onClick={onCancel} disabled={isSaving}>
-          Cancel
-        </Button>
-        <Button type="submit" size="lg" disabled={isSaving}>
-          {isSaving ? 'Saving…' : 'Save'}
-        </Button>
-      </SheetFooter>
-    </form>
   );
 }

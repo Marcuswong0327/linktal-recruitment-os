@@ -21,13 +21,23 @@ export interface LogContactValues {
   contactedAt: string;
 }
 
+export interface LogContactSubjectPicker {
+  label: string;
+  placeholder?: string;
+  options: { value: string; label: string }[];
+  value: string;
+  onValueChange: (value: string) => void;
+}
+
 interface LogContactSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Who this contact is with, e.g. a stakeholder or candidate's name — shown in the sheet description. */
-  subjectLabel: string;
+  /** Who this contact is with, e.g. a stakeholder or candidate's name — shown in the sheet description. Ignored when `subjectPicker` is set, since the subject isn't known until picked. */
+  subjectLabel?: string;
   isSaving: boolean;
   onSave: (values: LogContactValues) => void;
+  /** When the caller doesn't already know who the contact is with (e.g. logging from a company page that covers several stakeholders) — renders a required picker field above Contact method, and the picked value drives the description text instead of `subjectLabel`. */
+  subjectPicker?: LogContactSubjectPicker;
 }
 
 function toLocalDatetimeInputValue(date: Date) {
@@ -42,7 +52,14 @@ function toLocalDatetimeInputValue(date: Date) {
  * actually submitting the request (the logged-in consultant), not a
  * manually picked value.
  */
-export function LogContactSheet({ open, onOpenChange, subjectLabel, isSaving, onSave }: LogContactSheetProps) {
+export function LogContactSheet({
+  open,
+  onOpenChange,
+  subjectLabel,
+  isSaving,
+  onSave,
+  subjectPicker,
+}: LogContactSheetProps) {
   const [contactType, setContactType] = React.useState<string>(contactTypeOptions[0].value);
   const [notes, setNotes] = React.useState('');
   const [contactedAt, setContactedAt] = React.useState(() => toLocalDatetimeInputValue(new Date()));
@@ -66,16 +83,35 @@ export function LogContactSheet({ open, onOpenChange, subjectLabel, isSaving, on
     });
   }
 
+  const pickedLabel = subjectPicker?.options.find((o) => o.value === subjectPicker.value)?.label;
+  const description = subjectPicker
+    ? pickedLabel
+      ? `Record a contact with ${pickedLabel}.`
+      : 'Pick who this contact is with.'
+    : `Record a contact with ${subjectLabel}.`;
+  const canSubmit = !isSaving && (!subjectPicker || subjectPicker.value !== '');
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-md">
         <form onSubmit={handleSubmit} className="flex h-full flex-col">
           <SheetHeader>
             <SheetTitle>Log a contact</SheetTitle>
-            <SheetDescription>Record a contact with {subjectLabel}.</SheetDescription>
+            <SheetDescription>{description}</SheetDescription>
           </SheetHeader>
 
           <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
+            {subjectPicker ? (
+              <FormField label={subjectPicker.label} htmlFor="contact-subject" required>
+                <EnumSelect
+                  id="contact-subject"
+                  value={subjectPicker.value}
+                  onValueChange={subjectPicker.onValueChange}
+                  options={subjectPicker.options}
+                  placeholder={subjectPicker.placeholder}
+                />
+              </FormField>
+            ) : null}
             <FormField label="Contact method" htmlFor="contact-type" required>
               <EnumSelect
                 id="contact-type"
@@ -118,7 +154,7 @@ export function LogContactSheet({ open, onOpenChange, subjectLabel, isSaving, on
             >
               Cancel
             </Button>
-            <Button type="submit" size="lg" disabled={isSaving}>
+            <Button type="submit" size="lg" disabled={!canSubmit}>
               {isSaving ? 'Logging…' : 'Log contact'}
             </Button>
           </SheetFooter>
