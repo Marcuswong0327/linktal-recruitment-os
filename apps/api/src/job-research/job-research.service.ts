@@ -1,14 +1,36 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { ClientStatus, Prisma } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { PrismaService } from '../prisma/prisma.service';
 import { RequestContext } from '../common/request-context';
-import { assertInScope, isScoped, jobResearchScope } from '../common/scope';
+import { isScoped, jobResearchScope } from '../common/scope';
 import { AuthUser } from '../auth/auth.types';
 import { CreateJobResearchDto } from './dto/create-job-research.dto';
 import { UpdateJobResearchDto } from './dto/update-job-research.dto';
 import { QueryJobResearchDto } from './dto/query-job-research.dto';
+import { ExportJobResearchDto } from './dto/export-job-research.dto';
+import { buildWorkbook, formatExportDate, resolveTimeZone, ExportColumn } from '../common/xlsx-export';
+import { logExport } from '../common/audit-export';
+import { clientStatusLabels } from '../common/export-labels';
+
+/** The subset of QueryJobResearchDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination but still satisfies this structurally. */
+type JobResearchFilterFields = Pick<
+  QueryJobResearchDto,
+  | 'q'
+  | 'clientId'
+  | 'clientIds'
+  | 'consultantIds'
+  | 'jobTitleIds'
+  | 'jobRoleTypeIds'
+  | 'industryIds'
+  | 'specializationIds'
+  | 'locationIds'
+  | 'location'
+  | 'statuses'
+  | 'isContacted'
+  | 'hasJobOrder'
+>;
 
 // client/consultant/jobTitle/jobRoleType/location are FK relations — every read
 // needs this to get the resolved names back, since JobResearchEntity documents
@@ -19,9 +41,10 @@ import { QueryJobResearchDto } from './dto/query-job-research.dto';
 // for the single-record scope check (a research row has no industry of its own,
 // only via its Client) and are stripped back out in `toEntity` — never part of
 // the API response. `jobOrder` is the conversion back-reference, reduced to a
-// bare id.
+// bare id. `client.displayId` feeds the entity's `clientDisplayId` (the label
+// to show/link) and the export sheet's own Client Display ID column.
 const JOB_RESEARCH_INCLUDE = {
-  client: { select: { companyName: true, industryId: true } },
+  client: { select: { companyName: true, displayId: true, industryId: true } },
   consultant: { select: { fullName: true } },
   jobTitle: { select: { name: true } },
   jobRoleType: { select: { name: true } },
@@ -30,7 +53,7 @@ const JOB_RESEARCH_INCLUDE = {
 } satisfies Prisma.ClientJobResearchInclude;
 
 type JobResearchWithRelations = {
-  client: { companyName: string; industryId: string | null } | null;
+  client: { companyName: string; displayId: string; industryId: string | null } | null;
   consultant: { fullName: string } | null;
   jobTitle: { name: string } | null;
   jobRoleType: { name: string } | null;
@@ -38,11 +61,34 @@ type JobResearchWithRelations = {
   jobOrder: { id: string } | null;
 };
 
+/** The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept separate from the generic `toEntity<T>` return type, which erases extra fields when used across a second generic boundary (same reasoning as JobOrderExportRow). */
+type JobResearchExportRow = {
+  displayId: string;
+  companyName: string | null;
+  clientDisplayId: string | null;
+  consultant: string | null;
+  location: string | null;
+  jobTitle: string | null;
+  jobRoleType: string | null;
+  status: ClientStatus | null;
+  seekUrl: string | null;
+  permanentUrl: string | null;
+  postedDate: Date | null;
+  contactEmailFromAd: string | null;
+  salaryRange: string | null;
+  isContacted: boolean;
+  researchedAt: Date;
+  lastContactedAt: Date | null;
+  notes: string | null;
+  jobOrderId: string | null;
+};
+
 function toEntity<T extends JobResearchWithRelations>(research: T) {
   const { client, consultant, jobTitle, jobRoleType, location, jobOrder, ...rest } = research;
   return {
     ...rest,
     companyName: client?.companyName ?? null,
+    clientDisplayId: client?.displayId ?? null,
     consultant: consultant?.fullName ?? null,
     jobTitle: jobTitle?.name ?? null,
     jobRoleType: jobRoleType?.name ?? null,
@@ -61,9 +107,13 @@ export class JobResearchService {
     private readonly base: PrismaService,
   ) {}
 
-  async findAll(query: QueryJobResearchDto, user: AuthUser) {
-    const { page, pageSize, sortBy, sortOrder, q } = query;
-
+  /**
+   * Shared by `findAll` and the export endpoint — every list/export read
+   * against ClientJobResearch applies the same filters and scope, just with a
+   * different set of rows selected out of the result.
+   */
+  private buildWhere(query: JobResearchFilterFields, user: AuthUser): Prisma.ClientJobResearchWhereInput {
+    const { q } = query;
     const where: Prisma.ClientJobResearchWhereInput = {};
 
     if (query.clientId) {
@@ -113,6 +163,15 @@ export class JobResearchService {
     // assignment would silently clobber instead of combining with.
     const and: Prisma.ClientJobResearchWhereInput[] = [];
 
+    // A research row has no industry/specialization of its own — both filter
+    // through the researched Client, same relation the scope resolver walks.
+    if (query.industryIds?.length) {
+      and.push({ client: { industryId: { in: query.industryIds } } });
+    }
+    if (query.specializationIds?.length) {
+      and.push({ client: { specializationId: { in: query.specializationIds } } });
+    }
+
     // Location is a node in the tree — selecting a state matches every ad
     // beneath it, via the denormalized ancestor path.
     if (query.locationIds?.length) {
@@ -143,16 +202,26 @@ export class JobResearchService {
       where.AND = and;
     }
 
-    // postedDate and lastContactedAt are null on plenty of rows (an ad with no
-    // visible date, an advertiser never approached) — "nulls: last" keeps those
-    // at the bottom regardless of direction, rather than Postgres's default of
-    // nulls first on desc.
+    return where;
+  }
+
+  /** Shared by `findAll` and `exportAll` so the exported sheet mirrors the grid's current sort exactly. postedDate and lastContactedAt are null on plenty of rows (an ad with no visible date, an advertiser never approached) — "nulls: last" keeps those at the bottom regardless of direction, rather than Postgres's default of nulls first on desc. */
+  private buildOrderBy(
+    sortBy: QueryJobResearchDto['sortBy'],
+    sortOrder: QueryJobResearchDto['sortOrder'],
+  ): Prisma.ClientJobResearchOrderByWithRelationInput {
     const nullableSorts: string[] = ['postedDate', 'lastContactedAt'];
-    const orderBy: Prisma.ClientJobResearchOrderByWithRelationInput = !sortBy
+    return !sortBy
       ? { researchedAt: 'desc' }
       : nullableSorts.includes(sortBy)
         ? { [sortBy]: { sort: sortOrder, nulls: 'last' } }
         : { [sortBy]: sortOrder };
+  }
+
+  async findAll(query: QueryJobResearchDto, user: AuthUser) {
+    const { page, pageSize, sortBy, sortOrder } = query;
+    const where = this.buildWhere(query, user);
+    const orderBy = this.buildOrderBy(sortBy, sortOrder);
 
     // Parallel, not $transaction: these two reads don't need one consistent DB
     // snapshot, and running them concurrently roughly halves the round trips
@@ -171,12 +240,76 @@ export class JobResearchService {
     return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }
 
+  /** Every row matching the current filters, unbounded — no `skip`/`take`. */
+  async exportAll(query: ExportJobResearchDto, user: AuthUser): Promise<Buffer> {
+    const where = this.buildWhere(query, user);
+    const orderBy = this.buildOrderBy(query.sortBy, query.sortOrder);
+    const research = await this.prisma.clientJobResearch.findMany({ where, orderBy, include: JOB_RESEARCH_INCLUDE });
+    const { timezone: _timezone, ...filters } = query;
+    await logExport(this.base, 'ClientJobResearch', { count: research.length, filters });
+    return this.buildExportWorkbook(research.map(toEntity), query.timezone);
+  }
+
+  /** An explicit row selection — scope is still re-applied server-side (defense-in-depth), so an out-of-scope id is silently dropped rather than exported. */
+  async exportByIds(ids: string[], user: AuthUser, timezone?: string): Promise<Buffer> {
+    const and: Prisma.ClientJobResearchWhereInput[] = [{ id: { in: ids } }];
+    if (isScoped(user)) and.push(jobResearchScope(user));
+    const research = await this.prisma.clientJobResearch.findMany({ where: { AND: and }, include: JOB_RESEARCH_INCLUDE });
+    await logExport(this.base, 'ClientJobResearch', { count: research.length, requestedIds: ids });
+    return this.buildExportWorkbook(research.map(toEntity), timezone);
+  }
+
+  private buildExportWorkbook(research: JobResearchExportRow[], timezone?: string): Promise<Buffer> {
+    const tz = resolveTimeZone(timezone);
+    const columns: ExportColumn[] = [
+      { header: 'Display ID', key: 'displayId' },
+      { header: 'Client', key: 'companyName' },
+      { header: 'Client Display ID', key: 'clientDisplayId' },
+      { header: 'Consultant', key: 'consultant' },
+      { header: 'Location', key: 'location' },
+      { header: 'Job Title', key: 'jobTitle' },
+      { header: 'Job Role Type', key: 'jobRoleType' },
+      { header: 'Status', key: 'status' },
+      { header: 'Seek URL', key: 'seekUrl' },
+      { header: 'Permanent URL', key: 'permanentUrl' },
+      { header: 'Posted Date', key: 'postedDate' },
+      { header: 'Contact Email', key: 'contactEmailFromAd' },
+      { header: 'Salary Range', key: 'salaryRange' },
+      { header: 'Contacted', key: 'isContacted' },
+      { header: 'Last Contacted', key: 'lastContactedAt' },
+      { header: 'Researched At', key: 'researchedAt' },
+      { header: 'Has Job Order', key: 'hasJobOrder' },
+      { header: 'Notes', key: 'notes', wrap: true },
+    ];
+    const rows = research.map((r) => ({
+      displayId: r.displayId,
+      companyName: r.companyName ?? '',
+      clientDisplayId: r.clientDisplayId ?? '',
+      consultant: r.consultant ?? '',
+      location: r.location ?? '',
+      jobTitle: r.jobTitle ?? '',
+      jobRoleType: r.jobRoleType ?? '',
+      status: r.status ? clientStatusLabels[r.status] : '',
+      seekUrl: r.seekUrl ?? '',
+      permanentUrl: r.permanentUrl ?? '',
+      postedDate: formatExportDate(r.postedDate, tz),
+      contactEmailFromAd: r.contactEmailFromAd ?? '',
+      salaryRange: r.salaryRange ?? '',
+      isContacted: r.isContacted ? 'Yes' : 'No',
+      lastContactedAt: formatExportDate(r.lastContactedAt, tz),
+      researchedAt: formatExportDate(r.researchedAt, tz),
+      hasJobOrder: r.jobOrderId ? 'Yes' : 'No',
+      notes: r.notes ?? '',
+    }));
+    return buildWorkbook('Job Research', columns, rows);
+  }
+
   /**
-   * `user` gates the job-scope check (findOne/update/remove are single-record
-   * access — a scoped consultant hitting an out-of-scope row directly gets an
-   * explicit 403, unlike `findAll`, which just filters silently).
+   * Single-record access is unguarded by scope — scope only ever filters
+   * `findAll`. `user` is accepted for signature symmetry with the other
+   * services but unused here now.
    */
-  async findOne(id: string, user: AuthUser) {
+  async findOne(id: string, _user: AuthUser) {
     const research = await this.prisma.clientJobResearch.findUnique({
       where: { id },
       include: JOB_RESEARCH_INCLUDE,
@@ -184,14 +317,6 @@ export class JobResearchService {
     if (!research) {
       throw new NotFoundException(`Job research ${id} not found`);
     }
-    // No industry of its own — it inherits its Client's. `consultantId`
-    // short-circuits both arms: a row you logged yourself is always yours to
-    // open (see ownedBy in common/scope.ts).
-    assertInScope(user, {
-      consultantId: research.consultantId,
-      industryId: research.client?.industryId ?? null,
-      locationAncestorIds: research.location?.ancestorIds ?? [],
-    });
     return toEntity(research);
   }
 

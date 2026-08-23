@@ -5,18 +5,22 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { CreateCandidateContactHistoryDtoCategory } from './createCandidateContactHistoryDtoCategory';
 import type { CreateCandidateContactHistoryDtoContactType } from './createCandidateContactHistoryDtoContactType';
+import type { CreateCandidateContactHistoryDtoOutreachChannel } from './createCandidateContactHistoryDtoOutreachChannel';
 import type { CreateCandidateContactHistoryDtoStatus } from './createCandidateContactHistoryDtoStatus';
 
 export interface CreateCandidateContactHistoryDto {
   /** How this contact happened */
   contactType: CreateCandidateContactHistoryDtoContactType;
   /** Kind of note — distinct from contactType, which is the channel */
-  category?: string;
-  /** The screening call content */
-  conversationSummary?: string;
-  /** Notes for an outreach campaign entry */
+  category: CreateCandidateContactHistoryDtoCategory;
+  /** The screening call content — set when category is SCREENING */
+  screeningNotes?: string;
+  /** Free-text campaign context (e.g. which job/campaign) — set when category is OUTREACH */
   outreachCampaignNotes?: string;
+  /** Which channel this outreach used — set when category is OUTREACH */
+  outreachChannel?: CreateCandidateContactHistoryDtoOutreachChannel;
   /** Snapshot of the candidate's status at the time of this contact; defaults to WARM */
   status?: CreateCandidateContactHistoryDtoStatus;
   /** Suburb captured during this contact */

@@ -27,10 +27,6 @@ industryIds?: string[];
  */
 specializationIds?: string[];
 /**
- * Filter by owning consultant ID(s)
- */
-consultantIds?: string[];
-/**
  * Filter by submission status (has at least one submission with this status)
  */
 submissionStatuses?: GetCandidateJobRoleTypeFacetsSubmissionStatusesItem[];

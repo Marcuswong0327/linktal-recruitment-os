@@ -1,6 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Candidate, CandidateStatus, LocationLevel, Prisma } from '@prisma/client';
-import { CandidateNoteDto } from '../dto/candidate-note.dto';
+import { Candidate, CandidateStatus, ContactCategory, LocationLevel, Prisma } from '@prisma/client';
 
 /**
  * OpenAPI response shape for a Candidate.
@@ -15,10 +14,6 @@ import { CandidateNoteDto } from '../dto/candidate-note.dto';
  * `T | null` union reflects as `Object` at runtime, which would otherwise emit
  * `type: object` instead of the real scalar type.
  *
- * `notes` is excluded from the `Omit` below and typed as `CandidateNoteDto[]`
- * ourselves, because Prisma's `Json` maps to `JsonValue`, which has no room for
- * a concrete shape.
- *
  * `lastContact*` fields aren't part of the raw `Candidate` model — they're
  * resolved from the most recent `CandidateContactHistory` row (see
  * CandidatesService). `lastContactedAt`/`lastContactedById` are the exception:
@@ -32,7 +27,7 @@ import { CandidateNoteDto } from '../dto/candidate-note.dto';
  * get plain strings instead of joining against /industries, /job-role-types,
  * /locations or /specializations themselves.
  */
-export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedById' | 'notes'> {
+export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedById'> {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'CDD-000001' }) displayId!: string;
   @ApiProperty({ type: String, nullable: true, example: 'John' }) firstName!: string | null;
@@ -93,8 +88,6 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
   })
   specializationIds!: string[];
   @ApiProperty({ enum: CandidateStatus }) status!: CandidateStatus;
-  @ApiProperty({ type: [CandidateNoteDto], nullable: true }) notes!: CandidateNoteDto[] | null;
-  @ApiProperty({ type: String, nullable: true }) consultantId!: string | null;
   @ApiProperty({
     type: Date,
     nullable: true,
@@ -106,11 +99,11 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
   @ApiProperty({ type: String, nullable: true, description: 'Contact method of the most recent contact (email, call, meeting, linkedin)' })
   lastContactType!: string | null;
   @ApiProperty({
-    type: String,
+    enum: ContactCategory,
     nullable: true,
     description: 'Category of the most recent contact — distinct from lastContactType, which is the channel',
   })
-  lastContactCategory!: string | null;
+  lastContactCategory!: ContactCategory | null;
   @ApiProperty({
     type: String,
     nullable: true,
@@ -126,6 +119,20 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
       "Resolved live from the latest CandidateContactHistory row (see lastContactType/lastContactedBy) — distinct from lastContactedAt, which is a denormalized column left null on imported history. Sort/filter by lastContactedAt; display this.",
   })
   lastContactDate!: Date | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Free text, from the most recent CandidateContactHistory row — e.g. "35 per hour". Null if never contacted. Display-only, no sort/filter.',
+  })
+  currentSalary!: string | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Free text, from the most recent CandidateContactHistory row — e.g. "above 47". Null if never contacted. Display-only, no sort/filter.',
+  })
+  expectedSalary!: string | null;
   @ApiProperty() createdAt!: Date;
   @ApiProperty() updatedAt!: Date;
 }

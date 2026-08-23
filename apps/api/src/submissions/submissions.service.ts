@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
@@ -79,36 +79,22 @@ export class SubmissionsService {
    * job order after a removal restores the dead row (fresh status, cleared
    * deletedAt) instead of colliding with the constraint.
    *
-   * Industry guard: a candidate's own industry tag must match the job
-   * order's client's industry (a Job Order has none of its own). Blocks the
-   * mismatch at the source — the pairing that would otherwise let a scoped
-   * consultant's candidate silently end up on a job order outside their
-   * industry — rather than allowing it and special-casing visibility around
-   * it later. Applies to every role, not just scoped consultants: this is a
-   * data-integrity rule about whether the pairing makes sense, not access
-   * control.
+   * No industry guard: a candidate can be submitted to a job order outside
+   * their tagged industry — cross-industry placements are a legitimate part
+   * of the workflow (e.g. a job order consultant deliberately working an
+   * out-of-scope client, see JobOrderConsultant in schema.prisma), not a
+   * data error to block.
    */
   async create(dto: CreateSubmissionDto) {
     const [candidate, jobOrder] = await Promise.all([
-      this.prisma.candidate.findUnique({ where: { id: dto.candidateId }, select: { industryId: true } }),
-      this.prisma.jobOrder.findUnique({
-        where: { id: dto.jobOrderId },
-        select: { client: { select: { industryId: true } } },
-      }),
+      this.prisma.candidate.findUnique({ where: { id: dto.candidateId }, select: { id: true } }),
+      this.prisma.jobOrder.findUnique({ where: { id: dto.jobOrderId }, select: { id: true } }),
     ]);
     if (!candidate) {
       throw new NotFoundException(`Candidate ${dto.candidateId} not found`);
     }
     if (!jobOrder) {
       throw new NotFoundException(`Job order ${dto.jobOrderId} not found`);
-    }
-    // industryId is required on Client and Candidate now, so this is a plain
-    // equality check — there's no untagged case left to guard against.
-    if (candidate.industryId !== jobOrder.client.industryId) {
-      throw new BadRequestException({
-        code: 'SUBMISSION_INDUSTRY_MISMATCH',
-        message: "This candidate's industry does not match this job order.",
-      });
     }
 
     const existing = await this.base.candidateSubmission.findUnique({
@@ -144,6 +130,7 @@ export class SubmissionsService {
           include: SUBMISSION_INCLUDE,
         });
 
+    await this.recomputeJobOrderCounters(dto.jobOrderId);
     return toEntity(submission);
   }
 
@@ -154,12 +141,41 @@ export class SubmissionsService {
       data: dto,
       include: SUBMISSION_INCLUDE,
     });
+    await this.recomputeJobOrderCounters(submission.jobOrderId);
     return toEntity(submission);
   }
 
   /** Soft-deletes the submission — "removed from job order" in the pipeline timeline. */
   async remove(id: string) {
-    await this.findOne(id);
-    return this.prisma.candidateSubmission.delete({ where: { id } });
+    const existing = await this.findOne(id);
+    const removed = await this.prisma.candidateSubmission.delete({ where: { id } });
+    await this.recomputeJobOrderCounters(existing.jobOrderId);
+    return removed;
+  }
+
+  /**
+   * Recomputes JobOrder.activeSubmissionCount/lastSubmittedAt from scratch
+   * rather than incrementing/decrementing in place — a status edit (e.g.
+   * into or out of REJECTED) changes the active count without any row being
+   * created or removed, so there's no single call site where a delta alone
+   * would be correct. Called after every create/update/remove; see the two
+   * fields' own schema.prisma comment for why a plain relation aggregate
+   * can't stand in for this (no `where` on Prisma's orderBy aggregates).
+   */
+  private async recomputeJobOrderCounters(jobOrderId: string) {
+    const [activeSubmissionCount, lastSubmission] = await Promise.all([
+      this.prisma.candidateSubmission.count({
+        where: { jobOrderId, status: { not: 'REJECTED' } },
+      }),
+      this.prisma.candidateSubmission.findFirst({
+        where: { jobOrderId },
+        orderBy: { submittedAt: 'desc' },
+        select: { submittedAt: true },
+      }),
+    ]);
+    await this.prisma.jobOrder.update({
+      where: { id: jobOrderId },
+      data: { activeSubmissionCount, lastSubmittedAt: lastSubmission?.submittedAt ?? null },
+    });
   }
 }

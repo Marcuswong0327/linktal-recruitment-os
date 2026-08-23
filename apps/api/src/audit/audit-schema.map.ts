@@ -18,9 +18,9 @@ export type AuditFieldMeta =
  * relations (see the "Logical ref to Consultant.id (no FK)" comments in
  * schema.prisma) — invisible to DMMF by design, so they can't be derived.
  * Verified against every audited model: these two are the only such columns
- * that actually appear on an AUDITED_MODELS entry (CandidateContactHistory's
- * `contactedById` is a real `@relation`, but that model isn't audited at
- * all, so it never reaches this map).
+ * that actually appear on an AUDITED_MODELS entry. (CandidateContactHistory's
+ * `contactedById` is a real `@relation`, so it's already resolved via DMMF,
+ * not this overlay — it needed adding to AUDITED_MODELS itself, not here.)
  */
 const LOGICAL_REFS: Record<string, string> = {
   deletedById: 'Consultant',
@@ -95,6 +95,8 @@ export const LABEL_SPEC: Record<string, LabelSpec> = {
   JobTitle: { delegate: 'jobTitle', fields: ['name'], softDeletable: false },
   JobRoleType: { delegate: 'jobRoleType', fields: ['name'], softDeletable: false },
   StakeholderRoleType: { delegate: 'stakeholderRoleType', fields: ['name'], softDeletable: false },
+  CandidateContactHistory: { delegate: 'candidateContactHistory', fields: ['displayId'], softDeletable: false },
+  StakeholderContactHistory: { delegate: 'stakeholderContactHistory', fields: ['displayId'], softDeletable: false },
 };
 
 /**
@@ -110,6 +112,7 @@ const ENTITY_TYPE_LABEL_OVERRIDES: Record<string, string> = {
   CandidateSubmission: 'Submission',
   ClientJobResearch: 'Job Research',
   ConsultantIndustry: 'Industry Assignment',
+  JobOrderConsultant: 'Consultant Assignment',
   Tob: 'Terms of Business',
 };
 
@@ -161,9 +164,8 @@ export function booleanLabel(field: string, value: boolean): string {
 /**
  * Role-sensitive columns to redact in the activity log regardless of the
  * viewer — `audit:read` is admin-only today (see docs/rbac-roles.md), but
- * these are compensation fields already redacted from every other response
- * (see redact-consultant-field.ts's `consultantId`-hiding sibling), so if
- * `audit:read` is ever granted more broadly this can't become a silent leak.
+ * these are compensation fields that shouldn't leak if `audit:read` is ever
+ * granted more broadly.
  */
 export const SENSITIVE_FIELDS: Record<string, Set<string>> = {
   Consultant: new Set(['salary', 'costTo']),

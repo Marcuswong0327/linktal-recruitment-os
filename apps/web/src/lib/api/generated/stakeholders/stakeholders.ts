@@ -28,7 +28,11 @@ import type {
   CreateStakeholderContactHistoryDto,
   CreateStakeholderDto,
   ErrorResponse,
+  ExportByIdsDto,
+  ExportStakeholdersParams,
   GetStakeholdersParams,
+  ImportResultEntity,
+  ImportStakeholdersBody,
   PaginatedStakeholdersEntity,
   StakeholderContactHistoryEntity,
   StakeholderEntity,
@@ -85,7 +89,7 @@ export const getGetStakeholdersUrl = (params?: GetStakeholdersParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["clientIds","roleTypeIds","jobTitleIds","locationIds","accuracy"];
+    const explodeParameters = ["clientIds","roleTypeIds","jobTitleIds","locationIds","accuracy","statuses"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
@@ -419,7 +423,463 @@ export function useGetStakeholderByDisplayId<TData = Awaited<ReturnType<typeof g
 
 
 
-export type getStakeholderResponse200 = {
+export type exportStakeholdersResponse200 = {
+  data: void
+  status: 200
+}
+
+export type exportStakeholdersResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportStakeholdersResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportStakeholdersResponseSuccess = (exportStakeholdersResponse200) & {
+  headers: Headers;
+};
+export type exportStakeholdersResponseError = (exportStakeholdersResponse400 | exportStakeholdersResponse500) & {
+  headers: Headers;
+};
+
+export type exportStakeholdersResponse = (exportStakeholdersResponseSuccess | exportStakeholdersResponseError)
+
+export const getExportStakeholdersUrl = (params?: ExportStakeholdersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["clientIds","roleTypeIds","jobTitleIds","locationIds","accuracy","statuses"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/stakeholders/export?${stringifiedParams}` : `/stakeholders/export`
+}
+
+/**
+ * @summary Export every stakeholder matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+export const exportStakeholders = async (params?: ExportStakeholdersParams, options?: RequestInit): Promise<exportStakeholdersResponse> => {
+
+  return customFetch<exportStakeholdersResponse>(getExportStakeholdersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportStakeholdersQueryKey = (params?: ExportStakeholdersParams,) => {
+    return [
+    `/stakeholders/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportStakeholdersQueryOptions = <TData = Awaited<ReturnType<typeof exportStakeholders>>, TError = ErrorResponse>(params?: ExportStakeholdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportStakeholders>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportStakeholdersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportStakeholders>>> = ({ signal }) => exportStakeholders(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportStakeholders>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportStakeholdersQueryResult = NonNullable<Awaited<ReturnType<typeof exportStakeholders>>>
+export type ExportStakeholdersQueryError = ErrorResponse
+
+
+export function useExportStakeholders<TData = Awaited<ReturnType<typeof exportStakeholders>>, TError = ErrorResponse>(
+ params: undefined |  ExportStakeholdersParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportStakeholders>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportStakeholders>>,
+          TError,
+          Awaited<ReturnType<typeof exportStakeholders>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportStakeholders<TData = Awaited<ReturnType<typeof exportStakeholders>>, TError = ErrorResponse>(
+ params?: ExportStakeholdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportStakeholders>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportStakeholders>>,
+          TError,
+          Awaited<ReturnType<typeof exportStakeholders>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportStakeholders<TData = Awaited<ReturnType<typeof exportStakeholders>>, TError = ErrorResponse>(
+ params?: ExportStakeholdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportStakeholders>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Export every stakeholder matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+
+export function useExportStakeholders<TData = Awaited<ReturnType<typeof exportStakeholders>>, TError = ErrorResponse>(
+ params?: ExportStakeholdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportStakeholders>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getExportStakeholdersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type exportStakeholdersByIdsResponse201 = {
+  data: void
+  status: 201
+}
+
+export type exportStakeholdersByIdsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportStakeholdersByIdsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportStakeholdersByIdsResponseSuccess = (exportStakeholdersByIdsResponse201) & {
+  headers: Headers;
+};
+export type exportStakeholdersByIdsResponseError = (exportStakeholdersByIdsResponse400 | exportStakeholdersByIdsResponse500) & {
+  headers: Headers;
+};
+
+export type exportStakeholdersByIdsResponse = (exportStakeholdersByIdsResponseSuccess | exportStakeholdersByIdsResponseError)
+
+export const getExportStakeholdersByIdsUrl = () => {
+
+
+
+
+  return `/stakeholders/export`
+}
+
+/**
+ * @summary Export an explicit set of stakeholders (by id) as an .xlsx file
+ */
+export const exportStakeholdersByIds = async (exportByIdsDto: ExportByIdsDto, options?: RequestInit): Promise<exportStakeholdersByIdsResponse> => {
+
+  return customFetch<exportStakeholdersByIdsResponse>(getExportStakeholdersByIdsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(exportByIdsDto)
+  }
+);}
+
+
+
+
+
+export const getExportStakeholdersByIdsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportStakeholdersByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportStakeholdersByIds>>, TError,{data: ExportByIdsDto}, TContext> => {
+
+const mutationKey = ['exportStakeholdersByIds'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportStakeholdersByIds>>, {data: ExportByIdsDto}> = (props) => {
+          const {data} = props ?? {};
+
+          return  exportStakeholdersByIds(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportStakeholdersByIdsMutationResult = NonNullable<Awaited<ReturnType<typeof exportStakeholdersByIds>>>
+    export type ExportStakeholdersByIdsMutationBody = ExportByIdsDto
+    export type ExportStakeholdersByIdsMutationError = ErrorResponse
+
+    /**
+ * @summary Export an explicit set of stakeholders (by id) as an .xlsx file
+ */
+export const useExportStakeholdersByIds = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportStakeholdersByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof exportStakeholdersByIds>>,
+        TError,
+        {data: ExportByIdsDto},
+        TContext
+      > => {
+      return useMutation(getExportStakeholdersByIdsMutationOptions(options), queryClient);
+    }
+    export type getStakeholderImportTemplateResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getStakeholderImportTemplateResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getStakeholderImportTemplateResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getStakeholderImportTemplateResponseSuccess = (getStakeholderImportTemplateResponse200) & {
+  headers: Headers;
+};
+export type getStakeholderImportTemplateResponseError = (getStakeholderImportTemplateResponse400 | getStakeholderImportTemplateResponse500) & {
+  headers: Headers;
+};
+
+export type getStakeholderImportTemplateResponse = (getStakeholderImportTemplateResponseSuccess | getStakeholderImportTemplateResponseError)
+
+export const getGetStakeholderImportTemplateUrl = () => {
+
+
+
+
+  return `/stakeholders/import/template`
+}
+
+/**
+ * @summary Download the .xlsx template for bulk-importing/updating stakeholders
+ */
+export const getStakeholderImportTemplate = async ( options?: RequestInit): Promise<getStakeholderImportTemplateResponse> => {
+
+  return customFetch<getStakeholderImportTemplateResponse>(getGetStakeholderImportTemplateUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStakeholderImportTemplateQueryKey = () => {
+    return [
+    `/stakeholders/import/template`
+    ] as const;
+    }
+
+
+export const getGetStakeholderImportTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStakeholderImportTemplateQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStakeholderImportTemplate>>> = ({ signal }) => getStakeholderImportTemplate({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetStakeholderImportTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getStakeholderImportTemplate>>>
+export type GetStakeholderImportTemplateQueryError = ErrorResponse
+
+
+export function useGetStakeholderImportTemplate<TData = Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError = ErrorResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStakeholderImportTemplate>>,
+          TError,
+          Awaited<ReturnType<typeof getStakeholderImportTemplate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStakeholderImportTemplate<TData = Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStakeholderImportTemplate>>,
+          TError,
+          Awaited<ReturnType<typeof getStakeholderImportTemplate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStakeholderImportTemplate<TData = Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Download the .xlsx template for bulk-importing/updating stakeholders
+ */
+
+export function useGetStakeholderImportTemplate<TData = Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholderImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetStakeholderImportTemplateQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type importStakeholdersResponse201 = {
+  data: ImportResultEntity
+  status: 201
+}
+
+export type importStakeholdersResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type importStakeholdersResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type importStakeholdersResponseSuccess = (importStakeholdersResponse201) & {
+  headers: Headers;
+};
+export type importStakeholdersResponseError = (importStakeholdersResponse400 | importStakeholdersResponse500) & {
+  headers: Headers;
+};
+
+export type importStakeholdersResponse = (importStakeholdersResponseSuccess | importStakeholdersResponseError)
+
+export const getImportStakeholdersUrl = () => {
+
+
+
+
+  return `/stakeholders/import`
+}
+
+/**
+ * @summary Preview (commit=false, default) or commit (commit=true) a bulk stakeholder import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.
+ */
+export const importStakeholders = async (importStakeholdersBody: ImportStakeholdersBody, options?: RequestInit): Promise<importStakeholdersResponse> => {
+    const formData = new FormData();
+formData.append(`file`, importStakeholdersBody.file);
+if(importStakeholdersBody.commit !== undefined) {
+ formData.append(`commit`, importStakeholdersBody.commit.toString())
+ }
+
+  return customFetch<importStakeholdersResponse>(getImportStakeholdersUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getImportStakeholdersMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importStakeholders>>, TError,{data: ImportStakeholdersBody}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importStakeholders>>, TError,{data: ImportStakeholdersBody}, TContext> => {
+
+const mutationKey = ['importStakeholders'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importStakeholders>>, {data: ImportStakeholdersBody}> = (props) => {
+          const {data} = props ?? {};
+
+          return  importStakeholders(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportStakeholdersMutationResult = NonNullable<Awaited<ReturnType<typeof importStakeholders>>>
+    export type ImportStakeholdersMutationBody = ImportStakeholdersBody
+    export type ImportStakeholdersMutationError = ErrorResponse
+
+    /**
+ * @summary Preview (commit=false, default) or commit (commit=true) a bulk stakeholder import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.
+ */
+export const useImportStakeholders = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importStakeholders>>, TError,{data: ImportStakeholdersBody}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof importStakeholders>>,
+        TError,
+        {data: ImportStakeholdersBody},
+        TContext
+      > => {
+      return useMutation(getImportStakeholdersMutationOptions(options), queryClient);
+    }
+    export type getStakeholderResponse200 = {
   data: StakeholderEntity
   status: 200
 }

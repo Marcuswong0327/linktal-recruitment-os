@@ -43,6 +43,8 @@ import {
   useSetConsultantSpecializations,
   useUpdateConsultant,
 } from '@/lib/api/generated/consultants/consultants';
+import { GetConsultantsSortBy } from '@/lib/api/generated/types/getConsultantsSortBy';
+import type { GetConsultantsSortOrder } from '@/lib/api/generated/types/getConsultantsSortOrder';
 import {
   getGetIndustriesQueryKey,
   useCreateIndustry,
@@ -122,6 +124,12 @@ export function ConsultantsTable() {
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
+  // Server-side sort — infinite scroll only ever has one page's worth of
+  // rows loaded at a time, so sorting has to happen on the server; a local
+  // resort of just the loaded subset would silently go stale (and get
+  // clobbered) the moment the next page arrives. See DataGrid's manualSorting.
+  const [sortBy, setSortBy] = React.useState<GetConsultantsSortBy | undefined>();
+  const [sortOrder, setSortOrder] = React.useState<GetConsultantsSortOrder>('desc');
   const [role, setRole] = React.useState<string | undefined>();
   const [isActive, setIsActive] = React.useState<boolean | undefined>();
   const [industryFilterIds, setIndustryFilterIds] = React.useState<string[] | undefined>();
@@ -189,6 +197,8 @@ export function ConsultantsTable() {
     {
       page,
       pageSize: PAGE_SIZE,
+      sortBy,
+      sortOrder,
       q: search,
       roleName: role,
       isActive,
@@ -522,7 +532,7 @@ export function ConsultantsTable() {
           ? (setLocations.variables?.id ?? null)
           : null;
 
-  function handleQueryChange({ search, columnFilters }: DataGridQuery) {
+  function handleQueryChange({ search, sorting, columnFilters }: DataGridQuery) {
     const valueOf = (columnId: string) =>
       columnFilters.find((f) => f.id === columnId)?.value as string[] | undefined;
     const roleFilter = valueOf('roleName');
@@ -530,6 +540,10 @@ export function ConsultantsTable() {
     const industryFilter = valueOf('industries');
     const specializationFilter = valueOf('specializations');
     const locationFilter = valueOf('locations');
+    const sort = sorting[0];
+    const sortField = sort && sort.id in GetConsultantsSortBy ? (sort.id as GetConsultantsSortBy) : undefined;
+    setSortBy(sortField);
+    setSortOrder(sort?.desc ? 'desc' : 'asc');
     setSearch(search.trim() || undefined);
     setRole(roleFilter?.[0]);
     setIsActive(statusFilter?.[0] === undefined ? undefined : statusFilter[0] === 'true');

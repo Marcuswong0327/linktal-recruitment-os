@@ -17,4 +17,5 @@ export const JobResearchEntityStatus = {
   COLD: 'COLD',
   WARM: 'WARM',
   TRADED: 'TRADED',
+  UNS: 'UNS',
 } as const;

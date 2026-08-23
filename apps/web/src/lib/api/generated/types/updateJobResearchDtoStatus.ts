@@ -16,4 +16,5 @@ export const UpdateJobResearchDtoStatus = {
   COLD: 'COLD',
   WARM: 'WARM',
   TRADED: 'TRADED',
+  UNS: 'UNS',
 } as const;

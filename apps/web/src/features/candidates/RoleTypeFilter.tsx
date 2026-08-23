@@ -23,7 +23,14 @@ import type { JobRoleTypeFacetEntity } from '@/lib/api/generated/types';
  * paginated at 50 by design, so it can't be trusted to contain an arbitrary
  * selected id; facets, an unbounded `groupBy`, always can as long as it has
  * at least one current match).
+ *
+ * The list only renders once the user has typed at least `MIN_QUERY_LENGTH`
+ * characters — same "must type to browse" behavior as the City filter
+ * (`LocationFilterButton` with `browsable` off), rather than dumping the
+ * full (possibly 200+) facet list open on click.
  */
+const MIN_QUERY_LENGTH = 2;
+
 export function RoleTypeFilter({
   selected,
   onChange,
@@ -36,14 +43,19 @@ export function RoleTypeFilter({
   /** Resolves an id already selected but with zero current matches (so absent from `facets`) — falls back so the trigger never shows a raw id. */
   labelFor: (id: string) => string;
 }) {
+  const [inputValue, setInputValue] = React.useState('');
+  const searchEnabled = inputValue.trim().length >= MIN_QUERY_LENGTH;
+
   const byId = React.useMemo(() => new Map(facets.map((f) => [f.id, f])), [facets]);
   const items = React.useMemo(() => {
-    const ids = new Set(facets.map((f) => f.id));
+    const visible = searchEnabled ? facets.map((f) => f.id) : [];
     // Selected-but-not-in-current-facets (a filter combo that's since
     // narrowed this option to zero) still needs to render as a checked row —
-    // appended after the real facets, in selection order.
-    return [...facets.map((f) => f.id), ...selected.filter((id) => !ids.has(id))];
-  }, [facets, selected]);
+    // appended after the visible facets, in selection order, regardless of
+    // whether the list is currently gated behind typing.
+    const ids = new Set(visible);
+    return [...visible, ...selected.filter((id) => !ids.has(id))];
+  }, [facets, selected, searchEnabled]);
 
   function remove(id: string) {
     onChange(selected.filter((v) => v !== id));
@@ -55,6 +67,8 @@ export function RoleTypeFilter({
       multiple
       value={selected}
       onValueChange={onChange}
+      inputValue={inputValue}
+      onInputValueChange={setInputValue}
       itemToStringLabel={(id) => byId.get(id)?.name ?? labelFor(id)}
       itemToStringValue={(id) => id}
     >
@@ -100,7 +114,7 @@ export function RoleTypeFilter({
               />
             </div>
             <Combobox.Empty className="px-3 pb-3 text-center text-sm text-muted-foreground">
-              No role types match the current filters.
+              {!searchEnabled ? 'Type at least 2 characters to search.' : 'No role types match the current filters.'}
             </Combobox.Empty>
             <Combobox.List className="max-h-72 overflow-y-auto p-1 pt-0">
               {(id: string) => {

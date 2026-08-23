@@ -1,27 +1,33 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ClientQuality, ClientStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { RequestContext } from '../common/request-context';
-import {
-  assertConsultantCovers,
-  assertInScope,
-  clearMismatchedClientAssignment,
-  clientScope,
-  isScoped,
-} from '../common/scope';
-import { redactConsultantField } from '../common/redact-consultant-field';
+import { clientScope, isScoped } from '../common/scope';
 import { AuthUser } from '../auth/auth.types';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
+import { ExportClientsDto } from './dto/export-clients.dto';
+import { buildWorkbook, formatExportDate, resolveTimeZone, ExportColumn } from '../common/xlsx-export';
+import { logExport } from '../common/audit-export';
+import { clientStatusLabels, clientQualityLabels } from '../common/export-labels';
+
+/** The subset of QueryClientsDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination/sort but still satisfies this structurally. */
+type ClientFilterFields = Pick<
+  QueryClientsDto,
+  | 'q'
+  | 'statuses'
+  | 'qualities'
+  | 'industry'
+  | 'specialization'
+  | 'industryIds'
+  | 'specializationIds'
+  | 'hasTob'
+  | 'locationIds'
+  | 'location'
+>;
 
 // Industry/specialization are FK relations, not scalars — every read needs
 // this to get the resolved name back, and every write needs it to return one
@@ -82,12 +88,71 @@ type ClientWithRelations = {
   }[];
 };
 
+/**
+ * Splits the `locationIds` relation and the JSON columns out of the DTO.
+ * Class instances don't structurally satisfy Prisma's `InputJsonValue` (no
+ * index signature), so the JSON fields are cast explicitly while the scalar
+ * fields keep their compile-time checks. `locationIds` is a nested relation
+ * write, not a column — create/update build that part themselves.
+ *
+ * Exported (not a private method) so ClientsImportService can build the
+ * exact same write shape a normal create/update would, without duplicating
+ * this — it doesn't touch `this`, so hoisting is a pure, zero-risk move.
+ */
+export function toPrismaData<T extends CreateClientDto | UpdateClientDto>(dto: T) {
+  const { locationIds: _locationIds, addresses, suburbsAndPostcodes, ...rest } = dto;
+  return {
+    ...rest,
+    ...(addresses !== undefined ? { addresses: addresses as Prisma.InputJsonValue } : {}),
+    ...(suburbsAndPostcodes !== undefined
+      ? { suburbsAndPostcodes: suburbsAndPostcodes as Prisma.InputJsonValue }
+      : {}),
+  };
+}
+
+/**
+ * A client must always cover at least one Location node (country level at
+ * minimum) — the schema can't express "non-empty relation", so it's enforced
+ * here. Without it the location arm of the scope resolver has nothing to
+ * match on and the client falls out of every consultant's patch. Exported
+ * for the same reason as `toPrismaData` above.
+ */
+export function assertHasLocations(locationIds: string[] | undefined): asserts locationIds is string[] {
+  if (!locationIds || locationIds.length === 0) {
+    throw new BadRequestException({
+      code: 'CLIENT_LOCATION_REQUIRED',
+      message: 'A client must cover at least one location.',
+    });
+  }
+}
+
 function latestContact(rows: LatestContactRow[]): LatestContactRow | undefined {
   return rows.reduce<LatestContactRow | undefined>(
     (max, row) => (!max || row.contactedAt > max.contactedAt ? row : max),
     undefined,
   );
 }
+
+/** contains/insensitive text filter — undefined when the value is empty, so it's omitted from `where` rather than matching everything. */
+function contains(value?: string) {
+  return value ? { contains: value, mode: Prisma.QueryMode.insensitive } : undefined;
+}
+
+/** The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept separate from the generic `toEntity<T>` return type, which erases extra fields when used across a second generic boundary. */
+type ClientExportRow = {
+  companyName: string;
+  displayId: string;
+  industry: string | null;
+  specialization: string | null;
+  locations: string[];
+  status: ClientStatus;
+  quality: ClientQuality;
+  website: string | null;
+  lastContactedAt: Date | null;
+  lastContactedBy: string | null;
+  lastContactType: string | null;
+  lastContactNotes: string | null;
+};
 
 function toEntity<T extends ClientWithRelations>(client: T) {
   const { industry, specialization, locations, stakeholders, ...rest } = client;
@@ -117,40 +182,12 @@ export class ClientsService {
   ) {}
 
   /**
-   * Splits the `locationIds` relation and the JSON columns out of the DTO.
-   * Class instances don't structurally satisfy Prisma's `InputJsonValue` (no
-   * index signature), so the JSON fields are cast explicitly while the scalar
-   * fields keep their compile-time checks. `locationIds` is a nested relation
-   * write, not a column — create/update build that part themselves.
+   * Shared by `findAll` and the export endpoint — every list/export read
+   * against Client applies the same filters and scope, just with a
+   * different set of rows selected out of the result.
    */
-  private toPrismaData<T extends CreateClientDto | UpdateClientDto>(dto: T) {
-    const { locationIds: _locationIds, addresses, suburbsAndPostcodes, ...rest } = dto;
-    return {
-      ...rest,
-      ...(addresses !== undefined ? { addresses: addresses as Prisma.InputJsonValue } : {}),
-      ...(suburbsAndPostcodes !== undefined
-        ? { suburbsAndPostcodes: suburbsAndPostcodes as Prisma.InputJsonValue }
-        : {}),
-    };
-  }
-
-  /**
-   * A client must always cover at least one Location node (country level at
-   * minimum) — the schema can't express "non-empty relation", so it's enforced
-   * here. Without it the location arm of the scope resolver has nothing to
-   * match on and the client falls out of every consultant's patch.
-   */
-  private assertHasLocations(locationIds: string[] | undefined): asserts locationIds is string[] {
-    if (!locationIds || locationIds.length === 0) {
-      throw new BadRequestException({
-        code: 'CLIENT_LOCATION_REQUIRED',
-        message: 'A client must cover at least one location.',
-      });
-    }
-  }
-
-  async findAll(query: QueryClientsDto, user: AuthUser) {
-    const { page, pageSize, sortBy, sortOrder, q } = query;
+  private buildWhere(query: ClientFilterFields, user: AuthUser): Prisma.ClientWhereInput {
+    const { q } = query;
 
     const where: Prisma.ClientWhereInput = {};
 
@@ -163,8 +200,6 @@ export class ClientsService {
     }
 
     // contains/insensitive text filters
-    const contains = (value?: string) =>
-      value ? { contains: value, mode: Prisma.QueryMode.insensitive } : undefined;
     const containsName = (value?: string) => {
       const filter = contains(value);
       return filter ? { name: filter } : undefined;
@@ -191,24 +226,6 @@ export class ClientsService {
     // instead of combining with it (see CandidatesService.findAll for the
     // same idiom already established there).
     const and: Prisma.ClientWhereInput[] = [];
-
-    if (query.consultantIds?.length) {
-      // '' is the frontend's "Unassigned" sentinel — maps to a null FK, not a
-      // real id. Prisma's `in` never matches NULL (SQL semantics), so an OR
-      // arm is needed whenever '' is one of the selected values. Safe to
-      // honour for a consultant too: `clientScope` is AND-ed on below, so
-      // filtering *by* other consultants can only ever narrow what this
-      // caller was already allowed to see, never widen it.
-      const ids = query.consultantIds.filter((id) => id !== '');
-      const includeUnassigned = query.consultantIds.includes('');
-      if (includeUnassigned && ids.length > 0) {
-        and.push({ OR: [{ consultantId: { in: ids } }, { consultantId: null }] });
-      } else if (includeUnassigned) {
-        and.push({ consultantId: null });
-      } else {
-        and.push({ consultantId: { in: ids } });
-      }
-    }
 
     // A client carries a *set* of locations at mixed granularity, so both
     // filters go through the join. Selecting a country matches every client
@@ -242,6 +259,26 @@ export class ClientsService {
       where.AND = and;
     }
 
+    return where;
+  }
+
+  /** Shared by `findAll` and `exportAll` so the exported sheet mirrors the grid's current sort exactly. */
+  private buildOrderBy(
+    sortBy: QueryClientsDto['sortBy'],
+    sortOrder: QueryClientsDto['sortOrder'],
+  ): Prisma.ClientOrderByWithRelationInput[] {
+    return [
+      sortBy === 'lastContactedAt' || !sortBy
+        ? { lastContactedAt: { sort: sortBy ? sortOrder : 'desc', nulls: 'last' } }
+        : { [sortBy]: sortOrder },
+      { id: 'asc' },
+    ];
+  }
+
+  async findAll(query: QueryClientsDto, user: AuthUser) {
+    const { page, pageSize, sortBy, sortOrder } = query;
+    const where = this.buildWhere(query, user);
+
     // Default: most-recently-contacted first. lastContactedAt is null for
     // clients with no contact history yet — "nulls: last" keeps those at the
     // bottom regardless of sort direction, rather than Postgres's default
@@ -253,12 +290,7 @@ export class ClientsService {
     // stable order across separate paginated queries for tied rows. Without
     // it, paging (or infinite-scroll's page-by-page accumulation) can
     // silently return the same row twice or skip one.
-    const orderBy: Prisma.ClientOrderByWithRelationInput[] = [
-      sortBy === 'lastContactedAt' || !sortBy
-        ? { lastContactedAt: { sort: sortBy ? sortOrder : 'desc', nulls: 'last' } }
-        : { [sortBy]: sortOrder },
-      { id: 'asc' },
-    ];
+    const orderBy = this.buildOrderBy(sortBy, sortOrder);
 
     // Parallel, not $transaction: these two reads don't need one consistent
     // DB snapshot, and running them concurrently instead of sequentially
@@ -275,7 +307,7 @@ export class ClientsService {
     ]);
 
     return {
-      data: data.map((c) => redactConsultantField(toEntity(c), user)),
+      data: data.map((c) => toEntity(c)),
       total,
       page,
       pageSize,
@@ -283,25 +315,69 @@ export class ClientsService {
     };
   }
 
+  /** Every row matching the current filters, unbounded — no `skip`/`take`. */
+  async exportAll(query: ExportClientsDto, user: AuthUser): Promise<Buffer> {
+    const where = this.buildWhere(query, user);
+    const orderBy = this.buildOrderBy(query.sortBy, query.sortOrder);
+    const clients = await this.prisma.client.findMany({ where, orderBy, include: CLIENT_INCLUDE });
+    const { timezone: _timezone, ...filters } = query;
+    await logExport(this.base, 'Client', { count: clients.length, filters });
+    return this.buildExportWorkbook(clients.map(toEntity), query.timezone);
+  }
+
+  /** An explicit row selection — scope is still re-applied server-side (defense-in-depth), so an out-of-scope id is silently dropped rather than exported. */
+  async exportByIds(ids: string[], user: AuthUser, timezone?: string): Promise<Buffer> {
+    const and: Prisma.ClientWhereInput[] = [{ id: { in: ids } }];
+    if (isScoped(user)) and.push(clientScope(user));
+    const clients = await this.prisma.client.findMany({ where: { AND: and }, include: CLIENT_INCLUDE });
+    await logExport(this.base, 'Client', { count: clients.length, requestedIds: ids });
+    return this.buildExportWorkbook(clients.map(toEntity), timezone);
+  }
+
+  private buildExportWorkbook(clients: ClientExportRow[], timezone?: string): Promise<Buffer> {
+    const tz = resolveTimeZone(timezone);
+    const columns: ExportColumn[] = [
+      { header: 'Company Name', key: 'companyName' },
+      { header: 'Display ID', key: 'displayId' },
+      { header: 'Industry', key: 'industry' },
+      { header: 'Specialization', key: 'specialization' },
+      { header: 'Market', key: 'market' },
+      { header: 'Status', key: 'status' },
+      { header: 'Quality', key: 'quality' },
+      { header: 'Website', key: 'website' },
+      { header: 'Last Contacted', key: 'lastContacted' },
+      { header: 'Last Contacted By', key: 'lastContactedBy' },
+      { header: 'Last Contact Type', key: 'lastContactType' },
+      { header: 'Last Contact Notes', key: 'lastContactNotes', wrap: true },
+    ];
+    const rows = clients.map((c) => ({
+      companyName: c.companyName,
+      displayId: c.displayId,
+      industry: c.industry ?? '',
+      specialization: c.specialization ?? '',
+      market: c.locations.join(', '),
+      status: clientStatusLabels[c.status],
+      quality: clientQualityLabels[c.quality],
+      website: c.website ?? '',
+      lastContacted: formatExportDate(c.lastContactedAt, tz),
+      lastContactedBy: c.lastContactedBy ?? '',
+      lastContactType: c.lastContactType ?? '',
+      lastContactNotes: c.lastContactNotes ?? '',
+    }));
+    return buildWorkbook('Companies', columns, rows);
+  }
+
   /**
-   * `user` gates the "not under your job scope" check below (findOne/update/
-   * remove are single-record access — a scoped consultant hitting an
-   * out-of-scope record directly gets an explicit 403, unlike `findAll`,
-   * which just silently filters).
+   * Single-record access is unguarded by scope — scope only ever filters
+   * `findAll`. `user` is accepted for signature symmetry with the other
+   * services but unused here now.
    */
-  async findOne(id: string, user: AuthUser) {
+  async findOne(id: string, _user: AuthUser) {
     const client = await this.prisma.client.findUnique({ where: { id }, include: CLIENT_INCLUDE });
     if (!client) {
       throw new NotFoundException(`Client ${id} not found`);
     }
-    // `consultantId` short-circuits all of it — an assigned account is
-    // always its owner's to open (see clientScope).
-    assertInScope(user, {
-      consultantId: client.consultantId,
-      industryId: client.industryId,
-      locationAncestorIds: client.locations.flatMap((l) => l.location.ancestorIds),
-    });
-    return redactConsultantField(toEntity(client), user);
+    return toEntity(client);
   }
 
   async findByDisplayId(displayId: string) {
@@ -315,23 +391,32 @@ export class ClientsService {
     return toEntity(client);
   }
 
-  async create(dto: CreateClientDto, user: AuthUser) {
-    this.assertHasLocations(dto.locationIds);
-    // A consultant can only be assigned a company they'd reach anyway — its
-    // industry or any of its markets — unless an admin/manager is
-    // deliberately making an exception (see assertConsultantCovers).
-    if (dto.consultantId) {
-      await assertConsultantCovers(
-        this.prisma,
-        dto.consultantId,
-        { industryId: dto.industryId, locationIds: dto.locationIds },
-        user.roleName,
-      );
-    }
+  /**
+   * A client has no contact history of its own (see ClientContactHistoryEntity's
+   * doc) — this aggregates every non-deleted stakeholder's contact history at
+   * this client into one newest-first list, flattened with which stakeholder
+   * each row was actually with.
+   */
+  /** Newest first, capped at `limit` (default 5, see QueryContactHistoryDto) — the FE only needs to pass it to see further back. */
+  async listContactHistory(clientId: string, limit: number) {
+    const rows = await this.prisma.stakeholderContactHistory.findMany({
+      where: { stakeholder: { clientId, deletedAt: null } },
+      include: { stakeholder: { select: { firstName: true, lastName: true } } },
+      orderBy: { contactedAt: 'desc' },
+      take: limit,
+    });
+    return rows.map(({ stakeholder, ...rest }) => ({
+      ...rest,
+      stakeholderName: [stakeholder.firstName, stakeholder.lastName].filter(Boolean).join(' ') || 'Unnamed contact',
+    }));
+  }
+
+  async create(dto: CreateClientDto, _user: AuthUser) {
+    assertHasLocations(dto.locationIds);
     // displayId is assigned by the DB (Client_displayId_seq default).
     const client = await this.prisma.client.create({
       data: {
-        ...this.toPrismaData(dto),
+        ...toPrismaData(dto),
         locations: { create: dto.locationIds.map((locationId) => ({ locationId })) },
       },
       include: CLIENT_INCLUDE,
@@ -340,49 +425,18 @@ export class ClientsService {
   }
 
   async update(id: string, dto: UpdateClientDto, user: AuthUser) {
-    // A consultant can reassign a company to another consultant, but can't
-    // orphan it — 'consultantId' present and falsy means "clear the FK"
-    // (see the null-vs-undefined regression test above), which combined with
-    // the consultant-only scoping in `findAll` would otherwise let them drop
-    // a company out of their own book entirely, with no one left owning it.
-    if (
-      isScoped(user) &&
-      'consultantId' in dto &&
-      !dto.consultantId
-    ) {
-      throw new ForbiddenException({
-        code: 'FORBIDDEN',
-        message: 'Consultants cannot unassign a company from a consultant.',
-      });
-    }
-
-    const existing = await this.findOne(id, user);
+    await this.findOne(id, user);
 
     // A location list can be replaced, but never emptied — same reasoning as
     // on create.
     if (dto.locationIds !== undefined) {
-      this.assertHasLocations(dto.locationIds);
+      assertHasLocations(dto.locationIds);
     }
 
-    // Only validated when a consultant is explicitly being set/changed here —
-    // an industry/location-only edit never blocks on this (that's what the
-    // auto-clear below is for instead of erroring).
-    if ('consultantId' in dto && dto.consultantId) {
-      await assertConsultantCovers(
-        this.prisma,
-        dto.consultantId,
-        {
-          industryId: 'industryId' in dto ? (dto.industryId ?? null) : existing.industryId,
-          locationIds: dto.locationIds ?? existing.locationIds,
-        },
-        user.roleName,
-      );
-    }
-
-    let client = await this.prisma.client.update({
+    const client = await this.prisma.client.update({
       where: { id },
       data: {
-        ...this.toPrismaData(dto),
+        ...toPrismaData(dto),
         // Locations is a to-many join, not a scalar column — a full list
         // replace (clear then recreate) is simplest and correct here; a
         // client's market list is short.
@@ -398,19 +452,7 @@ export class ClientsService {
       include: CLIENT_INCLUDE,
     });
 
-    // Bidirectional auto-clear: the industry or the market list changed
-    // without an explicit consultant change in the same request — silently
-    // unassign if the existing consultant no longer reaches it, rather than
-    // blocking the edit. Re-fetch only if it actually cleared something, so
-    // the response reflects it — most such edits won't touch the consultant.
-    if (('industryId' in dto || 'locationIds' in dto) && !('consultantId' in dto)) {
-      const cleared = await clearMismatchedClientAssignment(this.prisma, id);
-      if (cleared) {
-        client = await this.prisma.client.findUniqueOrThrow({ where: { id }, include: CLIENT_INCLUDE });
-      }
-    }
-
-    return redactConsultantField(toEntity(client), user);
+    return toEntity(client);
   }
 
   /**

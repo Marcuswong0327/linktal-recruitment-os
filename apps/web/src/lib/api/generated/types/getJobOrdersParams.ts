@@ -5,7 +5,6 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
-import type { GetJobOrdersQualitiesItem } from './getJobOrdersQualitiesItem';
 import type { GetJobOrdersSortBy } from './getJobOrdersSortBy';
 import type { GetJobOrdersSortOrder } from './getJobOrdersSortOrder';
 import type { GetJobOrdersStatusesItem } from './getJobOrdersStatusesItem';
@@ -36,15 +35,11 @@ q?: string;
  */
 statuses?: GetJobOrdersStatusesItem[];
 /**
- * Filter by quality (one or more). Omit for all qualities.
- */
-qualities?: GetJobOrdersQualitiesItem[];
-/**
  * Filter by client ID (exact match)
  */
 clientId?: string;
 /**
- * Filter by owning consultant ID(s). Ignored (overridden by the caller's own id) for the `consultant` role.
+ * Filter by assigned consultant ID(s) — matches a job order any of these consultants are working.
  */
 consultantIds?: string[];
 /**

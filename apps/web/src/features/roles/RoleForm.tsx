@@ -1,43 +1,42 @@
 'use client';
 
 import * as React from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { cn } from '@/lib/utils';
 import {
+  getGetRoleHistoryQueryKey,
   getGetRolesQueryKey,
   useCreateRole,
   useUpdateRole,
 } from '@/lib/api/generated/roles/roles';
 import { PermissionPicker } from './PermissionPicker';
+import { RoleHistoryPanel } from './RoleHistoryPanel';
 import { type Role, isBuiltin, isImmutable } from './schema';
 
 const inputClass =
   'w-full rounded-md border bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-60';
 
 /** Create (role === null) or edit a role in a side sheet. */
-export function RoleForm({
-  role,
-  open,
-  onClose,
-}: {
-  role: Role | null;
-  open: boolean;
-  onClose: () => void;
-}) {
+export function RoleForm({ role, open, onClose }: { role: Role | null; open: boolean; onClose: () => void }) {
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
+      <SheetContent className="flex w-full flex-col overflow-y-auto sm:max-w-xl">
         {open && <Body key={role?.id ?? 'new'} role={role} onClose={onClose} />}
       </SheetContent>
     </Sheet>
@@ -56,10 +55,21 @@ function Body({ role, onClose }: { role: Role | null; onClose: () => void }) {
     new Set(role?.permissions.map((p) => p.id) ?? []),
   );
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: getGetRolesQueryKey() });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: getGetRolesQueryKey() });
+    // A save writes a new AuditLog row too (see RolesService.update) — without
+    // this, reopening the sheet within the 30s staleTime window shows the
+    // version history from before this save, missing the entry just written.
+    if (isEdit) queryClient.invalidateQueries({ queryKey: getGetRoleHistoryQueryKey(role.id) });
+  };
   const create = useCreateRole();
   const update = useUpdateRole();
   const pending = create.isPending || update.isPending;
+
+  // Editing a role changes what everyone holding it can do, immediately —
+  // confirm before committing. Creating a new role has zero holders yet, so
+  // nothing to warn about there.
+  const [confirmingSave, setConfirmingSave] = React.useState(false);
 
   function submit() {
     const data = {
@@ -81,7 +91,7 @@ function Body({ role, onClose }: { role: Role | null; onClose: () => void }) {
   return (
     <>
       <SheetHeader>
-        <SheetTitle>{isEdit ? role.name : 'New role'}</SheetTitle>
+        <SheetTitle className="capitalize">{isEdit ? role.name : 'Create New Role'}</SheetTitle>
         <SheetDescription>
           {readOnly
             ? 'The admin role is immutable and cannot be changed.'
@@ -94,7 +104,7 @@ function Body({ role, onClose }: { role: Role | null; onClose: () => void }) {
           <Label htmlFor="role-name">Name</Label>
           <input
             id="role-name"
-            className={inputClass}
+            className={cn(inputClass, 'capitalize')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             disabled={readOnly || nameLocked}
@@ -121,6 +131,16 @@ function Body({ role, onClose }: { role: Role | null; onClose: () => void }) {
           <Label>Permissions</Label>
           <PermissionPicker value={permissionIds} onChange={setPermissionIds} disabled={readOnly} />
         </div>
+
+        {isEdit ? (
+          <div className="space-y-1.5">
+            <Label>Version history</Label>
+            {/* A restore lands via the mutation, not local state — closing
+                here (like a normal save) avoids this form's own name/
+                description/permissionIds state going stale against it. */}
+            <RoleHistoryPanel roleId={role.id} readOnly={readOnly} onRestored={onClose} />
+          </div>
+        ) : null}
       </div>
 
       <SheetFooter>
@@ -128,11 +148,42 @@ function Body({ role, onClose }: { role: Role | null; onClose: () => void }) {
           {readOnly ? 'Close' : 'Cancel'}
         </Button>
         {!readOnly && (
-          <Button onClick={submit} disabled={pending || !name.trim()}>
+          <Button
+            onClick={() => (isEdit ? setConfirmingSave(true) : submit())}
+            disabled={pending || !name.trim()}
+          >
             {pending ? 'Saving…' : isEdit ? 'Save changes' : 'Create role'}
           </Button>
         )}
       </SheetFooter>
+
+      {isEdit && (
+        <AlertDialog open={confirmingSave} onOpenChange={setConfirmingSave}>
+          <AlertDialogContent>
+            <AlertDialogHeader icon={AlertTriangle} iconVariant="warning">
+              <AlertDialogTitle>Save changes to “{role.name}”?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {role.consultantCount > 0
+                  ? `This updates permissions for ${role.consultantCount} consultant${role.consultantCount === 1 ? '' : 's'} currently assigned this role, effective immediately.`
+                  : 'No consultants currently hold this role, so this won’t affect anyone yet.'}{' '}
+                This can’t be reverted from Version history — review the changes before saving.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={pending}
+                onClick={() => {
+                  setConfirmingSave(false);
+                  submit();
+                }}
+              >
+                {pending ? 'Saving…' : 'Save changes'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </>
   );
 }

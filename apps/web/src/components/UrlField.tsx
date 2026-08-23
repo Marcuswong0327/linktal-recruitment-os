@@ -1,5 +1,6 @@
 'use client';
 
+import type * as React from 'react';
 import { ExternalLink } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
@@ -10,14 +11,18 @@ export function UrlField({
   value,
   onChange,
   disabled,
+  icon: Icon,
 }: {
   id: string;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
+  /** Leading icon identifying which link this is (e.g. brand mark for LinkedIn/Seek). */
+  icon?: React.ComponentType<{ className?: string }>;
 }) {
   return (
     <div className="flex items-center gap-1.5">
+      {Icon ? <Icon className="size-4 shrink-0 text-muted-foreground" /> : null}
       <Input
         id={id}
         type="url"

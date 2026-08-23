@@ -24,6 +24,8 @@ export class JobResearchEntity implements Omit<ClientJobResearch, 'deletedAt' | 
   @ApiProperty() clientId!: string;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved client company name' })
   companyName!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Resolved client Display ID' })
+  clientDisplayId!: string | null;
   @ApiProperty({ type: String, nullable: true }) consultantId!: string | null;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved name of the consultant who researched this' })
   consultant!: string | null;

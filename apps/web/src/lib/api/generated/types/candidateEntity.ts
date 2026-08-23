@@ -5,10 +5,10 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { CandidateEntityLastContactCategory } from './candidateEntityLastContactCategory';
 import type { CandidateEntityLocationLevel } from './candidateEntityLocationLevel';
 import type { CandidateEntityStatus } from './candidateEntityStatus';
 import type { CandidateEntityWorkHistoryItem } from './candidateEntityWorkHistoryItem';
-import type { CandidateNoteDto } from './candidateNoteDto';
 
 export interface CandidateEntity {
   id: string;
@@ -78,10 +78,6 @@ export interface CandidateEntity {
   /** Specialization IDs backing `specializations` — what an editable multi-select actually binds to */
   specializationIds: string[];
   status: CandidateEntityStatus;
-  /** @nullable */
-  notes: CandidateNoteDto[] | null;
-  /** @nullable */
-  consultantId: string | null;
   /**
      * Latest contactedAt across this candidate's contact history; null if never contacted
      * @nullable
@@ -101,7 +97,7 @@ export interface CandidateEntity {
      * Category of the most recent contact — distinct from lastContactType, which is the channel
      * @nullable
      */
-  lastContactCategory: string | null;
+  lastContactCategory: CandidateEntityLastContactCategory;
   /**
      * Notes from the most recent contact — its screening summary, or its outreach notes when that is what was logged
      * @nullable
@@ -117,6 +113,16 @@ export interface CandidateEntity {
      * @nullable
      */
   lastContactDate: string | null;
+  /**
+     * Free text, from the most recent CandidateContactHistory row — e.g. "35 per hour". Null if never contacted. Display-only, no sort/filter.
+     * @nullable
+     */
+  currentSalary: string | null;
+  /**
+     * Free text, from the most recent CandidateContactHistory row — e.g. "above 47". Null if never contacted. Display-only, no sort/filter.
+     * @nullable
+     */
+  expectedSalary: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -7,17 +7,18 @@ const toArray = ({ value }: { value: unknown }) =>
   Array.isArray(value) ? value : value === undefined ? value : [value];
 
 /**
- * Columns the list may be sorted by. Deliberately narrow: ID, date fields,
- * and `quality` (a native Postgres enum, which sorts by declaration order —
- * LOW < MEDIUM < HIGH — rather than alphabetically, so it's meaningfully
- * ordinal unlike `status`). Free-text/non-ordinal categorical columns
- * (companyName, industry, location, status) are exposed as filters instead,
- * since sorting by them only yields arbitrary alphabetical groupings. The
- * old fee/guarantee columns are gone: those terms live per-Tob now, and a
- * client can hold several that disagree.
+ * Columns the list may be sorted by. ID, date fields, `quality` (a native
+ * Postgres enum, which sorts by declaration order — LOW < MEDIUM < HIGH —
+ * rather than alphabetically, so it's meaningfully ordinal unlike `status`),
+ * and `companyName` (the search gate's "Alphabetical" sort). Other
+ * non-ordinal categorical columns (industry, location, status) are exposed
+ * as filters instead, since sorting by them only yields arbitrary
+ * alphabetical groupings. The old fee/guarantee columns are gone: those
+ * terms live per-Tob now, and a client can hold several that disagree.
  */
 export enum ClientSortField {
   displayId = 'displayId',
+  companyName = 'companyName',
   createdAt = 'createdAt',
   lastContactedAt = 'lastContactedAt',
   quality = 'quality',
@@ -117,17 +118,6 @@ export class QueryClientsDto {
   @IsArray()
   @IsString({ each: true })
   locationIds?: string[];
-
-  @ApiPropertyOptional({
-    description:
-      "Filter by owning consultant ID(s) (one or more, exact match). '' selects unassigned clients.",
-    type: [String],
-  })
-  @IsOptional()
-  @Transform(toArray)
-  @IsArray()
-  @IsString({ each: true })
-  consultantIds?: string[];
 
   @ApiPropertyOptional({
     description: 'Filter by lead quality (one or more). Omit for all qualities.',

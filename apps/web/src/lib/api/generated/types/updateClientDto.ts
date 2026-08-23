@@ -33,6 +33,4 @@ export interface UpdateClientDto {
   status?: UpdateClientDtoStatus;
   /** Lead quality; defaults to MEDIUM when omitted */
   quality?: UpdateClientDtoQuality;
-  /** Owning consultant ID */
-  consultantId?: string;
 }

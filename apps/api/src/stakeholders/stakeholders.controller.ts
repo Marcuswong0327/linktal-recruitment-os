@@ -8,24 +8,39 @@ import {
   Patch,
   Post,
   Query,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiProduces, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { BadRequestException } from '@nestjs/common';
 import { StakeholdersService } from './stakeholders.service';
+import { StakeholdersImportService } from './stakeholders-import.service';
 import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
 import { UpdateStakeholderDto } from './dto/update-stakeholder.dto';
 import { QueryStakeholdersDto } from './dto/query-stakeholders.dto';
+import { ExportStakeholdersDto } from './dto/export-stakeholders.dto';
+import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
+import { ImportOptionsDto } from '../common/dto/import-options.dto';
+import { XLSX_CONTENT_TYPE, exportFilename } from '../common/xlsx-export';
+import { MAX_IMPORT_FILE_BYTES } from '../common/xlsx-import';
 import { CreateStakeholderContactHistoryDto } from './dto/create-stakeholder-contact-history.dto';
 import { StakeholderEntity } from './entities/stakeholder.entity';
 import { PaginatedStakeholdersEntity } from './entities/paginated-stakeholders.entity';
 import { StakeholderContactHistoryEntity } from './entities/stakeholder-contact-history.entity';
-import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
+import { ImportResultEntity } from '../common/entities/import-result.entity';
+import { CurrentUser, RequirePermission, RequirePermissions } from '../auth/auth.decorators';
 import { AuthUser } from '../auth/auth.types';
 
 @ApiTags('Stakeholders')
 @ApiBearerAuth()
 @Controller('stakeholders')
 export class StakeholdersController {
-  constructor(private readonly stakeholders: StakeholdersService) {}
+  constructor(
+    private readonly stakeholders: StakeholdersService,
+    private readonly stakeholdersImport: StakeholdersImportService,
+  ) {}
 
   @Get()
   @RequirePermission('stakeholder', 'read')
@@ -44,6 +59,78 @@ export class StakeholdersController {
   @ApiResponse({ status: 200, description: 'Stakeholder found', type: StakeholderEntity })
   findByDisplayId(@Param('displayId') displayId: string) {
     return this.stakeholders.findByDisplayId(displayId);
+  }
+
+  @Get('export')
+  @RequirePermission('stakeholder', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportStakeholders',
+    summary: 'Export every stakeholder matching the current filters as an .xlsx file — unbounded, not paginated',
+  })
+  @ApiResponse({ status: 200, description: 'Stakeholders workbook' })
+  async exportAll(@Query() query: ExportStakeholdersDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.stakeholders.exportAll(query, user);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('stakeholders')}"`,
+    });
+  }
+
+  @Post('export')
+  @RequirePermission('stakeholder', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportStakeholdersByIds',
+    summary: 'Export an explicit set of stakeholders (by id) as an .xlsx file',
+  })
+  @ApiResponse({ status: 201, description: 'Stakeholders workbook' })
+  async exportByIds(@Body() dto: ExportByIdsDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.stakeholders.exportByIds(dto.ids, user, dto.timezone);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('stakeholders')}"`,
+    });
+  }
+
+  @Get('import/template')
+  @RequirePermission('stakeholder', 'create')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'getStakeholderImportTemplate',
+    summary: 'Download the .xlsx template for bulk-importing/updating stakeholders',
+  })
+  @ApiResponse({ status: 200, description: 'Stakeholders import template' })
+  async downloadImportTemplate() {
+    const buffer = await this.stakeholdersImport.buildTemplate();
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: 'attachment; filename="stakeholders-import-template.xlsx"',
+    });
+  }
+
+  @Post('import')
+  @RequirePermissions({ resource: 'stakeholder', action: 'create' }, { resource: 'stakeholder', action: 'update' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_FILE_BYTES } }))
+  @ApiOperation({
+    operationId: 'importStakeholders',
+    summary:
+      'Preview (commit=false, default) or commit (commit=true) a bulk stakeholder import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' }, commit: { type: 'boolean', default: false } },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Import result', type: ImportResultEntity })
+  async import(@UploadedFile() file: Express.Multer.File | undefined, @Body() options: ImportOptionsDto) {
+    if (!file) {
+      throw new BadRequestException({ code: 'FILE_REQUIRED', message: 'Upload an .xlsx file as "file".' });
+    }
+    return this.stakeholdersImport.importFromWorkbook(file.buffer, options.commit ?? false, file.originalname);
   }
 
   @Get(':id')

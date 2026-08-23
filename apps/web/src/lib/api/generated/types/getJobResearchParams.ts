@@ -43,6 +43,14 @@ clientIds?: string[];
  */
 consultantIds?: string[];
 /**
+ * Filter by the researched company's Industry id(s)
+ */
+industryIds?: string[];
+/**
+ * Filter by the researched company's Specialization id(s)
+ */
+specializationIds?: string[];
+/**
  * Filter by JobTitle id(s)
  */
 jobTitleIds?: string[];

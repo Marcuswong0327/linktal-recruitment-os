@@ -1,0 +1,81 @@
+name: DB Restore (manual)
+
+# Manual-only, on purpose: restoring is destructive to whatever it targets,
+# so a human always picks the date and reviews the result. This workflow
+# never touches Railway's env vars or production traffic — it only restores
+# into RESTORE_TARGET_URL, which you must point at a scratch Neon
+# branch/database you provision yourself before running this. Promoting a
+# restored DB to production is a separate, manual step. See
+# docs/migrations.md §8 for the full runbook.
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Backup date to restore, YYYY-MM-DD (matches backups/<date>.dump in R2)'
+        required: true
+        type: string
+
+jobs:
+  restore:
+    name: Restore a backup into RESTORE_TARGET_URL
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Install PostgreSQL 18 client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl ca-certificates gnupg lsb-release
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+          echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+
+          # Ask the package itself where it put its binaries, rather than
+          # assuming a path — see the matching comment in db-backup.yml.
+          PG_BIN_DIR=$(dirname "$(dpkg -L postgresql-client-18 | grep -E '/bin/pg_dump$')")
+          echo "Resolved PostgreSQL 18 client: $PG_BIN_DIR"
+          "$PG_BIN_DIR/pg_restore" --version
+          echo "PG_BIN_DIR=$PG_BIN_DIR" >> "$GITHUB_ENV"
+
+      - name: Download and restore
+        run: |
+          set -euo pipefail
+          DATE="${{ inputs.date }}"
+          if ! [[ "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo "Date must be YYYY-MM-DD (matches a backups/<date>.dump object in R2)" >&2
+            exit 1
+          fi
+
+          echo "Downloading r2://$R2_BUCKET/backups/$DATE.dump..."
+          aws s3 cp "s3://$R2_BUCKET/backups/$DATE.dump" restore.dump \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+
+          echo "Restoring into RESTORE_TARGET_URL (never the live prod DB — verify this points at a scratch DB)..."
+          # --clean --if-exists: safe to re-run into the same scratch DB.
+          # --no-owner/--no-privileges: mirrors the backup's dump flags.
+          set +e
+          "$PG_BIN_DIR/pg_restore" --clean --if-exists --no-owner --no-privileges -j 4 -d "$RESTORE_TARGET_URL" restore.dump
+          rc=$?
+          set -e
+
+          # pg_restore commonly exits 1 on harmless warnings (e.g. "role does
+          # not exist" for a grant it couldn't strip) — only treat a hard
+          # failure (>1) as fatal. Inspect the log either way.
+          if [ "$rc" -gt 1 ]; then
+            echo "pg_restore exited with code $rc" >&2
+            exit 1
+          fi
+          echo "Restore finished (exit code $rc). Verify row counts before treating this as good."
+        env:
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          RESTORE_TARGET_URL: ${{ secrets.RESTORE_TARGET_URL }}
+
+      - name: Post-restore sanity check (eyeball this before trusting the restore)
+        run: |
+          "$PG_BIN_DIR/psql" "$RESTORE_TARGET_URL" -c "select relname, n_live_tup from pg_stat_user_tables order by n_live_tup desc limit 10;"
+        env:
+          RESTORE_TARGET_URL: ${{ secrets.RESTORE_TARGET_URL }}

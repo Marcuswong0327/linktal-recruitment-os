@@ -153,22 +153,30 @@ visible  =  (industry match AND specialization match)  OR  (location match)
 `consultant` role only; admin/manager/finance/researcher are unrestricted.
 Wildcards are materialised into concrete grant rows (never an "unrestricted"
 flag), so zero rows means *not configured*, never *sees everything*.
-**An assigned record is always visible to its owner**, regardless of grants —
-every scope OR-s in `consultantId = me`, above the no-grants short-circuit.
-Stakeholder is the exception, having no `consultantId`. Stakeholders instead
-match on **their own coverage**, independent of where their client sits — and a
-`Client` is reachable through such a stakeholder in turn, its fourth arm. So
-`clientScope` is
-`consultantId = me OR industry OR locations OR stakeholders.some(coverage)`.
+
+**This is a pure list filter, never a gate.** There is no `consultantId`
+ownership on Client or Candidate anymore, and no 403 on a direct
+`findOne`/`update` when scope doesn't match — scope only ever narrows
+`findMany`. Manually assigning a consultant to "own" a client or candidate no
+longer exists as a concept.
+
+**The one deliberate way to reach an out-of-scope Client/Candidate**: get
+added to a `JobOrder`'s consultant list (`JobOrderConsultant`, a many-to-many —
+several consultants can work the same job order concurrently). That's a third
+OR-arm on `clientScope` (via the job order's client) and `candidateScope` (via
+a submission to that job order), and it carries **no scope-mismatch guard** —
+adding someone outside their industry/location on purpose is the entire point.
+`PUT /job-orders/:id/consultants` is the full-set-replace endpoint for it.
+`jobOrderScope` itself gets the same membership arm directly.
+
 Specialization narrows the industry arm and **is live** — an untagged record
 passes on its industry alone. Clients are ~100% tagged and candidates ~5%, so it
 cuts client lists hard and candidate lists barely.
 
-**Assignment must agree with visibility**: a record can only be assigned to a
-consultant the same `industry OR location` test would let see it (`400
-CONSULTANT_SCOPE_MISMATCH`), and narrowing either grant releases whatever it
-strands. Coverage grants visibility but not ownership — a client has no contacts
-when it's created.
+Stakeholder and Tob have no scope fields of their own — both delegate entirely
+to `clientScope` (`{ client: clientScope(user) }`), so a stakeholder or TOB is
+visible exactly when its client is. `ClientJobResearch.consultantId` ("who
+conducted this research") is descriptive metadata only, not a scope arm.
 
 Worked examples + diagrams: `docs/scope-explained.md`. Spec: `docs/rbac-roles.md` §3.
 

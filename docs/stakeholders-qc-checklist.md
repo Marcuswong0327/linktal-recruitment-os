@@ -95,7 +95,7 @@ Requests:
 ## 6. Bulk actions (multi-select on list)
 
 - [ ] Selecting rows shows the "Bulk actions (N)" button (toolbar) and a right-click context menu on the selection with the same actions.
-- [ ] **Export to Excel** with a selection exports only the selected rows; with none selected, exports the full current page's rows. Confirm exported columns match `exportToExcel.ts` (Contact Name, Company, Coverage, Role type, Job title, Email, Mobile, Details accurate, Last Contacted Date/Time/Method/By, Last Contact Notes).
+- [ ] **Export to Excel** is a standalone, always-visible toolbar button (not gated on selection) plus a right-click context-menu entry. It's server-side now (`POST/GET /stakeholders/export`, see `StakeholdersService.exportAll`/`exportByIds`) — with a selection it exports exactly those rows; with none selected it exports every stakeholder matching the current filters, unbounded (not just the current page). Confirm exported columns match `StakeholdersService.buildExportWorkbook` (Contact Name, Company, Coverage, Role type, Job title, Email, Mobile, Details accurate, Last Contacted Date/Time/Method/By, Last Contact Notes), with a bold+frozen header row and the date/time columns in the viewer's own timezone.
 - [ ] "Mark details" → Accurate / Inaccurate bulk-updates all selected, shows a summary toast ("Marked N as Accurate"), partial failures show a separate error toast with the failed count.
 - [ ] Bulk actions menu hides "Mark details" entirely when `canUpdate=false`.
 - [ ] Bulk delete hides entirely when `canDelete=false` (researcher, viewer).

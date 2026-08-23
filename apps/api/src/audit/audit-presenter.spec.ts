@@ -56,7 +56,7 @@ describe('collectRefs', () => {
         entityId: '(bulk)',
         metadata: {
           where: {
-            AND: [{ industryId: { in: ['industry-1', 'industry-2'] } }, { consultantId: { equals: 'consultant-5' } }],
+            AND: [{ industryId: { in: ['industry-1', 'industry-2'] } }, { locationId: { equals: 'location-5' } }],
           },
         },
       }),
@@ -64,7 +64,7 @@ describe('collectRefs', () => {
     const request: LabelRequest = new Map();
     collectRefs(rows, request);
     expect(request.get('Industry')).toEqual(new Set(['industry-1', 'industry-2']));
-    expect(request.get('Consultant')).toEqual(new Set(['consultant-5']));
+    expect(request.get('Location')).toEqual(new Set(['location-5']));
   });
 
   it('never throws on a malformed/unexpected where shape', () => {

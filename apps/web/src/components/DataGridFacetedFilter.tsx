@@ -98,16 +98,18 @@ export function DataGridFacetedFilter({
           <ListFilter className={selectedSet.size > 0 ? '' : 'opacity-60'} />
         ) : (
           <>
-            {title}
+            <span className="shrink-0">{title}</span>
             {selectedSet.size > 0 ? (
               <>
-                <span className="mx-0.5 h-4 w-px bg-border" />
-                <Badge variant="muted" className="rounded-sm px-1 font-normal">
-                  {selectedSet.size} selected
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-border" />
+                <Badge variant="muted" className="min-w-0 flex-1 truncate rounded-sm px-1 font-normal">
+                  {selectedSet.size === 1
+                    ? (options.find((o) => o.value === selected[0])?.label ?? selected[0])
+                    : `${selectedSet.size} selected`}
                 </Badge>
               </>
             ) : null}
-            <ChevronDown className="opacity-50" />
+            <ChevronDown className="shrink-0 opacity-50" />
           </>
         )}
       </DropdownMenuTrigger>

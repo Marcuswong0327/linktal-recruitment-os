@@ -18,6 +18,7 @@ export const auditActionLabels: Record<string, string> = {
   RESTORE: 'Restored',
   DEACTIVATE: 'Deactivated',
   HARD_DELETE: 'Deleted',
+  EXPORT: 'Exported',
 };
 
 // Maps to the Badge component's variants (default/secondary/outline/success/destructive).
@@ -28,6 +29,7 @@ export const auditActionVariants: Record<string, 'success' | 'secondary' | 'dest
   RESTORE: 'success',
   DEACTIVATE: 'outline',
   HARD_DELETE: 'destructive',
+  EXPORT: 'outline',
 };
 
 // The entity types the audit extension records (see AUDITED_MODELS in
@@ -221,6 +223,21 @@ export function metadataRows(metadata: unknown): { label: string; value: string 
   if (m.cascade) {
     const count = typeof m.count === 'number' ? ` (${m.count} record${m.count === 1 ? '' : 's'})` : '';
     rows.push({ label: 'Part of', value: `A bulk action${count}` });
+  }
+  // Export rows (one summary AuditLog row per export click — see
+  // apps/api/src/common/audit-export.ts) carry either `requestedIds` (an
+  // explicit selection) or `filters` (the current grid filters at export
+  // time), never both.
+  if (typeof m.count === 'number') {
+    const record = `${m.count} record${m.count === 1 ? '' : 's'}`;
+    if (Array.isArray(m.requestedIds)) {
+      rows.push({ label: 'Exported', value: `${record} (explicit selection)` });
+    } else if (m.filters && typeof m.filters === 'object') {
+      const hasFilters = Object.values(m.filters as Record<string, unknown>).some(
+        (v) => v !== undefined && v !== null && !(Array.isArray(v) && v.length === 0),
+      );
+      rows.push({ label: 'Exported', value: `${record}${hasFilters ? ' (filtered)' : ''}` });
+    }
   }
   return rows;
 }

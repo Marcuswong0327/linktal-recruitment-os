@@ -5,6 +5,8 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { CandidateContactHistoryEntityCategory } from './candidateContactHistoryEntityCategory';
+import type { CandidateContactHistoryEntityOutreachChannel } from './candidateContactHistoryEntityOutreachChannel';
 import type { CandidateContactHistoryEntityStatus } from './candidateContactHistoryEntityStatus';
 
 export interface CandidateContactHistoryEntity {
@@ -16,26 +18,28 @@ export interface CandidateContactHistoryEntity {
      * @nullable
      */
   contactType: string | null;
-  /**
-     * Kind of note — distinct from contactType, which is the channel.
-     * @nullable
-     */
-  category: string | null;
+  /** Kind of note — distinct from contactType, which is the channel. */
+  category: CandidateContactHistoryEntityCategory;
   /**
      * Consultant who made this contact
      * @nullable
      */
   contactedById: string | null;
   /**
-     * The screening call content.
+     * Which channel this outreach used — set only when category is OUTREACH.
      * @nullable
      */
-  conversationSummary: string | null;
+  outreachChannel: CandidateContactHistoryEntityOutreachChannel;
   /**
-     * Filled for outreach campaign entries.
+     * Free-text campaign context — filled for OUTREACH entries.
      * @nullable
      */
   outreachCampaignNotes: string | null;
+  /**
+     * The screening call content — filled for SCREENING entries.
+     * @nullable
+     */
+  screeningNotes: string | null;
   /** Snapshot of the candidate's status at the time of this contact. */
   status: CandidateContactHistoryEntityStatus;
   /** @nullable */
@@ -52,4 +56,14 @@ export interface CandidateContactHistoryEntity {
   expectedSalary: string | null;
   contactedAt: string;
   createdAt: string;
+  /**
+     * Set only when screeningNotes has been edited after creation.
+     * @nullable
+     */
+  editedAt: string | null;
+  /**
+     * Who made the last edit — may differ from contactedById.
+     * @nullable
+     */
+  editedById: string | null;
 }

@@ -1,8 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { StakeholderStatus } from '@prisma/client';
 import {
   IsArray,
   IsBoolean,
   IsEmail,
+  IsEnum,
   IsOptional,
   IsString,
   IsUrl,
@@ -68,6 +70,15 @@ export class CreateStakeholderDto {
   @IsArray()
   @IsString({ each: true })
   coverageLocationIds?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Relationship-warmth status; defaults to COLD when omitted. Distinct from isAccurate below.',
+    enum: StakeholderStatus,
+    example: 'COLD',
+  })
+  @IsOptional()
+  @IsEnum(StakeholderStatus)
+  status?: StakeholderStatus;
 
   @ApiPropertyOptional({
     description:

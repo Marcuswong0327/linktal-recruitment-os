@@ -3,8 +3,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
-import { ChevronDown, Plus, Rocket, Trash2 } from 'lucide-react';
+import { ChevronDown, Download, Plus, Rocket, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
@@ -22,23 +21,31 @@ import {
 import { Combobox } from '@base-ui/react/combobox';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
+import { ImportDialog } from '@/components/ImportDialog';
 import {
   ConsultantComboboxPopup,
+  ConsultantFilterButton,
   useConsultantLookup,
 } from '@/components/ConsultantCombobox';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
-import { useGetCandidates } from '@/lib/api/generated/candidates/candidates';
+import { downloadFile } from '@/lib/api/fetcher';
 import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import {
   deleteJobOrder as deleteJobOrderRequest,
+  getExportJobOrdersByIdsUrl,
+  getExportJobOrdersUrl,
+  getGetJobOrderImportTemplateUrl,
   getGetJobOrdersQueryKey,
+  setJobOrderConsultants as setJobOrderConsultantsRequest,
   updateJobOrder as updateJobOrderRequest,
   useGetJobOrders,
+  useImportJobOrders,
 } from '@/lib/api/generated/job-orders/job-orders';
 import type {
   ConsultantEntity,
-  GetJobOrdersQualitiesItem,
+  GetJobOrdersSortBy,
+  GetJobOrdersSortOrder,
   GetJobOrdersStatusesItem,
   UpdateJobOrderDto,
 } from '@/lib/api/generated/types';
@@ -52,7 +59,6 @@ import {
   priorityLabels,
   priorityOptions,
   priorityVariant,
-  qualityOptions,
   qualityVariant,
   statusOptions,
   statusVariant,
@@ -62,38 +68,37 @@ const PAGE_SIZE = 20;
 
 export function JobOrdersTable({
   canCreate = true,
+  canUpdate = true,
   canDelete = true,
 }: {
   canCreate?: boolean;
+  canUpdate?: boolean;
   canDelete?: boolean;
 }) {
   const router = useRouter();
-  const { data: session } = useSession();
-  // Every row is already scoped to this consultant's own job orders (see
-  // JobOrdersService.findAll) and the field is redacted server-side too —
-  // the column/filter would just repeat their own name (or nothing) on
-  // every row. Same reasoning as Companies' `isConsultant` treatment.
-  const isConsultant = session?.user?.roleName === 'consultant';
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
   const [statuses, setStatuses] = React.useState<GetJobOrdersStatusesItem[] | undefined>();
-  const [qualities, setQualities] = React.useState<GetJobOrdersQualitiesItem[] | undefined>();
   const [priorityLevels, setPriorityLevels] = React.useState<number[] | undefined>();
   const [consultantIds, setConsultantIds] = React.useState<string[] | undefined>();
+  const [sortBy, setSortBy] = React.useState<GetJobOrdersSortBy | undefined>();
+  const [sortOrder, setSortOrder] = React.useState<GetJobOrdersSortOrder | undefined>();
   const [selectedJobOrders, setSelectedJobOrders] = React.useState<JobOrder[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
+  const [isExporting, setIsExporting] = React.useState(false);
+  const importJobOrders = useImportJobOrders();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [consultantPickerOpen, setConsultantPickerOpen] = React.useState(false);
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
 
   const { data, isLoading, isFetching, isError, error } = useGetJobOrders(
-    { page, pageSize: PAGE_SIZE, q: search, statuses, qualities, priorityLevels, consultantIds },
+    { page, pageSize: PAGE_SIZE, q: search, statuses, priorityLevels, consultantIds, sortBy, sortOrder },
     { query: { placeholderData: keepPreviousData } },
   );
 
-  // Client-side joins: the API returns clientId/consultantId only, so pull
-  // both lists once to resolve names for the table.
+  // Client-side join: the API returns clientId only, so this resolves it once
+  // for the table.
   const { data: clientsData } = useGetClients({ pageSize: 100 });
   const clients = clientsData?.status === 200 ? clientsData.data.data : [];
   const clientName = React.useCallback(
@@ -104,34 +109,9 @@ export function JobOrdersTable({
   // pageSize is capped at 100 server-side (query-consultants.dto.ts) — this
   // is a single unpaginated fetch, so if consultant headcount ever exceeds
   // 100, the overflow silently won't appear here, including as options in
-  // the single-row and bulk "Set consultant" pickers below.
+  // the filter and the bulk "Add consultant" picker below.
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
-  const consultantName = React.useCallback(
-    (id: string | null) => (id ? (consultants.find((c) => c.id === id)?.fullName ?? 'Unknown') : '—'),
-    [consultants],
-  );
-
-  // Industry-first, for bulk assignment too: a Job Order has no industry of
-  // its own, only via its Client — same reasoning as Companies'
-  // bulkAssignableConsultants. Only offer consultants who hold *every*
-  // distinct industry represented across the selected job orders' clients;
-  // any selected job order whose client is untagged makes bulk assignment
-  // impossible outright.
-  const bulkAssignableConsultants = React.useMemo(() => {
-    const selectedClientIndustryIds = selectedJobOrders.map(
-      (j) => clients.find((c) => c.id === j.clientId)?.industryId ?? null,
-    );
-    if (selectedClientIndustryIds.some((id) => !id)) return [];
-    const distinctIndustryIds = Array.from(new Set(selectedClientIndustryIds as string[]));
-    return consultants.filter(
-      (c) => c.industryIds === undefined || distinctIndustryIds.every((id) => c.industryIds!.includes(id)),
-    );
-  }, [consultants, clients, selectedJobOrders]);
-
-  // For the Candidates column's multi-select picker.
-  const { data: candidatesData } = useGetCandidates({ pageSize: 100 });
-  const candidates = candidatesData?.status === 200 ? candidatesData.data.data : [];
 
   const consultantFilterOptions = React.useMemo(
     () => consultants.map((c) => ({ value: c.id, label: c.fullName })),
@@ -140,42 +120,47 @@ export function JobOrdersTable({
 
   // Filters render inside their column's header (2.1) instead of a toolbar
   // row, and every one is multi-select — the API takes arrays for all four.
+  // Consultant matches through the JobOrderConsultant join now — any of the
+  // selected consultants being on a job order's list is a match.
   const jobOrderFilters: DataGridFilter[] = React.useMemo(
     () => [
       { columnId: 'status', title: 'Status', options: statusOptions, inHeader: true },
-      { columnId: 'quality', title: 'Quality', options: qualityOptions, inHeader: true },
       { columnId: 'priorityLevel', title: 'Priority', options: priorityOptions, inHeader: true },
-      ...(isConsultant
-        ? []
-        : [
-            {
-              columnId: 'consultantId',
-              title: 'Consultant',
-              options: consultantFilterOptions,
-              inHeader: true,
-            },
-          ]),
+      {
+        columnId: 'consultants',
+        title: 'Consultant',
+        options: consultantFilterOptions,
+        inHeader: true,
+        // Searchable, avatar-rowed popup instead of a plain checkbox list —
+        // same ConsultantFilterButton used for the roster already fetched
+        // here, matching the Location/Specialization filters on the
+        // Companies table (see CompaniesTable's use of LocationFilterButton/
+        // SpecializationFilterButton).
+        render: ({ selected, onChange }) => (
+          <ConsultantFilterButton selected={selected} onChange={onChange} consultants={consultants} title="Consultant" />
+        ),
+      },
     ],
-    [consultantFilterOptions, isConsultant],
+    [consultantFilterOptions, consultants],
   );
 
   const result = data?.status === 200 ? data.data : undefined;
   const jobOrders = result?.data ?? [];
 
-  function handleQueryChange({ search, columnFilters }: DataGridQuery) {
+  function handleQueryChange({ search, columnFilters, sorting }: DataGridQuery) {
     const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as
-      string[] | undefined;
-    const qualityFilter = columnFilters.find((f) => f.id === 'quality')?.value as
       string[] | undefined;
     const priorityFilter = columnFilters.find((f) => f.id === 'priorityLevel')?.value as
       string[] | undefined;
-    const consultantFilter = columnFilters.find((f) => f.id === 'consultantId')?.value as
+    const consultantFilter = columnFilters.find((f) => f.id === 'consultants')?.value as
       string[] | undefined;
+    const sort = sorting[0];
     setSearch(search.trim() || undefined);
     setStatuses(statusFilter?.length ? (statusFilter as GetJobOrdersStatusesItem[]) : undefined);
-    setQualities(qualityFilter?.length ? (qualityFilter as GetJobOrdersQualitiesItem[]) : undefined);
     setPriorityLevels(priorityFilter?.length ? priorityFilter.map(Number) : undefined);
     setConsultantIds(consultantFilter?.length ? consultantFilter : undefined);
+    setSortBy(sort ? (sort.id as GetJobOrdersSortBy) : undefined);
+    setSortOrder(sort ? (sort.desc ? 'desc' : 'asc') : undefined);
     setPage(1);
   }
 
@@ -197,6 +182,50 @@ export function JobOrdersTable({
     setSelectedJobOrders([]);
   }
 
+  // Adds one consultant to each selected job order's existing list (never
+  // replaces it — several consultants can work the same job order
+  // concurrently). No scope check: this is the deliberate escape hatch, same
+  // as the single-job-order picker on the detail page.
+  async function handleBulkAddConsultant(consultantId: string) {
+    setIsBulkUpdating(true);
+    const results = await Promise.allSettled(
+      selectedJobOrders.map((j) => {
+        const nextIds = Array.from(new Set([...j.consultants.map((c) => c.id), consultantId]));
+        return setJobOrderConsultantsRequest(j.id, { consultantIds: nextIds });
+      }),
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    const succeeded = results.length - failed;
+    queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
+    if (succeeded > 0) toast.success(`Consultant added for ${succeeded} job order${succeeded === 1 ? '' : 's'}`);
+    if (failed > 0) toast.error(`Failed for ${failed} job order${failed === 1 ? '' : 's'}`);
+    setIsBulkUpdating(false);
+    setSelectedJobOrders([]);
+  }
+
+  // Routes through the server (not an in-browser build) so formatting stays
+  // in one place and scope is re-checked on every export — mirrors
+  // CompaniesTable/StakeholdersTable/CandidatesTable's handleExport.
+  async function handleExport() {
+    setIsExporting(true);
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    try {
+      if (selectedJobOrders.length > 0) {
+        await downloadFile(getExportJobOrdersByIdsUrl(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: selectedJobOrders.map((j) => j.id), timezone }),
+        });
+      } else {
+        await downloadFile(getExportJobOrdersUrl({ q: search, statuses, priorityLevels, consultantIds, timezone }));
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   function handleBulkDelete() {
     setDeleteConfirmOpen(false);
     const toDelete = selectedJobOrders;
@@ -216,10 +245,15 @@ export function JobOrdersTable({
     setSelectedJobOrders([]);
   }
 
-  const columns = React.useMemo(
-    () => getJobOrderColumns({ clientName, consultantName, candidates, hideConsultantColumn: isConsultant }),
-    [clientName, consultantName, candidates, isConsultant],
-  );
+  const columns = React.useMemo(() => getJobOrderColumns({ clientName }), [clientName]);
+
+  // Drag-select is the only way rows get picked (checkboxes stay hidden, same
+  // as the Candidates table) — mousedown on a row and drag to range-select,
+  // like a spreadsheet. onRowClick still navigates on a plain click; a real
+  // drag suppresses it (see DataGrid's enableRowRangeSelect doc).
+  function handleSelectionChange(rows: JobOrder[]) {
+    setSelectedJobOrders(rows);
+  }
 
   if (isError) {
     return (
@@ -238,119 +272,139 @@ export function JobOrdersTable({
         isFetching={isFetching}
         searchPlaceholder="Search job orders…"
         filters={jobOrderFilters}
+        // Size to actual content instead of stretching to fill leftover
+        // viewport height when there aren't enough rows — see DataGrid's
+        // fillHeight doc.
+        fillHeight={false}
         // Job Order info isn't directly editable from the main sheet (2.2) —
         // every row (not just the title link) opens the dedicated page.
         onRowClick={(jobOrder) => router.push(`/job-orders/${jobOrder.id}`)}
         emptyState="No job orders yet. Create one against a client to get started."
         getRowId={(j) => j.id}
+        enableRowRangeSelect
+        hideSelectColumn
+        onSelectionChange={handleSelectionChange}
         toolbar={
-          selectedJobOrders.length > 0 ? (
-            <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
-              <Button
-                variant="destructive"
-                size="lg"
-                disabled={!canDelete}
-                title={canDelete ? undefined : "You don't have permission to delete job orders"}
-                onClick={() => setDeleteConfirmOpen(true)}
-              >
-                <Trash2 />
-                Delete
-              </Button>
-              <ConfirmDeleteDialog
-                open={deleteConfirmOpen}
-                onOpenChange={setDeleteConfirmOpen}
-                title={`Delete ${selectedJobOrders.length} job order${selectedJobOrders.length === 1 ? '' : 's'}?`}
-                description="You can undo this from the toast right after, or it's gone for good."
-                onConfirm={handleBulkDelete}
+          <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
+            <Button size="lg" variant="outline" onClick={handleExport} disabled={isExporting}>
+              <Download />
+              {isExporting ? 'Exporting…' : 'Export to Excel'}
+            </Button>
+            {canCreate && canUpdate ? (
+              <ImportDialog
+                entityLabel="Job Orders"
+                templateUrl={getGetJobOrderImportTemplateUrl()}
+                upload={async (file, commit) => {
+                  const res = await importJobOrders.mutateAsync({ data: { file, commit } });
+                  if (res.status !== 201) throw new Error('Import failed');
+                  return res.data;
+                }}
+                onImported={() => queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() })}
               />
-
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button ref={bulkActionsTriggerRef} size="lg" disabled={isBulkUpdating}>
-                      {isBulkUpdating ? 'Updating…' : `Bulk actions (${selectedJobOrders.length})`}
-                      <ChevronDown />
-                    </Button>
-                  }
+            ) : null}
+            {selectedJobOrders.length > 0 ? (
+              <>
+                <Button
+                  variant="destructive"
+                  size="lg"
+                  disabled={!canDelete}
+                  title={canDelete ? undefined : "You don't have permission to delete job orders"}
+                  onClick={() => setDeleteConfirmOpen(true)}
+                >
+                  <Trash2 />
+                  Delete
+                </Button>
+                <ConfirmDeleteDialog
+                  open={deleteConfirmOpen}
+                  onOpenChange={setDeleteConfirmOpen}
+                  title={`Delete ${selectedJobOrders.length} job order${selectedJobOrders.length === 1 ? '' : 's'}?`}
+                  description="You can undo this from the toast right after, or it's gone for good."
+                  onConfirm={handleBulkDelete}
                 />
-                <DropdownMenuContent align="end">
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>Set status</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      {jobOrderStatuses.map((s) => (
-                        <DropdownMenuItem
-                          key={s}
-                          onClick={() =>
-                            handleBulkUpdate({ status: s }, `Marked ${jobOrderStatusLabels[s]}`)
-                          }
-                        >
-                          <Badge variant={statusVariant[s]}>{jobOrderStatusLabels[s]}</Badge>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>Set quality</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      {jobOrderQualities.map((q) => (
-                        <DropdownMenuItem
-                          key={q}
-                          onClick={() =>
-                            handleBulkUpdate(
-                              { quality: q },
-                              `Set to ${jobOrderQualityLabels[q]} quality`,
-                            )
-                          }
-                        >
-                          <Badge variant={qualityVariant[q]}>{jobOrderQualityLabels[q]}</Badge>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>Set priority</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      {Object.entries(priorityLabels).map(([value, label]) => (
-                        <DropdownMenuItem
-                          key={value}
-                          onClick={() =>
-                            handleBulkUpdate(
-                              { priorityLevel: Number(value) },
-                              `Set to ${label} priority`,
-                            )
-                          }
-                        >
-                          <Badge variant={priorityVariant[Number(value)]}>{label}</Badge>
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuItem onClick={() => setConsultantPickerOpen(true)}>
-                    Set consultant
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
 
-              {/* Anchored to the trigger above — a live search inside a Menu's own
-                  roving-focus popup isn't a supported composition, so this opens as
-                  its own popup right where "Set consultant" was clicked. */}
-              <BulkConsultantPicker
-                anchorRef={bulkActionsTriggerRef}
-                open={consultantPickerOpen}
-                onOpenChange={setConsultantPickerOpen}
-                consultants={bulkAssignableConsultants}
-                onAssign={(id) =>
-                  // Generated type omits null (API accepts it to clear the FK) —
-                  // cast around the gap rather than sending '' which Prisma would
-                  // reject as an invalid foreign key.
-                  handleBulkUpdate(
-                    { consultantId: id || null } as unknown as UpdateJobOrderDto,
-                    id ? 'Consultant assigned' : 'Unassigned',
-                  )
-                }
-              />
-            </div>
-          ) : null
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button ref={bulkActionsTriggerRef} size="lg" disabled={isBulkUpdating}>
+                        {isBulkUpdating ? 'Updating…' : `Bulk actions (${selectedJobOrders.length})`}
+                        <ChevronDown />
+                      </Button>
+                    }
+                  />
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>Set status</DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        {jobOrderStatuses.map((s) => (
+                          <DropdownMenuItem
+                            key={s}
+                            onClick={() =>
+                              handleBulkUpdate({ status: s }, `Marked ${jobOrderStatusLabels[s]}`)
+                            }
+                          >
+                            <Badge variant={statusVariant[s]}>{jobOrderStatusLabels[s]}</Badge>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>Set quality</DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        {jobOrderQualities.map((q) => (
+                          <DropdownMenuItem
+                            key={q}
+                            onClick={() =>
+                              handleBulkUpdate(
+                                { quality: q },
+                                `Set to ${jobOrderQualityLabels[q]} quality`,
+                              )
+                            }
+                          >
+                            <Badge variant={qualityVariant[q]}>{jobOrderQualityLabels[q]}</Badge>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>Set priority</DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent>
+                        {Object.entries(priorityLabels).map(([value, label]) => (
+                          <DropdownMenuItem
+                            key={value}
+                            onClick={() =>
+                              handleBulkUpdate(
+                                { priorityLevel: Number(value) },
+                                `Set to ${label} priority`,
+                              )
+                            }
+                          >
+                            <Badge variant={priorityVariant[Number(value)]}>{label}</Badge>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuItem onClick={() => setConsultantPickerOpen(true)}>
+                      Add consultant
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Anchored to the trigger above — a live search inside a Menu's own
+                    roving-focus popup isn't a supported composition, so this opens as
+                    its own popup right where "Add consultant" was clicked. No
+                    industry/location restriction on who's offered here — adding
+                    someone outside their usual scope is the deliberate point of
+                    this feature (see PUT /job-orders/:id/consultants). */}
+                <BulkConsultantPicker
+                  anchorRef={bulkActionsTriggerRef}
+                  open={consultantPickerOpen}
+                  onOpenChange={setConsultantPickerOpen}
+                  consultants={consultants}
+                  onAssign={handleBulkAddConsultant}
+                />
+              </>
+            ) : null}
+          </div>
         }
         server={{
           total: result?.total ?? 0,

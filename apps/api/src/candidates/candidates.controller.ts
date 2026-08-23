@@ -8,9 +8,14 @@ import {
   Patch,
   Post,
   Query,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiProduces, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CandidatesService } from './candidates.service';
+import { CandidatesImportService } from './candidates-import.service';
 import { AuditService } from '../audit/audit.service';
 import { PipelineTimelineEventEntity } from '../audit/entities/pipeline-timeline-event.entity';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
@@ -18,18 +23,21 @@ import { UpdateCandidateDto } from './dto/update-candidate.dto';
 import { QueryCandidatesDto } from './dto/query-candidates.dto';
 import { CreateCandidateContactHistoryDto } from './dto/create-candidate-contact-history.dto';
 import { QueryCandidateFacetsDto } from './dto/query-candidate-facets.dto';
-import {
-  AddCandidateNoteDto,
-  DeleteCandidateNoteQueryDto,
-  UpdateCandidateNoteDto,
-} from './dto/candidate-note.dto';
+import { ExportCandidatesDto } from './dto/export-candidates.dto';
+import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
+import { QueryContactHistoryDto } from '../common/dto/query-contact-history.dto';
+import { ImportOptionsDto } from '../common/dto/import-options.dto';
+import { XLSX_CONTENT_TYPE, exportFilename } from '../common/xlsx-export';
+import { MAX_IMPORT_FILE_BYTES } from '../common/xlsx-import';
+import { UpdateCandidateContactHistoryDto } from './dto/update-candidate-contact-history.dto';
 import { CandidateEntity } from './entities/candidate.entity';
 import { PaginatedCandidatesEntity } from './entities/paginated-candidates.entity';
 import { CandidateContactHistoryEntity } from './entities/candidate-contact-history.entity';
 import { JobRoleTypeFacetEntity } from './entities/job-role-type-facet.entity';
-import { CurrentUser, RequirePermission } from '../auth/auth.decorators';
+import { ImportResultEntity } from '../common/entities/import-result.entity';
+import { CurrentUser, RequirePermission, RequirePermissions } from '../auth/auth.decorators';
 import { AuthUser } from '../auth/auth.types';
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, BadRequestException } from '@nestjs/common';
 
 @ApiTags('Candidates')
 @ApiBearerAuth()
@@ -37,6 +45,7 @@ import { ForbiddenException } from '@nestjs/common';
 export class CandidatesController {
   constructor(
     private readonly candidates: CandidatesService,
+    private readonly candidatesImport: CandidatesImportService,
     private readonly audit: AuditService,
   ) {}
 
@@ -73,6 +82,78 @@ export class CandidatesController {
     return this.candidates.findByDisplayId(displayId);
   }
 
+  @Get('export')
+  @RequirePermission('candidate', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportCandidates',
+    summary: 'Export every candidate matching the current filters as an .xlsx file — unbounded, not paginated',
+  })
+  @ApiResponse({ status: 200, description: 'Candidates workbook' })
+  async exportAll(@Query() query: ExportCandidatesDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.candidates.exportAll(query, user);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('candidates')}"`,
+    });
+  }
+
+  @Post('export')
+  @RequirePermission('candidate', 'read')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'exportCandidatesByIds',
+    summary: 'Export an explicit set of candidates (by id) as an .xlsx file',
+  })
+  @ApiResponse({ status: 201, description: 'Candidates workbook' })
+  async exportByIds(@Body() dto: ExportByIdsDto, @CurrentUser() user: AuthUser) {
+    const buffer = await this.candidates.exportByIds(dto.ids, user, dto.timezone);
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: `attachment; filename="${exportFilename('candidates')}"`,
+    });
+  }
+
+  @Get('import/template')
+  @RequirePermission('candidate', 'create')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOperation({
+    operationId: 'getCandidateImportTemplate',
+    summary: 'Download the .xlsx template for bulk-importing/updating candidates',
+  })
+  @ApiResponse({ status: 200, description: 'Candidates import template' })
+  async downloadImportTemplate() {
+    const buffer = await this.candidatesImport.buildTemplate();
+    return new StreamableFile(buffer, {
+      type: XLSX_CONTENT_TYPE,
+      disposition: 'attachment; filename="candidates-import-template.xlsx"',
+    });
+  }
+
+  @Post('import')
+  @RequirePermissions({ resource: 'candidate', action: 'create' }, { resource: 'candidate', action: 'update' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_FILE_BYTES } }))
+  @ApiOperation({
+    operationId: 'importCandidates',
+    summary:
+      'Preview (commit=false, default) or commit (commit=true) a bulk candidate import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' }, commit: { type: 'boolean', default: false } },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Import result', type: ImportResultEntity })
+  async import(@UploadedFile() file: Express.Multer.File | undefined, @Body() options: ImportOptionsDto) {
+    if (!file) {
+      throw new BadRequestException({ code: 'FILE_REQUIRED', message: 'Upload an .xlsx file as "file".' });
+    }
+    return this.candidatesImport.importFromWorkbook(file.buffer, options.commit ?? false, file.originalname);
+  }
+
   @Get(':id')
   @RequirePermission('candidate', 'read')
   @ApiOperation({ operationId: 'getCandidate', summary: 'Get candidate by ID' })
@@ -106,46 +187,6 @@ export class CandidatesController {
   @ApiResponse({ status: 200, description: 'Candidate updated', type: CandidateEntity })
   update(@Param('id') id: string, @Body() dto: UpdateCandidateDto, @CurrentUser() user: AuthUser) {
     return this.candidates.update(id, dto, user);
-  }
-
-  @Post(':id/notes')
-  @RequirePermission('candidate', 'update')
-  @ApiOperation({ operationId: 'addCandidateNote', summary: "Append a note to a candidate's timeline" })
-  @ApiResponse({ status: 201, description: 'Candidate updated', type: CandidateEntity })
-  addNote(@Param('id') id: string, @Body() dto: AddCandidateNoteDto, @CurrentUser() user: AuthUser) {
-    return this.candidates.addNote(id, dto, user);
-  }
-
-  @Patch(':id/notes/:noteId')
-  @RequirePermission('candidate', 'update')
-  @ApiOperation({
-    operationId: 'updateCandidateNote',
-    summary: "Edit one note in a candidate's timeline (author or admin only)",
-  })
-  @ApiResponse({ status: 200, description: 'Candidate updated', type: CandidateEntity })
-  updateNote(
-    @Param('id') id: string,
-    @Param('noteId') noteId: string,
-    @Body() dto: UpdateCandidateNoteDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.candidates.updateNote(id, noteId, dto, user);
-  }
-
-  @Delete(':id/notes/:noteId')
-  @RequirePermission('candidate', 'update')
-  @ApiOperation({
-    operationId: 'deleteCandidateNote',
-    summary: "Remove one note from a candidate's timeline (author or admin only)",
-  })
-  @ApiResponse({ status: 200, description: 'Candidate updated', type: CandidateEntity })
-  deleteNote(
-    @Param('id') id: string,
-    @Param('noteId') noteId: string,
-    @Query() query: DeleteCandidateNoteQueryDto,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return this.candidates.deleteNote(id, noteId, user, query.expectedVersion);
   }
 
   @Delete(':id')
@@ -184,6 +225,17 @@ export class CandidatesController {
     return this.candidates.purge(id);
   }
 
+  @Get(':id/contact-history')
+  @RequirePermission('candidate', 'read')
+  @ApiOperation({
+    operationId: 'getCandidateContactHistory',
+    summary: "This candidate's most recent logged contacts, newest first (5 unless `limit` says otherwise)",
+  })
+  @ApiResponse({ status: 200, description: 'Contact history', type: CandidateContactHistoryEntity, isArray: true })
+  listContactHistory(@Param('id') id: string, @Query() query: QueryContactHistoryDto) {
+    return this.candidates.listContactHistory(id, query.limit);
+  }
+
   @Post(':id/contact-history')
   @RequirePermission('candidate', 'update')
   @ApiOperation({
@@ -197,5 +249,21 @@ export class CandidatesController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.candidates.addContactHistory(id, dto, user.consultantId);
+  }
+
+  @Patch(':id/contact-history/:contactHistoryId')
+  @RequirePermission('candidate', 'update')
+  @ApiOperation({
+    operationId: 'updateCandidateContactHistory',
+    summary: "Edit a SCREENING contact's screeningNotes (author or admin only) — every other field is immutable",
+  })
+  @ApiResponse({ status: 200, description: 'Contact history updated', type: CandidateContactHistoryEntity })
+  updateContactHistory(
+    @Param('id') id: string,
+    @Param('contactHistoryId') contactHistoryId: string,
+    @Body() dto: UpdateCandidateContactHistoryDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.candidates.updateContactHistory(id, contactHistoryId, dto, user);
   }
 }

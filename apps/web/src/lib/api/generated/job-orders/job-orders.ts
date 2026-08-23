@@ -27,10 +27,15 @@ import type {
 import type {
   CreateJobOrderDto,
   ErrorResponse,
+  ExportByIdsDto,
+  ExportJobOrdersParams,
   GetJobOrdersParams,
+  ImportJobOrdersBody,
+  ImportResultEntity,
   JobOrderEntity,
   PaginatedJobOrdersEntity,
   PipelineTimelineEventEntity,
+  SetJobOrderConsultantsDto,
   UpdateJobOrderDto
 } from '../types';
 
@@ -84,7 +89,7 @@ export const getGetJobOrdersUrl = (params?: GetJobOrdersParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["statuses","qualities","consultantIds","jobTitleIds","jobRoleTypeIds","locationIds","priorityLevels"];
+    const explodeParameters = ["statuses","consultantIds","jobTitleIds","jobRoleTypeIds","locationIds","priorityLevels"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
@@ -418,7 +423,463 @@ export function useGetJobOrderByDisplayId<TData = Awaited<ReturnType<typeof getJ
 
 
 
-export type getJobOrderResponse200 = {
+export type exportJobOrdersResponse200 = {
+  data: void
+  status: 200
+}
+
+export type exportJobOrdersResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportJobOrdersResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportJobOrdersResponseSuccess = (exportJobOrdersResponse200) & {
+  headers: Headers;
+};
+export type exportJobOrdersResponseError = (exportJobOrdersResponse400 | exportJobOrdersResponse500) & {
+  headers: Headers;
+};
+
+export type exportJobOrdersResponse = (exportJobOrdersResponseSuccess | exportJobOrdersResponseError)
+
+export const getExportJobOrdersUrl = (params?: ExportJobOrdersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["statuses","consultantIds","jobTitleIds","jobRoleTypeIds","locationIds","priorityLevels"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/job-orders/export?${stringifiedParams}` : `/job-orders/export`
+}
+
+/**
+ * @summary Export every job order matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+export const exportJobOrders = async (params?: ExportJobOrdersParams, options?: RequestInit): Promise<exportJobOrdersResponse> => {
+
+  return customFetch<exportJobOrdersResponse>(getExportJobOrdersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportJobOrdersQueryKey = (params?: ExportJobOrdersParams,) => {
+    return [
+    `/job-orders/export`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getExportJobOrdersQueryOptions = <TData = Awaited<ReturnType<typeof exportJobOrders>>, TError = ErrorResponse>(params?: ExportJobOrdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportJobOrders>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportJobOrdersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportJobOrders>>> = ({ signal }) => exportJobOrders(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportJobOrders>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportJobOrdersQueryResult = NonNullable<Awaited<ReturnType<typeof exportJobOrders>>>
+export type ExportJobOrdersQueryError = ErrorResponse
+
+
+export function useExportJobOrders<TData = Awaited<ReturnType<typeof exportJobOrders>>, TError = ErrorResponse>(
+ params: undefined |  ExportJobOrdersParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportJobOrders>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportJobOrders>>,
+          TError,
+          Awaited<ReturnType<typeof exportJobOrders>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportJobOrders<TData = Awaited<ReturnType<typeof exportJobOrders>>, TError = ErrorResponse>(
+ params?: ExportJobOrdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportJobOrders>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportJobOrders>>,
+          TError,
+          Awaited<ReturnType<typeof exportJobOrders>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportJobOrders<TData = Awaited<ReturnType<typeof exportJobOrders>>, TError = ErrorResponse>(
+ params?: ExportJobOrdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportJobOrders>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Export every job order matching the current filters as an .xlsx file — unbounded, not paginated
+ */
+
+export function useExportJobOrders<TData = Awaited<ReturnType<typeof exportJobOrders>>, TError = ErrorResponse>(
+ params?: ExportJobOrdersParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportJobOrders>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getExportJobOrdersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type exportJobOrdersByIdsResponse201 = {
+  data: void
+  status: 201
+}
+
+export type exportJobOrdersByIdsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportJobOrdersByIdsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type exportJobOrdersByIdsResponseSuccess = (exportJobOrdersByIdsResponse201) & {
+  headers: Headers;
+};
+export type exportJobOrdersByIdsResponseError = (exportJobOrdersByIdsResponse400 | exportJobOrdersByIdsResponse500) & {
+  headers: Headers;
+};
+
+export type exportJobOrdersByIdsResponse = (exportJobOrdersByIdsResponseSuccess | exportJobOrdersByIdsResponseError)
+
+export const getExportJobOrdersByIdsUrl = () => {
+
+
+
+
+  return `/job-orders/export`
+}
+
+/**
+ * @summary Export an explicit set of job orders (by id) as an .xlsx file
+ */
+export const exportJobOrdersByIds = async (exportByIdsDto: ExportByIdsDto, options?: RequestInit): Promise<exportJobOrdersByIdsResponse> => {
+
+  return customFetch<exportJobOrdersByIdsResponse>(getExportJobOrdersByIdsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(exportByIdsDto)
+  }
+);}
+
+
+
+
+
+export const getExportJobOrdersByIdsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportJobOrdersByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof exportJobOrdersByIds>>, TError,{data: ExportByIdsDto}, TContext> => {
+
+const mutationKey = ['exportJobOrdersByIds'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof exportJobOrdersByIds>>, {data: ExportByIdsDto}> = (props) => {
+          const {data} = props ?? {};
+
+          return  exportJobOrdersByIds(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ExportJobOrdersByIdsMutationResult = NonNullable<Awaited<ReturnType<typeof exportJobOrdersByIds>>>
+    export type ExportJobOrdersByIdsMutationBody = ExportByIdsDto
+    export type ExportJobOrdersByIdsMutationError = ErrorResponse
+
+    /**
+ * @summary Export an explicit set of job orders (by id) as an .xlsx file
+ */
+export const useExportJobOrdersByIds = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof exportJobOrdersByIds>>, TError,{data: ExportByIdsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof exportJobOrdersByIds>>,
+        TError,
+        {data: ExportByIdsDto},
+        TContext
+      > => {
+      return useMutation(getExportJobOrdersByIdsMutationOptions(options), queryClient);
+    }
+    export type getJobOrderImportTemplateResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getJobOrderImportTemplateResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getJobOrderImportTemplateResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getJobOrderImportTemplateResponseSuccess = (getJobOrderImportTemplateResponse200) & {
+  headers: Headers;
+};
+export type getJobOrderImportTemplateResponseError = (getJobOrderImportTemplateResponse400 | getJobOrderImportTemplateResponse500) & {
+  headers: Headers;
+};
+
+export type getJobOrderImportTemplateResponse = (getJobOrderImportTemplateResponseSuccess | getJobOrderImportTemplateResponseError)
+
+export const getGetJobOrderImportTemplateUrl = () => {
+
+
+
+
+  return `/job-orders/import/template`
+}
+
+/**
+ * @summary Download the .xlsx template for bulk-importing/updating job orders
+ */
+export const getJobOrderImportTemplate = async ( options?: RequestInit): Promise<getJobOrderImportTemplateResponse> => {
+
+  return customFetch<getJobOrderImportTemplateResponse>(getGetJobOrderImportTemplateUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetJobOrderImportTemplateQueryKey = () => {
+    return [
+    `/job-orders/import/template`
+    ] as const;
+    }
+
+
+export const getGetJobOrderImportTemplateQueryOptions = <TData = Awaited<ReturnType<typeof getJobOrderImportTemplate>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobOrderImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetJobOrderImportTemplateQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getJobOrderImportTemplate>>> = ({ signal }) => getJobOrderImportTemplate({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getJobOrderImportTemplate>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetJobOrderImportTemplateQueryResult = NonNullable<Awaited<ReturnType<typeof getJobOrderImportTemplate>>>
+export type GetJobOrderImportTemplateQueryError = ErrorResponse
+
+
+export function useGetJobOrderImportTemplate<TData = Awaited<ReturnType<typeof getJobOrderImportTemplate>>, TError = ErrorResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobOrderImportTemplate>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getJobOrderImportTemplate>>,
+          TError,
+          Awaited<ReturnType<typeof getJobOrderImportTemplate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetJobOrderImportTemplate<TData = Awaited<ReturnType<typeof getJobOrderImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobOrderImportTemplate>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getJobOrderImportTemplate>>,
+          TError,
+          Awaited<ReturnType<typeof getJobOrderImportTemplate>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetJobOrderImportTemplate<TData = Awaited<ReturnType<typeof getJobOrderImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobOrderImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Download the .xlsx template for bulk-importing/updating job orders
+ */
+
+export function useGetJobOrderImportTemplate<TData = Awaited<ReturnType<typeof getJobOrderImportTemplate>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getJobOrderImportTemplate>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetJobOrderImportTemplateQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type importJobOrdersResponse201 = {
+  data: ImportResultEntity
+  status: 201
+}
+
+export type importJobOrdersResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type importJobOrdersResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type importJobOrdersResponseSuccess = (importJobOrdersResponse201) & {
+  headers: Headers;
+};
+export type importJobOrdersResponseError = (importJobOrdersResponse400 | importJobOrdersResponse500) & {
+  headers: Headers;
+};
+
+export type importJobOrdersResponse = (importJobOrdersResponseSuccess | importJobOrdersResponseError)
+
+export const getImportJobOrdersUrl = () => {
+
+
+
+
+  return `/job-orders/import`
+}
+
+/**
+ * @summary Preview (commit=false, default) or commit (commit=true) a bulk job order import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.
+ */
+export const importJobOrders = async (importJobOrdersBody: ImportJobOrdersBody, options?: RequestInit): Promise<importJobOrdersResponse> => {
+    const formData = new FormData();
+formData.append(`file`, importJobOrdersBody.file);
+if(importJobOrdersBody.commit !== undefined) {
+ formData.append(`commit`, importJobOrdersBody.commit.toString())
+ }
+
+  return customFetch<importJobOrdersResponse>(getImportJobOrdersUrl(),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getImportJobOrdersMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importJobOrders>>, TError,{data: ImportJobOrdersBody}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof importJobOrders>>, TError,{data: ImportJobOrdersBody}, TContext> => {
+
+const mutationKey = ['importJobOrders'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importJobOrders>>, {data: ImportJobOrdersBody}> = (props) => {
+          const {data} = props ?? {};
+
+          return  importJobOrders(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportJobOrdersMutationResult = NonNullable<Awaited<ReturnType<typeof importJobOrders>>>
+    export type ImportJobOrdersMutationBody = ImportJobOrdersBody
+    export type ImportJobOrdersMutationError = ErrorResponse
+
+    /**
+ * @summary Preview (commit=false, default) or commit (commit=true) a bulk job order import/update from an .xlsx file. All-or-nothing: any row error means nothing is written.
+ */
+export const useImportJobOrders = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importJobOrders>>, TError,{data: ImportJobOrdersBody}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof importJobOrders>>,
+        TError,
+        {data: ImportJobOrdersBody},
+        TContext
+      > => {
+      return useMutation(getImportJobOrdersMutationOptions(options), queryClient);
+    }
+    export type getJobOrderResponse200 = {
   data: JobOrderEntity
   status: 200
 }
@@ -875,3 +1336,103 @@ export function useGetJobOrderPipelineTimeline<TData = Awaited<ReturnType<typeof
 
 
 
+export type setJobOrderConsultantsResponse200 = {
+  data: JobOrderEntity
+  status: 200
+}
+
+export type setJobOrderConsultantsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type setJobOrderConsultantsResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type setJobOrderConsultantsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type setJobOrderConsultantsResponseSuccess = (setJobOrderConsultantsResponse200) & {
+  headers: Headers;
+};
+export type setJobOrderConsultantsResponseError = (setJobOrderConsultantsResponse400 | setJobOrderConsultantsResponse404 | setJobOrderConsultantsResponse500) & {
+  headers: Headers;
+};
+
+export type setJobOrderConsultantsResponse = (setJobOrderConsultantsResponseSuccess | setJobOrderConsultantsResponseError)
+
+export const getSetJobOrderConsultantsUrl = (id: string,) => {
+
+
+
+
+  return `/job-orders/${id}/consultants`
+}
+
+/**
+ * @summary Replace who's working this job order (full-set-replace). Several consultants can work the same job order concurrently, in or out of their usual scope — no scope check is applied here on purpose.
+ */
+export const setJobOrderConsultants = async (id: string,
+    setJobOrderConsultantsDto: SetJobOrderConsultantsDto, options?: RequestInit): Promise<setJobOrderConsultantsResponse> => {
+
+  return customFetch<setJobOrderConsultantsResponse>(getSetJobOrderConsultantsUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setJobOrderConsultantsDto)
+  }
+);}
+
+
+
+
+
+export const getSetJobOrderConsultantsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setJobOrderConsultants>>, TError,{id: string;data: SetJobOrderConsultantsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setJobOrderConsultants>>, TError,{id: string;data: SetJobOrderConsultantsDto}, TContext> => {
+
+const mutationKey = ['setJobOrderConsultants'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setJobOrderConsultants>>, {id: string;data: SetJobOrderConsultantsDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setJobOrderConsultants(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetJobOrderConsultantsMutationResult = NonNullable<Awaited<ReturnType<typeof setJobOrderConsultants>>>
+    export type SetJobOrderConsultantsMutationBody = SetJobOrderConsultantsDto
+    export type SetJobOrderConsultantsMutationError = ErrorResponse
+
+    /**
+ * @summary Replace who's working this job order (full-set-replace). Several consultants can work the same job order concurrently, in or out of their usual scope — no scope check is applied here on purpose.
+ */
+export const useSetJobOrderConsultants = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setJobOrderConsultants>>, TError,{id: string;data: SetJobOrderConsultantsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof setJobOrderConsultants>>,
+        TError,
+        {id: string;data: SetJobOrderConsultantsDto},
+        TContext
+      > => {
+      return useMutation(getSetJobOrderConsultantsMutationOptions(options), queryClient);
+    }

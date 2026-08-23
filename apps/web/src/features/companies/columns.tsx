@@ -1,10 +1,10 @@
 'use client';
 
 import type { ColumnDef } from '@tanstack/react-table';
-import { ExternalLink } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { ComboboxSelect } from '@/components/ComboboxSelect';
+import { ConsultantAvatar } from '@/components/ConsultantCombobox';
 import { LocationBadgeList } from '@/components/LocationBadgeList';
 import { formatDate, qualityOptions, statusOptions, type Company } from './schema';
 
@@ -21,20 +21,10 @@ function initials(name: string) {
 interface CompanyColumnsOptions {
   onStatusChange: (company: Company, status: string) => void;
   onQualityChange: (company: Company, quality: string) => void;
-  /** Resolves a consultantId to a display name — client-side join, the API returns the id only. */
-  consultantName: (id: string | null) => string;
   /** Row id currently saving an inline change — disables that row's controls. */
   pendingRowId: string | null;
   /** Absent when the caller lacks `client:update` — controls render read-only. */
   canUpdate: boolean;
-  /**
-   * Omits the Consultant column — every row is already scoped to this
-   * consultant's own book (see ClientsService.findAll) and the field is
-   * redacted server-side too, so the column would just repeat their own name
-   * (or nothing) on every row. Same reasoning as Job Orders'
-   * hideConsultantColumn.
-   */
-  hideConsultantColumn?: boolean;
 }
 
 export function getCompanyColumns({
@@ -57,27 +47,9 @@ export function getCompanyColumns({
               {initials(client.companyName)}
             </span>
             <span className="truncate font-medium text-foreground">{client.companyName}</span>
-            {client.website ? (
-              <a
-                href={client.website}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                aria-label={`Open ${client.companyName}'s website`}
-                className="shrink-0 text-muted-foreground hover:text-foreground"
-              >
-                <ExternalLink className="size-3.5" />
-              </a>
-            ) : null}
           </div>
         );
       },
-    },
-    {
-      accessorKey: 'industry',
-      header: 'Industry',
-      enableSorting: false,
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.industry ?? '—'}</span>,
     },
     {
       accessorKey: 'specialization',
@@ -90,6 +62,32 @@ export function getCompanyColumns({
       header: 'Market',
       enableSorting: false,
       cell: ({ row }) => <LocationBadgeList locations={row.original.locations} />,
+    },
+    {
+      accessorKey: 'lastContactedAt',
+      header: 'Last contacted',
+      enableSorting: false,
+      cell: ({ row }) => <span className="text-muted-foreground">{formatDate(row.original.lastContactedAt)}</span>,
+    },
+    {
+      accessorKey: 'lastContactedBy',
+      header: 'Last contacted by',
+      // Resolved from the latest StakeholderContactHistory row, not a real
+      // column on Client itself — not a GetClientsSortBy field. Same avatar +
+      // name treatment as Stakeholders'/Candidates' equivalent column.
+      enableSorting: false,
+      cell: ({ row }) => {
+        const { lastContactedById, lastContactedBy } = row.original;
+        if (!lastContactedById) {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        return (
+          <div className="flex min-w-0 items-center gap-2">
+            <ConsultantAvatar consultantId={lastContactedById} name={lastContactedBy ?? undefined} size={5} />
+            <span className="truncate text-muted-foreground">{lastContactedBy ?? 'Unknown'}</span>
+          </div>
+        );
+      },
     },
     {
       accessorKey: 'status',
@@ -120,6 +118,7 @@ export function getCompanyColumns({
     {
       accessorKey: 'quality',
       header: 'Quality',
+      enableSorting: false,
       meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => {
         const client = row.original;
@@ -140,11 +139,6 @@ export function getCompanyColumns({
           </div>
         );
       },
-    },
-    {
-      accessorKey: 'lastContactedAt',
-      header: 'Last contacted',
-      cell: ({ row }) => <span className="text-muted-foreground">{formatDate(row.original.lastContactedAt)}</span>,
     },
   ];
 }

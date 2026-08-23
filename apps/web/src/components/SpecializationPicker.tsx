@@ -7,6 +7,7 @@ import { Check, ChevronDown, ListFilter, Loader2, Pencil, Plus, Trash2, X } from
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { colorFor } from '@/components/TagMultiSelect';
 import { useGetSpecializations } from '@/lib/api/generated/specializations/specializations';
 
@@ -317,12 +318,21 @@ export function SpecializationFilterButton({
   onChange,
   onResolve,
   title = 'Specialization',
+  compact = true,
+  placeholder,
+  labelFor,
 }: {
   selected: string[];
   onChange: (ids: string[]) => void;
   /** Fires whenever a specialization's name becomes known from a search result, so the caller can cache id -> name for display elsewhere (e.g. the "Filters applied" chip row). */
   onResolve?: (id: string, name: string) => void;
   title?: string;
+  /** Icon-only trigger (default) for a `DataGridFilter` header slot, vs a full dashed-pill dropdown field for an action-bar filter row. */
+  compact?: boolean;
+  /** Trigger label/placeholder text when `compact` is false. */
+  placeholder?: string;
+  /** Resolves an already-selected id to a display name when it's not in the current search results. Only used when `compact` is false. */
+  labelFor?: (id: string) => string;
 }) {
   const [inputValue, setInputValue] = React.useState('');
   const debouncedQuery = useDebounced(inputValue, DEBOUNCE_MS);
@@ -341,6 +351,8 @@ export function SpecializationFilterButton({
     for (const r of results) onResolve(r.id, r.name);
   }, [results, onResolve]);
 
+  const resolveLabel = (id: string) => resultsById.get(id)?.name ?? labelFor?.(id) ?? id;
+
   return (
     <Combobox.Root
       items={items}
@@ -350,22 +362,45 @@ export function SpecializationFilterButton({
       onValueChange={onChange}
       inputValue={inputValue}
       onInputValueChange={setInputValue}
-      itemToStringLabel={(id: string) => resultsById.get(id)?.name ?? id}
+      itemToStringLabel={resolveLabel}
       itemToStringValue={(id: string) => id}
       open={open}
       onOpenChange={setOpen}
     >
-      <Combobox.Trigger
-        aria-label={`Filter ${title}`}
-        title={`Filter ${title}`}
-        onClick={(e) => e.stopPropagation()}
-        className={cn(
-          'inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground',
-          selected.length > 0 && 'text-primary',
-        )}
-      >
-        <ListFilter className={cn('size-4', selected.length === 0 && 'opacity-60')} />
-      </Combobox.Trigger>
+      {compact ? (
+        <Combobox.Trigger
+          aria-label={`Filter ${title}`}
+          title={`Filter ${title}`}
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            'inline-flex size-7 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground',
+            selected.length > 0 && 'text-primary',
+          )}
+        >
+          <ListFilter className={cn('size-4', selected.length === 0 && 'opacity-60')} />
+        </Combobox.Trigger>
+      ) : (
+        <Combobox.Trigger
+          render={
+            <Button
+              variant="outline"
+              className={cn(
+                'w-full justify-between rounded-lg border-dashed border-foreground/40 aria-expanded:border-solid dark:bg-input/50 dark:hover:bg-input/70',
+                selected.length > 0 && 'border-solid',
+              )}
+            />
+          }
+        >
+          <span className={cn('min-w-0 flex-1 truncate text-left', selected.length === 0 && 'text-muted-foreground')}>
+            {selected.length === 0
+              ? (placeholder ?? title)
+              : selected.length === 1
+                ? resolveLabel(selected[0])
+                : `${selected.length} selected`}
+          </span>
+          <ChevronDown className="ml-auto shrink-0 opacity-50" />
+        </Combobox.Trigger>
+      )}
 
       <Combobox.Portal>
         <Combobox.Positioner align="start" sideOffset={4} className="isolate z-50">

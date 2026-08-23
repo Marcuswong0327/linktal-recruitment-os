@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ClientStatus } from '@prisma/client';
 import { JobResearchService } from './job-research.service';
 import { JobResearchSortField, QueryJobResearchDto, SortOrder } from './dto/query-job-research.dto';
@@ -29,7 +29,7 @@ function baseQuery(overrides: Partial<QueryJobResearchDto> = {}): QueryJobResear
 /** The relation keys JOB_RESEARCH_INCLUDE pulls in — `toEntity` destructures all of them. */
 function withRelations(row: Record<string, unknown> = {}) {
   return {
-    client: { companyName: 'Acme Corp', industryId: 'ind1' },
+    client: { companyName: 'Acme Corp', displayId: 'CLI-000001', industryId: 'ind1' },
     consultant: null,
     jobTitle: null,
     jobRoleType: null,
@@ -66,6 +66,7 @@ describe('JobResearchService.create', () => {
       clientId: 'cl1',
       isContacted: false,
       companyName: 'Acme Corp',
+      clientDisplayId: 'CLI-000001',
       consultant: 'Rita Researcher',
       jobTitle: 'Maintenance Fitter',
       jobRoleType: 'Mechanical Fitter',
@@ -155,6 +156,19 @@ describe('JobResearchService.findAll', () => {
     });
   });
 
+  // A research row has no industry/specialization of its own — both filter
+  // through the researched Client, same relation the scope resolver walks.
+  it('filters by the researched company\'s industry and specialization', async () => {
+    const { service, findMany } = setup();
+    await service.findAll(baseQuery({ industryIds: ['ind1'], specializationIds: ['spec1'] }), makeUser());
+    expect(findMany.mock.calls[0][0].where.AND).toEqual(
+      expect.arrayContaining([
+        { client: { industryId: { in: ['ind1'] } } },
+        { client: { specializationId: { in: ['spec1'] } } },
+      ]),
+    );
+  });
+
   // Research is market intelligence, not an assignment: a researcher logs the
   // ads and whoever covers that patch works them. An own-book filter (which
   // Client and JobOrder both apply) would hide exactly the leads this step
@@ -188,7 +202,45 @@ describe('JobResearchService.findAll', () => {
   });
 });
 
-describe('JobResearchService.findOne — job scope', () => {
+describe('JobResearchService.exportAll / exportByIds', () => {
+  function setup(rows: Record<string, unknown>[] = []) {
+    const findMany = jest.fn().mockResolvedValue(rows.map((r) => withRelations(r)));
+    const auditCreate = jest.fn().mockResolvedValue({});
+    const prisma = { clientJobResearch: { findMany } } as unknown as ExtendedPrismaClient;
+    const base = { auditLog: { create: auditCreate } } as unknown as PrismaService;
+    return { service: new JobResearchService(prisma, base), findMany, auditCreate };
+  }
+
+  it('exportAll applies the same filters/sort as findAll and logs a bulk EXPORT audit row', async () => {
+    const { service, findMany, auditCreate } = setup([{ id: 'jr1' }]);
+    await service.exportAll(baseQuery({ industryIds: ['ind1'] }) as any, makeUser());
+
+    expect(findMany.mock.calls[0][0].where.AND).toEqual(
+      expect.arrayContaining([{ client: { industryId: { in: ['ind1'] } } }]),
+    );
+    expect(auditCreate.mock.calls[0][0].data).toMatchObject({
+      action: 'EXPORT',
+      entityType: 'ClientJobResearch',
+      entityId: '(bulk)',
+    });
+  });
+
+  it('exportByIds re-applies scope server-side rather than trusting the requested id list', async () => {
+    const { service, findMany } = setup([{ id: 'jr1' }]);
+    await service.exportByIds(['jr1', 'jr2'], makeUser({ roleName: 'consultant', industryIds: ['ind1'] }));
+
+    const and = findMany.mock.calls[0][0].where.AND;
+    expect(and[0]).toEqual({ id: { in: ['jr1', 'jr2'] } });
+    expect(and).toHaveLength(2);
+  });
+});
+
+// findOne no longer gates on scope — it's a plain existence check now (see
+// common/scope.ts: scope is a list filter only). ClientJobResearch.consultantId
+// ("who conducted this research") is descriptive metadata only — it was never
+// folded into `jobResearchScope` as an ownership arm even before this change,
+// since research isn't job-order-scoped.
+describe('JobResearchService.findOne', () => {
   function setup(row: Record<string, unknown> | null) {
     const findUnique = jest.fn().mockResolvedValue(row === null ? null : withRelations(row));
     const prisma = { clientJobResearch: { findUnique } } as unknown as ExtendedPrismaClient;
@@ -200,7 +252,7 @@ describe('JobResearchService.findOne — job scope', () => {
     await expect(service.findOne('nope', makeUser())).rejects.toThrow(NotFoundException);
   });
 
-  it('403s a scoped consultant when neither arm matches', async () => {
+  it('returns the row for a scoped consultant even when neither arm matches', async () => {
     const { service } = setup({
       id: 'jr1',
       consultantId: null,
@@ -208,42 +260,7 @@ describe('JobResearchService.findOne — job scope', () => {
     });
     await expect(
       service.findOne('jr1', makeUser({ roleName: 'consultant', industryIds: ['ind1'] })),
-    ).rejects.toThrow(ForbiddenException);
-  });
-
-  it('allows it on the parent client’s industry alone', async () => {
-    const { service } = setup({ id: 'jr1', consultantId: null });
-    const result = await service.findOne(
-      'jr1',
-      makeUser({ roleName: 'consultant', industryIds: ['ind1'] }),
-    );
-    expect(result).toMatchObject({ id: 'jr1', companyName: 'Acme Corp' });
-  });
-
-  it('allows it on the row’s own location, under a granted ancestor', async () => {
-    const { service } = setup({
-      id: 'jr1',
-      consultantId: null,
-      client: { companyName: 'Acme', industryId: 'other' },
-      location: { name: 'Mackay', level: 'CITY', ancestorIds: ['mky', 'qld', 'au'] },
-    });
-    const result = await service.findOne(
-      'jr1',
-      makeUser({ roleName: 'consultant', industryIds: ['ind1'], locationIds: ['qld'] }),
-    );
-    expect(result).toMatchObject({ id: 'jr1', location: 'Mackay' });
-  });
-
-  // The ownership arm, above the no-grants short-circuit: a row you logged
-  // yourself stays yours even with nothing configured.
-  it('allows the researcher who logged it, whatever their grants say', async () => {
-    const { service } = setup({
-      id: 'jr1',
-      consultantId: 'me',
-      client: { companyName: 'Acme', industryId: 'other' },
-    });
-    const result = await service.findOne('jr1', makeUser({ roleName: 'consultant' }));
-    expect(result).toMatchObject({ id: 'jr1' });
+    ).resolves.toMatchObject({ id: 'jr1' });
   });
 
   it('never leaks the scope-only relation fields into the response', async () => {

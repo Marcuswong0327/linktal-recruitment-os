@@ -1,4 +1,4 @@
-import { CreateCandidateDtoStatus } from '@/lib/api/generated/types';
+import { CreateCandidateDtoStatus, GetCandidatesSortBy, GetCandidatesSortOrder } from '@/lib/api/generated/types';
 import type { CandidateEntity } from '@/lib/api/generated/types';
 
 // Types come straight from the generated API client, which is derived from the
@@ -21,7 +21,7 @@ export const candidateStatusLabels: Record<
   COLD: 'Cold',
   WARM: 'Warm',
   PLACED: 'Placed',
-  UNS: 'Unsuccessful',
+  UNS: 'UNS',
 };
 
 // Temperature scale: blue → yellow, green once placed, muted once ruled out.
@@ -66,3 +66,51 @@ export function contactRecencyClassName(iso: string | null): string {
   if (diffDays >= 90) return 'text-warning';
   return 'text-foreground';
 }
+
+/** Filters committed from the search gate's action bar — CandidatesTable has no filter UI of its own; this is its entire query beyond pagination. */
+export interface CandidateAppliedFilters {
+  statuses?: CandidateStatus[];
+  industryIds?: string[];
+  jobRoleTypeIds?: string[];
+  specializationIds?: string[];
+  /** Country + City selections merged — the API resolves any level through the location tree's ancestor path. */
+  locationIds?: string[];
+  sortBy?: GetCandidatesSortBy;
+  sortOrder?: GetCandidatesSortOrder;
+}
+
+interface SortOption {
+  value: string;
+  label: string;
+  sortBy: GetCandidatesSortBy;
+  sortOrder: GetCandidatesSortOrder;
+}
+
+// A plain (non-readonly) array via `satisfies` rather than `as const` — the
+// EnumSelect trigger it feeds expects a mutable `EnumSelectOption[]`, and
+// `as const` would make this a readonly array TS won't assign there, while
+// `satisfies` still narrows `value` to a literal union for `SortByValue`.
+// Only `lastContactedAt` and `firstName` back a "Sorted By" preset — the
+// other GetCandidatesSortBy fields (displayId, status) aren't useful sort
+// orders for a recruiter's own worklist.
+export const sortByOptions = [
+  {
+    value: 'alphabetical',
+    label: 'Alphabetical (A-Z)',
+    sortBy: GetCandidatesSortBy.firstName,
+    sortOrder: GetCandidatesSortOrder.asc,
+  },
+  {
+    value: 'mostRecentlyContacted',
+    label: 'Most Recently Contacted',
+    sortBy: GetCandidatesSortBy.lastContactedAt,
+    sortOrder: GetCandidatesSortOrder.desc,
+  },
+  {
+    value: 'leastRecentlyContacted',
+    label: 'Least Recently Contacted',
+    sortBy: GetCandidatesSortBy.lastContactedAt,
+    sortOrder: GetCandidatesSortOrder.asc,
+  },
+] satisfies SortOption[];
+export type SortByValue = (typeof sortByOptions)[number]['value'];

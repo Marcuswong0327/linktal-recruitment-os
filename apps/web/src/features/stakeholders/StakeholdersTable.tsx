@@ -18,6 +18,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -44,20 +45,24 @@ import {
   LocationMultiSelect,
   type LocationOption,
 } from '@/components/LocationMultiSelect';
-import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
+import { downloadFile } from '@/lib/api/fetcher';
 import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
 import {
   deleteStakeholder,
+  getExportStakeholdersByIdsUrl,
+  getExportStakeholdersUrl,
+  getGetStakeholderImportTemplateUrl,
   getGetStakeholdersQueryKey,
   updateStakeholder,
-  useAddStakeholderContactHistory,
   useCreateStakeholder,
   useGetStakeholders,
+  useImportStakeholders,
   useUpdateStakeholder,
 } from '@/lib/api/generated/stakeholders/stakeholders';
+import { ImportDialog } from '@/components/ImportDialog';
 import {
   useCreateStakeholderRoleType,
   useGetStakeholderRoleTypes,
@@ -65,16 +70,15 @@ import {
 import { GetStakeholdersSortBy } from '@/lib/api/generated/types/getStakeholdersSortBy';
 import type {
   ClientEntity,
-  CreateStakeholderContactHistoryDto,
   CreateStakeholderDto,
   GetStakeholdersAccuracyItem,
   GetStakeholdersSortOrder,
+  GetStakeholdersStatusesItem,
   LocationEntity,
   StakeholderEntity,
   UpdateStakeholderDto,
 } from '@/lib/api/generated/types';
-import { accuracyOptions, getStakeholderColumns, stakeholderFullName } from './columns';
-import { exportStakeholdersToExcel } from './exportToExcel';
+import { accuracyOptions, getStakeholderColumns, stakeholderStatusOptions, type StakeholderStatus } from './columns';
 
 const PAGE_SIZE = 50;
 
@@ -147,6 +151,7 @@ export function StakeholdersTable({
   const [search, setSearch] = React.useState<string | undefined>();
   const [roleTypeIds, setRoleTypeIds] = React.useState<string[] | undefined>();
   const [accuracy, setAccuracy] = React.useState<GetStakeholdersAccuracyItem[] | undefined>();
+  const [statuses, setStatuses] = React.useState<GetStakeholdersStatusesItem[] | undefined>();
   const [locationIds, setLocationIds] = React.useState<string[] | undefined>();
   // Name/level for the Coverage filter's currently selected location ids —
   // the API only returns these alongside a live search result, not by id, so
@@ -163,9 +168,10 @@ export function StakeholdersTable({
   const [sortOrder, setSortOrder] = React.useState<GetStakeholdersSortOrder>('desc');
   const [selected, setSelected] = React.useState<StakeholderEntity[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
+  const [isExporting, setIsExporting] = React.useState(false);
+  const importStakeholders = useImportStakeholders();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
-  const [loggingContactFor, setLoggingContactFor] = React.useState<StakeholderEntity | null>(null);
 
   // Opened via the global command palette's "Add a Stakeholder" action
   // (`/stakeholders?new=1`) — strip the param immediately so refresh/back
@@ -184,6 +190,7 @@ export function StakeholdersTable({
       q: search,
       roleTypeIds,
       accuracy,
+      statuses,
       locationIds,
       sortBy,
       sortOrder,
@@ -247,6 +254,13 @@ export function StakeholdersTable({
         // reasonable thing to want.
         inHeader: true,
         options: accuracyOptions.map((o) => ({ value: o.value, label: o.label, variant: o.variant })),
+      },
+      {
+        columnId: 'status',
+        title: 'Status',
+        // Multi-select — same reasoning as Accuracy above.
+        inHeader: true,
+        options: stakeholderStatusOptions.map((o) => ({ value: o.value, label: o.label, variant: o.variant })),
       },
       {
         columnId: 'coverage',
@@ -322,21 +336,12 @@ export function StakeholdersTable({
     ? (updateStakeholderMutation.variables?.id ?? null)
     : null;
 
-  const addContactHistory = useAddStakeholderContactHistory({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
-        toast.success('Contact logged');
-        setLoggingContactFor(null);
-      },
-      onError: (err) => toast.error(err.message || 'Failed to log contact'),
-    },
-  });
-
   function handleQueryChange({ search, sorting, columnFilters }: DataGridQuery) {
     const roleTypeFilter = columnFilters.find((f) => f.id === 'roleType')?.value as
       string[] | undefined;
     const accuracyFilter = columnFilters.find((f) => f.id === 'isAccurate')?.value as
+      string[] | undefined;
+    const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as
       string[] | undefined;
     const coverageFilter = columnFilters.find((f) => f.id === 'coverage')?.value as
       string[] | undefined;
@@ -346,6 +351,7 @@ export function StakeholdersTable({
     setSearch(search.trim() || undefined);
     setRoleTypeIds(roleTypeFilter);
     setAccuracy(accuracyFilter?.length ? (accuracyFilter as GetStakeholdersAccuracyItem[]) : undefined);
+    setStatuses(statusFilter?.length ? (statusFilter as GetStakeholdersStatusesItem[]) : undefined);
     setLocationIds(coverageFilter?.length ? coverageFilter : undefined);
     setSortBy(sortField);
     setSortOrder(sort?.desc ? 'desc' : 'asc');
@@ -371,27 +377,15 @@ export function StakeholdersTable({
     [updateStakeholderMutation],
   );
 
-  const handleAccuracyChange = React.useCallback(
-    (stakeholder: StakeholderEntity, isAccurate: boolean | null) => {
+  const handleStatusChange = React.useCallback(
+    (stakeholder: StakeholderEntity, status: StakeholderStatus) => {
       updateStakeholderMutation.mutate(
-        { id: stakeholder.id, data: { isAccurate } as UpdateStakeholderDto },
-        { onSuccess: () => toast.success('Details accuracy updated') },
+        { id: stakeholder.id, data: { status } },
+        { onSuccess: () => toast.success('Status updated') },
       );
     },
     [updateStakeholderMutation],
   );
-
-  function handleLogContact(values: LogContactValues) {
-    if (!loggingContactFor) return;
-    addContactHistory.mutate({
-      id: loggingContactFor.id,
-      data: {
-        contactType: values.contactType,
-        contactedAt: values.contactedAt,
-        ...(values.notes ? { notes: values.notes } : {}),
-      } as unknown as CreateStakeholderContactHistoryDto,
-    });
-  }
 
   // Fires several concurrent requests directly (not via a mutation hook,
   // which only tracks one in-flight call at a time) so bulk gets a single
@@ -432,8 +426,33 @@ export function StakeholdersTable({
     setSelected([]);
   }
 
-  function handleExport() {
-    exportStakeholdersToExcel(selected.length > 0 ? selected : stakeholders);
+  // Routes through the server (not the old in-browser xlsx build) so
+  // formatting stays in one place and scope is re-checked on every export —
+  // a selection exports exactly those rows; no selection exports everything
+  // matching the current filters, unbounded.
+  async function handleExport() {
+    setIsExporting(true);
+    // The server has no ambient concept of "the viewer's timezone" — it only
+    // ever sees UTC timestamps, so date/time export columns need this sent
+    // along explicitly.
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    try {
+      if (selected.length > 0) {
+        await downloadFile(getExportStakeholdersByIdsUrl(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: selected.map((s) => s.id), timezone }),
+        });
+      } else {
+        await downloadFile(
+          getExportStakeholdersUrl({ q: search, roleTypeIds, accuracy, statuses, locationIds, sortBy, sortOrder, timezone }),
+        );
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Export failed');
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   const columns = React.useMemo(
@@ -442,12 +461,11 @@ export function StakeholdersTable({
         roleTypes: roleTypeOptions,
         onRoleTypeChange: handleRoleTypeChange,
         onCreateRoleType: handleCreateRoleType,
-        onAccuracyChange: handleAccuracyChange,
-        onLogContact: setLoggingContactFor,
+        onStatusChange: handleStatusChange,
         pendingRowId,
         canUpdate,
       }),
-    [roleTypeOptions, handleRoleTypeChange, handleAccuracyChange, pendingRowId, canUpdate],
+    [roleTypeOptions, handleRoleTypeChange, handleStatusChange, pendingRowId, canUpdate],
   );
 
   if (isError) {
@@ -482,50 +500,67 @@ export function StakeholdersTable({
           ) : undefined
         }
         toolbar={
-          selected.length > 0 ? (
+          <div className="flex items-center gap-2">
+            {canCreate && canUpdate ? (
+              <ImportDialog
+                entityLabel="Stakeholders"
+                templateUrl={getGetStakeholderImportTemplateUrl()}
+                upload={async (file, commit) => {
+                  const res = await importStakeholders.mutateAsync({ data: { file, commit } });
+                  if (res.status !== 201) throw new Error('Import failed');
+                  return res.data;
+                }}
+                onImported={() => queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() })}
+              />
+            ) : null}
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
                   <Button size="lg" disabled={isBulkUpdating}>
-                    {isBulkUpdating ? 'Updating…' : `Bulk actions (${selected.length})`}
+                    {isBulkUpdating ? 'Updating…' : 'Bulk Actions'}
                     <ChevronDown />
                   </Button>
                 }
               />
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleExport}>
+                <DropdownMenuItem onClick={handleExport} disabled={isExporting}>
                   <Download />
-                  Export to Excel
+                  {isExporting ? 'Exporting…' : 'Export to Excel'}
                 </DropdownMenuItem>
-                {canUpdate ? (
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <CheckCheck />
-                      Mark details
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="min-w-48">
-                      <DropdownMenuItem onClick={() => handleBulkSetAccuracy(true)}>
-                        <Badge variant="success" className="rounded-md">
-                          Accurate
-                        </Badge>
+                {selected.length > 0 && (canUpdate || canDelete) ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    {canUpdate ? (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <CheckCheck />
+                          Mark details
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="min-w-48">
+                          <DropdownMenuItem onClick={() => handleBulkSetAccuracy(true)}>
+                            <Badge variant="success" className="rounded-md">
+                              Accurate
+                            </Badge>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleBulkSetAccuracy(false)}>
+                            <Badge variant="destructive" className="rounded-md">
+                              Inaccurate
+                            </Badge>
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    ) : null}
+                    {canDelete ? (
+                      <DropdownMenuItem variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>
+                        <Trash2 />
+                        Delete
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleBulkSetAccuracy(false)}>
-                        <Badge variant="destructive" className="rounded-md">
-                          Inaccurate
-                        </Badge>
-                      </DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                ) : null}
-                {canDelete ? (
-                  <DropdownMenuItem variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>
-                    <Trash2 />
-                    Delete
-                  </DropdownMenuItem>
+                    ) : null}
+                  </>
                 ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
-          ) : undefined
+          </div>
         }
         selectionContextMenu={
           <>
@@ -599,14 +634,6 @@ export function StakeholdersTable({
           ) : null}
         </SheetContent>
       </Sheet>
-
-      <LogContactSheet
-        open={loggingContactFor !== null}
-        onOpenChange={(open) => !open && setLoggingContactFor(null)}
-        subjectLabel={loggingContactFor ? stakeholderFullName(loggingContactFor) || 'this contact' : ''}
-        isSaving={addContactHistory.isPending}
-        onSave={handleLogContact}
-      />
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Stakeholder } from '@prisma/client';
+import { Stakeholder, StakeholderStatus } from '@prisma/client';
 
 /**
  * OpenAPI response shape for a Stakeholder.
@@ -67,6 +67,11 @@ export class StakeholderEntity implements Omit<Stakeholder, 'deletedAt' | 'delet
   lastContactedAt!: Date | null;
   @ApiProperty({ type: String, nullable: true, description: 'Consultant who made the most recent contact' })
   lastContactedById!: string | null;
+  @ApiProperty({
+    enum: StakeholderStatus,
+    description: 'Relationship-warmth status; defaults to COLD. Distinct from isAccurate below.',
+  })
+  status!: StakeholderStatus;
   @ApiProperty({ type: String, nullable: true, description: 'Contact method of the most recent contact (email, call, meeting, linkedin)' })
   lastContactType!: string | null;
   @ApiProperty({

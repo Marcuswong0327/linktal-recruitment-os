@@ -1,10 +1,63 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, AuditLog as RawAuditLog } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth.types';
 import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
-import { collectRefs, presentRow } from './audit-presenter';
+import { ExportAuditLogsDto } from './dto/export-audit-logs.dto';
+import { collectRefs, presentRow, PresentedRow } from './audit-presenter';
 import { LabelRequest, LabelResolverService } from './label-resolver.service';
+import { logExport } from '../common/audit-export';
+import { buildWorkbook, ExportColumn, resolveTimeZone } from '../common/xlsx-export';
+import { ResolvedChange } from './entities/resolved-change.entity';
+
+// Mirrors the frontend's auditActionLabels (apps/web/src/features/audit/schema.ts) — kept in
+// sync by hand since the two apps don't share code, but both read the same AuditAction enum.
+const ACTION_LABELS: Record<string, string> = {
+  CREATE: 'Created',
+  UPDATE: 'Updated',
+  SOFT_DELETE: 'Archived',
+  RESTORE: 'Restored',
+  DEACTIVATE: 'Deactivated',
+  HARD_DELETE: 'Deleted',
+  EXPORT: 'Exported',
+};
+
+const SUMMARY_FIELD_CAP = 6;
+
+/** A resolved value as a plain string — the export's equivalent of the frontend's displayValue. */
+function displayValue(v: ResolvedChange['to']): string {
+  if (v.redacted) return 'hidden';
+  if (v.label == null && (v.raw == null || v.raw === '')) return 'empty';
+  const base = v.label ?? String(v.raw);
+  return v.deleted ? `${base} (archived)` : base;
+}
+
+function hasPreviousValue(v: ResolvedChange['to']): boolean {
+  return v.redacted === true || v.raw != null || v.label != null;
+}
+
+/** One-line "Field: old → new" summary for the export's Changes column — same shape as the frontend's summarizeResolvedChanges, just uncapped-ish (a wider cap since a spreadsheet cell isn't a truncated table row). */
+function summarizeChanges(rows: ResolvedChange[] | null): string {
+  if (!rows || rows.length === 0) return '';
+  const parts = rows.slice(0, SUMMARY_FIELD_CAP).map((r) => {
+    const to = displayValue(r.to);
+    return hasPreviousValue(r.from) ? `${r.fieldLabel}: ${displayValue(r.from)} → ${to}` : `${r.fieldLabel}: ${to}`;
+  });
+  const extra = rows.length > SUMMARY_FIELD_CAP ? `, +${rows.length - SUMMARY_FIELD_CAP} more` : '';
+  return parts.join('; ') + extra;
+}
+
+/** Date + time (unlike xlsx-export's own formatExportDate, which is date-only) — an activity log routinely has several entries on the same day, so the export needs the same precision the grid shows. */
+function formatWhen(iso: string | Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(iso));
+}
 
 @Injectable()
 export class AuditService {
@@ -15,9 +68,11 @@ export class AuditService {
     private readonly labelResolver: LabelResolverService,
   ) {}
 
-  async findAll(query: QueryAuditLogsDto, user: AuthUser) {
-    const { page, pageSize, sortBy, sortOrder, action, entityType, actorId, from, to } = query;
-
+  /** Shared by `findAll` and `exportAll` so the exported sheet mirrors the grid's current filters exactly. */
+  private buildWhere(
+    query: Pick<QueryAuditLogsDto, 'action' | 'entityType' | 'actorId' | 'from' | 'to'>,
+  ): Prisma.AuditLogWhereInput {
+    const { action, entityType, actorId, from, to } = query;
     const where: Prisma.AuditLogWhereInput = {};
     if (action) where.action = action;
     if (entityType) where.entityType = entityType;
@@ -28,7 +83,26 @@ export class AuditService {
         ...(to ? { lte: new Date(to) } : {}),
       };
     }
+    return where;
+  }
 
+  /** One shared label-resolution + presentation pass — used by `findAll` and both export paths. */
+  private async present(rows: RawAuditLog[], isAdmin: boolean): Promise<(RawAuditLog & PresentedRow)[]> {
+    // One shared request across the whole set — every row's own
+    // entityType/entityId, actorId, and every foreign-key-shaped value found
+    // inside `changes`/`metadata.where` — resolved in one parallel wave (one
+    // query per distinct *target model*, not per row or per field). This
+    // replaces what used to be a separate actor lookup plus a sequential
+    // per-entity-type loop (see LabelResolverService's doc).
+    const request: LabelRequest = new Map();
+    collectRefs(rows, request);
+    const labels = await this.labelResolver.resolve(request);
+    return rows.map((r) => ({ ...r, ...presentRow(r, labels, isAdmin) }));
+  }
+
+  async findAll(query: QueryAuditLogsDto, user: AuthUser) {
+    const { page, pageSize, sortBy, sortOrder } = query;
+    const where = this.buildWhere(query);
     const orderBy: Prisma.AuditLogOrderByWithRelationInput = { [sortBy ?? 'createdAt']: sortOrder };
 
     // Parallel, not $transaction: these two reads don't need one consistent
@@ -44,20 +118,49 @@ export class AuditService {
       this.prisma.auditLog.count({ where }),
     ]);
 
-    // One shared request across the whole page — every row's own
-    // entityType/entityId, actorId, and every foreign-key-shaped value found
-    // inside `changes`/`metadata.where` — resolved in one parallel wave (one
-    // query per distinct *target model*, not per row or per field). This
-    // replaces what used to be a separate actor lookup plus a sequential
-    // per-entity-type loop (see LabelResolverService's doc).
-    const request: LabelRequest = new Map();
-    collectRefs(rows, request);
-    const labels = await this.labelResolver.resolve(request);
-
-    const isAdmin = user.roleName === 'admin';
-    const data = rows.map((r) => ({ ...r, ...presentRow(r, labels, isAdmin) }));
+    const data = await this.present(rows, user.roleName === 'admin');
 
     return { data, total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
+  }
+
+  /** Every row matching the current filters, unbounded — no `skip`/`take`. */
+  async exportAll(query: ExportAuditLogsDto, user: AuthUser): Promise<Buffer> {
+    const where = this.buildWhere(query);
+    const orderBy: Prisma.AuditLogOrderByWithRelationInput = { [query.sortBy ?? 'createdAt']: query.sortOrder };
+    const rows = await this.prisma.auditLog.findMany({ where, orderBy });
+    const data = await this.present(rows, user.roleName === 'admin');
+    const { timezone: _timezone, ...filters } = query;
+    await logExport(this.prisma, 'AuditLog', { count: data.length, filters });
+    return this.buildExportWorkbook(data, query.timezone);
+  }
+
+  /** An explicit row selection, in whatever order the caller passed the ids. */
+  async exportByIds(ids: string[], user: AuthUser, timezone?: string): Promise<Buffer> {
+    const rows = await this.prisma.auditLog.findMany({ where: { id: { in: ids } } });
+    const data = await this.present(rows, user.roleName === 'admin');
+    await logExport(this.prisma, 'AuditLog', { count: data.length, requestedIds: ids });
+    return this.buildExportWorkbook(data, timezone);
+  }
+
+  private buildExportWorkbook(rows: (RawAuditLog & PresentedRow)[], timezone?: string): Promise<Buffer> {
+    const tz = resolveTimeZone(timezone);
+    const columns: ExportColumn[] = [
+      { header: 'When', key: 'when' },
+      { header: 'Actor', key: 'actor' },
+      { header: 'Action', key: 'action' },
+      { header: 'Record Type', key: 'recordType' },
+      { header: 'Record', key: 'record' },
+      { header: 'Changes', key: 'changes', wrap: true },
+    ];
+    const exportRows = rows.map((r) => ({
+      when: formatWhen(r.createdAt, tz),
+      actor: r.actorName ?? 'The system',
+      action: ACTION_LABELS[r.action] ?? r.action,
+      recordType: r.entityTypeLabel,
+      record: r.entityLabel ?? `A ${r.entityTypeLabel.toLowerCase()} record`,
+      changes: summarizeChanges(r.resolvedChanges),
+    }));
+    return buildWorkbook('Activity Log', columns, exportRows);
   }
 
   /**

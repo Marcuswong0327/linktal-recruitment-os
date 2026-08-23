@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsArray, IsEnum, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { JobOrderQuality, JobOrderStatus } from '@prisma/client';
 
 export class CreateJobOrderDto {
@@ -21,10 +21,15 @@ export class CreateJobOrderDto {
   @IsString()
   jobRoleTypeId?: string;
 
-  @ApiPropertyOptional({ description: 'Owning consultant ID' })
+  @ApiPropertyOptional({
+    description:
+      'Consultants working this job order at creation time (see PUT /job-orders/:id/consultants to change it later). Several can work the same job order concurrently — no scope check is applied here on purpose.',
+    type: [String],
+  })
   @IsOptional()
-  @IsString()
-  consultantId?: string;
+  @IsArray()
+  @IsString({ each: true })
+  consultantIds?: string[];
 
   @ApiPropertyOptional({
     description: 'Most specific known Location node (see /locations) — replaces the old city/suburb columns',
@@ -72,12 +77,6 @@ export class CreateJobOrderDto {
   @IsInt()
   @Min(1)
   openings?: number;
-
-  @ApiPropertyOptional({ description: 'Number of openings already filled', example: 0, default: 0 })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  filledCount?: number;
 
   @ApiPropertyOptional({ description: 'Job description' })
   @IsOptional()

@@ -8,6 +8,7 @@
 import type { GetStakeholdersAccuracyItem } from './getStakeholdersAccuracyItem';
 import type { GetStakeholdersSortBy } from './getStakeholdersSortBy';
 import type { GetStakeholdersSortOrder } from './getStakeholdersSortOrder';
+import type { GetStakeholdersStatusesItem } from './getStakeholdersStatusesItem';
 
 export type GetStakeholdersParams = {
 /**
@@ -58,4 +59,8 @@ locationIds?: string[];
  * Filter by verification state (one or more): 'true' (Accurate), 'false' (Inaccurate), 'unchecked' (not yet verified). Omit for all.
  */
 accuracy?: GetStakeholdersAccuracyItem[];
+/**
+ * Filter by relationship-warmth status (one or more). Omit for all.
+ */
+statuses?: GetStakeholdersStatusesItem[];
 };
