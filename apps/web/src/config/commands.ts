@@ -60,9 +60,9 @@ export const actionCommands: ActionCommand[] = [
     requiredPermission: { resource: 'stakeholder', action: 'create' },
   },
   {
-    title: 'Add Job Orders Research',
+    title: 'Add Job Opening Research',
     description: 'Log a job ad found in the market',
-    href: '/job-orders-search?new=1',
+    href: '/job-opening-search?new=1',
     icon: BookA,
     requiredPermission: { resource: 'job_research', action: 'create' },
   },

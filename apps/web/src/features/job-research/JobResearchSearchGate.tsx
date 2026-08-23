@@ -53,7 +53,7 @@ function FilterField({ label, children }: { label: string; children: React.React
 }
 
 /**
- * Job Orders Search is search-gated, same as Companies: the table never
+ * Job Opening Search is search-gated, same as Companies: the table never
  * mounts (so no query ever fires) until the user explicitly commits the
  * action bar's selections with "View" — same reasoning as
  * CompaniesSearchGate, labeled "View" rather than "Search" since this list is
@@ -111,12 +111,12 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
 
   // Opened via the global header's "Add Job Order" button, or the command
   // palette's "Add a Job Order" action (both navigate to
-  // `/job-orders-search?new=1`) — strip the param immediately so
+  // `/job-opening-search?new=1`) — strip the param immediately so
   // refresh/back doesn't reopen the sheet.
   React.useEffect(() => {
     if (canCreate && searchParams.get('new') === '1') {
       setCreating(true);
-      router.replace('/job-orders-search');
+      router.replace('/job-opening-search');
     }
   }, [canCreate, searchParams, router]);
 

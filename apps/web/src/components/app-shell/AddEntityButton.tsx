@@ -39,8 +39,8 @@ const PAGE_CREATE_ACTIONS: PageCreateAction[] = [
     href: '/job-orders/new',
   },
   {
-    pathname: '/job-orders-search',
-    label: 'Add Job Orders Research',
+    pathname: '/job-opening-search',
+    label: 'Add Job Opening Research',
     requiredPermission: { resource: 'job_research', action: 'create' },
     mode: 'sheet',
   },
