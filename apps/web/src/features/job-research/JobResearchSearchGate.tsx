@@ -20,8 +20,7 @@ import {
   useCreateJobResearch,
 } from '@/lib/api/generated/job-research/job-research';
 import { getGetJobTitlesQueryKey, useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
-import { useGetMe } from '@/lib/api/generated/consultants/consultants';
-import { getLocation } from '@/lib/api/generated/locations/locations';
+import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { buildJobResearchPayload, JobResearchForm, type JobResearchFormValues } from './JobResearchForm';
 import { JobResearchTable } from './JobResearchTable';
 import {
@@ -150,64 +149,15 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
 
   const [appliedFilters, setAppliedFilters] = React.useState<JobResearchAppliedFilters | null>(null);
 
-  // Default the action bar's selections (not the search itself — the user
-  // still clicks View) to the logged-in consultant's own scope grants
-  // (Industry/Specialization/Location — see docs/scope-explained.md), so
-  // their own patch is one click away instead of built from scratch.
-  // No-ops for admin/manager/etc., whose grant arrays are normally empty
-  // (scoping only restricts the `consultant` role). Ref-guarded to run
-  // exactly once — after that, the fields are the user's to change freely.
-  const seededFromScopeRef = React.useRef(false);
-  const { data: meData } = useGetMe();
-  const me = meData?.status === 200 ? meData.data : undefined;
-
-  React.useEffect(() => {
-    if (!me || seededFromScopeRef.current) return;
-    seededFromScopeRef.current = true;
-
-    const scopeIndustryIds = me.industryIds ?? [];
-    const scopeSpecializationIds = me.specializationIds ?? [];
-    const scopeSpecializationNames = me.specializations ?? [];
-    const scopeLocationIds = me.locationIds ?? [];
-    const scopeLocationNames = me.locations ?? [];
-    if (scopeIndustryIds.length === 0 && scopeSpecializationIds.length === 0 && scopeLocationIds.length === 0) return;
-
-    setIndustryIds(scopeIndustryIds);
-    setSpecializationIds(scopeSpecializationIds);
-    scopeSpecializationIds.forEach((id, i) => {
-      if (scopeSpecializationNames[i]) registerSpecializationName(id, scopeSpecializationNames[i]);
-    });
-
-    let cancelled = false;
-    // Location grants carry no level of their own here (Consultant.locations
-    // is a flat, mixed-rung list — see the schema doc) — the Country/City
-    // dropdowns are level-scoped, so each grant needs a lookup to know which
-    // one it belongs in. STATE/SUBURB grants aren't representable in this
-    // two-dropdown bar and are left out of the default seed (still pickable
-    // by hand).
-    Promise.all(scopeLocationIds.map((id) => getLocation(id).catch(() => null))).then((results) => {
-      if (cancelled) return;
-      const nextCountryIds: string[] = [];
-      const nextCityIds: string[] = [];
-      results.forEach((res, i) => {
-        const id = scopeLocationIds[i];
-        const location = res?.status === 200 ? res.data : undefined;
-        const name = location?.name ?? scopeLocationNames[i];
-        if (location?.level === 'COUNTRY') {
-          nextCountryIds.push(id);
-          if (name) registerCountryName(id, name);
-        } else if (location?.level === 'CITY') {
-          nextCityIds.push(id);
-          if (name) registerCityName(id, name);
-        }
-      });
-      setCountryIds(nextCountryIds);
-      setCityIds(nextCityIds);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [me, registerSpecializationName, registerCountryName, registerCityName]);
+  useSeedFiltersFromScope({
+    setIndustryIds,
+    setSpecializationIds,
+    registerSpecializationName,
+    setCountryIds,
+    setCityIds,
+    registerCountryName,
+    registerCityName,
+  });
 
   const hasActiveFilters =
     countryIds.length > 0 ||
