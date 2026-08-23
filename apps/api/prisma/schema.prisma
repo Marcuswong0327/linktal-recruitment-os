@@ -60,6 +60,19 @@ enum JobOrderStatus {
   ON_HOLD
 }
 
+// Relationship-warmth status for a Stakeholder, distinct from isAccurate
+// (whether their contact details are verified) — a contact can be WARM and
+// still have stale details, or COLD with details confirmed fine. DATA_NOT_ACCURATE
+// sits last, same declaration-order-is-sort-order trick as ClientStatus/
+// CandidateStatus's UNS, since it's a data-quality flag rather than a warmer
+// relationship stage.
+enum StakeholderStatus {
+  COLD
+  WARM
+  UNS
+  DATA_NOT_ACCURATE
+}
+
 // What kind of contact this was — screening (a pre-screening call/session
 // with the candidate) vs. outreach (a campaign touch). Previously a free
 // string ("Detailed Screening Notes" / "Outreach Campaign History") with no
@@ -603,6 +616,7 @@ model Stakeholder {
 
   lastContactedAt   DateTime? // Denormalized: max(StakeholderContactHistory.contactedAt) for this stakeholder. Prisma's relation-aggregate `orderBy` only supports `_count` (not `_max`) on to-many relations, so sorting needs a real column, not a live join.
   lastContactedById String? // Logical ref to Consultant.id (no FK) — denormalized, mirrors lastContactedAt.
+  status            StakeholderStatus @default(COLD) // Relationship-warmth status, distinct from isAccurate below.
   isAccurate        Boolean? // Whether this stakeholder's details have been verified — nullable rather than defaulted, since "not yet checked" isn't "confirmed accurate".
   inaccurateReason  String? // Free text explaining what's wrong, when isAccurate is false.
   createdAt         DateTime  @default(now())

@@ -441,7 +441,7 @@ function StakeholderEditForm({
                 <CardDescription>Whether this contact's information has been verified.</CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Status" htmlFor="isAccurate">
+                <FormField label="Accuracy" htmlFor="isAccurate">
                   <EnumSelect
                     id="isAccurate"
                     value={isAccurate === null ? 'unchecked' : String(isAccurate)}

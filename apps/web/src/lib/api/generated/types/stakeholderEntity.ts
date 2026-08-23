@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { StakeholderEntityStatus } from './stakeholderEntityStatus';
 
 export interface StakeholderEntity {
   id: string;
@@ -53,6 +54,8 @@ export interface StakeholderEntity {
      * @nullable
      */
   lastContactedById: string | null;
+  /** Relationship-warmth status; defaults to COLD. Distinct from isAccurate below. */
+  status: StakeholderEntityStatus;
   /**
      * Contact method of the most recent contact (email, call, meeting, linkedin)
      * @nullable

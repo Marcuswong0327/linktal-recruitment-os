@@ -3407,6 +3407,24 @@
                 ]
               }
             }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by relationship-warmth status (one or more). Omit for all.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "UNS",
+                  "DATA_NOT_ACCURATE"
+                ]
+              }
+            }
           }
         ],
         "responses": {
@@ -3694,6 +3712,24 @@
                   "true",
                   "false",
                   "unchecked"
+                ]
+              }
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by relationship-warmth status (one or more). Omit for all.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "UNS",
+                  "DATA_NOT_ACCURATE"
                 ]
               }
             }
@@ -6342,7 +6378,8 @@
                 "enum": [
                   "COLD",
                   "WARM",
-                  "TRADED"
+                  "TRADED",
+                  "UNS"
                 ]
               }
             }
@@ -12253,6 +12290,16 @@
             "nullable": true,
             "description": "Consultant who made the most recent contact"
           },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COLD",
+              "WARM",
+              "UNS",
+              "DATA_NOT_ACCURATE"
+            ],
+            "description": "Relationship-warmth status; defaults to COLD. Distinct from isAccurate below."
+          },
           "lastContactType": {
             "type": "string",
             "nullable": true,
@@ -12310,6 +12357,7 @@
           "coverageLocationIds",
           "lastContactedAt",
           "lastContactedById",
+          "status",
           "lastContactType",
           "lastContactCategory",
           "lastContactNotes",
@@ -12404,6 +12452,17 @@
               "type": "string"
             }
           },
+          "status": {
+            "type": "string",
+            "description": "Relationship-warmth status; defaults to COLD when omitted. Distinct from isAccurate below.",
+            "enum": [
+              "COLD",
+              "WARM",
+              "UNS",
+              "DATA_NOT_ACCURATE"
+            ],
+            "example": "COLD"
+          },
           "isAccurate": {
             "type": "boolean",
             "description": "Whether these details have been verified. Omit for 'not yet checked' — which isn't the same as false."
@@ -12462,6 +12521,17 @@
             "items": {
               "type": "string"
             }
+          },
+          "status": {
+            "type": "string",
+            "description": "Relationship-warmth status; defaults to COLD when omitted. Distinct from isAccurate below.",
+            "enum": [
+              "COLD",
+              "WARM",
+              "UNS",
+              "DATA_NOT_ACCURATE"
+            ],
+            "example": "COLD"
           },
           "isAccurate": {
             "type": "boolean",

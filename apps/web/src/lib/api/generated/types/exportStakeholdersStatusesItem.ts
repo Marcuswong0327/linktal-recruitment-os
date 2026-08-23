@@ -6,12 +6,12 @@
  * OpenAPI spec version: 1.0
  */
 
-export type ExportJobResearchStatusesItem = typeof ExportJobResearchStatusesItem[keyof typeof ExportJobResearchStatusesItem];
+export type ExportStakeholdersStatusesItem = typeof ExportStakeholdersStatusesItem[keyof typeof ExportStakeholdersStatusesItem];
 
 
-export const ExportJobResearchStatusesItem = {
+export const ExportStakeholdersStatusesItem = {
   COLD: 'COLD',
   WARM: 'WARM',
-  TRADED: 'TRADED',
   UNS: 'UNS',
+  DATA_NOT_ACCURATE: 'DATA_NOT_ACCURATE',
 } as const;

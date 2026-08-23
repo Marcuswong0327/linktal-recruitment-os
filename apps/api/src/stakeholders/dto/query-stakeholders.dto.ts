@@ -1,4 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { StakeholderStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
 import { IsArray, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
@@ -132,4 +133,15 @@ export class QueryStakeholdersDto {
   @IsArray()
   @IsEnum(AccuracyFilter, { each: true })
   accuracy?: AccuracyFilter[];
+
+  @ApiPropertyOptional({
+    description: 'Filter by relationship-warmth status (one or more). Omit for all.',
+    enum: StakeholderStatus,
+    isArray: true,
+  })
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @IsArray()
+  @IsEnum(StakeholderStatus, { each: true })
+  statuses?: StakeholderStatus[];
 }

@@ -2,15 +2,14 @@
 
 import type * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Phone } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { ComboboxSelect } from '@/components/ComboboxSelect';
 import { ConsultantAvatar } from '@/components/ConsultantCombobox';
 import { ContactMethodsCell } from '@/components/ContactMethodsCell';
 import { CreatableCombobox, type CreatableComboboxOption } from '@/components/CreatableCombobox';
 import { LocationBadgeList } from '@/components/LocationBadgeList';
+import { StakeholderEntityStatus } from '@/lib/api/generated/types';
 import type { StakeholderEntity } from '@/lib/api/generated/types';
 
 /** Helper for display — the entity has no combined name field, by design (see firstName/lastName in the schema). */
@@ -74,6 +73,41 @@ export function parseAccuracyValue(value: string): boolean | null {
   return value === 'unchecked' ? null : value === 'true';
 }
 
+// Relationship-warmth status, distinct from Accuracy above — see
+// Stakeholder.status's own doc comment in schema.prisma. DATA_NOT_ACCURATE
+// sits last, same declaration-order-is-sort-order trick as ClientStatus's
+// UNS.
+export const stakeholderStatuses = Object.values(StakeholderEntityStatus);
+export type StakeholderStatus = (typeof stakeholderStatuses)[number];
+
+export const stakeholderStatusLabels: Record<StakeholderStatus, string> = {
+  COLD: 'Cold',
+  WARM: 'Warm',
+  UNS: 'UNS',
+  DATA_NOT_ACCURATE: 'Data Not Accurate',
+};
+
+export const stakeholderStatusVariants: Record<StakeholderStatus, 'info' | 'warning' | 'muted' | 'destructive'> = {
+  COLD: 'info',
+  WARM: 'warning',
+  UNS: 'muted',
+  DATA_NOT_ACCURATE: 'destructive',
+};
+
+export const stakeholderStatusTriggerClassName: Record<StakeholderStatus, string> = {
+  COLD: 'border-info/30 bg-info/10 text-info',
+  WARM: 'border-warning/30 bg-warning/10 text-warning',
+  UNS: 'border-transparent bg-muted text-muted-foreground',
+  DATA_NOT_ACCURATE: 'border-destructive/30 bg-destructive/10 text-destructive',
+};
+
+export const stakeholderStatusOptions = stakeholderStatuses.map((value) => ({
+  value,
+  label: stakeholderStatusLabels[value],
+  variant: stakeholderStatusVariants[value],
+  triggerClassName: stakeholderStatusTriggerClassName[value],
+}));
+
 // Shared palette for Role type coloring — the filter dropdown (Badge
 // `variant`), the Role type cell/form pickers (raw `triggerClassName`,
 // since CreatableCombobox isn't on the Badge variant system) and
@@ -101,8 +135,7 @@ interface StakeholderColumnsOptions {
   roleTypes: CreatableComboboxOption[];
   onRoleTypeChange: (stakeholder: StakeholderEntity, roleTypeId: string) => void;
   onCreateRoleType: (name: string) => Promise<CreatableComboboxOption>;
-  onAccuracyChange: (stakeholder: StakeholderEntity, isAccurate: boolean | null) => void;
-  onLogContact: (stakeholder: StakeholderEntity) => void;
+  onStatusChange: (stakeholder: StakeholderEntity, status: StakeholderStatus) => void;
   /** Row id currently saving an inline change — disables that row's controls. */
   pendingRowId: string | null;
   /** Absent when the caller lacks `stakeholder:update` — controls render read-only. */
@@ -113,8 +146,7 @@ export function getStakeholderColumns({
   roleTypes,
   onRoleTypeChange,
   onCreateRoleType,
-  onAccuracyChange,
-  onLogContact,
+  onStatusChange,
   pendingRowId,
   canUpdate,
 }: StakeholderColumnsOptions): ColumnDef<StakeholderEntity>[] {
@@ -214,15 +246,26 @@ export function getStakeholderColumns({
       ),
     },
     {
-      accessorKey: 'isAccurate',
-      header: 'Accuracy',
+      accessorKey: 'lastContactedAt',
+      header: 'Last contacted',
+      cell: ({ row }) => (
+        <span className="text-muted-foreground">
+          {row.original.lastContactedAt ? formatDate(row.original.lastContactedAt) : '—'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'status',
+      header: 'Status',
+      // Not a StakeholderSortField — exposed as a filter instead, same
+      // reasoning as Accuracy/Role type above.
       enableSorting: false,
       meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => {
         const stakeholder = row.original;
-        const current = accuracyOptions.find((o) => o.value === accuracyValue(stakeholder.isAccurate))!;
+        const current = stakeholderStatusOptions.find((o) => o.value === stakeholder.status)!;
         if (!canUpdate) {
-          return <span className="text-muted-foreground">{current.label}</span>;
+          return <Badge className={current.triggerClassName}>{current.label}</Badge>;
         }
         // stopPropagation only — no data-no-row-drag needed, same reasoning
         // as the Role type cell above: a mousedown that turns into a real
@@ -231,25 +274,16 @@ export function getStakeholderColumns({
         return (
           <div onClick={(e) => e.stopPropagation()}>
             <ComboboxSelect
-              title="Details accuracy"
-              value={accuracyValue(stakeholder.isAccurate)}
-              onValueChange={(v) => onAccuracyChange(stakeholder, parseAccuracyValue(v))}
-              options={accuracyOptions}
+              title="Status"
+              value={stakeholder.status}
+              onValueChange={(v) => onStatusChange(stakeholder, v as StakeholderStatus)}
+              options={stakeholderStatusOptions}
               disabled={pendingRowId === stakeholder.id}
               triggerClassName="mx-auto"
             />
           </div>
         );
       },
-    },
-    {
-      accessorKey: 'lastContactedAt',
-      header: 'Last contacted',
-      cell: ({ row }) => (
-        <span className="text-muted-foreground">
-          {row.original.lastContactedAt ? formatDate(row.original.lastContactedAt) : '—'}
-        </span>
-      ),
     },
     {
       accessorKey: 'lastContactedBy',
@@ -274,25 +308,6 @@ export function getStakeholderColumns({
           </div>
         );
       },
-    },
-    {
-      id: 'logContact',
-      header: '',
-      enableSorting: false,
-      size: 56,
-      meta: { align: 'center' },
-      cell: ({ row }) => (
-        <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => onLogContact(row.original)}
-            aria-label={`Log a contact with ${stakeholderFullName(row.original) || 'this contact'}`}
-          >
-            <Phone />
-          </Button>
-        </div>
-      ),
     },
   ];
 }

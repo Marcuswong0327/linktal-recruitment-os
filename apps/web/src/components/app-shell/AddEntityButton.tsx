@@ -44,6 +44,12 @@ const PAGE_CREATE_ACTIONS: PageCreateAction[] = [
     requiredPermission: { resource: 'job_research', action: 'create' },
     mode: 'sheet',
   },
+  {
+    pathname: '/stakeholders',
+    label: 'Add Stakeholder',
+    requiredPermission: { resource: 'stakeholder', action: 'create' },
+    mode: 'sheet',
+  },
 ];
 
 /**
