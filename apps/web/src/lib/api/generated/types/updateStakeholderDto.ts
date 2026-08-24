@@ -24,6 +24,8 @@ export interface UpdateStakeholderDto {
   email?: string;
   /** Mobile number */
   mobile?: string;
+  /** Free-text notes about this stakeholder */
+  generalDescription?: string;
   /** Location ids this stakeholder covers. Matched against a consultant's scope on its own, independent of where the client sits. */
   coverageLocationIds?: string[];
   /** Relationship-warmth status; defaults to COLD when omitted. Distinct from isAccurate below. */

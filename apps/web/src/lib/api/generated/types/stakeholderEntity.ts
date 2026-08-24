@@ -40,6 +40,11 @@ export interface StakeholderEntity {
   email: string | null;
   /** @nullable */
   mobile: string | null;
+  /**
+     * Free-text notes about this stakeholder
+     * @nullable
+     */
+  generalDescription: string | null;
   /** Resolved names of the Location nodes this stakeholder covers — their own territory, independent of where the client sits */
   coverage: string[];
   /** Location IDs backing `coverage` — what an editable multi-select actually binds to */

@@ -3,9 +3,10 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Contact, CornerDownLeft, MapPin, Phone, Trash2 } from 'lucide-react';
+import { ArrowLeft, ChevronDown, CornerDownLeft, FileText, Mail, Phone, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import { Collapsible } from '@base-ui/react/collapsible';
 
 import {
   AlertDialog,
@@ -19,22 +20,27 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { LinkedinIcon } from '@/components/BrandIcons';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+import { useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
 import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
-import { UrlField } from '@/components/UrlField';
 import { PageLayout } from '@/components/app-shell/PageLayout';
 import { useIsMac } from '@/hooks/use-is-mac';
 import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shortcut';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
+import { cn } from '@/lib/utils';
+import { useGetClientContactHistory } from '@/lib/api/generated/clients/clients';
+import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
 import {
   useCreateStakeholderRoleType,
@@ -53,7 +59,26 @@ import type {
   StakeholderEntity,
   UpdateStakeholderDto,
 } from '@/lib/api/generated/types';
-import { accuracyOptions, accuracyValue, formatDate, roleTypeStyle, stakeholderFullName } from './columns';
+import {
+  roleTypeStyle,
+  stakeholderFullName,
+  stakeholderStatusOptions,
+  type StakeholderStatus,
+} from './columns';
+
+const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+// Every contact logged against this stakeholder's client, across all of that
+// client's stakeholders — capped at the API's max page size and filtered down
+// to this one stakeholder client-side, since there's no per-stakeholder
+// history endpoint (only the per-client aggregate CompanyDetail also reads).
+const CONTACT_HISTORY_LIMIT = 200;
 
 function initials(name: string) {
   if (!name) return '?';
@@ -63,6 +88,73 @@ function initials(name: string) {
     .slice(0, 2)
     .join('')
     .toUpperCase();
+}
+
+/** One icon per contact method (Email/Mobile/LinkedIn) — click opens it (Mobile copies instead, see ContactCopyButton). A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. Mirrors CompanyDetail's LinkIconButton for its Website field. */
+function ContactIconButton({
+  icon: Icon,
+  href,
+  label,
+  activeClassName = 'text-muted-foreground hover:text-foreground',
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  href?: string | null;
+  label: string;
+  activeClassName?: string;
+}) {
+  const disabled = !href;
+  return (
+    <a
+      href={href ?? undefined}
+      target={href && !href.startsWith('mailto:') ? '_blank' : undefined}
+      rel="noopener noreferrer"
+      aria-disabled={disabled}
+      onClick={disabled ? (e) => e.preventDefault() : undefined}
+      title={disabled ? `No ${label.toLowerCase()} on file` : label}
+      aria-label={disabled ? `No ${label.toLowerCase()} on file` : `Open ${label.toLowerCase()}`}
+      className={cn(
+        'flex size-7 items-center justify-center rounded-md transition-colors',
+        disabled ? 'cursor-not-allowed text-muted-foreground' : cn(activeClassName, 'hover:bg-accent'),
+      )}
+    >
+      <Icon className={cn('size-4', disabled && 'opacity-30 grayscale')} />
+    </a>
+  );
+}
+
+function copyValue(value: string, label: string) {
+  navigator.clipboard.writeText(value).then(
+    () => toast.success(`${label} copied`),
+    () => toast.error(`Couldn't copy ${label.toLowerCase()}`),
+  );
+}
+
+/** Same look as ContactIconButton, but copies to the clipboard instead of navigating — for Mobile, which has no useful direct-interact link (no tel: dialer on desktop). */
+function ContactCopyButton({
+  icon: Icon,
+  value,
+  label,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  value?: string | null;
+  label: string;
+}) {
+  const disabled = !value;
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => value && copyValue(value, label)}
+      title={disabled ? `No ${label.toLowerCase()} on file` : `Copy ${label.toLowerCase()}`}
+      aria-label={disabled ? `No ${label.toLowerCase()} on file` : `Copy ${label.toLowerCase()}`}
+      className={cn(
+        'flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors',
+        disabled ? 'cursor-not-allowed' : 'hover:bg-accent hover:text-foreground',
+      )}
+    >
+      <Icon className={cn('size-4', disabled && 'opacity-30 grayscale')} />
+    </button>
+  );
 }
 
 export function StakeholderDetail({
@@ -128,8 +220,10 @@ function StakeholderEditForm({
   const [linkedinUrl, setLinkedinUrl] = React.useState(stakeholder.linkedinUrl ?? '');
   const [email, setEmail] = React.useState(stakeholder.email ?? '');
   const [mobile, setMobile] = React.useState(stakeholder.mobile ?? '');
-  const [isAccurate, setIsAccurate] = React.useState<boolean | null>(stakeholder.isAccurate);
-  const [inaccurateReason, setInaccurateReason] = React.useState(stakeholder.inaccurateReason ?? '');
+  const [status, setStatus] = React.useState<StakeholderStatus>(stakeholder.status);
+  const [generalDescription, setGeneralDescription] = React.useState(stakeholder.generalDescription ?? '');
+  // Purely a display toggle for the Contact row below — not part of isDirty.
+  const [editingContact, setEditingContact] = React.useState(false);
   // Seeded by zipping the two parallel arrays the entity returns — `coverage`
   // (resolved names) and `coverageLocationIds` (the ids backing them) are
   // guaranteed same-order same-length by the backend (see
@@ -152,8 +246,8 @@ function StakeholderEditForm({
     linkedinUrl !== (stakeholder.linkedinUrl ?? '') ||
     email !== (stakeholder.email ?? '') ||
     mobile !== (stakeholder.mobile ?? '') ||
-    isAccurate !== stakeholder.isAccurate ||
-    inaccurateReason !== (stakeholder.inaccurateReason ?? '') ||
+    status !== stakeholder.status ||
+    generalDescription !== (stakeholder.generalDescription ?? '') ||
     coverageIdsKey(coverage.map((c) => c.id)) !== initialCoverageKey;
 
   const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty && canEdit);
@@ -194,6 +288,17 @@ function StakeholderEditForm({
   }
   const currentRoleTypeIndex = roleTypeRows.findIndex((r) => r.id === stakeholder.stakeholderRoleTypeId);
 
+  const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
+  const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
+  const { labelFor: consultantLabelFor } = useConsultantLookup(consultants);
+
+  const { data: contactHistoryData } = useGetClientContactHistory(stakeholder.clientId, {
+    limit: CONTACT_HISTORY_LIMIT,
+  });
+  const contactHistory = (contactHistoryData?.status === 200 ? contactHistoryData.data : []).filter(
+    (row) => row.stakeholderId === stakeholder.id,
+  );
+
   const updateStakeholder = useUpdateStakeholder({
     mutation: {
       onSuccess: () => {
@@ -231,11 +336,12 @@ function StakeholderEditForm({
       linkedinUrl: linkedinUrl || undefined,
       email: email || undefined,
       mobile: mobile || undefined,
-      isAccurate: isAccurate ?? undefined,
-      inaccurateReason: inaccurateReason || undefined,
+      status,
+      generalDescription: generalDescription || undefined,
       coverageLocationIds: coverage.map((c) => c.id),
     };
     updateStakeholder.mutate({ id: stakeholder.id, data });
+    setEditingContact(false);
   }
 
   function handleLogContact(values: LogContactValues) {
@@ -267,8 +373,16 @@ function StakeholderEditForm({
     router.push('/stakeholders');
   }
 
-  const currentAccuracy = accuracyOptions.find((o) => o.value === accuracyValue(stakeholder.isAccurate))!;
+  const currentStatus = stakeholderStatusOptions.find((o) => o.value === stakeholder.status)!;
   const displayName = stakeholderFullName(stakeholder) || 'Unnamed contact';
+
+  const contactActionsMenu = (
+    <div className="flex items-center gap-1">
+      <ContactIconButton icon={Mail} href={email ? `mailto:${email}` : null} label="Email" />
+      <ContactCopyButton icon={Phone} value={mobile} label="Mobile" />
+      <ContactIconButton icon={LinkedinIcon} href={linkedinUrl} label="LinkedIn" activeClassName="text-[#0A66C2]" />
+    </div>
+  );
 
   return (
     <PageLayout className="overflow-auto">
@@ -292,7 +406,7 @@ function StakeholderEditForm({
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-3">
                 <h1 className="font-heading text-2xl font-semibold tracking-tight">{displayName}</h1>
-                <Badge className={currentAccuracy.triggerClassName}>{currentAccuracy.label}</Badge>
+                <Badge className={currentStatus.triggerClassName}>{currentStatus.label}</Badge>
                 {stakeholder.roleType ? (
                   <Badge
                     className={
@@ -309,10 +423,6 @@ function StakeholderEditForm({
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" size="lg" onClick={() => setLoggingContact(true)}>
-              <Phone />
-              Log contact
-            </Button>
             {canDelete ? (
               <Button
                 type="button"
@@ -360,159 +470,191 @@ function StakeholderEditForm({
         ref={formRef}
         onSubmit={handleSubmit}
         onKeyDown={blockImplicitEnterSubmit}
-        className="flex flex-col gap-5"
+        className="grid gap-5 lg:grid-cols-3"
       >
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="flex flex-col gap-5 lg:col-span-2">
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle className="flex items-center gap-2">
-                  <Contact className="size-4 text-muted-foreground" />
-                  Contact
-                </CardTitle>
-                <CardDescription>Who they are and how to reach them.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
-                <FormField label="First name" htmlFor="firstName">
-                  <Input
-                    id="firstName"
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    disabled={!canEdit}
-                  />
-                </FormField>
-                <FormField label="Last name" htmlFor="lastName">
-                  <Input
-                    id="lastName"
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    disabled={!canEdit}
-                  />
-                </FormField>
-                <FormField
-                  label="Job title"
-                  htmlFor="jobTitle"
-                  description="The company's own words for the role."
-                >
-                  <CreatableCombobox
-                    id="jobTitle"
-                    value={jobTitleId}
-                    onValueChange={setJobTitleId}
-                    options={jobTitleOptions}
-                    onCreate={handleCreateJobTitle}
-                    disabled={!canEdit}
-                  />
-                </FormField>
-                <FormField
-                  label="Role type"
-                  htmlFor="roleType"
-                  description="Your classification of the contact's function."
-                >
-                  <CreatableCombobox
-                    id="roleType"
-                    value={roleTypeId}
-                    onValueChange={setRoleTypeId}
-                    options={roleTypeOptions}
-                    onCreate={handleCreateRoleType}
-                    disabled={!canEdit}
-                  />
-                </FormField>
-                <FormField label="Email" htmlFor="email">
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    disabled={!canEdit}
-                  />
-                </FormField>
-                <FormField label="Mobile" htmlFor="mobile">
-                  <Input id="mobile" value={mobile} onChange={(e) => setMobile(e.target.value)} disabled={!canEdit} />
-                </FormField>
-                <FormField label="LinkedIn URL" htmlFor="linkedinUrl">
-                  <UrlField id="linkedinUrl" value={linkedinUrl} onChange={setLinkedinUrl} disabled={!canEdit} />
-                </FormField>
-              </CardContent>
-            </Card>
+        <div className="flex flex-col gap-5 lg:col-span-2">
+          <Card>
+            <CardHeader className="flex border-b flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="size-4 text-muted-foreground" />
+                Contact Histories
+              </CardTitle>
+              <Button type="button" variant="outline" size="sm" onClick={() => setLoggingContact(true)}>
+                <Phone />
+                Log Contact
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {contactHistory.length > 0 ? (
+                <div className="max-h-96 overflow-auto rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="divide-x divide-border">
+                        <TableHead>Content</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>By</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {contactHistory.map((row) => (
+                        <TableRow key={row.id} className="divide-x divide-border">
+                          <TableCell className="max-w-md whitespace-normal break-words">
+                            {row.notes ? (
+                              <p className="whitespace-pre-wrap">{row.notes}</p>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="whitespace-normal">
+                            {contactDateFormatter.format(new Date(row.contactedAt))}
+                          </TableCell>
+                          <TableCell className="whitespace-normal">
+                            {row.contactedById ? consultantLabelFor(row.contactedById) : 'Imported'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No contacts logged yet.</p>
+              )}
+            </CardContent>
+          </Card>
 
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle>Details accuracy</CardTitle>
-                <CardDescription>Whether this contact's information has been verified.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Accuracy" htmlFor="isAccurate">
-                  <EnumSelect
-                    id="isAccurate"
-                    value={isAccurate === null ? 'unchecked' : String(isAccurate)}
-                    onValueChange={(v) => setIsAccurate(v === 'unchecked' ? null : v === 'true')}
-                    options={accuracyOptions}
-                    disabled={!canEdit}
-                  />
-                </FormField>
-                {isAccurate === false ? (
-                  <FormField label="What's wrong" htmlFor="inaccurateReason">
-                    <textarea
-                      id="inaccurateReason"
-                      value={inaccurateReason}
-                      onChange={(e) => setInaccurateReason(e.target.value)}
+          <Card>
+            <CardHeader>
+              <CardTitle>General Description About This Stakeholder</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <textarea
+                id="generalDescription"
+                value={generalDescription}
+                onChange={(e) => setGeneralDescription(e.target.value)}
+                disabled={!canEdit}
+                className="min-h-40 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+              />
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="flex flex-col gap-5">
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle className="flex items-center gap-2">Information</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <FormField label="First name" htmlFor="firstName">
+                <Input
+                  id="firstName"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  disabled={!canEdit}
+                />
+              </FormField>
+              <FormField label="Last name" htmlFor="lastName">
+                <Input
+                  id="lastName"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  disabled={!canEdit}
+                />
+              </FormField>
+              <FormField label="Job title" htmlFor="jobTitle" description="The company's own words for the role.">
+                <CreatableCombobox
+                  id="jobTitle"
+                  value={jobTitleId}
+                  onValueChange={setJobTitleId}
+                  options={jobTitleOptions}
+                  onCreate={handleCreateJobTitle}
+                  disabled={!canEdit}
+                />
+              </FormField>
+              <FormField
+                label="Role type"
+                htmlFor="roleType"
+                description="Your classification of the contact's function."
+              >
+                <CreatableCombobox
+                  id="roleType"
+                  value={roleTypeId}
+                  onValueChange={setRoleTypeId}
+                  options={roleTypeOptions}
+                  onCreate={handleCreateRoleType}
+                  disabled={!canEdit}
+                />
+              </FormField>
+
+              <Collapsible.Root
+                open={editingContact}
+                onOpenChange={setEditingContact}
+                className="group/contact flex flex-col gap-1.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">Contact</span>
+                  <div className="flex items-center gap-1">
+                    {contactActionsMenu}
+                    {canEdit ? (
+                      <Collapsible.Trigger
+                        render={
+                          <button
+                            type="button"
+                            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                            aria-label={editingContact ? 'Collapse contact fields' : 'Expand contact fields'}
+                          >
+                            <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[panel-open]/contact:rotate-180" />
+                          </button>
+                        }
+                      />
+                    ) : null}
+                  </div>
+                </div>
+                <Collapsible.Panel className="flex flex-col gap-3 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
+                  <FormField label="Email" htmlFor="email">
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       disabled={!canEdit}
-                      className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
                     />
                   </FormField>
-                ) : null}
-              </CardContent>
-            </Card>
-          </div>
+                  <FormField label="Mobile" htmlFor="mobile">
+                    <Input id="mobile" value={mobile} onChange={(e) => setMobile(e.target.value)} disabled={!canEdit} />
+                  </FormField>
+                  <FormField label="LinkedIn URL" htmlFor="linkedinUrl">
+                    <Input
+                      id="linkedinUrl"
+                      value={linkedinUrl}
+                      onChange={(e) => setLinkedinUrl(e.target.value)}
+                      disabled={!canEdit}
+                    />
+                  </FormField>
+                </Collapsible.Panel>
+              </Collapsible.Root>
+            </CardContent>
+          </Card>
 
-          <div className="flex flex-col gap-5">
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="size-4 text-muted-foreground" />
-                  Coverage
-                </CardTitle>
-                <CardDescription>
-                  Which places this contact covers. A broader pick (a whole state or country) automatically covers
-                  everywhere inside it. Determines which consultants can see this contact — independent of where the
-                  client itself sits.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <LocationMultiSelect selected={coverage} onChange={setCoverage} disabled={!canEdit} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle>Last contact</CardTitle>
-                <CardDescription>Most recent logged contact — see "Log contact" to add another.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3 text-sm">
-                {stakeholder.lastContactedAt ? (
-                  <>
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">When</span>
-                      <span>{formatDate(stakeholder.lastContactedAt)}</span>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">Method</span>
-                      <span>{stakeholder.lastContactType ?? '—'}</span>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">By</span>
-                      <span>{stakeholder.lastContactedBy ?? '—'}</span>
-                    </div>
-                    {stakeholder.lastContactNotes ? (
-                      <p className="rounded-md bg-muted/50 p-2 text-muted-foreground">{stakeholder.lastContactNotes}</p>
-                    ) : null}
-                  </>
-                ) : (
-                  <p className="text-muted-foreground">No contact logged yet.</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <Card>
+            <CardContent className="grid gap-4">
+              <FormField label="Status" htmlFor="status">
+                <EnumSelect
+                  id="status"
+                  value={status}
+                  onValueChange={(v) => setStatus(v as StakeholderStatus)}
+                  options={stakeholderStatusOptions}
+                  disabled={!canEdit}
+                />
+              </FormField>
+              <FormField
+                label="Coverage"
+                htmlFor="coverage"
+                description="Which places this contact covers. A broader pick (a whole state or country) automatically covers everywhere inside it."
+              >
+                <LocationMultiSelect id="coverage" selected={coverage} onChange={setCoverage} disabled={!canEdit} />
+              </FormField>
+            </CardContent>
+          </Card>
         </div>
       </form>
 
