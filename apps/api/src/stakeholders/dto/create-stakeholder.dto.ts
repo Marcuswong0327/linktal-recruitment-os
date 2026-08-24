@@ -61,6 +61,11 @@ export class CreateStakeholderDto {
   @MaxLength(30)
   mobile?: string;
 
+  @ApiPropertyOptional({ description: 'Free-text notes about this stakeholder' })
+  @IsOptional()
+  @IsString()
+  generalDescription?: string;
+
   @ApiPropertyOptional({
     description:
       "Location ids this stakeholder covers. Matched against a consultant's scope on its own, independent of where the client sits.",

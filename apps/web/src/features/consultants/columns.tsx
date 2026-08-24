@@ -149,6 +149,8 @@ export function getConsultantColumns({
     {
       accessorKey: 'fullName',
       header: 'Name',
+      // Absorbs leftover width on a wide screen — see DataGridColumnMeta.grow.
+      meta: { grow: true },
       cell: ({ row }) => {
         const user = row.original;
         return (

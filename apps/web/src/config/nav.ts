@@ -14,6 +14,7 @@ import {
   UsersRound,
   BookA,
   ShieldCheck,
+  Handshake,
 } from 'lucide-react';
 
 /** Same shape as the API's @RequirePermission(resource, action) decorator. */
@@ -71,6 +72,7 @@ export const navGroups: NavGroup[] = [
       { title: "Job Orders", href: '/job-orders', icon: BookA },
       {
         title: 'Clients',
+        icon: Handshake,
         items: [
           { title: 'Companies', href: '/companies', icon: Building2 },
           { title: 'Stakeholders', href: '/stakeholders', icon: Contact },

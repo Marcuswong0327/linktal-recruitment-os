@@ -614,6 +614,8 @@ model Stakeholder {
   email       String?
   mobile      String?
 
+  generalDescription String? // Free-text notes about this stakeholder — same purpose as Client.generalDescription.
+
   lastContactedAt   DateTime? // Denormalized: max(StakeholderContactHistory.contactedAt) for this stakeholder. Prisma's relation-aggregate `orderBy` only supports `_count` (not `_max`) on to-many relations, so sorting needs a real column, not a live join.
   lastContactedById String? // Logical ref to Consultant.id (no FK) — denormalized, mirrors lastContactedAt.
   status            StakeholderStatus @default(COLD) // Relationship-warmth status, distinct from isAccurate below.

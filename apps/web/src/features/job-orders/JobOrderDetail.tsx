@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Briefcase, DollarSign, FileText, Info, Workflow } from 'lucide-react';
+import { ArrowLeft, Briefcase, CornerDownLeft, DollarSign, FileText, Info, Workflow } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ClientCombobox } from '@/components/ClientCombobox';
 import { ConsultantMultiSelect } from '@/components/ConsultantCombobox';
@@ -29,6 +30,8 @@ import { FormField } from '@/components/FormField';
 import { PipelineTimeline } from '@/components/PipelineTimeline';
 import { SubmissionsCard } from '@/components/SubmissionsCard';
 import { PageLayout } from '@/components/app-shell/PageLayout';
+import { useIsMac } from '@/hooks/use-is-mac';
+import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shortcut';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { useGetCandidates } from '@/lib/api/generated/candidates/candidates';
 import { useGetClient, useGetClients } from '@/lib/api/generated/clients/clients';
@@ -253,6 +256,10 @@ function JobOrderEditForm({
   const setConsultants = useSetJobOrderConsultants();
   const isSaving = updateJobOrder.isPending || setConsultants.isPending;
 
+  const formRef = React.useRef<HTMLFormElement>(null);
+  const isMac = useIsMac();
+  useSaveShortcut(() => formRef.current?.requestSubmit(), isDirty && !isSaving);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     try {
@@ -320,13 +327,35 @@ function JobOrderEditForm({
               <span className="text-xs text-muted-foreground">Unsaved changes</span>
             ) : null}
             <Button type="submit" form="job-order-form" size="lg" disabled={isSaving || !isDirty}>
-              {isSaving ? 'Saving…' : 'Save changes'}
+              {isSaving ? (
+                'Saving…'
+              ) : (
+                <>
+                  Save changes
+                  {isDirty ? (
+                    <span className="flex items-center gap-0.5">
+                      <Kbd className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground">
+                        {isMac ? '⌘' : 'Ctrl'}
+                      </Kbd>
+                      <Kbd className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground">
+                        <CornerDownLeft className="size-2.5" />
+                      </Kbd>
+                    </span>
+                  ) : null}
+                </>
+              )}
             </Button>
           </div>
         </div>
       </div>
 
-      <form id="job-order-form" onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <form
+        id="job-order-form"
+        ref={formRef}
+        onSubmit={handleSubmit}
+        onKeyDown={blockImplicitEnterSubmit}
+        className="flex flex-col gap-5"
+      >
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="flex flex-col gap-5 lg:col-span-2">
             <Card>

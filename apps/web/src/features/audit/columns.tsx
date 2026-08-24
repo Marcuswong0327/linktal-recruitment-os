@@ -88,6 +88,8 @@ export const auditColumns: ColumnDef<AuditLog>[] = [
     id: 'changes',
     header: 'Changes',
     enableSorting: false,
+    // Absorbs leftover width on a wide screen — see DataGridColumnMeta.grow.
+    meta: { grow: true },
     cell: ({ row }) => {
       const summary = summarizeResolvedChanges(row.original.resolvedChanges);
       return (

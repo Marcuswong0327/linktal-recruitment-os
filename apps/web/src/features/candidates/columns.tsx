@@ -126,6 +126,8 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     // lastContactedAt/lastContactedBy below.
     enableSorting: false,
     size: 200,
+    // Absorbs leftover width on a wide screen — see DataGridColumnMeta.grow.
+    meta: { grow: true },
     cell: ({ row }) => <MutedCell value={row.original.lastContactNotes} className="block truncate" />,
   },
   {

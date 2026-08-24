@@ -58,6 +58,8 @@ export function getJobOrderColumns({ clientName }: JobOrderColumnsOptions): Colu
       accessorKey: 'jobTitle',
       header: 'Role',
       size: 170,
+      // Absorbs leftover width on a wide screen — see DataGridColumnMeta.grow.
+      meta: { grow: true },
       cell: ({ row }) => (
         <Link
           href={`/job-orders/${row.original.id}`}

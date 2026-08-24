@@ -40,6 +40,8 @@ export function RolesTable() {
       {
         accessorKey: 'description',
         header: 'Description',
+        // Absorbs leftover width on a wide screen — see DataGridColumnMeta.grow.
+        meta: { grow: true },
         cell: ({ row }) => (
           <span className="block truncate text-muted-foreground">
             {row.original.description || '—'}

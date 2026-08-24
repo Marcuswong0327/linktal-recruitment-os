@@ -17,12 +17,15 @@ function ContactMethodButton({
   value,
   label,
   activeClassName = 'text-primary',
+  mode = 'copy',
 }: {
   icon: React.ComponentType<{ className?: string }>;
   value?: string | null;
   label: string;
   /** Icon color when a value is on file — overridable for brand colors (e.g. LinkedIn blue). Disabled state ignores this and always renders greyed-out. */
   activeClassName?: string;
+  /** 'copy' (default) puts the value on the clipboard — for Email/Mobile, which have no useful direct-interact target in a table row. 'open' navigates straight to `value` in a new tab instead — for LinkedIn/Seek, which are just URLs. */
+  mode?: 'copy' | 'open';
 }) {
   const disabled = !value;
   // "Copied!" replaces the tooltip's own content for a beat instead of a
@@ -30,13 +33,13 @@ function ContactMethodButton({
   // clicked, so it reads as feedback for that specific value with no extra
   // UI. `open` mirrors the tooltip's own hover state so the forced-open
   // "Copied!" state doesn't fight the pointer leaving before the timeout.
-  const [open, setOpen] = React.useState(false);
+  const [tooltipOpen, setTooltipOpen] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const copiedTimeout = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   React.useEffect(() => () => clearTimeout(copiedTimeout.current), []);
 
-  function handleClick() {
+  function handleCopyClick() {
     if (!value) return;
     copyContactValue(value, label, () => {
       setCopied(true);
@@ -45,29 +48,51 @@ function ContactMethodButton({
     });
   }
 
+  const iconEl = (
+    // grayscale+opacity (not just a text-color swap) so this dims
+    // fixed-fill brand marks like SeekIcon the same way it dims the
+    // currentColor icons
+    <Icon className={cn('size-4', disabled && 'opacity-30 grayscale')} />
+  );
+  const className = cn(
+    'flex size-7 items-center justify-center rounded-md transition-colors',
+    disabled ? 'cursor-not-allowed text-muted-foreground' : cn(activeClassName, 'hover:bg-accent'),
+  );
+
   return (
-    <Tooltip open={copied || open} onOpenChange={(next) => !copied && setOpen(next)}>
+    <Tooltip open={copied || tooltipOpen} onOpenChange={(next) => !copied && setTooltipOpen(next)}>
       <TooltipTrigger
         render={
-          <button
-            type="button"
-            disabled={disabled}
-            data-no-row-drag
-            onClick={handleClick}
-            aria-label={disabled ? `No ${label.toLowerCase()} on file` : `Copy ${label.toLowerCase()}`}
-            className={cn(
-              'flex size-7 items-center justify-center rounded-md transition-colors',
-              disabled ? 'cursor-not-allowed text-muted-foreground' : cn(activeClassName, 'hover:bg-accent'),
-            )}
-          >
-            {/* grayscale+opacity (not just a text-color swap) so this dims
-                fixed-fill brand marks like SeekIcon the same way it dims the
-                currentColor icons */}
-            <Icon className={cn('size-4', disabled && 'opacity-30 grayscale')} />
-          </button>
+          mode === 'open' ? (
+            <a
+              href={value ?? undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-no-row-drag
+              aria-disabled={disabled}
+              onClick={(e) => (disabled ? e.preventDefault() : e.stopPropagation())}
+              aria-label={disabled ? `No ${label.toLowerCase()} on file` : `Open ${label.toLowerCase()}`}
+              className={className}
+            >
+              {iconEl}
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled={disabled}
+              data-no-row-drag
+              onClick={handleCopyClick}
+              aria-label={disabled ? `No ${label.toLowerCase()} on file` : `Copy ${label.toLowerCase()}`}
+              className={className}
+            >
+              {iconEl}
+            </button>
+          )
         }
       />
-      <TooltipContent>{copied ? 'Copied!' : disabled ? `No ${label.toLowerCase()} on file` : value}</TooltipContent>
+      <TooltipContent>
+        {copied ? 'Copied!' : disabled ? `No ${label.toLowerCase()} on file` : mode === 'open' ? label : value}
+      </TooltipContent>
     </Tooltip>
   );
 }
@@ -100,8 +125,11 @@ export function ContactMethodsCell({
         value={linkedinUrl}
         label="LinkedIn"
         activeClassName="text-[#0A66C2]"
+        mode="open"
       />
-      {seekUrl !== undefined ? <ContactMethodButton icon={SeekIcon} value={seekUrl} label="Seek" /> : null}
+      {seekUrl !== undefined ? (
+        <ContactMethodButton icon={SeekIcon} value={seekUrl} label="Seek" mode="open" />
+      ) : null}
     </div>
   );
 }

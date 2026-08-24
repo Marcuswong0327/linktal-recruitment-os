@@ -12265,6 +12265,11 @@
             "type": "string",
             "nullable": true
           },
+          "generalDescription": {
+            "type": "string",
+            "nullable": true,
+            "description": "Free-text notes about this stakeholder"
+          },
           "coverage": {
             "type": "array",
             "items": {
@@ -12353,6 +12358,7 @@
           "linkedinUrl",
           "email",
           "mobile",
+          "generalDescription",
           "coverage",
           "coverageLocationIds",
           "lastContactedAt",
@@ -12445,6 +12451,10 @@
             "description": "Mobile number",
             "example": "+61 412 345 678"
           },
+          "generalDescription": {
+            "type": "string",
+            "description": "Free-text notes about this stakeholder"
+          },
           "coverageLocationIds": {
             "description": "Location ids this stakeholder covers. Matched against a consultant's scope on its own, independent of where the client sits.",
             "type": "array",
@@ -12514,6 +12524,10 @@
             "type": "string",
             "description": "Mobile number",
             "example": "+61 412 345 678"
+          },
+          "generalDescription": {
+            "type": "string",
+            "description": "Free-text notes about this stakeholder"
           },
           "coverageLocationIds": {
             "description": "Location ids this stakeholder covers. Matched against a consultant's scope on its own, independent of where the client sits.",

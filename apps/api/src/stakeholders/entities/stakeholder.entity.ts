@@ -47,6 +47,8 @@ export class StakeholderEntity implements Omit<Stakeholder, 'deletedAt' | 'delet
   @ApiProperty({ type: String, nullable: true }) linkedinUrl!: string | null;
   @ApiProperty({ type: String, nullable: true }) email!: string | null;
   @ApiProperty({ type: String, nullable: true }) mobile!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Free-text notes about this stakeholder' })
+  generalDescription!: string | null;
   @ApiProperty({
     type: 'array',
     items: { type: 'string' },
