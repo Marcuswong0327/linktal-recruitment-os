@@ -318,11 +318,6 @@ export function CandidatesTable({
         onSelectionChange={handleSelectionChange}
         enableRowRangeSelect
         hideSelectColumn
-        // This page has search-gate chrome above the grid, taller in total
-        // than a simple single-table page — it should scroll as one normal
-        // page, not have the grid stretch to fill leftover viewport height
-        // and clip itself internally. See DataGrid's fillHeight doc.
-        fillHeight={false}
         emptyState={
           total === 0 ? (
             <div className="flex flex-col items-center gap-1.5 py-4 text-center">

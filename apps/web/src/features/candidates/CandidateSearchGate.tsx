@@ -251,7 +251,7 @@ export function CandidateSearchGate({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
           <FilterField label="Country">
@@ -345,7 +345,12 @@ export function CandidateSearchGate({
         </div>
       </div>
 
-      <div className={cn('transition-opacity duration-200', isResetting && 'pointer-events-none opacity-0')}>
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col transition-opacity duration-200',
+          isResetting && 'pointer-events-none opacity-0',
+        )}
+      >
         {appliedFilters ? (
           <CandidatesTable filters={appliedFilters} canCreate={canCreate} canUpdate={canUpdate} canDelete={canDelete} />
         ) : (

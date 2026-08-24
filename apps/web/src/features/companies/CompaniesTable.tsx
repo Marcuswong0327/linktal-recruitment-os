@@ -264,12 +264,6 @@ export function CompaniesTable({
         onSelectionChange={setSelected}
         enableRowRangeSelect
         hideSelectColumn
-        // This page has an action bar + empty-state chrome above the grid
-        // (the search gate), taller in total than a simple single-table
-        // page — it should scroll as one normal page, not have the grid
-        // stretch to fill leftover viewport height and clip itself
-        // internally. See DataGrid's fillHeight doc.
-        fillHeight={false}
         toolbar={
           <div className="flex items-center gap-2">
             {canCreate && canUpdate ? (
