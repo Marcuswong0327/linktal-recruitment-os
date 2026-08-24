@@ -28,6 +28,9 @@ export interface LogCandidateContactValues {
   outreachChannel: OutreachChannel | null;
   /** ISO 8601 */
   contactedAt: string;
+  /** Free text, e.g. "35 per hour" — see CandidateContactHistory.currentSalary. */
+  currentSalary: string | null;
+  expectedSalary: string | null;
 }
 
 interface LogCandidateContactSheetProps {
@@ -64,6 +67,8 @@ export function LogCandidateContactSheet({
   const [outreachCampaignNotes, setOutreachCampaignNotes] = React.useState('');
   const [outreachChannel, setOutreachChannel] = React.useState<OutreachChannel | ''>('');
   const [contactedAt, setContactedAt] = React.useState(() => toLocalDatetimeInputValue(new Date()));
+  const [currentSalary, setCurrentSalary] = React.useState('');
+  const [expectedSalary, setExpectedSalary] = React.useState('');
 
   React.useEffect(() => {
     if (!open) return;
@@ -73,6 +78,8 @@ export function LogCandidateContactSheet({
     setOutreachCampaignNotes('');
     setOutreachChannel('');
     setContactedAt(toLocalDatetimeInputValue(new Date()));
+    setCurrentSalary('');
+    setExpectedSalary('');
   }, [open]);
 
   function handleSubmit(e: React.FormEvent) {
@@ -84,6 +91,8 @@ export function LogCandidateContactSheet({
       outreachCampaignNotes: category === 'OUTREACH' ? outreachCampaignNotes.trim() || null : null,
       outreachChannel: category === 'OUTREACH' && outreachChannel ? outreachChannel : null,
       contactedAt: new Date(contactedAt).toISOString(),
+      currentSalary: currentSalary.trim() || null,
+      expectedSalary: expectedSalary.trim() || null,
     });
   }
 
@@ -124,6 +133,28 @@ export function LogCandidateContactSheet({
                 type="datetime-local"
                 value={contactedAt}
                 onChange={(e) => setContactedAt(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/30"
+              />
+            </FormField>
+            <FormField
+              label="Current salary"
+              htmlFor="current-salary"
+              description={'Free text, e.g. "35 per hour" — leave blank if unknown.'}
+            >
+              <input
+                id="current-salary"
+                type="text"
+                value={currentSalary}
+                onChange={(e) => setCurrentSalary(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/30"
+              />
+            </FormField>
+            <FormField label="Expected salary" htmlFor="expected-salary">
+              <input
+                id="expected-salary"
+                type="text"
+                value={expectedSalary}
+                onChange={(e) => setExpectedSalary(e.target.value)}
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/30"
               />
             </FormField>

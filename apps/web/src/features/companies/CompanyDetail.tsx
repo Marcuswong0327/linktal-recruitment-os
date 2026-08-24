@@ -622,13 +622,12 @@ function CompanyEditForm({
         ref={formRef}
         onSubmit={handleSubmit}
         onKeyDown={blockImplicitEnterSubmit}
-        className="flex flex-col gap-5"
+        className="grid gap-5 lg:grid-cols-3"
       >
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="flex flex-col gap-5 lg:col-span-2">
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle>Contact history</CardTitle>
+        <div className="flex flex-col gap-5 lg:col-span-2">
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle>Contact history</CardTitle>
                 <CardDescription>Every logged contact, across all of this company's stakeholders.</CardDescription>
               </CardHeader>
               <CardContent>
@@ -778,6 +777,179 @@ function CompanyEditForm({
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">No stakeholders logged for this company yet.</p>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="border-b">
+                <CardTitle>Job Opening Research History</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {jobResearch.length === 0 ? (
+                  <p className="p-4 text-sm text-muted-foreground">No research logged yet.</p>
+                ) : (
+                  <div className="max-h-96 overflow-auto rounded-md border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="divide-x divide-border">
+                          <TableHead>Position</TableHead>
+                          <TableHead>Role Type</TableHead>
+                          <TableHead>Posted Date</TableHead>
+                          <TableHead>Location</TableHead>
+                          <TableHead>Links</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {jobResearch.map((row) => (
+                          <TableRow key={row.id} className="divide-x divide-border">
+                            <TableCell className="whitespace-normal">
+                              {row.jobTitle ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {row.jobRoleType ? (
+                                <Badge variant="muted">{row.jobRoleType}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {formatJobResearchDate(row.postedDate)}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {row.location ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell>
+                              {row.seekUrl || row.permanentUrl ? (
+                                <div className="flex items-center gap-2">
+                                  {row.seekUrl ? (
+                                    <a
+                                      href={row.seekUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Seek listing"
+                                      className="text-muted-foreground hover:text-foreground"
+                                    >
+                                      <SeekIcon className="size-3.5" />
+                                    </a>
+                                  ) : null}
+                                  {row.permanentUrl ? (
+                                    <a
+                                      href={row.permanentUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="LinkedIn listing"
+                                      className="text-muted-foreground hover:text-[#0A66C2]"
+                                    >
+                                      <LinkedinIcon className="size-3.5" />
+                                    </a>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex border-b flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="size-4 text-muted-foreground" />
+                  Terms of Business
+                </CardTitle>
+                {canEdit ? (
+                  <Button type="button" variant="outline" size="sm" onClick={() => setAddTobOpen(true)}>
+                    <Plus />
+                    Add TOB
+                  </Button>
+                ) : null}
+              </CardHeader>
+              <CardContent>
+                {tobs.length > 0 ? (
+                  <div className="max-h-96 overflow-auto rounded-md border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="divide-x divide-border">
+                          <TableHead>TOB ID</TableHead>
+                          <TableHead>Pricing</TableHead>
+                          <TableHead>Guarantee Period (days)</TableHead>
+                          <TableHead>Payment terms</TableHead>
+                          <TableHead>Client rep</TableHead>
+                          <TableHead>Linktal rep</TableHead>
+                          <TableHead>Invoice contact</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {tobs.map((tob) => (
+                          <TableRow key={tob.id} className="divide-x divide-border">
+                            <TableCell className="font-mono text-xs">
+                              {tob.sourceFileLink ? (
+                                <a
+                                  href={tob.sourceFileLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-foreground hover:underline"
+                                >
+                                  {tob.displayId}
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground" title="No file on file">
+                                  {tob.displayId}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {tob.pricing ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell>
+                              {tob.guaranteePeriod ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {tob.paymentTerm ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {tob.clientTobRepresentative ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {tob.linktalRepresentativeId ? (
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <ConsultantAvatar
+                                    consultantId={tob.linktalRepresentativeId}
+                                    name={tob.linktalRepresentative ?? undefined}
+                                    size={5}
+                                  />
+                                  <span className="truncate">{tob.linktalRepresentative}</span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {tob.invoiceContactName || tob.invoiceContactEmail ? (
+                                <div className="flex flex-col">
+                                  <span>{tob.invoiceContactName ?? '—'}</span>
+                                  {tob.invoiceContactEmail ? (
+                                    <span className="text-xs text-muted-foreground">{tob.invoiceContactEmail}</span>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No TOBs filed for this company yet.</p>
                 )}
               </CardContent>
             </Card>
@@ -933,90 +1105,7 @@ function CompanyEditForm({
                 </FormField>
               </CardContent>
             </Card>
-          </div>
-        </div>
 
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle>Job Opening Research History</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {jobResearch.length === 0 ? (
-                  <p className="p-4 text-sm text-muted-foreground">No research logged yet.</p>
-                ) : (
-                  <div className="max-h-96 overflow-auto rounded-md border border-border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="divide-x divide-border">
-                          <TableHead>Position</TableHead>
-                          <TableHead>Role Type</TableHead>
-                          <TableHead>Posted Date</TableHead>
-                          <TableHead>Location</TableHead>
-                          <TableHead>Links</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {jobResearch.map((row) => (
-                          <TableRow key={row.id} className="divide-x divide-border">
-                            <TableCell className="whitespace-normal">
-                              {row.jobTitle ?? <span className="text-muted-foreground">—</span>}
-                            </TableCell>
-                            <TableCell className="whitespace-normal">
-                              {row.jobRoleType ? (
-                                <Badge variant="muted">{row.jobRoleType}</Badge>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {formatJobResearchDate(row.postedDate)}
-                            </TableCell>
-                            <TableCell className="whitespace-normal">
-                              {row.location ?? <span className="text-muted-foreground">—</span>}
-                            </TableCell>
-                            <TableCell>
-                              {row.seekUrl || row.permanentUrl ? (
-                                <div className="flex items-center gap-2">
-                                  {row.seekUrl ? (
-                                    <a
-                                      href={row.seekUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="Seek listing"
-                                      className="text-muted-foreground hover:text-foreground"
-                                    >
-                                      <SeekIcon className="size-3.5" />
-                                    </a>
-                                  ) : null}
-                                  {row.permanentUrl ? (
-                                    <a
-                                      href={row.permanentUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="LinkedIn listing"
-                                      className="text-muted-foreground hover:text-[#0A66C2]"
-                                    >
-                                      <LinkedinIcon className="size-3.5" />
-                                    </a>
-                                  ) : null}
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div>
             <Card>
               <CardHeader>
                 <CardTitle>General Description About This Company</CardTitle>
@@ -1034,109 +1123,6 @@ function CompanyEditForm({
               </CardContent>
             </Card>
           </div>
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader className="flex border-b flex-row items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="size-4 text-muted-foreground" />
-                  Terms of Business
-                </CardTitle>
-                {canEdit ? (
-                  <Button type="button" variant="outline" size="sm" onClick={() => setAddTobOpen(true)}>
-                    <Plus />
-                    Add TOB
-                  </Button>
-                ) : null}
-              </CardHeader>
-              <CardContent>
-                {tobs.length > 0 ? (
-                  <div className="max-h-96 overflow-auto rounded-md border border-border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="divide-x divide-border">
-                          <TableHead>TOB ID</TableHead>
-                          <TableHead>Pricing</TableHead>
-                          <TableHead>Guarantee Period (days)</TableHead>
-                          <TableHead>Payment terms</TableHead>
-                          <TableHead>Client rep</TableHead>
-                          <TableHead>Linktal rep</TableHead>
-                          <TableHead>Invoice contact</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {tobs.map((tob) => (
-                          <TableRow key={tob.id} className="divide-x divide-border">
-                            <TableCell className="font-mono text-xs">
-                              {tob.sourceFileLink ? (
-                                <a
-                                  href={tob.sourceFileLink}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-foreground hover:underline"
-                                >
-                                  {tob.displayId}
-                                </a>
-                              ) : (
-                                <span className="text-muted-foreground" title="No file on file">
-                                  {tob.displayId}
-                                </span>
-                              )}
-                            </TableCell>
-                            <TableCell className="whitespace-normal">
-                              {tob.pricing ?? <span className="text-muted-foreground">—</span>}
-                            </TableCell>
-                            <TableCell>
-                              {tob.guaranteePeriod ?? <span className="text-muted-foreground">—</span>}
-                            </TableCell>
-                            <TableCell className="whitespace-normal">
-                              {tob.paymentTerm ?? <span className="text-muted-foreground">—</span>}
-                            </TableCell>
-                            <TableCell className="whitespace-normal">
-                              {tob.clientTobRepresentative ?? <span className="text-muted-foreground">—</span>}
-                            </TableCell>
-                            <TableCell className="whitespace-normal">
-                              {tob.linktalRepresentativeId ? (
-                                <div className="flex min-w-0 items-center gap-2">
-                                  <ConsultantAvatar
-                                    consultantId={tob.linktalRepresentativeId}
-                                    name={tob.linktalRepresentative ?? undefined}
-                                    size={5}
-                                  />
-                                  <span className="truncate">{tob.linktalRepresentative}</span>
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                            <TableCell className="whitespace-normal">
-                              {tob.invoiceContactName || tob.invoiceContactEmail ? (
-                                <div className="flex flex-col">
-                                  <span>{tob.invoiceContactName ?? '—'}</span>
-                                  {tob.invoiceContactEmail ? (
-                                    <span className="text-xs text-muted-foreground">{tob.invoiceContactEmail}</span>
-                                  ) : null}
-                                </div>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No TOBs filed for this company yet.</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          <div />
-        </div>
       </form>
 
       <ConfirmDeleteDialog

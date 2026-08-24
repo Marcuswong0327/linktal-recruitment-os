@@ -20,6 +20,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from '@/components/ui/sidebar';
 
 const isItemActive = (href: string, pathname: string) =>
@@ -47,6 +48,7 @@ function NavLeaf({ item, pathname }: { item: NavLeafItem; pathname: string }) {
 function NavParent({ item, pathname }: { item: NavParentItem; pathname: string }) {
   const hasActiveChild = item.items.some((child) => isItemActive(child.href, pathname));
   const [open, setOpen] = useState(hasActiveChild);
+  const { state: sidebarState, isMobile, setOpen: setSidebarOpen } = useSidebar();
 
   // Auto-expand when navigation lands on a child; never auto-collapse, so
   // browsing within the group doesn't fight the user's manual toggle.
@@ -55,7 +57,24 @@ function NavParent({ item, pathname }: { item: NavParentItem; pathname: string }
   }, [hasActiveChild]);
 
   return (
-    <Collapsible.Root open={open} onOpenChange={setOpen}>
+    <Collapsible.Root
+      open={open}
+      onOpenChange={(next) => {
+        // A collapsed (icon-only) sidebar hides SidebarMenuSub entirely via
+        // CSS (see group-data-[collapsible=icon]:hidden on it), regardless
+        // of this group's own open/closed state — so a click here while
+        // collapsed should always land on "sidebar expanded, group open"
+        // instead of following whichever direction the toggle naturally
+        // computed (which could be a no-op close, e.g. re-collapsing the
+        // sidebar while on a Companies page left this group already open).
+        if (sidebarState === 'collapsed' && !isMobile) {
+          setSidebarOpen(true);
+          setOpen(true);
+          return;
+        }
+        setOpen(next);
+      }}
+    >
       <SidebarMenuItem>
         {/* data-panel-open lives on the trigger element itself, so the "group" marking it
             has to sit here too — not on Root — for the chevron's group-data selector to match. */}
