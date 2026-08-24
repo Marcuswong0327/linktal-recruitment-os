@@ -8,7 +8,9 @@ import {
   ChevronDown,
   Contact,
   CornerDownLeft,
+  Copy,
   EllipsisVertical,
+  FileText,
   Globe,
   Mail,
   Phone,
@@ -43,6 +45,7 @@ import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { AddTobSheet, type AddTobValues } from '@/components/AddTobSheet';
 import { LinkedinIcon, SeekIcon } from '@/components/BrandIcons';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { ConsultantAvatar, useConsultantLookup } from '@/components/ConsultantCombobox';
@@ -75,6 +78,7 @@ import {
   useGetIndustries,
 } from '@/lib/api/generated/industries/industries';
 import { useGetJobOrders } from '@/lib/api/generated/job-orders/job-orders';
+import { useGetJobResearch } from '@/lib/api/generated/job-research/job-research';
 import {
   getGetSpecializationsQueryKey,
   useCreateSpecialization,
@@ -84,7 +88,14 @@ import {
   useAddStakeholderContactHistory,
   useGetStakeholders,
 } from '@/lib/api/generated/stakeholders/stakeholders';
-import type { ClientEntity, CreateStakeholderContactHistoryDto, UpdateClientDto } from '@/lib/api/generated/types';
+import { getGetTobsQueryKey, useCreateTob, useGetTobs } from '@/lib/api/generated/tobs/tobs';
+import type {
+  ClientEntity,
+  CreateStakeholderContactHistoryDto,
+  CreateTobDto,
+  UpdateClientDto,
+} from '@/lib/api/generated/types';
+import { formatDate as formatJobResearchDate } from '@/features/job-research/schema';
 import { qualityOptions, statusOptions } from './schema';
 
 const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
@@ -151,7 +162,62 @@ function copyValue(value: string, label: string) {
   );
 }
 
-/** Row actions for a stakeholder — a single kebab menu instead of separate buttons, since these are copy actions rather than links out. Website is the company's, not the stakeholder's — Stakeholder carries no site of its own. */
+/**
+ * A menu row for a contact method that can both be opened directly and
+ * copied. Rendered as two adjacent `DropdownMenuItem`s rather than one row
+ * with a nested button — Base UI tracks "highlighted" per composite-list
+ * item (the whole row), not by pointer position within it, so a nested
+ * button can't have its own independent hover state inside a single Item.
+ * Two Items means two independently-highlightable targets instead. Falls
+ * back to a single disabled item when there's no value to act on.
+ */
+function SplitActionRow({
+  icon: Icon,
+  value,
+  label,
+  emptyLabel,
+  copyLabel,
+  href,
+  external,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  value?: string | null;
+  label: string;
+  emptyLabel: string;
+  copyLabel: string;
+  href: (value: string) => string;
+  external?: boolean;
+}) {
+  if (!value) {
+    return (
+      <DropdownMenuItem disabled>
+        <Icon />
+        {emptyLabel}
+      </DropdownMenuItem>
+    );
+  }
+  return (
+    <div className="flex items-center gap-0.5">
+      <DropdownMenuItem
+        className="flex-1"
+        render={<a href={href(value)} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined} />}
+      >
+        <Icon />
+        {label}
+      </DropdownMenuItem>
+      <div className="h-4 w-px shrink-0 bg-border" aria-hidden />
+      <DropdownMenuItem
+        className="w-8 shrink-0 justify-center px-0"
+        onClick={() => copyValue(value, copyLabel)}
+        aria-label={`Copy ${copyLabel.toLowerCase()}`}
+      >
+        <Copy className="size-3.5" />
+      </DropdownMenuItem>
+    </div>
+  );
+}
+
+/** Each row (besides phone) splits into a direct-interact action (mailto:/open in a new tab) and a separate copy action — see `SplitActionRow`. Website is the company's, not the stakeholder's — Stakeholder carries no site of its own. Phone has no direct-interact counterpart (no tel: link), so its row stays copy-only. */
 function StakeholderActionsMenu({
   email,
   mobile,
@@ -177,22 +243,36 @@ function StakeholderActionsMenu({
         }
       />
       <DropdownMenuContent align="end">
-        <DropdownMenuItem disabled={!email} onClick={() => email && copyValue(email, 'Email')}>
-          <Mail />
-          {email ? 'Copy email' : 'No email on file'}
-        </DropdownMenuItem>
+        <SplitActionRow
+          icon={Mail}
+          value={email}
+          label="Email"
+          emptyLabel="No email on file"
+          copyLabel="Email"
+          href={(v) => `mailto:${v}`}
+        />
         <DropdownMenuItem disabled={!mobile} onClick={() => mobile && copyValue(mobile, 'Mobile')}>
           <Phone />
           {mobile ? 'Copy mobile' : 'No mobile on file'}
         </DropdownMenuItem>
-        <DropdownMenuItem disabled={!linkedinUrl} onClick={() => linkedinUrl && copyValue(linkedinUrl, 'LinkedIn')}>
-          <LinkedinIcon />
-          {linkedinUrl ? 'Copy LinkedIn' : 'No LinkedIn on file'}
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!website} onClick={() => website && copyValue(website, 'Website')}>
-          <Globe />
-          {website ? "Copy company's website" : 'No website on file'}
-        </DropdownMenuItem>
+        <SplitActionRow
+          icon={LinkedinIcon}
+          value={linkedinUrl}
+          label="LinkedIn"
+          emptyLabel="No LinkedIn on file"
+          copyLabel="LinkedIn"
+          href={(v) => v}
+          external
+        />
+        <SplitActionRow
+          icon={Globe}
+          value={website}
+          label="Company's website"
+          emptyLabel="No website on file"
+          copyLabel="Website"
+          href={(v) => v}
+          external
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -265,6 +345,7 @@ function CompanyEditForm({
   const [website, setWebsite] = React.useState(company.website ?? '');
   const [seekJobMarketUrl, setSeekJobMarketUrl] = React.useState(company.seekJobMarketUrl ?? '');
   const [linkedinJobMarketUrl, setLinkedinJobMarketUrl] = React.useState(company.linkedinJobMarketUrl ?? '');
+  const [generalDescription, setGeneralDescription] = React.useState(company.generalDescription ?? '');
   // Purely a display toggle for the links row below — not part of isDirty.
   const [editingLinks, setEditingLinks] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
@@ -283,7 +364,8 @@ function CompanyEditForm({
     suburbsAndPostcodes !== initialSuburbs ||
     website !== (company.website ?? '') ||
     seekJobMarketUrl !== (company.seekJobMarketUrl ?? '') ||
-    linkedinJobMarketUrl !== (company.linkedinJobMarketUrl ?? '');
+    linkedinJobMarketUrl !== (company.linkedinJobMarketUrl ?? '') ||
+    generalDescription !== (company.generalDescription ?? '');
 
   const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty && canEdit);
 
@@ -391,6 +473,27 @@ function CompanyEditForm({
     return Array.from(byId, ([id, name]) => ({ id, name }));
   }, [jobOrders]);
 
+  const { data: jobResearchData } = useGetJobResearch({ clientId: company.id, pageSize: 50 });
+  const jobResearch = jobResearchData?.status === 200 ? jobResearchData.data.data : [];
+
+  const { data: tobsData } = useGetTobs({ clientId: company.id, pageSize: 50 });
+  const tobs = tobsData?.status === 200 ? tobsData.data.data : [];
+
+  const [addTobOpen, setAddTobOpen] = React.useState(false);
+  const createTob = useCreateTob({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetTobsQueryKey() });
+        toast.success('TOB filed');
+        setAddTobOpen(false);
+      },
+      onError: (err) => toast.error(err.message || 'Failed to file TOB'),
+    },
+  });
+  function handleAddTob(values: AddTobValues) {
+    createTob.mutate({ data: { clientId: company.id, ...values } as unknown as CreateTobDto });
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const data: UpdateClientDto = {
@@ -413,6 +516,7 @@ function CompanyEditForm({
       website: website || undefined,
       seekJobMarketUrl: seekJobMarketUrl || undefined,
       linkedinJobMarketUrl: linkedinJobMarketUrl || undefined,
+      generalDescription: generalDescription || undefined,
     };
     updateCompany.mutate({ id: company.id, data });
     setEditingLinks(false);
@@ -831,6 +935,208 @@ function CompanyEditForm({
             </Card>
           </div>
         </div>
+
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <Card>
+              <CardHeader className="border-b">
+                <CardTitle>Job Opening Research History</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {jobResearch.length === 0 ? (
+                  <p className="p-4 text-sm text-muted-foreground">No research logged yet.</p>
+                ) : (
+                  <div className="max-h-96 overflow-auto rounded-md border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="divide-x divide-border">
+                          <TableHead>Position</TableHead>
+                          <TableHead>Role Type</TableHead>
+                          <TableHead>Posted Date</TableHead>
+                          <TableHead>Location</TableHead>
+                          <TableHead>Links</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {jobResearch.map((row) => (
+                          <TableRow key={row.id} className="divide-x divide-border">
+                            <TableCell className="whitespace-normal">
+                              {row.jobTitle ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {row.jobRoleType ? (
+                                <Badge variant="muted">{row.jobRoleType}</Badge>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {formatJobResearchDate(row.postedDate)}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {row.location ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell>
+                              {row.seekUrl || row.permanentUrl ? (
+                                <div className="flex items-center gap-2">
+                                  {row.seekUrl ? (
+                                    <a
+                                      href={row.seekUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Seek listing"
+                                      className="text-muted-foreground hover:text-foreground"
+                                    >
+                                      <SeekIcon className="size-3.5" />
+                                    </a>
+                                  ) : null}
+                                  {row.permanentUrl ? (
+                                    <a
+                                      href={row.permanentUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="LinkedIn listing"
+                                      className="text-muted-foreground hover:text-[#0A66C2]"
+                                    >
+                                      <LinkedinIcon className="size-3.5" />
+                                    </a>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div>
+            <Card>
+              <CardHeader>
+                <CardTitle>General Description About This Company</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <FormField label="" htmlFor="generalDescription">
+                  <textarea
+                    id="generalDescription"
+                    value={generalDescription}
+                    onChange={(e) => setGeneralDescription(e.target.value)}
+                    disabled={!canEdit}
+                    className="min-h-40 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+                  />
+                </FormField>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <Card>
+              <CardHeader className="flex border-b flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="size-4 text-muted-foreground" />
+                  Terms of Business
+                </CardTitle>
+                {canEdit ? (
+                  <Button type="button" variant="outline" size="sm" onClick={() => setAddTobOpen(true)}>
+                    <Plus />
+                    Add TOB
+                  </Button>
+                ) : null}
+              </CardHeader>
+              <CardContent>
+                {tobs.length > 0 ? (
+                  <div className="max-h-96 overflow-auto rounded-md border border-border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="divide-x divide-border">
+                          <TableHead>TOB ID</TableHead>
+                          <TableHead>Pricing</TableHead>
+                          <TableHead>Guarantee Period (days)</TableHead>
+                          <TableHead>Payment terms</TableHead>
+                          <TableHead>Client rep</TableHead>
+                          <TableHead>Linktal rep</TableHead>
+                          <TableHead>Invoice contact</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {tobs.map((tob) => (
+                          <TableRow key={tob.id} className="divide-x divide-border">
+                            <TableCell className="font-mono text-xs">
+                              {tob.sourceFileLink ? (
+                                <a
+                                  href={tob.sourceFileLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-foreground hover:underline"
+                                >
+                                  {tob.displayId}
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground" title="No file on file">
+                                  {tob.displayId}
+                                </span>
+                              )}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {tob.pricing ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell>
+                              {tob.guaranteePeriod ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {tob.paymentTerm ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {tob.clientTobRepresentative ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {tob.linktalRepresentativeId ? (
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <ConsultantAvatar
+                                    consultantId={tob.linktalRepresentativeId}
+                                    name={tob.linktalRepresentative ?? undefined}
+                                    size={5}
+                                  />
+                                  <span className="truncate">{tob.linktalRepresentative}</span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {tob.invoiceContactName || tob.invoiceContactEmail ? (
+                                <div className="flex flex-col">
+                                  <span>{tob.invoiceContactName ?? '—'}</span>
+                                  {tob.invoiceContactEmail ? (
+                                    <span className="text-xs text-muted-foreground">{tob.invoiceContactEmail}</span>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No TOBs filed for this company yet.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div />
+        </div>
       </form>
 
       <ConfirmDeleteDialog
@@ -866,6 +1172,15 @@ function CompanyEditForm({
           value: logContactStakeholderId,
           onValueChange: setLogContactStakeholderId,
         }}
+      />
+
+      <AddTobSheet
+        open={addTobOpen}
+        onOpenChange={setAddTobOpen}
+        companyName={company.companyName}
+        consultants={consultants}
+        isSaving={createTob.isPending}
+        onSave={handleAddTob}
       />
     </PageLayout>
   );
