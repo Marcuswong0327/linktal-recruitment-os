@@ -24,6 +24,8 @@ export function getJobResearchColumns(): ColumnDef<JobResearch>[] {
       accessorKey: 'jobTitle',
       enableSorting: false,
       header: 'Job Title',
+      // Absorbs leftover width on a wide screen — see DataGridColumnMeta.grow.
+      meta: { grow: true },
       cell: ({ row }) => <span className="font-medium text-foreground">{row.original.jobTitle ?? '—'}</span>,
     },
     {

@@ -39,6 +39,9 @@ export function getCompanyColumns({
       // Not a GetClientsSortBy field — companyName isn't sortable server-side.
       enableSorting: false,
       header: 'Company',
+      // Absorbs any leftover width on a wide screen instead of it sitting as
+      // dead space past Quality — see DataGridColumnMeta.grow.
+      meta: { grow: true },
       cell: ({ row }) => {
         const client = row.original;
         return (

@@ -156,8 +156,9 @@ export function getStakeholderColumns({
       // No single "fullName" column server-side to sort by (see
       // StakeholderSortField) — firstName/lastName are separate columns.
       // strictMinSize only — avatar + name + link icon is left-aligned
-      // content, not a centered pill like Coverage/Role type.
-      meta: { strictMinSize: true },
+      // content, not a centered pill like Coverage/Role type. grow: absorbs
+      // leftover width on a wide screen — see DataGridColumnMeta.grow.
+      meta: { strictMinSize: true, grow: true },
       enableSorting: false,
       header: 'Name',
       cell: ({ row }) => {

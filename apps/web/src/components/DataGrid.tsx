@@ -101,6 +101,20 @@ export interface DataGridColumnMeta {
    * broken, unlike plain text, which is fine to shrink and clip.
    */
   strictMinSize?: boolean;
+  /**
+   * Lets this column absorb leftover width when the container is wider than
+   * the sum of every column's natural size — e.g. a very wide monitor,
+   * where `table-fixed` would otherwise leave that space as dead area past
+   * the last column instead of growing anything (per the fixed-table-layout
+   * spec, a table wider than its declared column widths only redistributes
+   * the surplus onto columns that have *no* specified width — every column
+   * here has one, explicitly, so none of them qualify on their own). Put
+   * this on whichever column should read as the "main" one — a name/title
+   * column, typically — not on a pill/badge column, which would end up
+   * mostly padding. Multiple `grow` columns split the surplus proportionally
+   * to their own natural size.
+   */
+  grow?: boolean;
 }
 
 function columnAlignClass(meta: unknown): string | undefined {
@@ -448,6 +462,29 @@ export function DataGrid<TData>({
     }
     return map;
   }, [filters]);
+
+  const gridContainerRef = React.useRef<HTMLDivElement>(null);
+  // Wraps the whole component (toolbar + grid + footer) — used to detect
+  // clicks outside the entire DataGrid, not just the bordered rows box, so
+  // e.g. clicking the search input doesn't count as "outside".
+  const rootRef = React.useRef<HTMLDivElement>(null);
+
+  // The width budget available for the table — feeds the `meta.grow` surplus
+  // distribution below. Tracked live (not just measured once) so a browser
+  // window resize (not just an ultra-wide monitor from the start) re-fits
+  // `grow` columns instead of leaving them at their initial-load width.
+  const [containerWidth, setContainerWidth] = React.useState(0);
+  React.useEffect(() => {
+    const container = gridContainerRef.current;
+    if (!container) return;
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width;
+      if (width !== undefined) setContainerWidth(width);
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
   const tableColumns = React.useMemo(() => {
     const withFilters = columns.map((col) => {
       const id =
@@ -472,39 +509,76 @@ export function DataGrid<TData>({
       }
       return result;
     });
-    if (!onSelectionChange || hideSelectColumn) return withFilters;
 
-    const selectColumn: ColumnDef<TData, unknown> = {
-      id: SELECT_COLUMN_ID,
-      size: 40,
-      enableResizing: false,
-      header: ({ table }) => (
-        // Checkbox renders a visible span *and* a hidden input as siblings —
-        // clicking the span re-dispatches a bubbling click on that sibling
-        // input, which stopPropagation on the Checkbox itself can't catch
-        // (it never passes back through the span). Stop it here instead,
-        // on a shared ancestor of both.
-        <div onClick={(e) => e.stopPropagation()}>
-          <Checkbox
-            checked={table.getIsAllPageRowsSelected()}
-            indeterminate={!table.getIsAllPageRowsSelected() && table.getIsSomePageRowsSelected()}
-            onCheckedChange={(checked) => table.toggleAllPageRowsSelected(!!checked)}
-            aria-label="Select all"
-          />
-        </div>
-      ),
-      cell: ({ row }) => (
-        <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
-          <Checkbox
-            checked={row.getIsSelected()}
-            onCheckedChange={(checked) => row.toggleSelected(!!checked)}
-            disabled={!row.getCanSelect()}
-            aria-label="Select row"
-          />
-        </div>
-      ),
+    const withSelect: ColumnDef<TData, unknown>[] =
+      !onSelectionChange || hideSelectColumn
+        ? withFilters
+        : [
+            {
+              id: SELECT_COLUMN_ID,
+              size: 40,
+              enableResizing: false,
+              header: ({ table }) => (
+                // Checkbox renders a visible span *and* a hidden input as
+                // siblings — clicking the span re-dispatches a bubbling
+                // click on that sibling input, which stopPropagation on the
+                // Checkbox itself can't catch (it never passes back through
+                // the span). Stop it here instead, on a shared ancestor of
+                // both.
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={table.getIsAllPageRowsSelected()}
+                    indeterminate={!table.getIsAllPageRowsSelected() && table.getIsSomePageRowsSelected()}
+                    onCheckedChange={(checked) => table.toggleAllPageRowsSelected(!!checked)}
+                    aria-label="Select all"
+                  />
+                </div>
+              ),
+              cell: ({ row }) => (
+                <div onClick={(e) => e.stopPropagation()} data-no-row-drag>
+                  <Checkbox
+                    checked={row.getIsSelected()}
+                    onCheckedChange={(checked) => row.toggleSelected(!!checked)}
+                    disabled={!row.getCanSelect()}
+                    aria-label="Select row"
+                  />
+                </div>
+              ),
+            },
+            ...withFilters,
+          ];
+
+    // `table-fixed` only redistributes a table's surplus width (its own box
+    // wider than the sum of declared column widths — see the `Table` render
+    // below) onto columns with *no* declared width. Every column here has
+    // one, so on a container wider than that sum (an ultra-wide monitor,
+    // typically), the surplus just sits as dead space past the last column
+    // instead of going anywhere — hence this, done in JS: whatever columns
+    // opted in via `meta.grow` split the surplus proportionally to their own
+    // natural size.
+    const colId = (col: ColumnDef<TData, unknown>) =>
+      (col as { id?: string; accessorKey?: string }).id ?? (col as { accessorKey?: string }).accessorKey;
+    const naturalSize = (col: ColumnDef<TData, unknown>) => {
+      const id = colId(col);
+      return col.size ?? (id ? measuredSizes[id] : undefined) ?? 200;
     };
-    return [selectColumn, ...withFilters];
+    const growCols = withSelect.filter((col) => (col.meta as DataGridColumnMeta | undefined)?.grow);
+    if (containerWidth <= 0 || growCols.length === 0) return withSelect;
+
+    const growNaturalTotal = growCols.reduce((sum, col) => sum + naturalSize(col), 0);
+    const fixedTotal = withSelect.reduce(
+      (sum, col) => (growCols.includes(col) ? sum : sum + naturalSize(col)),
+      0,
+    );
+    const surplus = containerWidth - fixedTotal - growNaturalTotal;
+    if (surplus <= 0) return withSelect;
+
+    return withSelect.map((col) => {
+      if (!growCols.includes(col)) return col;
+      const natural = naturalSize(col);
+      const share = growNaturalTotal > 0 ? natural / growNaturalTotal : 1 / growCols.length;
+      return { ...col, size: natural + surplus * share };
+    });
   }, [
     columns,
     filterColumnIds,
@@ -512,13 +586,8 @@ export function DataGrid<TData>({
     hideSelectColumn,
     measuredSizes,
     headerOnlySizes,
+    containerWidth,
   ]);
-
-  const gridContainerRef = React.useRef<HTMLDivElement>(null);
-  // Wraps the whole component (toolbar + grid + footer) — used to detect
-  // clicks outside the entire DataGrid, not just the bordered rows box, so
-  // e.g. clicking the search input doesn't count as "outside".
-  const rootRef = React.useRef<HTMLDivElement>(null);
 
   // Pass 1: header-only sizing. Runs as soon as headers render, independent
   // of loading state — cell content isn't available yet while `isLoading`,
