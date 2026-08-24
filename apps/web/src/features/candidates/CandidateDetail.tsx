@@ -2,81 +2,64 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import {
-  ArrowLeft,
-  Briefcase,
-  Check,
-  FileText,
-  History,
-  Info,
-  Pencil,
-  Phone,
-  Tag,
-  User,
-  Workflow,
-  X,
-} from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, CornerDownLeft, Mail, Phone, Pencil, X } from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
+import { Collapsible } from '@base-ui/react/collapsible';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Kbd } from '@/components/ui/kbd';
+import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { LinkedinIcon, SeekIcon } from '@/components/BrandIcons';
 import { useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { FormField } from '@/components/FormField';
+import { LocationCombobox, type LocationValue } from '@/components/LocationCombobox';
 import { LogCandidateContactSheet, type LogCandidateContactValues } from '@/components/LogCandidateContactSheet';
-import { PipelineTimeline } from '@/components/PipelineTimeline';
-import { SubmissionsCard } from '@/components/SubmissionsCard';
 import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
+import { useIsMac } from '@/hooks/use-is-mac';
+import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shortcut';
+import { cn } from '@/lib/utils';
 import {
   useGetCandidate,
   useUpdateCandidate,
   useGetCandidateContactHistory,
   useAddCandidateContactHistory,
   useUpdateCandidateContactHistory,
-  useGetCandidatePipelineTimeline,
   getGetCandidatesQueryKey,
   getGetCandidateQueryKey,
   getGetCandidateContactHistoryQueryKey,
-  getGetCandidatePipelineTimelineQueryKey,
 } from '@/lib/api/generated/candidates/candidates';
-import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import { useGetJobOrders } from '@/lib/api/generated/job-orders/job-orders';
+import { getGetInterviewsQueryOptions } from '@/lib/api/generated/interviews/interviews';
+import { getGetPlacementsQueryOptions } from '@/lib/api/generated/placements/placements';
+import { useGetSubmissions } from '@/lib/api/generated/submissions/submissions';
 import {
   getGetJobRoleTypesQueryKey,
   useCreateJobRoleType,
   useGetJobRoleTypes,
 } from '@/lib/api/generated/job-role-types/job-role-types';
-import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@/lib/api/generated/industries/industries';
+import {
+  getGetIndustriesQueryKey,
+  useCreateIndustry,
+  useGetIndustries,
+} from '@/lib/api/generated/industries/industries';
 import {
   getGetSpecializationsQueryKey,
   useCreateSpecialization,
   useGetSpecializations,
 } from '@/lib/api/generated/specializations/specializations';
-import type { CreateCandidateContactHistoryDto, UpdateCandidateDto } from '@/lib/api/generated/types';
-import { contactTypeLabels, type ContactType } from '@/lib/contact-types';
+import type { CreateCandidateContactHistoryDto, SubmissionEntity, UpdateCandidateDto } from '@/lib/api/generated/types';
 import { contactCategoryLabels, outreachChannelLabels } from '@/lib/candidate-contact-category';
-import {
-  candidateFullName,
-  type Candidate,
-  candidateStatusLabels,
-  candidateStatusVariants,
-} from './schema';
-
-const textareaClass =
-  'min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30';
+import { candidateFullName, type Candidate, candidateStatusLabels, candidateStatusVariants } from './schema';
 
 const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
@@ -87,15 +70,19 @@ const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
   timeZoneName: 'short',
 });
 
+const shortDateFormatter = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+});
+
 /** A contact-history row's own last-modified marker — mirrors the API's version check, used for the optimistic-concurrency check on edit. */
 function contactHistoryVersion(row: { editedAt: string | null; createdAt: string }) {
   return row.editedAt ?? row.createdAt;
 }
 
 function isConflictError(err: unknown): boolean {
-  return (
-    typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === 409
-  );
+  return typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === 409;
 }
 
 function initials(name: string) {
@@ -124,10 +111,7 @@ export function CandidateDetail({ id }: { id: string }) {
   if (isError || !candidate) {
     return (
       <PageLayout>
-        <PageHeader
-          title="Candidate not found"
-          description={error?.message ?? `No candidate with ID ${id}.`}
-        />
+        <PageHeader title="Candidate not found" description={error?.message ?? `No candidate with ID ${id}.`} />
         <div>
           <Button variant="outline" nativeButton={false} render={<Link href="/candidates" />}>
             <ArrowLeft />
@@ -160,6 +144,73 @@ function sameIds(a: string[], b: string[]) {
   return sortedA.every((id, i) => id === sortedB[i]);
 }
 
+/** One icon per contact method (Email/Mobile/LinkedIn/Seek Talent) — click opens it. A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. Mirrors CompanyDetail's LinkIconButton for its Website field. */
+function ContactIconButton({
+  icon: Icon,
+  href,
+  label,
+  activeClassName = 'text-muted-foreground hover:text-foreground',
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  href?: string | null;
+  label: string;
+  activeClassName?: string;
+}) {
+  const disabled = !href;
+  return (
+    <a
+      href={href ?? undefined}
+      target={href && !href.startsWith('mailto:') && !href.startsWith('tel:') ? '_blank' : undefined}
+      rel="noopener noreferrer"
+      aria-disabled={disabled}
+      onClick={disabled ? (e) => e.preventDefault() : undefined}
+      title={disabled ? `No ${label.toLowerCase()} on file` : label}
+      aria-label={disabled ? `No ${label.toLowerCase()} on file` : `Open ${label.toLowerCase()}`}
+      className={cn(
+        'flex size-7 items-center justify-center rounded-md transition-colors',
+        disabled ? 'cursor-not-allowed text-muted-foreground' : cn(activeClassName, 'hover:bg-accent'),
+      )}
+    >
+      <Icon className={cn('size-4', disabled && 'opacity-30 grayscale')} />
+    </a>
+  );
+}
+
+function copyValue(value: string, label: string) {
+  navigator.clipboard.writeText(value).then(
+    () => toast.success(`${label} copied`),
+    () => toast.error(`Couldn't copy ${label.toLowerCase()}`),
+  );
+}
+
+/** Same look as ContactIconButton, but copies to the clipboard instead of navigating — for Mobile, which has no useful direct-interact link (no tel: dialer on desktop). */
+function ContactCopyButton({
+  icon: Icon,
+  value,
+  label,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  value?: string | null;
+  label: string;
+}) {
+  const disabled = !value;
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={() => value && copyValue(value, label)}
+      title={disabled ? `No ${label.toLowerCase()} on file` : `Copy ${label.toLowerCase()}`}
+      aria-label={disabled ? `No ${label.toLowerCase()} on file` : `Copy ${label.toLowerCase()}`}
+      className={cn(
+        'flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors',
+        disabled ? 'cursor-not-allowed' : 'hover:bg-accent hover:text-foreground',
+      )}
+    >
+      <Icon className={cn('size-4', disabled && 'opacity-30 grayscale')} />
+    </button>
+  );
+}
+
 function CandidateEditForm({ candidate }: { candidate: Candidate }) {
   const queryClient = useQueryClient();
 
@@ -167,27 +218,11 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
   const { labelFor: consultantLabelFor } = useConsultantLookup(consultants);
   const { data: session } = useSession();
-  const { data: pipelineData, isLoading: pipelineLoading } = useGetCandidatePipelineTimeline(candidate.id);
-  const pipelineEvents = pipelineData?.status === 200 ? pipelineData.data : undefined;
 
   const { data: jobOrdersData } = useGetJobOrders({ pageSize: 100 });
   const jobOrders = jobOrdersData?.status === 200 ? jobOrdersData.data.data : [];
+  const jobOrderById = React.useMemo(() => new Map(jobOrders.map((j) => [j.id, j])), [jobOrders]);
 
-  // A job order carries no industry of its own, only via its client — needed
-  // for the Submissions card's non-blocking industry-mismatch warning.
-  const { data: clientsData } = useGetClients({ pageSize: 100 });
-  const clients = clientsData?.status === 200 ? clientsData.data.data : [];
-  const clientIndustryById = React.useMemo(
-    () => new Map(clients.map((c) => [c.id, c.industryId])),
-    [clients],
-  );
-  const jobOrderClientIndustryId = React.useCallback(
-    (jobOrderId: string) => {
-      const jobOrder = jobOrders.find((j) => j.id === jobOrderId);
-      return jobOrder ? clientIndustryById.get(jobOrder.clientId) : undefined;
-    },
-    [jobOrders, clientIndustryById],
-  );
   // Mirrors the server-side check in CandidatesService.updateContactHistory —
   // only a SCREENING row has editable content, and only its own author (or
   // an admin) may edit it.
@@ -195,21 +230,18 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
     row.category === 'SCREENING' &&
     (row.contactedById === session?.user?.consultantId || session?.user?.roleName === 'admin');
 
-  const { register, handleSubmit, formState } =
-    useForm<UpdateCandidateDto>({
-      defaultValues: {
-        firstName: candidate.firstName ?? '',
-        lastName: candidate.lastName ?? '',
-        email: candidate.email ?? '',
-        mobile: candidate.mobile ?? '',
-        currentRole: candidate.currentRole ?? '',
-        currentCompany: candidate.currentCompany ?? '',
-        linkedinUrl: candidate.linkedinUrl ?? '',
-        seekTalentUrl: candidate.seekTalentUrl ?? '',
-        rawResumeUrl: candidate.rawResumeUrl ?? '',
-        editedResumeUrl: candidate.editedResumeUrl ?? '',
-      },
-    });
+  const { register, handleSubmit, formState } = useForm<UpdateCandidateDto>({
+    defaultValues: {
+      firstName: candidate.firstName ?? '',
+      lastName: candidate.lastName ?? '',
+      email: candidate.email ?? '',
+      mobile: candidate.mobile ?? '',
+      linkedinUrl: candidate.linkedinUrl ?? '',
+      seekTalentUrl: candidate.seekTalentUrl ?? '',
+      rawResumeUrl: candidate.rawResumeUrl ?? '',
+      editedResumeUrl: candidate.editedResumeUrl ?? '',
+    },
+  });
 
   // Industry/role type/specializations are reference-table pickers, not
   // plain registered inputs — tracked as their own state (like
@@ -218,6 +250,11 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
   const [industryId, setIndustryId] = React.useState(candidate.industryId ?? '');
   const [roleTypeId, setRoleTypeId] = React.useState(candidate.jobRoleTypeId ?? '');
   const [specializationIds, setSpecializationIds] = React.useState(candidate.specializationIds);
+  const [location, setLocation] = React.useState<LocationValue | null>(
+    candidate.locationId ? { id: candidate.locationId, name: candidate.location ?? candidate.locationId } : null,
+  );
+  // Purely a display toggle for the Contact row below — not part of isDirty.
+  const [editingContact, setEditingContact] = React.useState(false);
 
   const { data: industryData } = useGetIndustries();
   const industries = industryData?.status === 200 ? industryData.data : [];
@@ -269,7 +306,8 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
     formState.isDirty ||
     industryId !== (candidate.industryId ?? '') ||
     roleTypeId !== (candidate.jobRoleTypeId ?? '') ||
-    !sameIds(specializationIds, candidate.specializationIds);
+    !sameIds(specializationIds, candidate.specializationIds) ||
+    (location?.id ?? '') !== (candidate.locationId ?? '');
 
   const updateCandidate = useUpdateCandidate({
     mutation: {
@@ -294,9 +332,15 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
         industryId: industryId || null,
         jobRoleTypeId: roleTypeId || null,
         specializationIds,
+        locationId: location?.id ?? candidate.locationId,
       } as UpdateCandidateDto,
     });
+    setEditingContact(false);
   });
+
+  const formRef = React.useRef<HTMLFormElement>(null);
+  const isMac = useIsMac();
+  useSaveShortcut(() => formRef.current?.requestSubmit(), isDirty && !updateCandidate.isPending);
 
   const [loggingContact, setLoggingContact] = React.useState(false);
   const contactHistoryQueryKey = getGetCandidateContactHistoryQueryKey(candidate.id);
@@ -326,6 +370,8 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
         ...(values.screeningNotes ? { screeningNotes: values.screeningNotes } : {}),
         ...(values.outreachCampaignNotes ? { outreachCampaignNotes: values.outreachCampaignNotes } : {}),
         ...(values.outreachChannel ? { outreachChannel: values.outreachChannel } : {}),
+        ...(values.currentSalary ? { currentSalary: values.currentSalary } : {}),
+        ...(values.expectedSalary ? { expectedSalary: values.expectedSalary } : {}),
       } as unknown as CreateCandidateContactHistoryDto,
     });
   }
@@ -353,7 +399,12 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
     },
   });
 
-  function startEditingContact(row: { id: string; screeningNotes: string | null; editedAt: string | null; createdAt: string }) {
+  function startEditingContact(row: {
+    id: string;
+    screeningNotes: string | null;
+    editedAt: string | null;
+    createdAt: string;
+  }) {
     setEditingContactId(row.id);
     setEditDraft(row.screeningNotes ?? '');
     setEditingContactVersion(contactHistoryVersion(row));
@@ -369,6 +420,54 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
       data: { screeningNotes, expectedVersion: editingContactVersion ?? undefined },
     });
   }
+
+  // Interview Histories: one row per job-order submission — Client/Role come
+  // from the job order (a submission carries no client of its own), interview
+  // and placement dates come from per-submission lookups (neither endpoint
+  // supports a batch-by-candidate filter, only submissionId).
+  const { data: submissionsData } = useGetSubmissions({ candidateId: candidate.id });
+  const submissions: SubmissionEntity[] = submissionsData?.status === 200 ? submissionsData.data : [];
+
+  const interviewQueries = useQueries({
+    queries: submissions.map((s) => getGetInterviewsQueryOptions({ submissionId: s.id })),
+  });
+  const placementQueries = useQueries({
+    queries: submissions.map((s) => getGetPlacementsQueryOptions({ submissionId: s.id })),
+  });
+
+  const interviewRows = submissions.map((submission, i) => {
+    const jobOrder = jobOrderById.get(submission.jobOrderId);
+    const interviewsRes = interviewQueries[i]?.data;
+    const interviews = interviewsRes?.status === 200 ? interviewsRes.data : [];
+    const latestInterview = interviews.length
+      ? interviews.reduce((a, b) => (new Date(a.interviewDate) > new Date(b.interviewDate) ? a : b))
+      : null;
+    const placementsRes = placementQueries[i]?.data;
+    const placements = placementsRes?.status === 200 ? placementsRes.data : [];
+    const placement = placements[0];
+    return {
+      submissionId: submission.id,
+      client: jobOrder?.clientName ?? '—',
+      role: jobOrder?.jobTitle ?? jobOrder?.jobRoleType ?? submission.jobOrderTitle ?? '—',
+      submittedAt: submission.submittedAt,
+      interviewedAt: latestInterview?.interviewDate ?? null,
+      placedStartDate: submission.status === 'PLACED' ? (placement?.startDate ?? null) : null,
+    };
+  });
+
+  const contactActionsMenu = (
+    <div className="flex items-center gap-1">
+      <ContactIconButton icon={Mail} href={candidate.email ? `mailto:${candidate.email}` : null} label="Email" />
+      <ContactCopyButton icon={Phone} value={candidate.mobile} label="Mobile" />
+      <ContactIconButton
+        icon={LinkedinIcon}
+        href={candidate.linkedinUrl}
+        label="LinkedIn"
+        activeClassName="text-[#0A66C2]"
+      />
+      <ContactIconButton icon={SeekIcon} href={candidate.seekTalentUrl} label="Seek Talent" />
+    </div>
+  );
 
   return (
     <PageLayout className="overflow-auto">
@@ -398,372 +497,409 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   {candidateStatusLabels[candidate.status]}
                 </Badge>
               </div>
-              <span className="font-mono text-xs text-muted-foreground">
-                {candidate.displayId}
-              </span>
+              <span className="font-mono text-xs text-muted-foreground">{candidate.displayId}</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
             {isDirty && !updateCandidate.isPending ? (
               <span className="text-xs text-muted-foreground">Unsaved changes</span>
             ) : null}
-            <Button type="button" variant="outline" size="lg" onClick={() => setLoggingContact(true)}>
-              <Phone />
-              Log a contact
-            </Button>
-            <Button
-              type="submit"
-              form="candidate-form"
-              size="lg"
-              disabled={updateCandidate.isPending || !isDirty}
-            >
-              {updateCandidate.isPending ? 'Saving…' : 'Save changes'}
+            <Button type="submit" form="candidate-form" size="lg" disabled={updateCandidate.isPending || !isDirty}>
+              {updateCandidate.isPending ? (
+                'Saving…'
+              ) : (
+                <>
+                  Save changes
+                  {isDirty ? (
+                    <span className="flex items-center gap-0.5">
+                      <Kbd className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground">
+                        {isMac ? '⌘' : 'Ctrl'}
+                      </Kbd>
+                      <Kbd className="border-primary-foreground/30 bg-primary-foreground/15 text-primary-foreground">
+                        <CornerDownLeft className="size-2.5" />
+                      </Kbd>
+                    </span>
+                  ) : null}
+                </>
+              )}
             </Button>
           </div>
         </div>
       </div>
 
-      <form id="candidate-form" onSubmit={onSubmit} className="flex flex-col gap-5">
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="flex flex-col gap-5 lg:col-span-2">
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle className="flex items-center gap-2">
-                  <User className="size-4 text-muted-foreground" />
-                  Profile
-                </CardTitle>
-                <CardDescription>Identity, contact and location.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
-                <FormField label="First name" htmlFor="firstName">
-                  <Input id="firstName" {...register('firstName')} />
-                </FormField>
-                <FormField label="Last name" htmlFor="lastName">
-                  <Input id="lastName" {...register('lastName')} />
-                </FormField>
-                <FormField label="Email" htmlFor="email">
-                  <Input id="email" type="email" {...register('email')} />
-                </FormField>
-                <FormField label="Mobile" htmlFor="mobile">
-                  <Input id="mobile" {...register('mobile')} />
-                </FormField>
-                <FormField
-                  label="Location"
-                  htmlFor="location"
-                  description="Read-only for now — location editing isn't wired up here yet."
-                >
-                  <Input id="location" value={candidate.location ?? '—'} disabled />
-                </FormField>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle className="flex items-center gap-2">
-                  <Briefcase className="size-4 text-muted-foreground" />
-                  Work
-                </CardTitle>
-                <CardDescription>Current role, background and expectations.</CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Current title" htmlFor="currentRole">
-                  <Input id="currentRole" {...register('currentRole')} />
-                </FormField>
-                <FormField label="Current company" htmlFor="currentCompany">
-                  <Input id="currentCompany" {...register('currentCompany')} />
-                </FormField>
-                <FormField label="Industry" htmlFor="industry">
-                  <CreatableCombobox
-                    id="industry"
-                    value={industryId}
-                    onValueChange={setIndustryId}
-                    options={industries}
-                    onCreate={handleCreateIndustry}
-                    placeholder="Select industry…"
-                  />
-                </FormField>
-                <FormField label="Role type" htmlFor="roleType">
-                  <CreatableCombobox
-                    id="roleType"
-                    value={roleTypeId}
-                    onValueChange={setRoleTypeId}
-                    options={roleTypes}
-                    onCreate={handleCreateRoleType}
-                    placeholder="Select role type…"
-                  />
-                </FormField>
-                <FormField label="LinkedIn URL" htmlFor="linkedinUrl">
-                  <Input id="linkedinUrl" {...register('linkedinUrl')} />
-                </FormField>
-                <FormField label="Seek Talent URL" htmlFor="seekTalentUrl">
-                  <Input id="seekTalentUrl" {...register('seekTalentUrl')} />
-                </FormField>
-                <FormField label="Raw resume URL" htmlFor="rawResumeUrl">
-                  <Input id="rawResumeUrl" {...register('rawResumeUrl')} />
-                </FormField>
-                <FormField label="Edited resume URL" htmlFor="editedResumeUrl">
-                  <Input id="editedResumeUrl" {...register('editedResumeUrl')} />
-                </FormField>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="border-b">
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="size-4 text-muted-foreground" />
-                  Contact history
-                </CardTitle>
-                <CardDescription>
-                  Every logged contact — screening notes are editable by their author (or an admin); everything
-                  else is a permanent record.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                {contactHistory.length > 0 ? (
-                  <ul className="flex flex-col gap-3">
-                    {contactHistory.map((row) =>
-                      editingContactId === row.id ? (
-                        <li
-                          key={row.id}
-                          className="flex flex-col gap-2 rounded-md border border-border bg-muted/30 px-3 py-2"
-                        >
-                          <textarea
-                            aria-label="Edit screening notes"
-                            className={textareaClass}
-                            value={editDraft}
-                            onChange={(e) => setEditDraft(e.target.value)}
-                            autoFocus
-                          />
-                          <div className="flex items-center gap-2 self-end">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() => setEditingContactId(null)}
-                              aria-label="Cancel edit"
-                            >
-                              <X />
-                            </Button>
-                            <Button
-                              type="button"
-                              size="icon-sm"
-                              disabled={updateContactHistory.isPending || !editDraft.trim()}
-                              onClick={(e) => handleSaveContactEdit(e, row.id)}
-                              aria-label="Save edit"
-                            >
-                              <Check />
-                            </Button>
-                          </div>
-                        </li>
-                      ) : (
-                        <li
-                          key={row.id}
-                          className="group flex flex-col gap-1 rounded-md border border-border bg-muted/30 px-3 py-2"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="muted">{contactCategoryLabels[row.category]}</Badge>
-                                {row.category === 'OUTREACH' && row.outreachChannel ? (
-                                  <Badge variant="muted">{outreachChannelLabels[row.outreachChannel]}</Badge>
-                                ) : null}
-                                {row.contactType ? (
-                                  <span className="text-xs text-muted-foreground">
-                                    {contactTypeLabels[row.contactType as ContactType] ?? row.contactType}
-                                  </span>
-                                ) : null}
-                              </div>
-                              <p className="text-sm whitespace-pre-wrap">
-                                {row.category === 'SCREENING'
-                                  ? (row.screeningNotes ?? '—')
-                                  : (row.outreachCampaignNotes ?? '—')}
-                              </p>
-                            </div>
-                            {canEditContactHistory(row) ? (
-                              <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon-xs"
-                                  onClick={() => startEditingContact(row)}
+      <form
+        id="candidate-form"
+        ref={formRef}
+        onSubmit={onSubmit}
+        onKeyDown={blockImplicitEnterSubmit}
+        className="grid gap-5 lg:grid-cols-3"
+      >
+        <div className="flex flex-col gap-5 lg:col-span-2">
+          <Card>
+            <CardHeader className="flex border-b flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">Contact Histories</CardTitle>
+              <Button type="button" variant="outline" size="sm" onClick={() => setLoggingContact(true)}>
+                <Phone />
+                Log Contact
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {contactHistory.length > 0 ? (
+                <div className="max-h-96 overflow-auto rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="divide-x divide-border">
+                        <TableHead>Content</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>By</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {contactHistory.map((row) => (
+                        <TableRow key={row.id} className="divide-x divide-border">
+                          <TableCell className="group max-w-md whitespace-normal break-words">
+                            {editingContactId === row.id ? (
+                              <div className="flex flex-col gap-2">
+                                <textarea
                                   aria-label="Edit screening notes"
-                                >
-                                  <Pencil />
-                                </Button>
+                                  className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30"
+                                  value={editDraft}
+                                  onChange={(e) => setEditDraft(e.target.value)}
+                                  autoFocus
+                                />
+                                <div className="flex items-center gap-2 self-end">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() => setEditingContactId(null)}
+                                    aria-label="Cancel edit"
+                                  >
+                                    <X />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="icon-sm"
+                                    disabled={updateContactHistory.isPending || !editDraft.trim()}
+                                    onClick={(e) => handleSaveContactEdit(e, row.id)}
+                                    aria-label="Save edit"
+                                  >
+                                    <Check />
+                                  </Button>
+                                </div>
                               </div>
-                            ) : null}
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            {row.contactedById ? consultantLabelFor(row.contactedById) : 'Imported'} ·{' '}
+                            ) : (
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="muted">{contactCategoryLabels[row.category]}</Badge>
+                                    {row.category === 'OUTREACH' && row.outreachChannel ? (
+                                      <Badge variant="muted">{outreachChannelLabels[row.outreachChannel]}</Badge>
+                                    ) : null}
+                                  </div>
+                                  <p className="whitespace-pre-wrap">
+                                    {row.category === 'SCREENING'
+                                      ? (row.screeningNotes ?? '—')
+                                      : (row.outreachCampaignNotes ?? '—')}
+                                  </p>
+                                </div>
+                                {canEditContactHistory(row) ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon-xs"
+                                    className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                                    onClick={() => startEditingContact(row)}
+                                    aria-label="Edit screening notes"
+                                  >
+                                    <Pencil />
+                                  </Button>
+                                ) : null}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="whitespace-normal">
                             {contactDateFormatter.format(new Date(row.contactedAt))}
+                          </TableCell>
+                          <TableCell className="whitespace-normal">
+                            {row.contactedById ? consultantLabelFor(row.contactedById) : 'Imported'}
                             {row.editedAt ? (
-                              <>
-                                {' '}
-                                · edited by{' '}
-                                {row.editedById ? consultantLabelFor(row.editedById) : 'Imported'} ·{' '}
-                                {contactDateFormatter.format(new Date(row.editedAt))}
-                              </>
+                              <span className="block text-xs text-muted-foreground">
+                                edited by {row.editedById ? consultantLabelFor(row.editedById) : 'Imported'}
+                              </span>
                             ) : null}
-                          </span>
-                        </li>
-                      ),
-                    )}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No contacts logged yet.</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No contacts logged yet.</p>
+              )}
+            </CardContent>
+          </Card>
 
-          <div className="flex flex-col gap-5">
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Briefcase className="size-4 text-muted-foreground" />
-                  Submissions
-                </CardTitle>
-                <CardDescription>Job orders this candidate is submitted to.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <SubmissionsCard
-                  mode="candidate"
-                  candidateId={candidate.id}
-                  jobOrders={jobOrders}
-                  candidateIndustryId={candidate.industryId}
-                  candidateLocationId={candidate.locationId}
-                  jobOrderClientIndustryId={jobOrderClientIndustryId}
-                  onChanged={() =>
-                    queryClient.invalidateQueries({
-                      queryKey: getGetCandidatePipelineTimelineQueryKey(candidate.id),
-                    })
-                  }
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle className="flex items-center gap-2">Interview Histories</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {interviewRows.length > 0 ? (
+                <div className="max-h-96 overflow-auto rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="divide-x divide-border">
+                        <TableHead>Client</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Submitted Date</TableHead>
+                        <TableHead>Interviewed Date</TableHead>
+                        <TableHead>Placed Starting Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {interviewRows.map((row) => (
+                        <TableRow key={row.submissionId} className="divide-x divide-border">
+                          <TableCell className="whitespace-normal">{row.client}</TableCell>
+                          <TableCell className="whitespace-normal">{row.role}</TableCell>
+                          <TableCell>{shortDateFormatter.format(new Date(row.submittedAt))}</TableCell>
+                          <TableCell>
+                            {row.interviewedAt ? (
+                              shortDateFormatter.format(new Date(row.interviewedAt))
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.placedStartDate ? (
+                              shortDateFormatter.format(new Date(row.placedStartDate))
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Not submitted to any job orders yet.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle className="flex items-center gap-2">Document Base</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-auto rounded-md border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="divide-x divide-border">
+                      <TableHead>Raw Resume</TableHead>
+                      <TableHead>Linktal Resume</TableHead>
+                      <TableHead>Historic Files</TableHead>
+                      <TableHead>Other Documents</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <TableRow className="divide-x divide-border">
+                      <TableCell>
+                        <Input id="rawResumeUrl" placeholder="https://…" {...register('rawResumeUrl')} />
+                      </TableCell>
+                      <TableCell>
+                        <Input id="editedResumeUrl" placeholder="https://…" {...register('editedResumeUrl')} />
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground" title="Not tracked yet">
+                          —
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground" title="Not tracked yet">
+                          —
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="flex flex-col gap-5">
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle className="flex items-center gap-2">Information</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              <FormField label="First name" htmlFor="firstName">
+                <Input id="firstName" {...register('firstName')} />
+              </FormField>
+              <FormField label="Last name" htmlFor="lastName">
+                <Input id="lastName" {...register('lastName')} />
+              </FormField>
+              <FormField label="Industry" htmlFor="industry" required>
+                <CreatableCombobox
+                  id="industry"
+                  value={industryId}
+                  onValueChange={setIndustryId}
+                  options={industries}
+                  onCreate={handleCreateIndustry}
+                  placeholder="Select industry…"
                 />
-              </CardContent>
-            </Card>
-
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Workflow className="size-4 text-muted-foreground" />
-                  Pipeline history
-                </CardTitle>
-                <CardDescription>Submission and stage changes across every job order.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <PipelineTimeline events={pipelineEvents} isLoading={pipelineLoading} showJobOrder />
-              </CardContent>
-            </Card>
-
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <History className="size-4 text-muted-foreground" />
-                  Work history
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {candidate.workHistory?.length ? (
-                  <div className="flex flex-col gap-4 border-l border-border pl-4">
-                    {candidate.workHistory.map((raw, i) => {
-                      // JSONB in the API; the generated type is an open record.
-                      const item = raw as {
-                        company?: string;
-                        role?: string;
-                        startDate?: string;
-                        endDate?: string;
-                      };
-                      const period = [item.startDate, item.endDate].filter(Boolean).join(' – ');
-                      return (
-                        <div key={i} className="relative flex flex-col text-sm">
-                          <span className="absolute top-1.5 -left-[21px] size-2 rounded-full bg-primary/60" />
-                          <span className="font-medium">{item.role ?? '—'}</span>
-                          {item.company ? (
-                            <span className="text-muted-foreground">{item.company}</span>
-                          ) : null}
-                          {period ? (
-                            <span className="text-xs text-muted-foreground/80">{period}</span>
-                          ) : null}
-                        </div>
-                      );
-                    })}
+              </FormField>
+              <FormField label="Role type" htmlFor="roleType">
+                <CreatableCombobox
+                  id="roleType"
+                  value={roleTypeId}
+                  onValueChange={setRoleTypeId}
+                  options={roleTypes}
+                  onCreate={handleCreateRoleType}
+                  placeholder="Select role type…"
+                />
+              </FormField>
+              <FormField
+                label="Specialization"
+                htmlFor="specialization"
+                description={!industryId ? 'Pick an industry first' : undefined}
+              >
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {specializationIds.length > 0
+                      ? specializationIds.map((id) => (
+                          <Badge key={id} variant="muted" className="gap-1">
+                            {specializationById.get(id)?.name ?? id}
+                            <button
+                              type="button"
+                              aria-label="Remove specialization"
+                              onClick={() => setSpecializationIds((prev) => prev.filter((s) => s !== id))}
+                            >
+                              <X className="size-3" />
+                            </button>
+                          </Badge>
+                        ))
+                      : null}
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No work history recorded.</p>
-                )}
-              </CardContent>
-            </Card>
+                  {/* value is always '' — this is an "add one" picker, not a
+                        single-select; onCreate/onValueChange append instead of
+                        replacing, and already-selected options are filtered out. */}
+                  <CreatableCombobox
+                    id="specialization"
+                    value=""
+                    onValueChange={(id) => setSpecializationIds((prev) => (prev.includes(id) ? prev : [...prev, id]))}
+                    options={specializations.filter((s) => !specializationIds.includes(s.id))}
+                    onCreate={handleCreateSpecialization}
+                    placeholder="Add a specialization…"
+                    disabled={!industryId}
+                  />
+                </div>
+              </FormField>
 
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Tag className="size-4 text-muted-foreground" />
-                  Specializations
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <div className="flex flex-wrap gap-1.5">
-                  {specializationIds.length > 0 ? (
-                    specializationIds.map((id) => (
-                      <Badge key={id} variant="muted" className="gap-1">
-                        {specializationById.get(id)?.name ?? id}
+              <Collapsible.Root
+                open={editingContact}
+                onOpenChange={setEditingContact}
+                className="group/contact flex flex-col gap-1.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">Contact</span>
+                  <div className="flex items-center gap-1">
+                    {contactActionsMenu}
+                    <Collapsible.Trigger
+                      render={
                         <button
                           type="button"
-                          aria-label="Remove specialization"
-                          onClick={() => setSpecializationIds((prev) => prev.filter((s) => s !== id))}
+                          className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          aria-label={editingContact ? 'Collapse contact fields' : 'Expand contact fields'}
                         >
-                          <X className="size-3" />
+                          <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[panel-open]/contact:rotate-180" />
                         </button>
-                      </Badge>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No specializations recorded.</p>
-                  )}
+                      }
+                    />
+                  </div>
                 </div>
-                {/* value is always '' — this is an "add one" picker, not a
-                    single-select; onCreate/onValueChange append instead of
-                    replacing, and already-selected options are filtered out. */}
-                <CreatableCombobox
-                  value=""
-                  onValueChange={(id) => setSpecializationIds((prev) => (prev.includes(id) ? prev : [...prev, id]))}
-                  options={specializations.filter((s) => !specializationIds.includes(s.id))}
-                  onCreate={handleCreateSpecialization}
-                  placeholder="Add a specialization…"
-                />
-              </CardContent>
-            </Card>
+                <Collapsible.Panel className="flex flex-col gap-3 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
+                  <FormField label="Email" htmlFor="email">
+                    <Input id="email" type="email" {...register('email')} />
+                  </FormField>
+                  <FormField label="Mobile" htmlFor="mobile">
+                    <Input id="mobile" {...register('mobile')} />
+                  </FormField>
+                  <FormField label="LinkedIn URL" htmlFor="linkedinUrl">
+                    <Input id="linkedinUrl" {...register('linkedinUrl')} />
+                  </FormField>
+                  <FormField label="Seek Talent URL" htmlFor="seekTalentUrl">
+                    <Input id="seekTalentUrl" {...register('seekTalentUrl')} />
+                  </FormField>
+                </Collapsible.Panel>
+              </Collapsible.Root>
 
-            <Card size="sm">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Info className="size-4 text-muted-foreground" />
-                  Record
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
-                <span className="text-muted-foreground">ID</span>
-                <span className="font-mono text-xs leading-5">{candidate.displayId}</span>
-                <span className="text-muted-foreground">Created</span>
-                <span>{new Date(candidate.createdAt).toLocaleDateString()}</span>
-                <span className="text-muted-foreground">Updated</span>
-                <span>{new Date(candidate.updatedAt).toLocaleDateString()}</span>
-                <span className="text-muted-foreground">Last contacted</span>
-                <span>
-                  {candidate.lastContactedAt
-                    ? new Date(candidate.lastContactedAt).toLocaleString()
-                    : '—'}
-                </span>
-                <span className="text-muted-foreground">Method</span>
-                <span>
-                  {candidate.lastContactType
-                    ? (contactTypeLabels[candidate.lastContactType as ContactType] ?? candidate.lastContactType)
-                    : '—'}
-                </span>
-                <span className="text-muted-foreground">Contacted by</span>
-                <span>{candidate.lastContactedBy ?? '—'}</span>
-              </CardContent>
-            </Card>
-          </div>
+              <Separator />
+
+              <FormField label="Suburb" htmlFor="location">
+                <LocationCombobox
+                  id="location"
+                  value={location}
+                  onChange={setLocation}
+                  placeholder="Search for a suburb…"
+                />
+              </FormField>
+
+              <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+                <span className="text-muted-foreground">Current salary</span>
+                <span>{candidate.currentSalary ?? '—'}</span>
+                <span className="text-muted-foreground">Expected salary</span>
+                <span>{candidate.expectedSalary ?? '—'}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Salary is a snapshot from the latest logged contact — update it via "Log Contact" above.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="border-b">
+              <CardTitle className="flex items-center gap-2">Employment History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {candidate.workHistory?.length ? (
+                <div className="max-h-96 overflow-auto rounded-md border border-border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="divide-x divide-border">
+                        <TableHead>Company</TableHead>
+                        <TableHead>Position</TableHead>
+                        <TableHead>Period</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {candidate.workHistory.map((raw, i) => {
+                        // JSONB in the API; the generated type is an open record.
+                        const item = raw as { company?: string; role?: string; period?: string };
+                        return (
+                          <TableRow key={i} className="divide-x divide-border">
+                            <TableCell className="whitespace-normal">
+                              {item.company ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {item.role ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                            <TableCell className="whitespace-normal">
+                              {item.period ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No employment history recorded.</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </form>
 
