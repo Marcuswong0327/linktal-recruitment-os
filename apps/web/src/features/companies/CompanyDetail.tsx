@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Contact,
   CornerDownLeft,
+  Copy,
   EllipsisVertical,
   FileText,
   Globe,
@@ -161,7 +162,62 @@ function copyValue(value: string, label: string) {
   );
 }
 
-/** Row actions for a stakeholder — a single kebab menu instead of separate buttons, since these are copy actions rather than links out. Website is the company's, not the stakeholder's — Stakeholder carries no site of its own. */
+/**
+ * A menu row for a contact method that can both be opened directly and
+ * copied. Rendered as two adjacent `DropdownMenuItem`s rather than one row
+ * with a nested button — Base UI tracks "highlighted" per composite-list
+ * item (the whole row), not by pointer position within it, so a nested
+ * button can't have its own independent hover state inside a single Item.
+ * Two Items means two independently-highlightable targets instead. Falls
+ * back to a single disabled item when there's no value to act on.
+ */
+function SplitActionRow({
+  icon: Icon,
+  value,
+  label,
+  emptyLabel,
+  copyLabel,
+  href,
+  external,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  value?: string | null;
+  label: string;
+  emptyLabel: string;
+  copyLabel: string;
+  href: (value: string) => string;
+  external?: boolean;
+}) {
+  if (!value) {
+    return (
+      <DropdownMenuItem disabled>
+        <Icon />
+        {emptyLabel}
+      </DropdownMenuItem>
+    );
+  }
+  return (
+    <div className="flex items-center gap-0.5">
+      <DropdownMenuItem
+        className="flex-1"
+        render={<a href={href(value)} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined} />}
+      >
+        <Icon />
+        {label}
+      </DropdownMenuItem>
+      <div className="h-4 w-px shrink-0 bg-border" aria-hidden />
+      <DropdownMenuItem
+        className="w-8 shrink-0 justify-center px-0"
+        onClick={() => copyValue(value, copyLabel)}
+        aria-label={`Copy ${copyLabel.toLowerCase()}`}
+      >
+        <Copy className="size-3.5" />
+      </DropdownMenuItem>
+    </div>
+  );
+}
+
+/** Each row (besides phone) splits into a direct-interact action (mailto:/open in a new tab) and a separate copy action — see `SplitActionRow`. Website is the company's, not the stakeholder's — Stakeholder carries no site of its own. Phone has no direct-interact counterpart (no tel: link), so its row stays copy-only. */
 function StakeholderActionsMenu({
   email,
   mobile,
@@ -187,22 +243,36 @@ function StakeholderActionsMenu({
         }
       />
       <DropdownMenuContent align="end">
-        <DropdownMenuItem disabled={!email} onClick={() => email && copyValue(email, 'Email')}>
-          <Mail />
-          {email ? 'Copy email' : 'No email on file'}
-        </DropdownMenuItem>
+        <SplitActionRow
+          icon={Mail}
+          value={email}
+          label="Email"
+          emptyLabel="No email on file"
+          copyLabel="Email"
+          href={(v) => `mailto:${v}`}
+        />
         <DropdownMenuItem disabled={!mobile} onClick={() => mobile && copyValue(mobile, 'Mobile')}>
           <Phone />
           {mobile ? 'Copy mobile' : 'No mobile on file'}
         </DropdownMenuItem>
-        <DropdownMenuItem disabled={!linkedinUrl} onClick={() => linkedinUrl && copyValue(linkedinUrl, 'LinkedIn')}>
-          <LinkedinIcon />
-          {linkedinUrl ? 'Copy LinkedIn' : 'No LinkedIn on file'}
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!website} onClick={() => website && copyValue(website, 'Website')}>
-          <Globe />
-          {website ? "Copy company's website" : 'No website on file'}
-        </DropdownMenuItem>
+        <SplitActionRow
+          icon={LinkedinIcon}
+          value={linkedinUrl}
+          label="LinkedIn"
+          emptyLabel="No LinkedIn on file"
+          copyLabel="LinkedIn"
+          href={(v) => v}
+          external
+        />
+        <SplitActionRow
+          icon={Globe}
+          value={website}
+          label="Company's website"
+          emptyLabel="No website on file"
+          copyLabel="Website"
+          href={(v) => v}
+          external
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );
