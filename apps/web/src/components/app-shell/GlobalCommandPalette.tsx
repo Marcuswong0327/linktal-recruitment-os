@@ -39,17 +39,22 @@ export function CommandPaletteProvider({
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const auth = { permissions };
+  const isMac = useIsMac();
 
   React.useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      const isPaletteShortcut =
+        ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') ||
+        // Alt+G only, not Cmd+G — Cmd/Ctrl+G is the browser's "Find Next" shortcut on Mac.
+        (!isMac && e.altKey && e.key.toLowerCase() === 'g');
+      if (isPaletteShortcut) {
         e.preventDefault();
         setOpen((prev) => !prev);
       }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [isMac]);
 
   const visiblePages = pageCommands.filter(
     (item) => !item.hidden && !(item.adminOnly && !isAdmin) && hasPermission(auth, item.requiredPermission),
@@ -149,9 +154,20 @@ export function CommandPaletteTrigger({ size = 'sm', className }: { size?: 'sm' 
       >
         <Search className="size-5 shrink-0 text-primary" />
         <span className="flex-1 text-base">Search anything...</span>
-        <span className="flex items-center gap-0.5">
-          <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
-          <Kbd>K</Kbd>
+        <span className="flex items-center gap-1.5">
+          <span className="flex items-center gap-0.5">
+            <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
+            <Kbd>K</Kbd>
+          </span>
+          {!isMac && (
+            <>
+              <span className="text-muted-foreground">or</span>
+              <span className="flex items-center gap-0.5">
+                <Kbd>Alt</Kbd>
+                <Kbd>G</Kbd>
+              </span>
+            </>
+          )}
         </span>
       </button>
     );
