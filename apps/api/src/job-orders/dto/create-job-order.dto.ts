@@ -111,4 +111,25 @@ export class CreateJobOrderDto {
   @Min(1)
   @Max(3)
   priorityLevel?: number;
+
+  // Not @IsUrl, same reasoning as Tob.sourceFileLink: these hold SharePoint
+  // links, bare file paths, and the occasional note — rejecting non-URLs
+  // would lose the only pointer to the original document.
+  @ApiPropertyOptional({ description: 'Link to the job description document' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  jdFileUrl?: string;
+
+  @ApiPropertyOptional({ description: "Link to the client's own published ad for this role" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  clientAdsUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Link to any other document supporting this job order' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  otherDocumentsUrl?: string;
 }
