@@ -7,8 +7,7 @@ export type UploadFolder = 'tob' | 'job-orders' | 'candidates';
 
 // Matches exactly what buildKey produces: <folder>/<uuid>-<sanitized name>.
 // Enforced on every read so a manipulated `key` query param can't reach
-// anything else in the bucket — this bucket (R2_BUCKET_NAME) isn't
-// dedicated to this app, so that boundary matters.
+// anything else in the bucket.
 const KEY_PATTERN =
   /^(tob|job-orders|candidates)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-[a-zA-Z0-9._-]+$/;
 
@@ -40,7 +39,7 @@ export class UploadsService {
       const accountId = this.config.get<string>('R2_ACCOUNT_ID');
       const accessKeyId = this.config.get<string>('R2_ACCESS_KEY_ID');
       const secretAccessKey = this.config.get<string>('R2_SECRET_ACCESS_KEY');
-      const bucket = this.config.get<string>('R2_BUCKET_NAME');
+      const bucket = this.config.get<string>('R2_UPLOAD_BUCKET_NAME');
 
       if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
         throw new InternalServerErrorException({
