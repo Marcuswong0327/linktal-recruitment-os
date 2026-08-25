@@ -19,11 +19,11 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ContactIconRow, JobOrderPipelineCard } from '@/components/JobOrderPipelineCard';
+import { FileUploadField } from '@/components/FileUploadField';
 import { PageLayout } from '@/components/app-shell/PageLayout';
 import { useIsMac } from '@/hooks/use-is-mac';
 import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shortcut';
@@ -36,6 +36,7 @@ import {
   useGetJobOrder,
   useUpdateJobOrder,
 } from '@/lib/api/generated/job-orders/job-orders';
+import { useUploadJobOrderFile } from '@/lib/api/generated/uploads/uploads';
 import type { UpdateJobOrderDto } from '@/lib/api/generated/types';
 import { type JobOrder, jobOrderQualityLabels, jobOrderStatusLabels, qualityVariant, statusVariant } from './schema';
 
@@ -120,6 +121,16 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
       onError: (err) => toast.error(err.message || 'Failed to save job order'),
     },
   });
+
+  const uploadJobOrderFile = useUploadJobOrderFile();
+  async function handleUploadFile(file: File) {
+    // customFetch throws on any non-2xx response, so a resolved call is
+    // always the 201 envelope — this guard is just for TypeScript's
+    // discriminated-union narrowing (same as ImportDialog's `upload` prop).
+    const res = await uploadJobOrderFile.mutateAsync({ data: { file } });
+    if (res.status !== 201) throw new Error('Upload failed');
+    return res.data;
+  }
 
   const formRef = React.useRef<HTMLFormElement>(null);
   const isMac = useIsMac();
@@ -296,30 +307,27 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
                   <TableBody>
                     <TableRow className="divide-x divide-border">
                       <TableCell>
-                        <Input
+                        <FileUploadField
                           id="jdFileUrl"
-                          aria-label="JD file link"
-                          placeholder="https://…"
                           value={jdFileUrl}
-                          onChange={(e) => setJdFileUrl(e.target.value)}
+                          onChange={(url) => setJdFileUrl(url ?? '')}
+                          upload={handleUploadFile}
                         />
                       </TableCell>
                       <TableCell>
-                        <Input
+                        <FileUploadField
                           id="clientAdsUrl"
-                          aria-label="Client Ads file link"
-                          placeholder="https://…"
                           value={clientAdsUrl}
-                          onChange={(e) => setClientAdsUrl(e.target.value)}
+                          onChange={(url) => setClientAdsUrl(url ?? '')}
+                          upload={handleUploadFile}
                         />
                       </TableCell>
                       <TableCell>
-                        <Input
+                        <FileUploadField
                           id="otherDocumentsUrl"
-                          aria-label="Other Documents file link"
-                          placeholder="https://…"
                           value={otherDocumentsUrl}
-                          onChange={(e) => setOtherDocumentsUrl(e.target.value)}
+                          onChange={(url) => setOtherDocumentsUrl(url ?? '')}
+                          upload={handleUploadFile}
                         />
                       </TableCell>
                     </TableRow>

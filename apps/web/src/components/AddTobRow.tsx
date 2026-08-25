@@ -1,13 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import { FileText } from 'lucide-react';
 
 import { InlineAddRow } from '@/components/InlineAddRow';
 import { Input } from '@/components/ui/input';
 import { ConsultantCombobox } from '@/components/ConsultantCombobox';
 import { FormField } from '@/components/FormField';
-import { UrlField } from '@/components/UrlField';
+import { FileUploadField } from '@/components/FileUploadField';
 import type { ConsultantEntity } from '@/lib/api/generated/types';
 
 export interface AddTobValues {
@@ -32,12 +31,12 @@ interface AddTobRowProps {
   consultants: ConsultantEntity[];
   isSaving: boolean;
   onSave: (values: AddTobValues) => void;
+  /** Uploads the source document to R2 and returns its object key — see FileUploadField's `upload` prop. */
+  uploadFile: (file: File) => Promise<{ key: string; fileName: string }>;
 }
 
 const emptyValues = {
-  fileName: '',
   fileType: '',
-  sourceFileLink: '',
   clientTobRepresentative: '',
   linktalRepresentativeId: '',
   pricing: '',
@@ -56,12 +55,19 @@ export function AddTobRow({
   consultants,
   isSaving,
   onSave,
+  uploadFile,
 }: AddTobRowProps) {
   const [values, setValues] = React.useState(emptyValues);
+  const [fileName, setFileName] = React.useState<string | null>(null);
+  const [sourceFileLink, setSourceFileLink] = React.useState<string | null>(null);
 
   // Reset every time the row opens, not just on first mount.
   React.useEffect(() => {
-    if (open) setValues(emptyValues);
+    if (open) {
+      setValues(emptyValues);
+      setFileName(null);
+      setSourceFileLink(null);
+    }
   }, [open]);
 
   function set<K extends keyof typeof emptyValues>(key: K, value: (typeof emptyValues)[K]) {
@@ -70,9 +76,9 @@ export function AddTobRow({
 
   function handleSave() {
     onSave({
-      fileName: values.fileName.trim() || null,
+      fileName,
       fileType: values.fileType.trim() || null,
-      sourceFileLink: values.sourceFileLink.trim() || null,
+      sourceFileLink,
       clientTobRepresentative: values.clientTobRepresentative.trim() || null,
       linktalRepresentativeId: values.linktalRepresentativeId || null,
       pricing: values.pricing.trim() || null,
@@ -157,13 +163,6 @@ export function AddTobRow({
             onChange={(e) => set('invoiceContactEmail', e.target.value)}
           />
         </FormField>
-        <FormField label="File name" htmlFor="tob-file-name">
-          <Input
-            id="tob-file-name"
-            value={values.fileName}
-            onChange={(e) => set('fileName', e.target.value)}
-          />
-        </FormField>
         <FormField
           label="File type"
           htmlFor="tob-file-type"
@@ -177,15 +176,19 @@ export function AddTobRow({
         </FormField>
       </div>
       <FormField
-        label="Source file link"
-        htmlFor="tob-source-link"
-        description="e.g. a SharePoint URL — this is what the TOB ID links to."
+        label="Source document"
+        htmlFor="tob-source-file"
+        description="This is what the TOB ID links to."
       >
-        <UrlField
-          id="tob-source-link"
-          value={values.sourceFileLink}
-          onChange={(v) => set('sourceFileLink', v)}
-          icon={FileText}
+        <FileUploadField
+          id="tob-source-file"
+          value={sourceFileLink}
+          fileName={fileName}
+          onChange={(url, name) => {
+            setSourceFileLink(url);
+            setFileName(name);
+          }}
+          upload={uploadFile}
         />
       </FormField>
     </InlineAddRow>

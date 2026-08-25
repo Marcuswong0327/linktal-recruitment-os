@@ -36,6 +36,7 @@ import {
 import { LinkedinIcon, SeekIcon } from '@/components/BrandIcons';
 import { useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
+import { FileUploadField } from '@/components/FileUploadField';
 import { FormField } from '@/components/FormField';
 import { LocationCombobox, type LocationValue } from '@/components/LocationCombobox';
 import {
@@ -57,6 +58,7 @@ import {
   getGetCandidateContactHistoryQueryKey,
 } from '@/lib/api/generated/candidates/candidates';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
+import { useUploadCandidateFile } from '@/lib/api/generated/uploads/uploads';
 import { useGetJobOrders } from '@/lib/api/generated/job-orders/job-orders';
 import { getGetInterviewsQueryOptions } from '@/lib/api/generated/interviews/interviews';
 import { getGetPlacementsQueryOptions } from '@/lib/api/generated/placements/placements';
@@ -275,15 +277,13 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
       mobile: candidate.mobile ?? '',
       linkedinUrl: candidate.linkedinUrl ?? '',
       seekTalentUrl: candidate.seekTalentUrl ?? '',
-      rawResumeUrl: candidate.rawResumeUrl ?? '',
-      editedResumeUrl: candidate.editedResumeUrl ?? '',
     },
   });
 
-  // Industry/role type/specializations are reference-table pickers, not
-  // plain registered inputs — tracked as their own state (like
-  // CompanyDetail's industryId/specializationId) and merged into the patch
-  // on submit, since RHF's dirty-tracking doesn't see them.
+  // Industry/role type/specializations/resumes are reference-table pickers
+  // or uploads, not plain registered inputs — tracked as their own state
+  // (like CompanyDetail's industryId/specializationId) and merged into the
+  // patch on submit, since RHF's dirty-tracking doesn't see them.
   const [industryId, setIndustryId] = React.useState(candidate.industryId ?? '');
   const [roleTypeId, setRoleTypeId] = React.useState(candidate.jobRoleTypeId ?? '');
   const [specializationIds, setSpecializationIds] = React.useState(candidate.specializationIds);
@@ -292,6 +292,8 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
       ? { id: candidate.locationId, name: candidate.location ?? candidate.locationId }
       : null,
   );
+  const [rawResumeUrl, setRawResumeUrl] = React.useState(candidate.rawResumeUrl ?? '');
+  const [editedResumeUrl, setEditedResumeUrl] = React.useState(candidate.editedResumeUrl ?? '');
   // Purely a display toggle for the Contact row below — not part of isDirty.
   const [editingContact, setEditingContact] = React.useState(false);
 
@@ -349,7 +351,19 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
     industryId !== (candidate.industryId ?? '') ||
     roleTypeId !== (candidate.jobRoleTypeId ?? '') ||
     !sameIds(specializationIds, candidate.specializationIds) ||
-    (location?.id ?? '') !== (candidate.locationId ?? '');
+    (location?.id ?? '') !== (candidate.locationId ?? '') ||
+    rawResumeUrl !== (candidate.rawResumeUrl ?? '') ||
+    editedResumeUrl !== (candidate.editedResumeUrl ?? '');
+
+  const uploadCandidateFile = useUploadCandidateFile();
+  async function handleUploadFile(file: File) {
+    // customFetch throws on any non-2xx response, so a resolved call is
+    // always the 201 envelope — this guard is just for TypeScript's
+    // discriminated-union narrowing (same as ImportDialog's `upload` prop).
+    const res = await uploadCandidateFile.mutateAsync({ data: { file } });
+    if (res.status !== 201) throw new Error('Upload failed');
+    return res.data;
+  }
 
   const updateCandidate = useUpdateCandidate({
     mutation: {
@@ -375,6 +389,8 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
         jobRoleTypeId: roleTypeId || null,
         specializationIds,
         locationId: location?.id ?? candidate.locationId,
+        rawResumeUrl: rawResumeUrl || null,
+        editedResumeUrl: editedResumeUrl || null,
       } as UpdateCandidateDto,
     });
     setEditingContact(false);
@@ -779,17 +795,19 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   <TableBody>
                     <TableRow className="divide-x divide-border">
                       <TableCell>
-                        <Input
+                        <FileUploadField
                           id="rawResumeUrl"
-                          placeholder="https://…"
-                          {...register('rawResumeUrl')}
+                          value={rawResumeUrl}
+                          onChange={(url) => setRawResumeUrl(url ?? '')}
+                          upload={handleUploadFile}
                         />
                       </TableCell>
                       <TableCell>
-                        <Input
+                        <FileUploadField
                           id="editedResumeUrl"
-                          placeholder="https://…"
-                          {...register('editedResumeUrl')}
+                          value={editedResumeUrl}
+                          onChange={(url) => setEditedResumeUrl(url ?? '')}
+                          upload={handleUploadFile}
                         />
                       </TableCell>
                       <TableCell>

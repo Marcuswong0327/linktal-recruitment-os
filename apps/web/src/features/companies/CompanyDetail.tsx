@@ -54,6 +54,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { AddStakeholderRow, type AddStakeholderValues } from '@/components/AddStakeholderRow';
 import { AddTobRow, type AddTobValues } from '@/components/AddTobRow';
+import { fileViewUrl } from '@/components/FileUploadField';
 import { LinkedinIcon, SeekIcon } from '@/components/BrandIcons';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { ConsultantAvatar, useConsultantLookup } from '@/components/ConsultantCombobox';
@@ -108,6 +109,7 @@ import {
   useGetStakeholders,
 } from '@/lib/api/generated/stakeholders/stakeholders';
 import { getGetTobsQueryKey, useCreateTob, useGetTobs } from '@/lib/api/generated/tobs/tobs';
+import { useUploadTobFile } from '@/lib/api/generated/uploads/uploads';
 import type {
   ClientEntity,
   CreateStakeholderContactHistoryDto,
@@ -611,6 +613,16 @@ function CompanyEditForm({
     createTob.mutate({ data: { clientId: company.id, ...values } as unknown as CreateTobDto });
   }
 
+  const uploadTobFile = useUploadTobFile();
+  async function handleUploadTobFile(file: File) {
+    // customFetch throws on any non-2xx response, so a resolved call is
+    // always the 201 envelope — this guard is just for TypeScript's
+    // discriminated-union narrowing (same as ImportDialog's `upload` prop).
+    const res = await uploadTobFile.mutateAsync({ data: { file } });
+    if (res.status !== 201) throw new Error('Upload failed');
+    return res.data;
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const data: UpdateClientDto = {
@@ -1068,7 +1080,7 @@ function CompanyEditForm({
                           <TableCell className="font-mono text-xs">
                             {tob.sourceFileLink ? (
                               <a
-                                href={tob.sourceFileLink}
+                                href={fileViewUrl(tob.sourceFileLink)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-foreground hover:underline"
@@ -1135,6 +1147,7 @@ function CompanyEditForm({
                           consultants={consultants}
                           isSaving={createTob.isPending}
                           onSave={handleAddTob}
+                          uploadFile={handleUploadTobFile}
                         />
                       ) : null}
                     </TableBody>
