@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
-import { CheckCheck, ChevronDown, Download, MapPin, Plus, Trash2 } from 'lucide-react';
+import { CheckCheck, ChevronDown, Download, MapPin, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
