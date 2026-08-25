@@ -11,4 +11,8 @@ export type GetInterviewsParams = {
  * Filter by submission ID
  */
 submissionId?: string;
+/**
+ * Filter by job order ID
+ */
+jobOrderId?: string;
 };

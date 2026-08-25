@@ -43,4 +43,10 @@ export interface CreateJobOrderDto {
   quality?: CreateJobOrderDtoQuality;
   /** Priority: 1=High, 2=Medium, 3=Low */
   priorityLevel?: number;
+  /** Link to the job description document */
+  jdFileUrl?: string;
+  /** Link to the client's own published ad for this role */
+  clientAdsUrl?: string;
+  /** Link to any other document supporting this job order */
+  otherDocumentsUrl?: string;
 }

@@ -9971,6 +9971,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "jobOrderId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by job order ID",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -10013,7 +10022,7 @@
             "bearer": []
           }
         ],
-        "summary": "List interview rounds, filtered by submissionId",
+        "summary": "List interview rounds, filtered by submissionId and/or jobOrderId",
         "tags": [
           "Interviews"
         ]
@@ -12932,6 +12941,18 @@
           "candidateName": {
             "type": "string"
           },
+          "candidateEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "candidateMobile": {
+            "type": "string",
+            "nullable": true
+          },
+          "candidateLinkedinUrl": {
+            "type": "string",
+            "nullable": true
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -12940,6 +12961,16 @@
               "REJECTED",
               "PLACED"
             ]
+          },
+          "shortlisted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Client shortlisted this candidate to interview — tri-state, gates the interview stage"
+          },
+          "cddAccepted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Candidate accepted the offer — tri-state, gates the starting-date field"
           },
           "submittedAt": {
             "format": "date-time",
@@ -12969,7 +13000,12 @@
           "submissionId",
           "candidateId",
           "candidateName",
+          "candidateEmail",
+          "candidateMobile",
+          "candidateLinkedinUrl",
           "status",
+          "shortlisted",
+          "cddAccepted",
           "submittedAt",
           "latestInterviewDate",
           "placementBaseSalary",
@@ -13103,6 +13139,21 @@
             "nullable": true,
             "description": "Briefing notes — internal, distinct from the public-facing description/requirements copy"
           },
+          "jdFileUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Link to the job description document"
+          },
+          "clientAdsUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Link to the client's own published ad for this role"
+          },
+          "otherDocumentsUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Link to any other document supporting this job order"
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -13147,6 +13198,27 @@
             "items": {
               "$ref": "#/components/schemas/JobOrderPipelineCandidateEntity"
             }
+          },
+          "keyStakeholderId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The client's most recently contacted stakeholder"
+          },
+          "keyStakeholderName": {
+            "type": "string",
+            "nullable": true
+          },
+          "keyStakeholderEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "keyStakeholderMobile": {
+            "type": "string",
+            "nullable": true
+          },
+          "keyStakeholderLinkedinUrl": {
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
@@ -13175,6 +13247,9 @@
           "description",
           "requirements",
           "notes",
+          "jdFileUrl",
+          "clientAdsUrl",
+          "otherDocumentsUrl",
           "status",
           "quality",
           "priorityLevel",
@@ -13182,7 +13257,12 @@
           "closedAt",
           "createdAt",
           "updatedAt",
-          "pipelineSubmissions"
+          "pipelineSubmissions",
+          "keyStakeholderId",
+          "keyStakeholderName",
+          "keyStakeholderEmail",
+          "keyStakeholderMobile",
+          "keyStakeholderLinkedinUrl"
         ]
       },
       "PaginatedJobOrdersEntity": {
@@ -13318,6 +13398,18 @@
             "description": "Priority: 1=High, 2=Medium, 3=Low",
             "example": 2,
             "default": 2
+          },
+          "jdFileUrl": {
+            "type": "string",
+            "description": "Link to the job description document"
+          },
+          "clientAdsUrl": {
+            "type": "string",
+            "description": "Link to the client's own published ad for this role"
+          },
+          "otherDocumentsUrl": {
+            "type": "string",
+            "description": "Link to any other document supporting this job order"
           }
         },
         "required": [
@@ -13412,6 +13504,18 @@
             "description": "Priority: 1=High, 2=Medium, 3=Low",
             "example": 2,
             "default": 2
+          },
+          "jdFileUrl": {
+            "type": "string",
+            "description": "Link to the job description document"
+          },
+          "clientAdsUrl": {
+            "type": "string",
+            "description": "Link to the client's own published ad for this role"
+          },
+          "otherDocumentsUrl": {
+            "type": "string",
+            "description": "Link to any other document supporting this job order"
           }
         }
       },
@@ -14786,6 +14890,16 @@
             "format": "date-time",
             "type": "string"
           },
+          "shortlisted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Client shortlisted this candidate to interview — tri-state, gates the interview stage"
+          },
+          "cddAccepted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Candidate accepted the offer — tri-state, gates the starting-date field"
+          },
           "notes": {
             "type": "string",
             "nullable": true
@@ -14808,6 +14922,8 @@
           "jobOrderTitle",
           "status",
           "submittedAt",
+          "shortlisted",
+          "cddAccepted",
           "notes",
           "createdAt",
           "updatedAt"
@@ -14834,6 +14950,16 @@
               "PLACED"
             ],
             "example": "SUBMITTED"
+          },
+          "shortlisted": {
+            "type": "boolean",
+            "description": "Client shortlisted this candidate to interview — tri-state, gates the interview stage",
+            "nullable": true
+          },
+          "cddAccepted": {
+            "type": "boolean",
+            "description": "Candidate accepted the offer — tri-state, gates the starting-date field",
+            "nullable": true
           },
           "notes": {
             "type": "string",
@@ -14866,6 +14992,16 @@
               "PLACED"
             ],
             "example": "SUBMITTED"
+          },
+          "shortlisted": {
+            "type": "boolean",
+            "description": "Client shortlisted this candidate to interview — tri-state, gates the interview stage",
+            "nullable": true
+          },
+          "cddAccepted": {
+            "type": "boolean",
+            "description": "Candidate accepted the offer — tri-state, gates the starting-date field",
+            "nullable": true
           },
           "notes": {
             "type": "string",
