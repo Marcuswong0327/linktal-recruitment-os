@@ -15,6 +15,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   ArrowDown,
   ArrowUp,
@@ -51,6 +52,16 @@ import {
 } from '@/components/ui/context-menu';
 
 const SELECT_COLUMN_ID = '__select';
+
+/**
+ * Row-height guess for the virtualizer (infiniteScroll mode only) — refined
+ * per-row afterward via its `measureElement` callback, so this only needs to
+ * be roughly right (matches this grid's typical single-line row: `py-1.5`
+ * cell padding + one line of text).
+ */
+const ROW_HEIGHT_ESTIMATE = 37;
+/** Fetch the next page once the scroll container is within this many px of its bottom. Matches TanStack's own virtualized-infinite-scrolling example. */
+const FETCH_DISTANCE_PX = 500;
 
 export interface DataGridFilter {
   /** Column id (accessorKey) to filter on. */
@@ -168,6 +179,10 @@ function DataGridBodyRowInner<TData>({
   hasContextMenu,
   onRowContextMenu,
   onRowClick,
+  isVirtual,
+  virtualStyle,
+  virtualIndex,
+  measureRowRef,
 }: {
   row: Row<TData>;
   isSelected: boolean;
@@ -178,11 +193,22 @@ function DataGridBodyRowInner<TData>({
   onRowContextMenu: (row: Row<TData>) => void;
   /** Already resolved to "suppress the click after a drag" — undefined when the caller has no row-click behavior at all. */
   onRowClick?: (row: Row<TData>) => void;
+  /** True only in infiniteScroll mode — rows are positioned by @tanstack/react-virtual instead of native table flow, so row/cell layout switches from table-cell to flex. */
+  isVirtual: boolean;
+  /** Absolute position + translateY for this row's slot, computed by the virtualizer. Only meaningful when `isVirtual`. */
+  virtualStyle?: React.CSSProperties;
+  /** The virtualizer's row index, so it can correlate this DOM node back to its slot for re-measurement. */
+  virtualIndex?: number;
+  /** The virtualizer's own `measureElement` callback, so it can track this row's real rendered height. */
+  measureRowRef?: (node: HTMLTableRowElement | null) => void;
 }) {
   return (
     <TableRow
+      ref={isVirtual ? measureRowRef : undefined}
+      data-index={isVirtual ? virtualIndex : undefined}
       data-row-id={row.id}
       data-state={isSelected ? 'selected' : undefined}
+      style={isVirtual ? virtualStyle : undefined}
       // Capture, not bubble — a popup's own "click outside closes it" logic
       // commonly runs in the capture phase too, and can strip its
       // [data-open] marker before a bubble-phase handler here would even
@@ -195,7 +221,11 @@ function DataGridBodyRowInner<TData>({
       className={cn(onRowClick && 'cursor-pointer')}
     >
       {row.getVisibleCells().map((cell) => (
-        <TableCell key={cell.id} className={columnAlignClass(cell.column.columnDef.meta)}>
+        <TableCell
+          key={cell.id}
+          className={columnAlignClass(cell.column.columnDef.meta)}
+          style={isVirtual ? { display: 'flex', width: cell.column.getSize() } : undefined}
+        >
           <span data-measure-column={cell.column.id} className="inline-block max-w-full">
             {flexRender(cell.column.columnDef.cell, cell.getContext())}
           </span>
@@ -232,6 +262,13 @@ export interface DataGridServerProps {
    * row. `data` must contain every row loaded so far (pages 1..page
    * concatenated), not just the current page — same as `onPageChange` would
    * otherwise require, just accumulated by the caller instead of replaced.
+   *
+   * Rows are virtualized (`@tanstack/react-virtual`) rather than all mounted
+   * at once, so scroll performance stays flat no matter how many pages have
+   * accumulated. Virtualization needs a scroll container with a known,
+   * bounded height to measure against, so this requires `fillHeight` (the
+   * default) — see that prop's doc — rather than the page-level scroll
+   * `fillHeight={false}` allows.
    */
   infiniteScroll?: boolean;
   /** A next-page fetch is in flight — shows a footer spinner and blocks re-triggering `onPageChange` (infiniteScroll only). */
@@ -338,6 +375,10 @@ interface DataGridProps<TData> {
    * height depending on the rest of the chain — this prop sidesteps that
    * by removing the flex-fill classes outright rather than trying to make
    * them inert.
+   *
+   * `server.infiniteScroll` requires this to stay `true` — its row
+   * virtualization needs the grid's own scroll container, not page-level
+   * scroll, to measure against.
    */
   fillHeight?: boolean;
 }
@@ -684,12 +725,49 @@ export function DataGrid<TData>({
   // `moved` distinguishes a genuine drag from a plain click so a click still
   // reaches `onRowClick` (e.g. navigating to the row's detail page)
   // untouched, and a drag suppresses that click instead of also navigating.
-  const dragStateRef = React.useRef<{ anchorId: string; moved: boolean } | null>(null);
+  //
+  // `additive`/`baseSelection` support Sheets-style multi-range selection:
+  // holding Cmd/Ctrl when a drag *starts* means this range should be added to
+  // whatever was already selected instead of replacing it. `baseSelection`
+  // snapshots that prior selection once, at mousedown — `applySelectionRange`
+  // below then recomputes `baseSelection ∪ currentDragRange` fresh on every
+  // move, rather than mutating it incrementally, so dragging back and forth
+  // never leaves stray rows selected from a range the pointer already left. A
+  // plain (non-modifier) drag always starts from an empty base, matching
+  // Sheets/Finder/Explorer: the modifier is read once at mousedown, not
+  // polled during the drag, since that's the same moment those apps check it
+  // and avoids having to track key state independently of mouse capture.
+  const dragStateRef = React.useRef<{
+    anchorId: string;
+    moved: boolean;
+    additive: boolean;
+    baseSelection: RowSelectionState;
+  } | null>(null);
   // Latest pointer position during a drag — read by the auto-scroll rAF loop
   // below, which needs it on frames where no mousemove fired.
   const dragPointerRef = React.useRef<{ x: number; y: number } | null>(null);
   const suppressNextClickRef = React.useRef(false);
   const [isRowDragging, setIsRowDragging] = React.useState(false);
+
+  // Teaches the Cmd/Ctrl-drag multi-range shortcut every time it's relevant
+  // (a real, non-additive drag is under way) rather than up front in a modal
+  // nobody reads — see the drag-select doc above. Deliberately shown on
+  // *every* plain drag, not just the first ever: it's an infrequently-used
+  // shortcut easy to forget between uses, and since it only ever appears
+  // during an active drag (never a persistent element), showing it every
+  // time costs nothing while idle.
+  const [showMultiRangeHint, setShowMultiRangeHint] = React.useState(false);
+  // Positioned imperatively (see the mousemove handler below), not via React
+  // state, so following the cursor doesn't force a re-render on every pixel
+  // of movement — same reasoning as `dragPointerRef` itself.
+  const multiRangeHintRef = React.useRef<HTMLDivElement>(null);
+  const modifierLabel = React.useMemo(
+    () =>
+      typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent)
+        ? '⌘'
+        : 'Ctrl',
+    [],
+  );
 
   const rowIndexById = React.useMemo(() => {
     const map = new Map<string, number>();
@@ -701,18 +779,24 @@ export function DataGrid<TData>({
   // the per-row `mouseenter` handler (fast movement over already-loaded rows)
   // and the auto-scroll loop below (which hit-tests the row under the cursor
   // itself, since rows sliding under a *stationary* cursor during auto-scroll
-  // never fire a native `mouseenter`).
+  // never fire a native `mouseenter`). Always recomputed from
+  // `state.baseSelection` (see its doc above) rather than the current
+  // `rowSelection`, so a drag that overshoots and comes back never leaves
+  // extra rows selected.
   const applySelectionRange = React.useCallback(
     (rowId: string) => {
       const state = dragStateRef.current;
       if (!state) return;
+      if (!state.moved && !state.additive) {
+        setShowMultiRangeHint(true);
+      }
       state.moved = true;
       setIsRowDragging(true);
       const anchorIdx = rowIndexById.get(state.anchorId);
       const currentIdx = rowIndexById.get(rowId);
       if (anchorIdx === undefined || currentIdx === undefined) return;
       const [lo, hi] = anchorIdx <= currentIdx ? [anchorIdx, currentIdx] : [currentIdx, anchorIdx];
-      const next: RowSelectionState = {};
+      const next: RowSelectionState = { ...state.baseSelection };
       for (let i = lo; i <= hi; i++) {
         const r = rows[i];
         if (r.getCanSelect()) next[r.id] = true;
@@ -730,8 +814,8 @@ export function DataGrid<TData>({
   // Auto-scroll + selection-extension while dragging near the top/bottom edge
   // of the grid's scroll container — the same gesture a spreadsheet supports:
   // drag past the visible rows and it scrolls (and, here, paginates via the
-  // existing `loadMoreRef` sentinel/IntersectionObserver as more rows scroll
-  // into view) to keep extending the selection, rather than the drag simply
+  // scroll-driven `fetchMoreOnBottomReached` below as more rows scroll into
+  // view) to keep extending the selection, rather than the drag simply
   // stalling once it reaches the last rendered row.
   //
   // Runs on a rAF loop instead of `mousemove` alone because the selection
@@ -879,7 +963,13 @@ export function DataGrid<TData>({
       ) {
         return;
       }
-      dragStateRef.current = { anchorId: row.id, moved: false };
+      const additive = e.metaKey || e.ctrlKey;
+      dragStateRef.current = {
+        anchorId: row.id,
+        moved: false,
+        additive,
+        baseSelection: additive ? rowSelectionRef.current : {},
+      };
       dragPointerRef.current = { x: e.clientX, y: e.clientY };
       startAutoScrollLoop();
     },
@@ -920,11 +1010,20 @@ export function DataGrid<TData>({
 
   // Tracks pointer position during a drag — the auto-scroll loop needs it on
   // frames where the pointer didn't move but rows still scrolled underneath.
+  // Also repositions the multi-range hint tooltip directly on the DOM node
+  // (via `multiRangeHintRef`) rather than through React state, so a hint
+  // that's following the cursor doesn't force a re-render on every pixel —
+  // the element itself only mounts/unmounts on the rarer `showMultiRangeHint`
+  // state change.
   React.useEffect(() => {
     if (!enableRowRangeSelect) return;
     function handleMouseMove(e: MouseEvent) {
       if (!dragStateRef.current) return;
       dragPointerRef.current = { x: e.clientX, y: e.clientY };
+      const hintEl = multiRangeHintRef.current;
+      if (hintEl) {
+        hintEl.style.transform = `translate(${e.clientX + 16}px, ${e.clientY + 20}px)`;
+      }
     }
     document.addEventListener('mousemove', handleMouseMove);
     return () => document.removeEventListener('mousemove', handleMouseMove);
@@ -944,6 +1043,7 @@ export function DataGrid<TData>({
       dragPointerRef.current = null;
       stopAutoScrollLoop();
       setIsRowDragging(false);
+      setShowMultiRangeHint(false);
     }
     // Capture phase, not bubble — a popup item's own click handler (Select,
     // Combobox) commonly calls stopPropagation so outer "click away"
@@ -983,39 +1083,88 @@ export function DataGrid<TData>({
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [onSelectionChange]);
 
-  // Infinite scroll: observes a sentinel row placed after the last loaded
-  // row and requests the next page once it scrolls into view. IntersectionObserver's
-  // default root (the viewport) still correctly reports visibility through
-  // the table's own nested scroll container, so no explicit root wiring is
-  // needed here.
+  // Infinite scroll + virtualization: `infiniteScroll` tables render only
+  // the rows near the viewport (via @tanstack/react-virtual) instead of every
+  // loaded row, so scroll performance stays flat no matter how many pages
+  // have accumulated — classic pagination doesn't need this, since it never
+  // has more than one page's worth of rows on screen at once. This follows
+  // TanStack's own virtualized-infinite-scrolling example directly
+  // (https://tanstack.com/table/latest/docs/framework/react/examples/virtualized-infinite-scrolling),
+  // adapted from its v9 API to this app's v8 `useReactTable`.
   //
+  // This app went through two earlier attempts at the fetch-trigger alone
+  // (percent of total scrollHeight, then percent of one viewport remaining)
+  // chasing an "80% scrolled" framing, and both were the wrong tool — a
+  // ratio needs knowing which element is "the" scroller, which used to be
+  // genuinely ambiguous (fillHeight vs. non-fillHeight pages scrolled
+  // different elements). `infiniteScroll` now requires `fillHeight` (the
+  // default) — see that prop's doc — specifically to remove that ambiguity:
+  // there is exactly one scroll container, `[data-slot="table-container"]`,
+  // the same element the virtualizer itself watches. Distance-from-bottom in
+  // fixed pixels (not a ratio) is also just what the reference example
+  // itself uses, and what most real infinite-scroll UIs do.
+  const isVirtual = !!server?.infiniteScroll;
+
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () =>
+      gridContainerRef.current?.querySelector<HTMLElement>('[data-slot="table-container"]') ??
+      null,
+    estimateSize: () => ROW_HEIGHT_ESTIMATE,
+    overscan: 8,
+    enabled: isVirtual,
+    // Dynamic re-measurement — a cell can wrap to more than one line (a long
+    // company name, etc.), so the flat estimate alone would misplace later
+    // rows. Skipped in Firefox: it measures this row's own border height
+    // incorrectly there (the same caveat the reference example notes).
+    measureElement:
+      isVirtual && typeof window !== 'undefined' && navigator.userAgent.indexOf('Firefox') === -1
+        ? (element) => element.getBoundingClientRect().height
+        : undefined,
+  });
+
   // `server` is a fresh object literal every render (the caller passes
-  // `server={{ ... }}` inline), so a ref callback that closed over it
-  // directly would tear down and recreate the observer on every render —
-  // and since `observer.observe()` fires its callback immediately with the
-  // *current* intersection state, recreating it while the sentinel is still
-  // in view (e.g. right after loading a page, before new rows push it
-  // off-screen) re-fires `onPageChange` again before `isFetchingNextPage`
-  // has had a chance to become true, snowballing into duplicate page
-  // fetches. Reading `server` from a ref instead keeps the callback fresh
-  // without ever recreating the observer itself.
+  // `server={{ ... }}` inline) — reading it via a ref keeps this callback's
+  // identity stable (empty deps) without ever going stale.
   const serverRef = React.useRef(server);
   serverRef.current = server;
-  const loadMoreRef = React.useCallback((node: HTMLTableRowElement | null) => {
-    if (!node) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        const s = serverRef.current;
-        if (!s?.infiniteScroll) return;
-        if (entry?.isIntersecting && s.page < s.pageCount && !s.isFetchingNextPage) {
-          s.onPageChange(s.page + 1);
-        }
-      },
-      { rootMargin: '300px' },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
+  const fetchMoreOnBottomReached = React.useCallback((containerEl?: HTMLElement | null) => {
+    if (!containerEl) return;
+    const s = serverRef.current;
+    if (!s?.infiniteScroll) return;
+    const { scrollHeight, scrollTop, clientHeight } = containerEl;
+    if (
+      scrollHeight - scrollTop - clientHeight < FETCH_DISTANCE_PX &&
+      !s.isFetchingNextPage &&
+      s.page < s.pageCount
+    ) {
+      s.onPageChange(s.page + 1);
+    }
   }, []);
+
+  // Attaches the scroll listener once — the container element itself never
+  // changes for the life of the component, so there's nothing to re-attach
+  // to on later renders. Unthrottled, matching the reference example: each
+  // check is just three property reads, cheap enough to run on every native
+  // scroll event.
+  React.useEffect(() => {
+    if (!isVirtual) return;
+    const el = gridContainerRef.current?.querySelector<HTMLElement>('[data-slot="table-container"]');
+    if (!el) return;
+    const handleScroll = () => fetchMoreOnBottomReached(el);
+    el.addEventListener('scroll', handleScroll, { passive: true });
+    return () => el.removeEventListener('scroll', handleScroll);
+  }, [isVirtual, fetchMoreOnBottomReached]);
+
+  // Re-checks after each page's rows actually render — covers a page that
+  // still doesn't fill the container (nothing to scroll yet, so no scroll
+  // event would otherwise re-trigger this), same as the reference example's
+  // mount-time check.
+  React.useEffect(() => {
+    if (!isVirtual) return;
+    const el = gridContainerRef.current?.querySelector<HTMLElement>('[data-slot="table-container"]');
+    fetchMoreOnBottomReached(el);
+  }, [isVirtual, fetchMoreOnBottomReached, rows.length]);
 
   // Pass 2: refine upward with actual cell content once real rows are
   // available (a short header like "TOB" undersells the pill it holds). Cell
@@ -1050,12 +1199,78 @@ export function DataGrid<TData>({
     setMeasuredSizes((prev) => raiseSizes(prev, next));
   }, [rows, isLoading]);
 
+  // Shared between the initial-load skeleton and the infinite-scroll
+  // next-page skeleton below — full placeholder rows rather than a bare
+  // spinner, so the scrollable area grows the instant a fetch starts instead
+  // of stopping dead at the last loaded row until it resolves. That's what
+  // was reading as "scrolling gets stuck": a fast flick/trackpad scroll can
+  // outrun the fetch, and a lone spinner row is only ever the height of one
+  // skeleton line, not the several rows' worth of scroll room this replaces
+  // it with.
+  //
+  // `absoluteTopPx`, when given, stacks the rows starting at that y offset
+  // (`display:flex; position:absolute`) — used only for the next-page
+  // skeleton in virtualized mode, so it lands right after the last
+  // absolutely-positioned real row instead of collapsing to the top of the
+  // (position:relative) tbody the way an ordinary flow sibling would once
+  // every real row is out of flow. Omitted (normal flow) for the
+  // initial-load skeleton, which has no virtualized siblings to line up
+  // after.
+  function renderSkeletonRows(
+    count: number,
+    keyPrefix: string,
+    virtual: boolean,
+    absoluteTopPx?: number,
+  ) {
+    return Array.from({ length: count }).map((_, rowIndex) => (
+      <TableRow
+        key={`${keyPrefix}-${rowIndex}`}
+        style={
+          !virtual
+            ? undefined
+            : absoluteTopPx !== undefined
+              ? {
+                  display: 'flex',
+                  position: 'absolute',
+                  top: absoluteTopPx + rowIndex * ROW_HEIGHT_ESTIMATE,
+                  left: 0,
+                  width: '100%',
+                }
+              : { display: 'flex', width: '100%' }
+        }
+      >
+        {table.getAllLeafColumns().map((column) => (
+          <TableCell
+            key={column.id}
+            style={virtual ? { display: 'flex', width: column.getSize() } : undefined}
+          >
+            <Skeleton className="h-4 w-full max-w-32 rounded-md" />
+          </TableCell>
+        ))}
+      </TableRow>
+    ));
+  }
+
   return (
     // flex-1/min-h-0 (when fillHeight) let the grid fill a height-locked
     // page and scroll its own rows (sticky header) — see the fillHeight doc
     // for why this is an explicit prop rather than something callers are
     // expected to neutralize from outside.
     <div ref={rootRef} className={cn('flex flex-col gap-3', fillHeight && 'min-h-0 flex-1')}>
+      {enableRowRangeSelect && showMultiRangeHint ? (
+        // Cursor-following, not anchored to any row — a drag can range over
+        // many rows, so there's no single "correct" cell to point a fixed
+        // tooltip at. Positioned imperatively by the mousemove handler above
+        // (see its doc); the transform here is just an off-screen default
+        // for the one frame before that handler first runs.
+        <div
+          ref={multiRangeHintRef}
+          className="pointer-events-none fixed top-0 left-0 z-50 rounded-md bg-foreground px-2 py-1 text-xs font-medium whitespace-nowrap text-background shadow-lg"
+          style={{ transform: 'translate(-9999px, -9999px)' }}
+        >
+          Hold {modifierLabel} to select more rows
+        </div>
+      ) : null}
       {/* Toolbar: search + primary action on their own row, filters wrap freely on the next */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -1197,14 +1412,29 @@ export function DataGrid<TData>({
             growing a column via resize expands the table — and scrolls —
             instead of squeezing its neighbors; minWidth keeps it filling the
             container the rest of the time, when that sum is narrower (columns
-            are now measured to fit their content, not padded out to 200px). */}
+            are now measured to fit their content, not padded out to 200px).
+            infiniteScroll mode drops table-fixed for `display:grid` instead
+            — virtualized rows are absolutely positioned, which native table
+            layout can't do, so column widths there come entirely from each
+            header/cell's own explicit `width` style (set below) rather than
+            from table-layout math. */}
         <Table
-          style={{ width: table.getTotalSize(), minWidth: '100%' }}
-          className="table-fixed [&_td]:border-r [&_th]:border-r [&_td:last-child]:border-r-0 [&_th:last-child]:border-r-0 [&_td]:py-1.5"
+          style={{
+            width: table.getTotalSize(),
+            minWidth: '100%',
+            ...(isVirtual ? { display: 'grid' } : {}),
+          }}
+          className={cn(
+            !isVirtual && 'table-fixed',
+            '[&_td]:border-r [&_th]:border-r [&_td:last-child]:border-r-0 [&_th:last-child]:border-r-0 [&_td]:py-1.5',
+          )}
         >
-          <TableHeader>
+          <TableHeader style={isVirtual ? { display: 'grid' } : undefined}>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
+              <TableRow
+                key={headerGroup.id}
+                style={isVirtual ? { display: 'flex', width: '100%' } : undefined}
+              >
                 {headerGroup.headers.map((header) => {
                   const canSort = header.column.getCanSort();
                   const sorted = header.column.getIsSorted();
@@ -1213,7 +1443,10 @@ export function DataGrid<TData>({
                   return (
                     <TableHead
                       key={header.id}
-                      style={{ width: header.getSize() }}
+                      style={{
+                        width: header.getSize(),
+                        ...(isVirtual ? { display: 'flex' } : {}),
+                      }}
                       className={cn('relative', columnAlignClass(header.column.columnDef.meta))}
                     >
                       <span className="inline-flex max-w-full items-center gap-1">
@@ -1285,52 +1518,115 @@ export function DataGrid<TData>({
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody className={cn(isRowDragging && 'select-none')}>
+          <TableBody
+            className={cn(isRowDragging && 'select-none')}
+            style={
+              isVirtual
+                ? {
+                    display: 'grid',
+                    ...(rows.length > 0
+                      ? {
+                          // Total height includes the trailing decorative
+                          // block (next-page skeleton or the END OF LIST
+                          // row) so the scroll container's real scrollHeight
+                          // — what fetchMoreOnBottomReached measures —
+                          // accounts for it too, not just the real rows.
+                          height:
+                            rowVirtualizer.getTotalSize() +
+                            (server?.infiniteScroll &&
+                            server.page < server.pageCount &&
+                            server.isFetchingNextPage
+                              ? Math.min(server.pageSize, 12)
+                              : !server || server.page >= server.pageCount
+                                ? 1
+                                : 0) *
+                              ROW_HEIGHT_ESTIMATE,
+                          position: 'relative',
+                        }
+                      : {}),
+                  }
+                : undefined
+            }
+          >
             {isLoading ? (
-              Array.from({ length: skeletonRows }).map((_, rowIndex) => (
-                <TableRow key={`skeleton-${rowIndex}`}>
-                  {table.getAllLeafColumns().map((column) => (
-                    <TableCell key={column.id}>
-                      <Skeleton className="h-4 w-full max-w-[8rem] rounded-md" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
+              renderSkeletonRows(skeletonRows, 'skeleton', isVirtual)
             ) : rows.length > 0 ? (
               <>
-                {rows.map((row) => (
-                  <DataGridBodyRow
-                    key={row.id}
-                    row={row}
-                    isSelected={row.getIsSelected()}
-                    enableRowRangeSelect={enableRowRangeSelect}
-                    onMouseDown={handleRowMouseDown}
-                    onMouseEnterRow={handleRowMouseEnter}
-                    hasContextMenu={!!selectionContextMenu}
-                    onRowContextMenu={handleRowContextMenu}
-                    onRowClick={onRowClick ? handleRowClick : undefined}
-                  />
-                ))}
-                {server?.infiniteScroll && server.page < server.pageCount ? (
-                  <TableRow ref={loadMoreRef}>
-                    <TableCell
-                      colSpan={totalColumns}
-                      className="py-3 text-center text-xs text-muted-foreground"
-                    >
-                      {server.isFetchingNextPage ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <Loader2 className="size-3 animate-spin" aria-hidden />
-                          Loading more…
-                        </span>
-                      ) : null}
-                    </TableCell>
-                  </TableRow>
-                ) : null}
+                {isVirtual
+                  ? rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const row = rows[virtualRow.index];
+                      return (
+                        <DataGridBodyRow
+                          key={row.id}
+                          row={row}
+                          isSelected={row.getIsSelected()}
+                          enableRowRangeSelect={enableRowRangeSelect}
+                          onMouseDown={handleRowMouseDown}
+                          onMouseEnterRow={handleRowMouseEnter}
+                          hasContextMenu={!!selectionContextMenu}
+                          onRowContextMenu={handleRowContextMenu}
+                          onRowClick={onRowClick ? handleRowClick : undefined}
+                          isVirtual
+                          virtualIndex={virtualRow.index}
+                          measureRowRef={rowVirtualizer.measureElement}
+                          virtualStyle={{
+                            display: 'flex',
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            transform: `translateY(${virtualRow.start}px)`,
+                          }}
+                        />
+                      );
+                    })
+                  : rows.map((row) => (
+                      <DataGridBodyRow
+                        key={row.id}
+                        row={row}
+                        isSelected={row.getIsSelected()}
+                        enableRowRangeSelect={enableRowRangeSelect}
+                        onMouseDown={handleRowMouseDown}
+                        onMouseEnterRow={handleRowMouseEnter}
+                        hasContextMenu={!!selectionContextMenu}
+                        onRowContextMenu={handleRowContextMenu}
+                        onRowClick={onRowClick ? handleRowClick : undefined}
+                        isVirtual={false}
+                      />
+                    ))}
+                {server?.infiniteScroll && server.page < server.pageCount && server.isFetchingNextPage
+                  ? // Full skeleton rows, not a bare spinner — see
+                    // renderSkeletonRows' doc for why. Capped well under
+                    // `pageSize` (often 50): enough rows to give a fast
+                    // flick/trackpad scroll real room to keep moving into
+                    // without a hard stop, without ballooning the DOM by a
+                    // full page's worth of nodes on every fetch, most of
+                    // which would be discarded off-screen the moment real
+                    // rows replace them anyway.
+                    renderSkeletonRows(
+                      Math.min(server.pageSize, 12),
+                      'skeleton-next',
+                      isVirtual,
+                      isVirtual ? rowVirtualizer.getTotalSize() : undefined,
+                    )
+                  : null}
                 {/* End-of-list marker on the final page. As the new last child
                     it also restores the bottom border of the last data row
                     (the primitive strips it from :last-child). */}
                 {!server || server.page >= server.pageCount ? (
-                  <TableRow>
+                  <TableRow
+                    style={
+                      isVirtual
+                        ? {
+                            display: 'flex',
+                            position: 'absolute',
+                            top: rowVirtualizer.getTotalSize(),
+                            left: 0,
+                            width: '100%',
+                          }
+                        : undefined
+                    }
+                  >
                     <TableCell
                       colSpan={totalColumns}
                       className="py-3 text-center text-xs text-muted-foreground"
