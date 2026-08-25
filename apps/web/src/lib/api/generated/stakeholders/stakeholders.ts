@@ -30,6 +30,7 @@ import type {
   ErrorResponse,
   ExportByIdsDto,
   ExportStakeholdersParams,
+  GetStakeholdersForEnrichmentParams,
   GetStakeholdersParams,
   ImportResultEntity,
   ImportStakeholdersBody,
@@ -656,7 +657,146 @@ export const useExportStakeholdersByIds = <TError = ErrorResponse,
       > => {
       return useMutation(getExportStakeholdersByIdsMutationOptions(options), queryClient);
     }
-    export type getStakeholderImportTemplateResponse200 = {
+    export type getStakeholdersForEnrichmentResponse200 = {
+  data: StakeholderEntity[]
+  status: 200
+}
+
+export type getStakeholdersForEnrichmentResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getStakeholdersForEnrichmentResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getStakeholdersForEnrichmentResponseSuccess = (getStakeholdersForEnrichmentResponse200) & {
+  headers: Headers;
+};
+export type getStakeholdersForEnrichmentResponseError = (getStakeholdersForEnrichmentResponse400 | getStakeholdersForEnrichmentResponse500) & {
+  headers: Headers;
+};
+
+export type getStakeholdersForEnrichmentResponse = (getStakeholdersForEnrichmentResponseSuccess | getStakeholdersForEnrichmentResponseError)
+
+export const getGetStakeholdersForEnrichmentUrl = (params: GetStakeholdersForEnrichmentParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["roleTypeIds","jobTitleIds","locationIds","accuracy","statuses","clientIds"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/stakeholders/enrichment?${stringifiedParams}` : `/stakeholders/enrichment`
+}
+
+/**
+ * @summary Every stakeholder across a required set of company IDs — unbounded, not paginated. Backs the cross-company enrichment workspace.
+ */
+export const getStakeholdersForEnrichment = async (params: GetStakeholdersForEnrichmentParams, options?: RequestInit): Promise<getStakeholdersForEnrichmentResponse> => {
+
+  return customFetch<getStakeholdersForEnrichmentResponse>(getGetStakeholdersForEnrichmentUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStakeholdersForEnrichmentQueryKey = (params?: GetStakeholdersForEnrichmentParams,) => {
+    return [
+    `/stakeholders/enrichment`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetStakeholdersForEnrichmentQueryOptions = <TData = Awaited<ReturnType<typeof getStakeholdersForEnrichment>>, TError = ErrorResponse>(params: GetStakeholdersForEnrichmentParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholdersForEnrichment>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStakeholdersForEnrichmentQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStakeholdersForEnrichment>>> = ({ signal }) => getStakeholdersForEnrichment(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStakeholdersForEnrichment>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetStakeholdersForEnrichmentQueryResult = NonNullable<Awaited<ReturnType<typeof getStakeholdersForEnrichment>>>
+export type GetStakeholdersForEnrichmentQueryError = ErrorResponse
+
+
+export function useGetStakeholdersForEnrichment<TData = Awaited<ReturnType<typeof getStakeholdersForEnrichment>>, TError = ErrorResponse>(
+ params: GetStakeholdersForEnrichmentParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholdersForEnrichment>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStakeholdersForEnrichment>>,
+          TError,
+          Awaited<ReturnType<typeof getStakeholdersForEnrichment>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStakeholdersForEnrichment<TData = Awaited<ReturnType<typeof getStakeholdersForEnrichment>>, TError = ErrorResponse>(
+ params: GetStakeholdersForEnrichmentParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholdersForEnrichment>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStakeholdersForEnrichment>>,
+          TError,
+          Awaited<ReturnType<typeof getStakeholdersForEnrichment>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStakeholdersForEnrichment<TData = Awaited<ReturnType<typeof getStakeholdersForEnrichment>>, TError = ErrorResponse>(
+ params: GetStakeholdersForEnrichmentParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholdersForEnrichment>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Every stakeholder across a required set of company IDs — unbounded, not paginated. Backs the cross-company enrichment workspace.
+ */
+
+export function useGetStakeholdersForEnrichment<TData = Awaited<ReturnType<typeof getStakeholdersForEnrichment>>, TError = ErrorResponse>(
+ params: GetStakeholdersForEnrichmentParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStakeholdersForEnrichment>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetStakeholdersForEnrichmentQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getStakeholderImportTemplateResponse200 = {
   data: void
   status: 200
 }

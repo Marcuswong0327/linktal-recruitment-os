@@ -208,6 +208,11 @@ export function JobOrdersTable({
   // CompaniesTable/StakeholdersTable/CandidatesTable's handleExport.
   async function handleExport() {
     setIsExporting(true);
+    // Same loading-toast pattern as every other entity's export — the
+    // button itself already stays visible here (not tucked inside a
+    // dropdown), but a toast is still the clearer signal for a
+    // potentially-slow, unbounded export than a small label change alone.
+    toast.loading('Exporting…', { id: 'export-job-orders' });
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     try {
       if (selectedJobOrders.length > 0) {
@@ -219,8 +224,9 @@ export function JobOrdersTable({
       } else {
         await downloadFile(getExportJobOrdersUrl({ q: search, statuses, priorityLevels, consultantIds, timezone }));
       }
+      toast.success('Export ready', { id: 'export-job-orders' });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Export failed');
+      toast.error(err instanceof Error ? err.message : 'Export failed', { id: 'export-job-orders' });
     } finally {
       setIsExporting(false);
     }

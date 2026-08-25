@@ -13,6 +13,7 @@ import { ExportClientsDto } from './dto/export-clients.dto';
 import { buildWorkbook, formatExportDate, resolveTimeZone, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
 import { clientStatusLabels, clientQualityLabels } from '../common/export-labels';
+import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
 
 /** The subset of QueryClientsDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination/sort but still satisfies this structurally. */
 type ClientFilterFields = Pick<
@@ -138,16 +139,26 @@ function contains(value?: string) {
   return value ? { contains: value, mode: Prisma.QueryMode.insensitive } : undefined;
 }
 
-/** The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept separate from the generic `toEntity<T>` return type, which erases extra fields when used across a second generic boundary. */
+/**
+ * The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept
+ * separate from the generic `toEntity<T>` return type, which erases extra
+ * fields when used across a second generic boundary. `locationPaths` isn't
+ * something `toEntity` produces (it strips `ancestorIds` before returning) —
+ * `exportAll`/`exportByIds` compute it separately, from the raw Prisma rows,
+ * before `toEntity` runs, and merge it in — see their own comment.
+ */
 type ClientExportRow = {
   companyName: string;
   displayId: string;
   industry: string | null;
   specialization: string | null;
-  locations: string[];
+  locationPaths: string[];
   status: ClientStatus;
   quality: ClientQuality;
   website: string | null;
+  seekJobMarketUrl: string | null;
+  linkedinJobMarketUrl: string | null;
+  generalDescription: string | null;
   lastContactedAt: Date | null;
   lastContactedBy: string | null;
   lastContactType: string | null;
@@ -315,6 +326,25 @@ export class ClientsService {
     };
   }
 
+  /**
+   * Resolves each client's locations to full breadcrumb paths ("Australia >
+   * New South Wales > Sydney") — the exact format the Locations import
+   * column expects (see xlsx-import.ts's `locationBreadcrumbPath`), so a
+   * client exported and re-uploaded actually round-trips instead of failing
+   * to resolve every location beneath the country level. `toEntity` strips
+   * `ancestorIds` before returning (it's scope-check-only, never part of the
+   * API response), so this has to run on the raw Prisma rows first and be
+   * merged in as a field `toEntity`'s return type doesn't otherwise carry.
+   */
+  private async withLocationPaths<T extends ClientWithRelations>(clients: T[]): Promise<(T & { locationPaths: string[] })[]> {
+    const allLocations = await this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true } });
+    const byId = buildLocationById(allLocations);
+    return clients.map((c) => ({
+      ...c,
+      locationPaths: c.locations.map((l) => locationBreadcrumbPath(l.location, byId)),
+    }));
+  }
+
   /** Every row matching the current filters, unbounded — no `skip`/`take`. */
   async exportAll(query: ExportClientsDto, user: AuthUser): Promise<Buffer> {
     const where = this.buildWhere(query, user);
@@ -322,7 +352,8 @@ export class ClientsService {
     const clients = await this.prisma.client.findMany({ where, orderBy, include: CLIENT_INCLUDE });
     const { timezone: _timezone, ...filters } = query;
     await logExport(this.base, 'Client', { count: clients.length, filters });
-    return this.buildExportWorkbook(clients.map(toEntity), query.timezone);
+    const withPaths = await this.withLocationPaths(clients);
+    return this.buildExportWorkbook(withPaths.map(toEntity), query.timezone);
   }
 
   /** An explicit row selection — scope is still re-applied server-side (defense-in-depth), so an out-of-scope id is silently dropped rather than exported. */
@@ -331,20 +362,30 @@ export class ClientsService {
     if (isScoped(user)) and.push(clientScope(user));
     const clients = await this.prisma.client.findMany({ where: { AND: and }, include: CLIENT_INCLUDE });
     await logExport(this.base, 'Client', { count: clients.length, requestedIds: ids });
-    return this.buildExportWorkbook(clients.map(toEntity), timezone);
+    const withPaths = await this.withLocationPaths(clients);
+    return this.buildExportWorkbook(withPaths.map(toEntity), timezone);
   }
 
   private buildExportWorkbook(clients: ClientExportRow[], timezone?: string): Promise<Buffer> {
     const tz = resolveTimeZone(timezone);
+    // Header text and value format (Locations: `;`-separated breadcrumb
+    // paths) are deliberately identical to CLIENT_IMPORT_COLUMNS
+    // (clients-import.service.ts) — this sheet is also what "Export to
+    // Excel → edit → re-upload to update" actually re-imports (see
+    // ImportDialog's own instructions), so any drift here silently breaks
+    // that documented round trip.
     const columns: ExportColumn[] = [
-      { header: 'Company Name', key: 'companyName' },
+      { header: 'Company Name', key: 'companyName', required: true },
       { header: 'Display ID', key: 'displayId' },
-      { header: 'Industry', key: 'industry' },
+      { header: 'Industry', key: 'industry', required: true },
       { header: 'Specialization', key: 'specialization' },
-      { header: 'Market', key: 'market' },
-      { header: 'Status', key: 'status' },
-      { header: 'Quality', key: 'quality' },
+      { header: 'Locations', key: 'locations', required: true },
       { header: 'Website', key: 'website' },
+      { header: 'Seek Job Market URL', key: 'seekJobMarketUrl' },
+      { header: 'LinkedIn Job Market URL', key: 'linkedinJobMarketUrl' },
+      { header: 'General Description', key: 'generalDescription' },
+      { header: 'Status', key: 'status', required: true },
+      { header: 'Quality', key: 'quality', required: true },
       { header: 'Last Contacted', key: 'lastContacted' },
       { header: 'Last Contacted By', key: 'lastContactedBy' },
       { header: 'Last Contact Type', key: 'lastContactType' },
@@ -355,10 +396,13 @@ export class ClientsService {
       displayId: c.displayId,
       industry: c.industry ?? '',
       specialization: c.specialization ?? '',
-      market: c.locations.join(', '),
+      locations: c.locationPaths.join('; '),
+      website: c.website ?? '',
+      seekJobMarketUrl: c.seekJobMarketUrl ?? '',
+      linkedinJobMarketUrl: c.linkedinJobMarketUrl ?? '',
+      generalDescription: c.generalDescription ?? '',
       status: clientStatusLabels[c.status],
       quality: clientQualityLabels[c.quality],
-      website: c.website ?? '',
       lastContacted: formatExportDate(c.lastContactedAt, tz),
       lastContactedBy: c.lastContactedBy ?? '',
       lastContactType: c.lastContactType ?? '',

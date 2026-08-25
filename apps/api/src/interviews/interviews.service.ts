@@ -13,6 +13,7 @@ export class InterviewsService {
   findAll(query: QueryInterviewsDto) {
     const where: Prisma.InterviewWhereInput = {};
     if (query.submissionId) where.submissionId = query.submissionId;
+    if (query.jobOrderId) where.submission = { jobOrderId: query.jobOrderId };
 
     return this.prisma.interview.findMany({ where, orderBy: { interviewDate: 'asc' } });
   }

@@ -62,7 +62,11 @@ export function ImportDialog({ entityLabel, templateUrl, upload, onImported }: I
     try {
       await downloadFile(templateUrl);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to download template');
+      // Stable `id`: a repeated failure (e.g. clicking again right after)
+      // replaces the existing toast in place instead of stacking a new one
+      // — Sonner has no built-in dedup, so without this a few quick retries
+      // pile up a wall of identical toasts.
+      toast.error(err instanceof Error ? err.message : 'Failed to download template', { id: 'import-download-template-error' });
     }
   }
 
@@ -80,7 +84,10 @@ export function ImportDialog({ entityLabel, templateUrl, upload, onImported }: I
       setResult(res);
       setStage(res.errors.length > 0 ? 'errors' : 'ready');
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to check file');
+      // Stable id — see handleDownloadTemplate's note. This is the path a
+      // user is most likely to hammer retries on (e.g. re-clicking "Check
+      // file" after each failure), so it's the one this matters most for.
+      toast.error(err instanceof Error ? err.message : 'Failed to check file', { id: 'import-check-error' });
       setStage('pick');
     }
   }
@@ -102,7 +109,8 @@ export function ImportDialog({ entityLabel, templateUrl, upload, onImported }: I
         setStage(res.errors.length > 0 ? 'errors' : 'ready');
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Import failed');
+      // Stable id — see handleDownloadTemplate's note.
+      toast.error(err instanceof Error ? err.message : 'Import failed', { id: 'import-commit-error' });
       setStage('ready');
     }
   }
@@ -155,7 +163,9 @@ export function ImportDialog({ entityLabel, templateUrl, upload, onImported }: I
               </p>
               <div className="max-h-72 overflow-auto rounded-md border">
                 <table className="w-full text-left text-sm">
-                  <thead className="sticky top-0 bg-muted/50">
+                  {/* Fully opaque, not bg-muted/50 — a translucent sticky header lets
+                      scrolled-under row text bleed through and overlap its own labels. */}
+                  <thead className="sticky top-0 z-10 bg-muted">
                     <tr>
                       <th className="px-3 py-2 font-medium">Row</th>
                       <th className="px-3 py-2 font-medium">Column</th>

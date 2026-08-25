@@ -87,6 +87,21 @@ export interface JobOrderEntity {
      * @nullable
      */
   notes: string | null;
+  /**
+     * Link to the job description document
+     * @nullable
+     */
+  jdFileUrl: string | null;
+  /**
+     * Link to the client's own published ad for this role
+     * @nullable
+     */
+  clientAdsUrl: string | null;
+  /**
+     * Link to any other document supporting this job order
+     * @nullable
+     */
+  otherDocumentsUrl: string | null;
   status: JobOrderEntityStatus;
   quality: JobOrderEntityQuality;
   /**
@@ -100,4 +115,17 @@ export interface JobOrderEntity {
   createdAt: string;
   updatedAt: string;
   pipelineSubmissions: JobOrderPipelineCandidateEntity[];
+  /**
+     * The client's most recently contacted stakeholder
+     * @nullable
+     */
+  keyStakeholderId: string | null;
+  /** @nullable */
+  keyStakeholderName: string | null;
+  /** @nullable */
+  keyStakeholderEmail: string | null;
+  /** @nullable */
+  keyStakeholderMobile: string | null;
+  /** @nullable */
+  keyStakeholderLinkedinUrl: string | null;
 }

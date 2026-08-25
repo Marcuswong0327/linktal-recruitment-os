@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import {
   ImportColumn,
@@ -39,6 +40,30 @@ describe('parseWorkbook', () => {
     expect(rows).toEqual([
       { rowNumber: 2, cells: { displayId: 'CLI-000001', companyName: 'Acme Corp', website: 'https://acme.com' } },
     ]);
+  });
+
+  it('matches a required column whose header still carries the template\'s own " *" marker — the untouched-download-then-fill-in-then-upload flow', async () => {
+    // buildTemplateWorkbook writes a required column's header as "Company
+    // Name *" (see REQUIRED_HEADER_SUFFIX) — a template downloaded, filled
+    // in, and uploaded without anyone editing the header row (the normal,
+    // expected flow) must still match, or every required column fails the
+    // header check on every brand-new-row import, every time.
+    const buffer = await makeWorkbookBuffer(
+      ['Display ID', 'Company Name *', 'Website'],
+      [['', 'Acme Corp', 'https://acme.com']],
+    );
+    const { rows, headerErrors } = await parseWorkbook(buffer, COLUMNS);
+    expect(headerErrors).toEqual([]);
+    expect(rows[0].cells.companyName).toBe('Acme Corp');
+  });
+
+  it('rejects a file that is not a real .xlsx workbook with a clean 400, not an uncaught crash', async () => {
+    // A CSV (or any non-OOXML content) saved/renamed with an .xlsx
+    // extension — ExcelJS throws loading this; real-world repro from a jam
+    // recording where the uploaded file was actually a .csv wearing an
+    // .xlsx name.
+    const notAWorkbook = Buffer.from('Display ID,Company Name\n,Acme Corp\n', 'utf-8');
+    await expect(parseWorkbook(notAWorkbook, COLUMNS)).rejects.toThrow(BadRequestException);
   });
 
   it('reports a header error when an expected column is missing, and returns no rows', async () => {
@@ -218,6 +243,25 @@ describe('buildTemplateWorkbook', () => {
     expect(infoText).toContain('Some extra instruction.');
     expect(infoText).toContain('Display ID');
     expect(infoText).toContain('Export to Excel');
+  });
+
+  it('round-trips through parseWorkbook untouched — the real "download, fill in, upload" flow', async () => {
+    // The template's own Data sheet, with its required-column "*" markers
+    // baked into the header row, fed straight into parseWorkbook with no
+    // header edits at all — this is what actually happens when someone
+    // downloads the template, fills in a row, and uploads it right back.
+    const buffer = await buildTemplateWorkbook('Companies', COLUMNS, []);
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buffer as any);
+    const dataSheet = workbook.getWorksheet('Companies')!;
+    dataSheet.getRow(2).values = ['', 'Acme Corp', 'https://acme.com'];
+
+    const refilled = Buffer.from(await workbook.xlsx.writeBuffer());
+    const { rows, headerErrors } = await parseWorkbook(refilled, COLUMNS);
+    expect(headerErrors).toEqual([]);
+    expect(rows).toEqual([
+      { rowNumber: 2, cells: { displayId: '', companyName: 'Acme Corp', website: 'https://acme.com' } },
+    ]);
   });
 
   it('consolidates multiple reference sheets into one Instructions line, not one per sheet', async () => {

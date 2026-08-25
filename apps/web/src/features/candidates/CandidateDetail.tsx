@@ -2,7 +2,16 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Check, ChevronDown, CornerDownLeft, Mail, Phone, Pencil, X } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  CornerDownLeft,
+  Mail,
+  Phone,
+  Pencil,
+  X,
+} from 'lucide-react';
 import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
@@ -16,13 +25,24 @@ import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { LinkedinIcon, SeekIcon } from '@/components/BrandIcons';
 import { useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
+import { FileUploadField } from '@/components/FileUploadField';
 import { FormField } from '@/components/FormField';
 import { LocationCombobox, type LocationValue } from '@/components/LocationCombobox';
-import { LogCandidateContactSheet, type LogCandidateContactValues } from '@/components/LogCandidateContactSheet';
+import {
+  LogCandidateContactRow,
+  type LogCandidateContactValues,
+} from '@/components/LogCandidateContactRow';
 import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
 import { useIsMac } from '@/hooks/use-is-mac';
 import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shortcut';
@@ -38,6 +58,7 @@ import {
   getGetCandidateContactHistoryQueryKey,
 } from '@/lib/api/generated/candidates/candidates';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
+import { useUploadCandidateFile } from '@/lib/api/generated/uploads/uploads';
 import { useGetJobOrders } from '@/lib/api/generated/job-orders/job-orders';
 import { getGetInterviewsQueryOptions } from '@/lib/api/generated/interviews/interviews';
 import { getGetPlacementsQueryOptions } from '@/lib/api/generated/placements/placements';
@@ -57,9 +78,18 @@ import {
   useCreateSpecialization,
   useGetSpecializations,
 } from '@/lib/api/generated/specializations/specializations';
-import type { CreateCandidateContactHistoryDto, SubmissionEntity, UpdateCandidateDto } from '@/lib/api/generated/types';
+import type {
+  CreateCandidateContactHistoryDto,
+  SubmissionEntity,
+  UpdateCandidateDto,
+} from '@/lib/api/generated/types';
 import { contactCategoryLabels, outreachChannelLabels } from '@/lib/candidate-contact-category';
-import { candidateFullName, type Candidate, candidateStatusLabels, candidateStatusVariants } from './schema';
+import {
+  candidateFullName,
+  type Candidate,
+  candidateStatusLabels,
+  candidateStatusVariants,
+} from './schema';
 
 const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
@@ -82,7 +112,9 @@ function contactHistoryVersion(row: { editedAt: string | null; createdAt: string
 }
 
 function isConflictError(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === 409;
+  return (
+    typeof err === 'object' && err !== null && (err as { statusCode?: number }).statusCode === 409
+  );
 }
 
 function initials(name: string) {
@@ -111,7 +143,10 @@ export function CandidateDetail({ id }: { id: string }) {
   if (isError || !candidate) {
     return (
       <PageLayout>
-        <PageHeader title="Candidate not found" description={error?.message ?? `No candidate with ID ${id}.`} />
+        <PageHeader
+          title="Candidate not found"
+          description={error?.message ?? `No candidate with ID ${id}.`}
+        />
         <div>
           <Button variant="outline" nativeButton={false} render={<Link href="/candidates" />}>
             <ArrowLeft />
@@ -160,7 +195,9 @@ function ContactIconButton({
   return (
     <a
       href={href ?? undefined}
-      target={href && !href.startsWith('mailto:') && !href.startsWith('tel:') ? '_blank' : undefined}
+      target={
+        href && !href.startsWith('mailto:') && !href.startsWith('tel:') ? '_blank' : undefined
+      }
       rel="noopener noreferrer"
       aria-disabled={disabled}
       onClick={disabled ? (e) => e.preventDefault() : undefined}
@@ -168,7 +205,9 @@ function ContactIconButton({
       aria-label={disabled ? `No ${label.toLowerCase()} on file` : `Open ${label.toLowerCase()}`}
       className={cn(
         'flex size-7 items-center justify-center rounded-md transition-colors',
-        disabled ? 'cursor-not-allowed text-muted-foreground' : cn(activeClassName, 'hover:bg-accent'),
+        disabled
+          ? 'cursor-not-allowed text-muted-foreground'
+          : cn(activeClassName, 'hover:bg-accent'),
       )}
     >
       <Icon className={cn('size-4', disabled && 'opacity-30 grayscale')} />
@@ -238,21 +277,23 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
       mobile: candidate.mobile ?? '',
       linkedinUrl: candidate.linkedinUrl ?? '',
       seekTalentUrl: candidate.seekTalentUrl ?? '',
-      rawResumeUrl: candidate.rawResumeUrl ?? '',
-      editedResumeUrl: candidate.editedResumeUrl ?? '',
     },
   });
 
-  // Industry/role type/specializations are reference-table pickers, not
-  // plain registered inputs — tracked as their own state (like
-  // CompanyDetail's industryId/specializationId) and merged into the patch
-  // on submit, since RHF's dirty-tracking doesn't see them.
+  // Industry/role type/specializations/resumes are reference-table pickers
+  // or uploads, not plain registered inputs — tracked as their own state
+  // (like CompanyDetail's industryId/specializationId) and merged into the
+  // patch on submit, since RHF's dirty-tracking doesn't see them.
   const [industryId, setIndustryId] = React.useState(candidate.industryId ?? '');
   const [roleTypeId, setRoleTypeId] = React.useState(candidate.jobRoleTypeId ?? '');
   const [specializationIds, setSpecializationIds] = React.useState(candidate.specializationIds);
   const [location, setLocation] = React.useState<LocationValue | null>(
-    candidate.locationId ? { id: candidate.locationId, name: candidate.location ?? candidate.locationId } : null,
+    candidate.locationId
+      ? { id: candidate.locationId, name: candidate.location ?? candidate.locationId }
+      : null,
   );
+  const [rawResumeUrl, setRawResumeUrl] = React.useState(candidate.rawResumeUrl ?? '');
+  const [editedResumeUrl, setEditedResumeUrl] = React.useState(candidate.editedResumeUrl ?? '');
   // Purely a display toggle for the Contact row below — not part of isDirty.
   const [editingContact, setEditingContact] = React.useState(false);
 
@@ -262,7 +303,10 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
   const roleTypes = roleTypeData?.status === 200 ? roleTypeData.data : [];
   const { data: specializationData } = useGetSpecializations();
   const specializations = specializationData?.status === 200 ? specializationData.data : [];
-  const specializationById = React.useMemo(() => new Map(specializations.map((s) => [s.id, s])), [specializations]);
+  const specializationById = React.useMemo(
+    () => new Map(specializations.map((s) => [s.id, s])),
+    [specializations],
+  );
 
   const createIndustry = useCreateIndustry({
     mutation: {
@@ -307,7 +351,19 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
     industryId !== (candidate.industryId ?? '') ||
     roleTypeId !== (candidate.jobRoleTypeId ?? '') ||
     !sameIds(specializationIds, candidate.specializationIds) ||
-    (location?.id ?? '') !== (candidate.locationId ?? '');
+    (location?.id ?? '') !== (candidate.locationId ?? '') ||
+    rawResumeUrl !== (candidate.rawResumeUrl ?? '') ||
+    editedResumeUrl !== (candidate.editedResumeUrl ?? '');
+
+  const uploadCandidateFile = useUploadCandidateFile();
+  async function handleUploadFile(file: File) {
+    // customFetch throws on any non-2xx response, so a resolved call is
+    // always the 201 envelope — this guard is just for TypeScript's
+    // discriminated-union narrowing (same as ImportDialog's `upload` prop).
+    const res = await uploadCandidateFile.mutateAsync({ data: { file } });
+    if (res.status !== 201) throw new Error('Upload failed');
+    return res.data;
+  }
 
   const updateCandidate = useUpdateCandidate({
     mutation: {
@@ -333,6 +389,8 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
         jobRoleTypeId: roleTypeId || null,
         specializationIds,
         locationId: location?.id ?? candidate.locationId,
+        rawResumeUrl: rawResumeUrl || null,
+        editedResumeUrl: editedResumeUrl || null,
       } as UpdateCandidateDto,
     });
     setEditingContact(false);
@@ -368,7 +426,9 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
         category: values.category,
         contactedAt: values.contactedAt,
         ...(values.screeningNotes ? { screeningNotes: values.screeningNotes } : {}),
-        ...(values.outreachCampaignNotes ? { outreachCampaignNotes: values.outreachCampaignNotes } : {}),
+        ...(values.outreachCampaignNotes
+          ? { outreachCampaignNotes: values.outreachCampaignNotes }
+          : {}),
         ...(values.outreachChannel ? { outreachChannel: values.outreachChannel } : {}),
         ...(values.currentSalary ? { currentSalary: values.currentSalary } : {}),
         ...(values.expectedSalary ? { expectedSalary: values.expectedSalary } : {}),
@@ -391,7 +451,9 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
         if (isConflictError(err)) {
           queryClient.invalidateQueries({ queryKey: contactHistoryQueryKey });
           setEditingContactId(null);
-          toast.error('This contact was changed by someone else. Refreshed with the latest version.');
+          toast.error(
+            'This contact was changed by someone else. Refreshed with the latest version.',
+          );
           return;
         }
         toast.error(err.message || 'Failed to edit contact');
@@ -426,7 +488,8 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
   // and placement dates come from per-submission lookups (neither endpoint
   // supports a batch-by-candidate filter, only submissionId).
   const { data: submissionsData } = useGetSubmissions({ candidateId: candidate.id });
-  const submissions: SubmissionEntity[] = submissionsData?.status === 200 ? submissionsData.data : [];
+  const submissions: SubmissionEntity[] =
+    submissionsData?.status === 200 ? submissionsData.data : [];
 
   const interviewQueries = useQueries({
     queries: submissions.map((s) => getGetInterviewsQueryOptions({ submissionId: s.id })),
@@ -457,7 +520,11 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
   const contactActionsMenu = (
     <div className="flex items-center gap-1">
-      <ContactIconButton icon={Mail} href={candidate.email ? `mailto:${candidate.email}` : null} label="Email" />
+      <ContactIconButton
+        icon={Mail}
+        href={candidate.email ? `mailto:${candidate.email}` : null}
+        label="Email"
+      />
       <ContactCopyButton icon={Phone} value={candidate.mobile} label="Mobile" />
       <ContactIconButton
         icon={LinkedinIcon}
@@ -504,7 +571,12 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
             {isDirty && !updateCandidate.isPending ? (
               <span className="text-xs text-muted-foreground">Unsaved changes</span>
             ) : null}
-            <Button type="submit" form="candidate-form" size="lg" disabled={updateCandidate.isPending || !isDirty}>
+            <Button
+              type="submit"
+              form="candidate-form"
+              size="lg"
+              disabled={updateCandidate.isPending || !isDirty}
+            >
               {updateCandidate.isPending ? (
                 'Saving…'
               ) : (
@@ -538,105 +610,118 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
           <Card>
             <CardHeader className="flex border-b flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2">Contact Histories</CardTitle>
-              <Button type="button" variant="outline" size="sm" onClick={() => setLoggingContact(true)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setLoggingContact(true)}
+              >
                 <Phone />
                 Log Contact
               </Button>
             </CardHeader>
             <CardContent>
-              {contactHistory.length > 0 ? (
-                <div className="max-h-96 overflow-auto rounded-md border border-border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="divide-x divide-border">
-                        <TableHead>Content</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>By</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {contactHistory.map((row) => (
-                        <TableRow key={row.id} className="divide-x divide-border">
-                          <TableCell className="group max-w-md whitespace-normal break-words">
-                            {editingContactId === row.id ? (
-                              <div className="flex flex-col gap-2">
-                                <textarea
+              <div className="max-h-96 overflow-auto rounded-md border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="divide-x divide-border">
+                      <TableHead>Content</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>By</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {contactHistory.map((row) => (
+                      <TableRow key={row.id} className="divide-x divide-border">
+                        <TableCell className="group max-w-md whitespace-normal break-words">
+                          {editingContactId === row.id ? (
+                            <div className="flex flex-col gap-2">
+                              <textarea
+                                aria-label="Edit screening notes"
+                                className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30"
+                                value={editDraft}
+                                onChange={(e) => setEditDraft(e.target.value)}
+                                autoFocus
+                              />
+                              <div className="flex items-center gap-2 self-end">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  onClick={() => setEditingContactId(null)}
+                                  aria-label="Cancel edit"
+                                >
+                                  <X />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="icon-sm"
+                                  disabled={updateContactHistory.isPending || !editDraft.trim()}
+                                  onClick={(e) => handleSaveContactEdit(e, row.id)}
+                                  aria-label="Save edit"
+                                >
+                                  <Check />
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="muted">
+                                    {contactCategoryLabels[row.category]}
+                                  </Badge>
+                                  {row.category === 'OUTREACH' && row.outreachChannel ? (
+                                    <Badge variant="muted">
+                                      {outreachChannelLabels[row.outreachChannel]}
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                                <p className="whitespace-pre-wrap">
+                                  {row.category === 'SCREENING'
+                                    ? (row.screeningNotes ?? '—')
+                                    : (row.outreachCampaignNotes ?? '—')}
+                                </p>
+                              </div>
+                              {canEditContactHistory(row) ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-xs"
+                                  className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                                  onClick={() => startEditingContact(row)}
                                   aria-label="Edit screening notes"
-                                  className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30"
-                                  value={editDraft}
-                                  onChange={(e) => setEditDraft(e.target.value)}
-                                  autoFocus
-                                />
-                                <div className="flex items-center gap-2 self-end">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    onClick={() => setEditingContactId(null)}
-                                    aria-label="Cancel edit"
-                                  >
-                                    <X />
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="icon-sm"
-                                    disabled={updateContactHistory.isPending || !editDraft.trim()}
-                                    onClick={(e) => handleSaveContactEdit(e, row.id)}
-                                    aria-label="Save edit"
-                                  >
-                                    <Check />
-                                  </Button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex flex-col gap-1">
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="muted">{contactCategoryLabels[row.category]}</Badge>
-                                    {row.category === 'OUTREACH' && row.outreachChannel ? (
-                                      <Badge variant="muted">{outreachChannelLabels[row.outreachChannel]}</Badge>
-                                    ) : null}
-                                  </div>
-                                  <p className="whitespace-pre-wrap">
-                                    {row.category === 'SCREENING'
-                                      ? (row.screeningNotes ?? '—')
-                                      : (row.outreachCampaignNotes ?? '—')}
-                                  </p>
-                                </div>
-                                {canEditContactHistory(row) ? (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon-xs"
-                                    className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-                                    onClick={() => startEditingContact(row)}
-                                    aria-label="Edit screening notes"
-                                  >
-                                    <Pencil />
-                                  </Button>
-                                ) : null}
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="whitespace-normal">
-                            {contactDateFormatter.format(new Date(row.contactedAt))}
-                          </TableCell>
-                          <TableCell className="whitespace-normal">
-                            {row.contactedById ? consultantLabelFor(row.contactedById) : 'Imported'}
-                            {row.editedAt ? (
-                              <span className="block text-xs text-muted-foreground">
-                                edited by {row.editedById ? consultantLabelFor(row.editedById) : 'Imported'}
-                              </span>
-                            ) : null}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No contacts logged yet.</p>
-              )}
+                                >
+                                  <Pencil />
+                                </Button>
+                              ) : null}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="whitespace-normal">
+                          {contactDateFormatter.format(new Date(row.contactedAt))}
+                        </TableCell>
+                        <TableCell className="whitespace-normal">
+                          {row.contactedById ? consultantLabelFor(row.contactedById) : 'Imported'}
+                          {row.editedAt ? (
+                            <span className="block text-xs text-muted-foreground">
+                              edited by{' '}
+                              {row.editedById ? consultantLabelFor(row.editedById) : 'Imported'}
+                            </span>
+                          ) : null}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <LogCandidateContactRow
+                      colSpan={3}
+                      open={loggingContact}
+                      onOpenChange={setLoggingContact}
+                      isSaving={addContactHistory.isPending}
+                      onSave={handleLogContact}
+                    />
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
 
@@ -662,7 +747,9 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                         <TableRow key={row.submissionId} className="divide-x divide-border">
                           <TableCell className="whitespace-normal">{row.client}</TableCell>
                           <TableCell className="whitespace-normal">{row.role}</TableCell>
-                          <TableCell>{shortDateFormatter.format(new Date(row.submittedAt))}</TableCell>
+                          <TableCell>
+                            {shortDateFormatter.format(new Date(row.submittedAt))}
+                          </TableCell>
                           <TableCell>
                             {row.interviewedAt ? (
                               shortDateFormatter.format(new Date(row.interviewedAt))
@@ -683,7 +770,9 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   </Table>
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">Not submitted to any job orders yet.</p>
+                <p className="text-sm text-muted-foreground">
+                  Not submitted to any job orders yet.
+                </p>
               )}
             </CardContent>
           </Card>
@@ -706,10 +795,20 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   <TableBody>
                     <TableRow className="divide-x divide-border">
                       <TableCell>
-                        <Input id="rawResumeUrl" placeholder="https://…" {...register('rawResumeUrl')} />
+                        <FileUploadField
+                          id="rawResumeUrl"
+                          value={rawResumeUrl}
+                          onChange={(url) => setRawResumeUrl(url ?? '')}
+                          upload={handleUploadFile}
+                        />
                       </TableCell>
                       <TableCell>
-                        <Input id="editedResumeUrl" placeholder="https://…" {...register('editedResumeUrl')} />
+                        <FileUploadField
+                          id="editedResumeUrl"
+                          value={editedResumeUrl}
+                          onChange={(url) => setEditedResumeUrl(url ?? '')}
+                          upload={handleUploadFile}
+                        />
                       </TableCell>
                       <TableCell>
                         <span className="text-sm text-muted-foreground" title="Not tracked yet">
@@ -735,13 +834,15 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
               <CardTitle className="flex items-center gap-2">Information</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4">
-              <FormField label="First name" htmlFor="firstName">
-                <Input id="firstName" {...register('firstName')} />
-              </FormField>
-              <FormField label="Last name" htmlFor="lastName">
-                <Input id="lastName" {...register('lastName')} />
-              </FormField>
-              <FormField label="Industry" htmlFor="industry" required>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="First name" htmlFor="firstName">
+                  <Input id="firstName" {...register('firstName')} />
+                </FormField>
+                <FormField label="Last name" htmlFor="lastName">
+                  <Input id="lastName" {...register('lastName')} />
+                </FormField>
+              </div>
+              <FormField label="Industry" htmlFor="industry" required orientation="horizontal">
                 <CreatableCombobox
                   id="industry"
                   value={industryId}
@@ -751,7 +852,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   placeholder="Select industry…"
                 />
               </FormField>
-              <FormField label="Role type" htmlFor="roleType">
+              <FormField label="Role type" htmlFor="roleType" orientation="horizontal">
                 <CreatableCombobox
                   id="roleType"
                   value={roleTypeId}
@@ -765,6 +866,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                 label="Specialization"
                 htmlFor="specialization"
                 description={!industryId ? 'Pick an industry first' : undefined}
+                orientation="horizontal"
               >
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-wrap gap-1.5">
@@ -775,7 +877,9 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                             <button
                               type="button"
                               aria-label="Remove specialization"
-                              onClick={() => setSpecializationIds((prev) => prev.filter((s) => s !== id))}
+                              onClick={() =>
+                                setSpecializationIds((prev) => prev.filter((s) => s !== id))
+                              }
                             >
                               <X className="size-3" />
                             </button>
@@ -789,7 +893,9 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   <CreatableCombobox
                     id="specialization"
                     value=""
-                    onValueChange={(id) => setSpecializationIds((prev) => (prev.includes(id) ? prev : [...prev, id]))}
+                    onValueChange={(id) =>
+                      setSpecializationIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
+                    }
                     options={specializations.filter((s) => !specializationIds.includes(s.id))}
                     onCreate={handleCreateSpecialization}
                     placeholder="Add a specialization…"
@@ -812,7 +918,9 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                         <button
                           type="button"
                           className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                          aria-label={editingContact ? 'Collapse contact fields' : 'Expand contact fields'}
+                          aria-label={
+                            editingContact ? 'Collapse contact fields' : 'Expand contact fields'
+                          }
                         >
                           <ChevronDown className="size-3.5 transition-transform duration-200 group-data-[panel-open]/contact:rotate-180" />
                         </button>
@@ -821,16 +929,20 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   </div>
                 </div>
                 <Collapsible.Panel className="flex flex-col gap-3 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
-                  <FormField label="Email" htmlFor="email">
+                  <FormField label="Email" htmlFor="email" orientation="horizontal">
                     <Input id="email" type="email" {...register('email')} />
                   </FormField>
-                  <FormField label="Mobile" htmlFor="mobile">
+                  <FormField label="Mobile" htmlFor="mobile" orientation="horizontal">
                     <Input id="mobile" {...register('mobile')} />
                   </FormField>
-                  <FormField label="LinkedIn URL" htmlFor="linkedinUrl">
+                  <FormField label="LinkedIn URL" htmlFor="linkedinUrl" orientation="horizontal">
                     <Input id="linkedinUrl" {...register('linkedinUrl')} />
                   </FormField>
-                  <FormField label="Seek Talent URL" htmlFor="seekTalentUrl">
+                  <FormField
+                    label="Seek Talent URL"
+                    htmlFor="seekTalentUrl"
+                    orientation="horizontal"
+                  >
                     <Input id="seekTalentUrl" {...register('seekTalentUrl')} />
                   </FormField>
                 </Collapsible.Panel>
@@ -838,7 +950,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
               <Separator />
 
-              <FormField label="Suburb" htmlFor="location">
+              <FormField label="Suburb" htmlFor="location" orientation="horizontal">
                 <LocationCombobox
                   id="location"
                   value={location}
@@ -854,7 +966,8 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                 <span>{candidate.expectedSalary ?? '—'}</span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Salary is a snapshot from the latest logged contact — update it via "Log Contact" above.
+                Salary is a snapshot from the latest logged contact — update it via "Log Contact"
+                above.
               </p>
             </CardContent>
           </Card>
@@ -902,14 +1015,6 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
           </Card>
         </div>
       </form>
-
-      <LogCandidateContactSheet
-        open={loggingContact}
-        onOpenChange={setLoggingContact}
-        subjectLabel={candidateFullName(candidate) || 'this candidate'}
-        isSaving={addContactHistory.isPending}
-        onSave={handleLogContact}
-      />
     </PageLayout>
   );
 }

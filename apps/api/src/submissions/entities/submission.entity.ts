@@ -20,6 +20,18 @@ export class SubmissionEntity implements Omit<CandidateSubmission, 'deletedAt' |
   jobOrderTitle!: string | null;
   @ApiProperty({ enum: SubmissionStatus }) status!: SubmissionStatus;
   @ApiProperty() submittedAt!: Date;
+  @ApiProperty({
+    type: Boolean,
+    nullable: true,
+    description: 'Client shortlisted this candidate to interview — tri-state, gates the interview stage',
+  })
+  shortlisted!: boolean | null;
+  @ApiProperty({
+    type: Boolean,
+    nullable: true,
+    description: 'Candidate accepted the offer — tri-state, gates the starting-date field',
+  })
+  cddAccepted!: boolean | null;
   @ApiProperty({ type: String, nullable: true }) notes!: string | null;
   @ApiProperty() createdAt!: Date;
   @ApiProperty() updatedAt!: Date;

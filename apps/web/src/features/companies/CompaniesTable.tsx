@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
-import { ChevronDown, Download, Tag, Trash2 } from 'lucide-react';
+import { ChevronDown, Download, Sparkles, Tag, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -73,6 +73,22 @@ export function CompaniesTable({
   const [isExporting, setIsExporting] = React.useState(false);
   const importClients = useImportClients();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
+
+  // DataGrid reports selected rows in current table order (TanStack Table's
+  // row-selection model), not the order they were actually clicked in — but
+  // Enrich Stakeholders needs true selection order (see
+  // StakeholderEnrichmentWorkspace's doc). Track it here instead of in
+  // DataGrid itself (shared by every table in the app — too much blast
+  // radius to change there): diff the newly-reported set against what we
+  // already had, drop ids no longer selected, append newly-added ones in the
+  // order DataGrid handed them to us.
+  const selectionOrderRef = React.useRef<string[]>([]);
+  function handleSelectionChange(rows: Company[]) {
+    const ids = new Set(rows.map((r) => r.id));
+    selectionOrderRef.current = selectionOrderRef.current.filter((id) => ids.has(id));
+    for (const row of rows) if (!selectionOrderRef.current.includes(row.id)) selectionOrderRef.current.push(row.id);
+    setSelected(rows);
+  }
 
   // A new `filters` object only ever arrives from a fresh "Search" click in
   // the gate (even an unchanged re-search) — always worth restarting
@@ -200,6 +216,13 @@ export function CompaniesTable({
   // matching the current filters, unbounded.
   async function handleExport() {
     setIsExporting(true);
+    // A loading toast, not just the isExporting-driven button label — this
+    // is triggered from a DropdownMenuItem, and the dropdown closes the
+    // instant it's clicked, so a label change on that now-unmounted item is
+    // never actually seen. The toast (same `id` as the success/error below,
+    // so it morphs in place rather than stacking) is what's actually visible
+    // while an unbounded, potentially-slow export is in flight.
+    toast.loading('Exporting…', { id: 'export-companies' });
     // The server has no ambient concept of "the viewer's timezone" — it only
     // ever sees UTC timestamps, so date/time export columns need this sent
     // along explicitly.
@@ -224,11 +247,16 @@ export function CompaniesTable({
           }),
         );
       }
+      toast.success('Export ready', { id: 'export-companies' });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Export failed');
+      toast.error(err instanceof Error ? err.message : 'Export failed', { id: 'export-companies' });
     } finally {
       setIsExporting(false);
     }
+  }
+
+  function handleEnrichStakeholders() {
+    router.push(`/stakeholders/enrich?clientIds=${encodeURIComponent(selectionOrderRef.current.join(','))}`);
   }
 
   const columns = React.useMemo(
@@ -261,7 +289,7 @@ export function CompaniesTable({
         emptyState="No companies match these filters."
         getRowId={(c) => c.id}
         onRowClick={(c) => router.push(`/companies/${c.id}`)}
-        onSelectionChange={setSelected}
+        onSelectionChange={handleSelectionChange}
         enableRowRangeSelect
         hideSelectColumn
         toolbar={
@@ -284,8 +312,8 @@ export function CompaniesTable({
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <Button size="lg" disabled={isBulkUpdating}>
-                    {isBulkUpdating ? 'Updating…' : 'Bulk Actions'}
+                  <Button size="lg" disabled={isBulkUpdating || isExporting}>
+                    {isBulkUpdating ? 'Updating…' : isExporting ? 'Exporting…' : 'Bulk Actions'}
                     <ChevronDown />
                   </Button>
                 }
@@ -295,6 +323,12 @@ export function CompaniesTable({
                   <Download />
                   {isExporting ? 'Exporting…' : 'Export to Excel'}
                 </DropdownMenuItem>
+                {selected.length > 0 ? (
+                  <DropdownMenuItem onClick={handleEnrichStakeholders}>
+                    <Sparkles />
+                    Enrich Stakeholders
+                  </DropdownMenuItem>
+                ) : null}
                 {selected.length > 0 && (canUpdate || canDelete) ? (
                   <>
                     <DropdownMenuSeparator />
@@ -345,6 +379,10 @@ export function CompaniesTable({
             <ContextMenuItem onClick={handleExport}>
               <Download />
               Export to Excel
+            </ContextMenuItem>
+            <ContextMenuItem onClick={handleEnrichStakeholders}>
+              <Sparkles />
+              Enrich Stakeholders
             </ContextMenuItem>
             {canUpdate ? (
               <>

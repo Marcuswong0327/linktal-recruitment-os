@@ -18,7 +18,22 @@ export class JobOrderPipelineCandidateEntity {
   @ApiProperty() submissionId!: string;
   @ApiProperty() candidateId!: string;
   @ApiProperty() candidateName!: string;
+  @ApiProperty({ type: String, nullable: true }) candidateEmail!: string | null;
+  @ApiProperty({ type: String, nullable: true }) candidateMobile!: string | null;
+  @ApiProperty({ type: String, nullable: true }) candidateLinkedinUrl!: string | null;
   @ApiProperty({ enum: SubmissionStatus }) status!: SubmissionStatus;
+  @ApiProperty({
+    type: Boolean,
+    nullable: true,
+    description: 'Client shortlisted this candidate to interview — tri-state, gates the interview stage',
+  })
+  shortlisted!: boolean | null;
+  @ApiProperty({
+    type: Boolean,
+    nullable: true,
+    description: 'Candidate accepted the offer — tri-state, gates the starting-date field',
+  })
+  cddAccepted!: boolean | null;
   @ApiProperty() submittedAt!: Date;
   @ApiProperty({ type: Date, nullable: true, description: "This submission's most recent interview round" })
   latestInterviewDate!: Date | null;
@@ -126,6 +141,12 @@ export class JobOrderEntity implements Omit<JobOrder, 'deletedAt' | 'deletedById
     description: 'Briefing notes — internal, distinct from the public-facing description/requirements copy',
   })
   notes!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Link to the job description document' })
+  jdFileUrl!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: "Link to the client's own published ad for this role" })
+  clientAdsUrl!: string | null;
+  @ApiProperty({ type: String, nullable: true, description: 'Link to any other document supporting this job order' })
+  otherDocumentsUrl!: string | null;
   @ApiProperty({ enum: JobOrderStatus }) status!: JobOrderStatus;
   @ApiProperty({ enum: JobOrderQuality }) quality!: JobOrderQuality;
   @ApiProperty({ type: Number, nullable: true, description: '1=High, 2=Medium, 3=Low' }) priorityLevel!: number | null;
@@ -135,4 +156,16 @@ export class JobOrderEntity implements Omit<JobOrder, 'deletedAt' | 'deletedById
   @ApiProperty() updatedAt!: Date;
   @ApiProperty({ type: JobOrderPipelineCandidateEntity, isArray: true })
   pipelineSubmissions!: JobOrderPipelineCandidateEntity[];
+
+  // Computed, not stored — the client's most-recently-contacted stakeholder.
+  // Deliberately not a `keyStakeholderId` column on JobOrder: this schema
+  // avoids manually-assigned "ownership" fields (see the SCOPING note above
+  // Consultant in schema.prisma) — same reasoning as CompanyDetail's
+  // "Consultants" list being derived from job orders rather than stored.
+  @ApiProperty({ type: String, nullable: true, description: "The client's most recently contacted stakeholder" })
+  keyStakeholderId!: string | null;
+  @ApiProperty({ type: String, nullable: true }) keyStakeholderName!: string | null;
+  @ApiProperty({ type: String, nullable: true }) keyStakeholderEmail!: string | null;
+  @ApiProperty({ type: String, nullable: true }) keyStakeholderMobile!: string | null;
+  @ApiProperty({ type: String, nullable: true }) keyStakeholderLinkedinUrl!: string | null;
 }

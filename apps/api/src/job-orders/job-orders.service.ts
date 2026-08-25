@@ -11,7 +11,8 @@ import { QueryJobOrdersDto } from './dto/query-job-orders.dto';
 import { ExportJobOrdersDto } from './dto/export-job-orders.dto';
 import { buildWorkbook, formatExportDate, resolveTimeZone, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
-import { jobOrderStatusLabels, jobOrderQualityLabels } from '../common/export-labels';
+import { jobOrderQualityLabels } from '../common/export-labels';
+import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
 
 /** The subset of QueryJobOrdersDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination but still satisfies this structurally. */
 type JobOrderFilterFields = Pick<
@@ -48,7 +49,23 @@ const JOB_ORDER_INCLUDE = {
   // or link the company a role belongs to. industryId rides along purely for
   // the scope check below (a Job Order has no industry of its own, only via
   // its Client) and is stripped back out in `toEntity`.
-  client: { select: { industryId: true, companyName: true, displayId: true } },
+  client: {
+    select: {
+      industryId: true,
+      companyName: true,
+      displayId: true,
+      // Feeds the computed "key stakeholder" below — the most recently
+      // contacted stakeholder of this job order's client. Not a stored FK
+      // (see the entity's comment); every live stakeholder rides along here
+      // since client rosters are small and the pick happens in JS, where
+      // `orderBy: lastContactedAt desc` would put untouched (null) rows first
+      // under Postgres's default DESC-nulls-first ordering.
+      stakeholders: {
+        where: { deletedAt: null },
+        select: { id: true, firstName: true, lastName: true, email: true, mobile: true, linkedinUrl: true, lastContactedAt: true },
+      },
+    },
+  },
   // Who's working this job order — see JobOrderConsultant in schema.prisma.
   // Several consultants can be on the same job order concurrently.
   consultants: { select: { consultantId: true, consultant: { select: { fullName: true } } } },
@@ -62,9 +79,11 @@ const JOB_ORDER_INCLUDE = {
     select: {
       id: true,
       status: true,
+      shortlisted: true,
+      cddAccepted: true,
       candidateId: true,
       submittedAt: true,
-      candidate: { select: { firstName: true, lastName: true } },
+      candidate: { select: { firstName: true, lastName: true, email: true, mobile: true, linkedinUrl: true } },
       placement: { select: { baseSalary: true, feeValue: true, startDate: true } },
       interviews: {
         where: { deletedAt: null },
@@ -76,8 +95,25 @@ const JOB_ORDER_INCLUDE = {
   },
 } satisfies Prisma.JobOrderInclude;
 
+type ClientStakeholderForKeyContact = {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  mobile: string | null;
+  linkedinUrl: string | null;
+  lastContactedAt: Date | null;
+};
+
 type JobOrderWithRelations = {
-  client: { industryId: string; companyName: string; displayId: string } | null;
+  client:
+    | {
+        industryId: string;
+        companyName: string;
+        displayId: string;
+        stakeholders: ClientStakeholderForKeyContact[];
+      }
+    | null;
   consultants: { consultantId: string; consultant: { fullName: string } }[];
   jobTitle: { name: string } | null;
   jobRoleType: { name: string } | null;
@@ -85,13 +121,31 @@ type JobOrderWithRelations = {
   submissions: {
     id: string;
     status: SubmissionStatus;
+    shortlisted: boolean | null;
+    cddAccepted: boolean | null;
     candidateId: string;
     submittedAt: Date;
-    candidate: { firstName: string | null; lastName: string | null } | null;
+    candidate: {
+      firstName: string | null;
+      lastName: string | null;
+      email: string | null;
+      mobile: string | null;
+      linkedinUrl: string | null;
+    } | null;
     placement: { baseSalary: number | null; feeValue: number | null; startDate: Date | null } | null;
     interviews: { interviewDate: Date }[];
   }[];
 };
+
+/** Best guess at "who to talk to" for this job order's client: whoever was contacted most recently, falling back to the first stakeholder on file. No stakeholder at all → null (not "not configured yet" — see the entity's comment on why this isn't a stored field). */
+function pickKeyStakeholder(stakeholders: ClientStakeholderForKeyContact[]) {
+  if (stakeholders.length === 0) return null;
+  return stakeholders.reduce((best, s) => {
+    const bestTime = best.lastContactedAt?.getTime() ?? -Infinity;
+    const time = s.lastContactedAt?.getTime() ?? -Infinity;
+    return time > bestTime ? s : best;
+  });
+}
 
 /** A candidate is stored as first/last name, either of which may be missing. */
 function displayName(candidate: { firstName: string | null; lastName: string | null } | null): string {
@@ -99,7 +153,15 @@ function displayName(candidate: { firstName: string | null; lastName: string | n
   return name || 'Unknown candidate';
 }
 
-/** The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept separate from the generic `toEntity<T>` return type, which erases extra fields when used across a second generic boundary (same reasoning as ClientExportRow). */
+/**
+ * The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept
+ * separate from the generic `toEntity<T>` return type, which erases extra
+ * fields when used across a second generic boundary (same reasoning as
+ * ClientExportRow). `locationPath` isn't something `toEntity` produces (it
+ * strips `ancestorIds` before returning) — `exportAll`/`exportByIds` compute
+ * it separately and merge it in, same pattern as ClientsService's
+ * `locationPaths`.
+ */
 type JobOrderExportRow = {
   displayId: string;
   clientName: string | null;
@@ -107,6 +169,7 @@ type JobOrderExportRow = {
   jobTitle: string | null;
   jobRoleType: string | null;
   location: string | null;
+  locationPath: string | null;
   status: JobOrderStatus;
   quality: JobOrderQuality;
   priorityLevel: number | null;
@@ -126,6 +189,7 @@ type JobOrderExportRow = {
 
 function toEntity<T extends JobOrderWithRelations>(jobOrder: T) {
   const { submissions, client, consultants, jobTitle, jobRoleType, location, ...rest } = jobOrder;
+  const keyStakeholder = client ? pickKeyStakeholder(client.stakeholders) : null;
   return {
     ...rest,
     // `clientId` (on ...rest) is what you PATCH; these two are what you show
@@ -142,13 +206,25 @@ function toEntity<T extends JobOrderWithRelations>(jobOrder: T) {
       submissionId: s.id,
       candidateId: s.candidateId,
       candidateName: displayName(s.candidate),
+      candidateEmail: s.candidate?.email ?? null,
+      candidateMobile: s.candidate?.mobile ?? null,
+      candidateLinkedinUrl: s.candidate?.linkedinUrl ?? null,
       status: s.status,
+      shortlisted: s.shortlisted,
+      cddAccepted: s.cddAccepted,
       submittedAt: s.submittedAt,
       latestInterviewDate: s.interviews[0]?.interviewDate ?? null,
       placementBaseSalary: s.placement?.baseSalary ?? null,
       placementFeeValue: s.placement?.feeValue ?? null,
       placementStartDate: s.placement?.startDate ?? null,
     })),
+    keyStakeholderId: keyStakeholder?.id ?? null,
+    keyStakeholderName: keyStakeholder
+      ? [keyStakeholder.firstName, keyStakeholder.lastName].filter(Boolean).join(' ') || 'Unnamed contact'
+      : null,
+    keyStakeholderEmail: keyStakeholder?.email ?? null,
+    keyStakeholderMobile: keyStakeholder?.mobile ?? null,
+    keyStakeholderLinkedinUrl: keyStakeholder?.linkedinUrl ?? null,
   };
 }
 
@@ -288,6 +364,23 @@ export class JobOrdersService {
     };
   }
 
+  /**
+   * Resolves each job order's location to a full breadcrumb path — the exact
+   * format JOB_ORDER_IMPORT_COLUMNS (job-orders-import.service.ts) expects,
+   * so an exported sheet actually re-imports. Same pattern as ClientsService's
+   * `locationPaths`.
+   */
+  private async withLocationPath<T extends JobOrderWithRelations>(
+    jobOrders: T[],
+  ): Promise<(T & { locationPath: string | null })[]> {
+    const allLocations = await this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true } });
+    const byId = buildLocationById(allLocations);
+    return jobOrders.map((jo) => ({
+      ...jo,
+      locationPath: jo.location ? locationBreadcrumbPath(jo.location, byId) : null,
+    }));
+  }
+
   /** Every row matching the current filters, unbounded — no `skip`/`take`. */
   async exportAll(query: ExportJobOrdersDto, user: AuthUser): Promise<Buffer> {
     const where = this.buildWhere(query, user);
@@ -295,7 +388,8 @@ export class JobOrdersService {
     const jobOrders = await this.prisma.jobOrder.findMany({ where, orderBy, include: JOB_ORDER_INCLUDE });
     const { timezone: _timezone, ...filters } = query;
     await logExport(this.base, 'JobOrder', { count: jobOrders.length, filters });
-    return this.buildExportWorkbook(jobOrders.map((jo) => toEntity(jo)), query.timezone);
+    const withPath = await this.withLocationPath(jobOrders);
+    return this.buildExportWorkbook(withPath.map((jo) => toEntity(jo)), query.timezone);
   }
 
   /** An explicit row selection — scope is still re-applied server-side (defense-in-depth), so an out-of-scope id is silently dropped rather than exported. */
@@ -304,26 +398,34 @@ export class JobOrdersService {
     if (isScoped(user)) and.push(jobOrderScope(user));
     const jobOrders = await this.prisma.jobOrder.findMany({ where: { AND: and }, include: JOB_ORDER_INCLUDE });
     await logExport(this.base, 'JobOrder', { count: jobOrders.length, requestedIds: ids });
-    return this.buildExportWorkbook(jobOrders.map((jo) => toEntity(jo)), timezone);
+    const withPath = await this.withLocationPath(jobOrders);
+    return this.buildExportWorkbook(withPath.map((jo) => toEntity(jo)), timezone);
   }
 
   private buildExportWorkbook(jobOrders: JobOrderExportRow[], timezone?: string): Promise<Buffer> {
     const tz = resolveTimeZone(timezone);
+    // Header text and value format (Location: full breadcrumb path; Status:
+    // the raw enum text, not a humanized label — "On Hold" wouldn't match
+    // the "ON_HOLD" import expects; Priority Level: the raw 1/2/3, not the
+    // High/Medium/Low label, same reasoning) are deliberately identical to
+    // JOB_ORDER_IMPORT_COLUMNS (job-orders-import.service.ts), for the same
+    // "Export to Excel → edit → re-upload" round trip ImportDialog's own
+    // instructions promise.
     const columns: ExportColumn[] = [
       { header: 'Display ID', key: 'displayId' },
       { header: 'Client', key: 'clientName' },
-      { header: 'Client Display ID', key: 'clientDisplayId' },
+      { header: 'Client Display ID', key: 'clientDisplayId', required: true },
       { header: 'Job Title', key: 'jobTitle' },
       { header: 'Job Role Type', key: 'jobRoleType' },
       { header: 'Location', key: 'location' },
-      { header: 'Status', key: 'status' },
-      { header: 'Quality', key: 'quality' },
-      { header: 'Priority', key: 'priorityLevel' },
+      { header: 'Status', key: 'status', required: true },
+      { header: 'Quality', key: 'quality', required: true },
+      { header: 'Priority Level', key: 'priorityLevel' },
       { header: 'Salary Min', key: 'salaryMin' },
       { header: 'Salary Max', key: 'salaryMax' },
-      { header: 'Currency', key: 'salaryCurrency' },
+      { header: 'Salary Currency', key: 'salaryCurrency' },
       { header: 'Estimated Value', key: 'estimatedValue' },
-      { header: 'Openings', key: 'openings' },
+      { header: 'Openings', key: 'openings', required: true },
       { header: 'Filled', key: 'filledCount' },
       { header: 'Consultants', key: 'consultants' },
       { header: 'Description', key: 'description', wrap: true },
@@ -332,17 +434,16 @@ export class JobOrdersService {
       { header: 'Received', key: 'receivedAt' },
       { header: 'Closed', key: 'closedAt' },
     ];
-    const priorityLabels: Record<number, string> = { 1: 'High', 2: 'Medium', 3: 'Low' };
     const rows = jobOrders.map((jo) => ({
       displayId: jo.displayId,
       clientName: jo.clientName ?? '',
       clientDisplayId: jo.clientDisplayId ?? '',
       jobTitle: jo.jobTitle ?? '',
       jobRoleType: jo.jobRoleType ?? '',
-      location: jo.location ?? '',
-      status: jobOrderStatusLabels[jo.status],
+      location: jo.locationPath ?? '',
+      status: jo.status,
       quality: jobOrderQualityLabels[jo.quality],
-      priorityLevel: jo.priorityLevel != null ? (priorityLabels[jo.priorityLevel] ?? jo.priorityLevel) : '',
+      priorityLevel: jo.priorityLevel ?? '',
       salaryMin: jo.salaryMin ?? '',
       salaryMax: jo.salaryMax ?? '',
       salaryCurrency: jo.salaryCurrency ?? '',

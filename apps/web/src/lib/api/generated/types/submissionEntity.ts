@@ -24,6 +24,16 @@ export interface SubmissionEntity {
   jobOrderTitle: string | null;
   status: SubmissionEntityStatus;
   submittedAt: string;
+  /**
+     * Client shortlisted this candidate to interview — tri-state, gates the interview stage
+     * @nullable
+     */
+  shortlisted: boolean | null;
+  /**
+     * Candidate accepted the offer — tri-state, gates the starting-date field
+     * @nullable
+     */
+  cddAccepted: boolean | null;
   /** @nullable */
   notes: string | null;
   createdAt: string;

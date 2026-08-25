@@ -14,6 +14,16 @@ export interface UpdateSubmissionDto {
   jobOrderId?: string;
   /** Status; defaults to SUBMITTED when omitted */
   status?: UpdateSubmissionDtoStatus;
+  /**
+     * Client shortlisted this candidate to interview — tri-state, gates the interview stage
+     * @nullable
+     */
+  shortlisted?: boolean | null;
+  /**
+     * Candidate accepted the offer — tri-state, gates the starting-date field
+     * @nullable
+     */
+  cddAccepted?: boolean | null;
   /** Notes */
   notes?: string;
 }

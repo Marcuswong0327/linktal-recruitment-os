@@ -18,7 +18,7 @@ export class InterviewsController {
 
   @Get()
   @RequirePermission('submission', 'read')
-  @ApiOperation({ operationId: 'getInterviews', summary: 'List interview rounds, filtered by submissionId' })
+  @ApiOperation({ operationId: 'getInterviews', summary: 'List interview rounds, filtered by submissionId and/or jobOrderId' })
   @ApiResponse({ status: 200, description: 'Interview rounds, earliest first', type: InterviewEntity, isArray: true })
   findAll(@Query() query: QueryInterviewsDto) {
     return this.interviews.findAll(query);

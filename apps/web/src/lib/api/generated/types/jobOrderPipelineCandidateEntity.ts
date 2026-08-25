@@ -11,7 +11,23 @@ export interface JobOrderPipelineCandidateEntity {
   submissionId: string;
   candidateId: string;
   candidateName: string;
+  /** @nullable */
+  candidateEmail: string | null;
+  /** @nullable */
+  candidateMobile: string | null;
+  /** @nullable */
+  candidateLinkedinUrl: string | null;
   status: JobOrderPipelineCandidateEntityStatus;
+  /**
+     * Client shortlisted this candidate to interview — tri-state, gates the interview stage
+     * @nullable
+     */
+  shortlisted: boolean | null;
+  /**
+     * Candidate accepted the offer — tri-state, gates the starting-date field
+     * @nullable
+     */
+  cddAccepted: boolean | null;
   submittedAt: string;
   /**
      * This submission's most recent interview round

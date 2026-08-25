@@ -3828,6 +3828,196 @@
         ]
       }
     },
+    "/stakeholders/enrichment": {
+      "get": {
+        "operationId": "getStakeholdersForEnrichment",
+        "parameters": [
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to most recently created.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "displayId",
+                "firstName",
+                "lastName",
+                "createdAt",
+                "lastContactedAt"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across firstName, lastName, email, displayId and mobile",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by client ID (exact match)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "jobTitle",
+            "required": false,
+            "in": "query",
+            "description": "Filter by job title (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "roleTypeIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by role type ID(s) (see /stakeholder-role-types)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobTitleIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by JobTitle id(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Location id(s) matched against a stakeholder's own coverage (not its client's location). Selecting a country or state matches every stakeholder whose coverage sits beneath it, via the ancestor path — same semantics as Client.locationIds.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "accuracy",
+            "required": false,
+            "in": "query",
+            "description": "Filter by verification state (one or more): 'true' (Accurate), 'false' (Inaccurate), 'unchecked' (not yet verified). Omit for all.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "true",
+                  "false",
+                  "unchecked"
+                ]
+              }
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by relationship-warmth status (one or more). Omit for all.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "UNS",
+                  "DATA_NOT_ACCURATE"
+                ]
+              }
+            }
+          },
+          {
+            "name": "clientIds",
+            "required": true,
+            "in": "query",
+            "description": "Company IDs to fetch stakeholders for — required, at least one.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stakeholders across the given companies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StakeholderEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every stakeholder across a required set of company IDs — unbounded, not paginated. Backs the cross-company enrichment workspace.",
+        "tags": [
+          "Stakeholders"
+        ]
+      }
+    },
     "/stakeholders/import/template": {
       "get": {
         "operationId": "getStakeholderImportTemplate",
@@ -9971,6 +10161,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "jobOrderId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by job order ID",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -10013,7 +10212,7 @@
             "bearer": []
           }
         ],
-        "summary": "List interview rounds, filtered by submissionId",
+        "summary": "List interview rounds, filtered by submissionId and/or jobOrderId",
         "tags": [
           "Interviews"
         ]
@@ -10589,6 +10788,253 @@
         "summary": "Remove a placement (soft-delete, recoverable)",
         "tags": [
           "Placements"
+        ]
+      }
+    },
+    "/uploads/tob": {
+      "post": {
+        "operationId": "uploadTobFile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResultEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upload a TOB's source document to R2",
+        "tags": [
+          "Uploads"
+        ]
+      }
+    },
+    "/uploads/job-order": {
+      "post": {
+        "operationId": "uploadJobOrderFile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResultEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upload a job order's JD/ad/other document to R2",
+        "tags": [
+          "Uploads"
+        ]
+      }
+    },
+    "/uploads/candidate": {
+      "post": {
+        "operationId": "uploadCandidateFile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResultEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upload a candidate's resume/document to R2",
+        "tags": [
+          "Uploads"
+        ]
+      }
+    },
+    "/uploads/view": {
+      "get": {
+        "operationId": "viewUploadedFile",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File contents"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Stream a previously uploaded file back (permission-gated by its owning entity's read permission)",
+        "tags": [
+          "Uploads"
         ]
       }
     }
@@ -12932,6 +13378,18 @@
           "candidateName": {
             "type": "string"
           },
+          "candidateEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "candidateMobile": {
+            "type": "string",
+            "nullable": true
+          },
+          "candidateLinkedinUrl": {
+            "type": "string",
+            "nullable": true
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -12940,6 +13398,16 @@
               "REJECTED",
               "PLACED"
             ]
+          },
+          "shortlisted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Client shortlisted this candidate to interview — tri-state, gates the interview stage"
+          },
+          "cddAccepted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Candidate accepted the offer — tri-state, gates the starting-date field"
           },
           "submittedAt": {
             "format": "date-time",
@@ -12969,7 +13437,12 @@
           "submissionId",
           "candidateId",
           "candidateName",
+          "candidateEmail",
+          "candidateMobile",
+          "candidateLinkedinUrl",
           "status",
+          "shortlisted",
+          "cddAccepted",
           "submittedAt",
           "latestInterviewDate",
           "placementBaseSalary",
@@ -13103,6 +13576,21 @@
             "nullable": true,
             "description": "Briefing notes — internal, distinct from the public-facing description/requirements copy"
           },
+          "jdFileUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Link to the job description document"
+          },
+          "clientAdsUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Link to the client's own published ad for this role"
+          },
+          "otherDocumentsUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Link to any other document supporting this job order"
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -13147,6 +13635,27 @@
             "items": {
               "$ref": "#/components/schemas/JobOrderPipelineCandidateEntity"
             }
+          },
+          "keyStakeholderId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The client's most recently contacted stakeholder"
+          },
+          "keyStakeholderName": {
+            "type": "string",
+            "nullable": true
+          },
+          "keyStakeholderEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "keyStakeholderMobile": {
+            "type": "string",
+            "nullable": true
+          },
+          "keyStakeholderLinkedinUrl": {
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
@@ -13175,6 +13684,9 @@
           "description",
           "requirements",
           "notes",
+          "jdFileUrl",
+          "clientAdsUrl",
+          "otherDocumentsUrl",
           "status",
           "quality",
           "priorityLevel",
@@ -13182,7 +13694,12 @@
           "closedAt",
           "createdAt",
           "updatedAt",
-          "pipelineSubmissions"
+          "pipelineSubmissions",
+          "keyStakeholderId",
+          "keyStakeholderName",
+          "keyStakeholderEmail",
+          "keyStakeholderMobile",
+          "keyStakeholderLinkedinUrl"
         ]
       },
       "PaginatedJobOrdersEntity": {
@@ -13318,6 +13835,18 @@
             "description": "Priority: 1=High, 2=Medium, 3=Low",
             "example": 2,
             "default": 2
+          },
+          "jdFileUrl": {
+            "type": "string",
+            "description": "Link to the job description document"
+          },
+          "clientAdsUrl": {
+            "type": "string",
+            "description": "Link to the client's own published ad for this role"
+          },
+          "otherDocumentsUrl": {
+            "type": "string",
+            "description": "Link to any other document supporting this job order"
           }
         },
         "required": [
@@ -13412,6 +13941,18 @@
             "description": "Priority: 1=High, 2=Medium, 3=Low",
             "example": 2,
             "default": 2
+          },
+          "jdFileUrl": {
+            "type": "string",
+            "description": "Link to the job description document"
+          },
+          "clientAdsUrl": {
+            "type": "string",
+            "description": "Link to the client's own published ad for this role"
+          },
+          "otherDocumentsUrl": {
+            "type": "string",
+            "description": "Link to any other document supporting this job order"
           }
         }
       },
@@ -14786,6 +15327,16 @@
             "format": "date-time",
             "type": "string"
           },
+          "shortlisted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Client shortlisted this candidate to interview — tri-state, gates the interview stage"
+          },
+          "cddAccepted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Candidate accepted the offer — tri-state, gates the starting-date field"
+          },
           "notes": {
             "type": "string",
             "nullable": true
@@ -14808,6 +15359,8 @@
           "jobOrderTitle",
           "status",
           "submittedAt",
+          "shortlisted",
+          "cddAccepted",
           "notes",
           "createdAt",
           "updatedAt"
@@ -14834,6 +15387,16 @@
               "PLACED"
             ],
             "example": "SUBMITTED"
+          },
+          "shortlisted": {
+            "type": "boolean",
+            "description": "Client shortlisted this candidate to interview — tri-state, gates the interview stage",
+            "nullable": true
+          },
+          "cddAccepted": {
+            "type": "boolean",
+            "description": "Candidate accepted the offer — tri-state, gates the starting-date field",
+            "nullable": true
           },
           "notes": {
             "type": "string",
@@ -14866,6 +15429,16 @@
               "PLACED"
             ],
             "example": "SUBMITTED"
+          },
+          "shortlisted": {
+            "type": "boolean",
+            "description": "Client shortlisted this candidate to interview — tri-state, gates the interview stage",
+            "nullable": true
+          },
+          "cddAccepted": {
+            "type": "boolean",
+            "description": "Candidate accepted the offer — tri-state, gates the starting-date field",
+            "nullable": true
           },
           "notes": {
             "type": "string",
@@ -15212,6 +15785,23 @@
             ]
           }
         }
+      },
+      "UploadResultEntity": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Object key — pass to GET /uploads/view?key=... to fetch it back"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Original filename, as uploaded"
+          }
+        },
+        "required": [
+          "key",
+          "fileName"
+        ]
       },
       "ErrorResponse": {
         "type": "object",

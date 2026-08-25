@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import { REQUIRED_HEADER_SUFFIX } from './xlsx-import';
 
 const MIN_COLUMN_WIDTH = 10;
 const MAX_COLUMN_WIDTH = 60;
@@ -15,9 +16,17 @@ export interface ExportColumn {
   key: string;
   /** Enables wrap-text alignment — for long free-text fields (notes, descriptions) that would otherwise overflow visually. */
   wrap?: boolean;
+  /**
+   * Marks this column required for import, the same way the corresponding
+   * *_IMPORT_COLUMNS entry does — an exported sheet is also what "Export to
+   * Excel → edit → re-upload to update" re-imports, so someone editing it
+   * needs the same "don't blank this out" warning the blank template shows,
+   * or they'll only discover it's required from a rejected re-upload.
+   */
+  required?: boolean;
 }
 
-/** Builds a single-sheet, human-readable .xlsx buffer — frozen + bold header, autofilter, content-sized columns, wrapped long text, '—' for blanks. Shared by every entity's export endpoint. */
+/** Builds a single-sheet, human-readable .xlsx buffer — frozen + bold header, autofilter, content-sized columns, wrapped long text, truly blank cells for "no value". Shared by every entity's export endpoint. */
 export async function buildWorkbook(
   sheetName: string,
   columns: ExportColumn[],
@@ -28,16 +37,24 @@ export async function buildWorkbook(
     views: [{ state: 'frozen', ySplit: 1 }],
   });
 
-  // '—' reads clearer than a blank cell for "no value" — matches how every
-  // on-screen table in this app already renders missing fields.
+  // Blank/null cells stay genuinely empty — NOT '—'. This sheet is also
+  // what "Export to Excel → edit → re-upload" re-imports (see
+  // ImportDialog's own instructions), and every importer's own blank/clear
+  // rule (docs: an optional column blank on an update row clears it) only
+  // recognizes an actually-empty cell — a literal '—' character fails a
+  // URL/email column's validation, or on a plain text column, would get
+  // written back as the field's new value instead of clearing it. On-screen
+  // tables render their own '—' for a missing value independently of this;
+  // that's a display concern for that component, not the export file.
   const displayRows = rows.map((row) =>
-    Object.fromEntries(columns.map(({ key }) => [key, row[key] === '' || row[key] == null ? '—' : row[key]])),
+    Object.fromEntries(columns.map(({ key }) => [key, row[key] === '' || row[key] == null ? null : row[key]])),
   );
 
-  sheet.columns = columns.map(({ header, key, wrap }) => {
-    const longest = displayRows.reduce((max, row) => Math.max(max, String(row[key] ?? '').length), header.length);
+  sheet.columns = columns.map(({ header, key, wrap, required }) => {
+    const displayHeader = required ? `${header}${REQUIRED_HEADER_SUFFIX}` : header;
+    const longest = displayRows.reduce((max, row) => Math.max(max, String(row[key] ?? '').length), displayHeader.length);
     return {
-      header,
+      header: displayHeader,
       key,
       width: Math.min(Math.max(longest + 2, MIN_COLUMN_WIDTH), MAX_COLUMN_WIDTH),
       style: wrap ? { alignment: { wrapText: true, vertical: 'top' } } : undefined,
@@ -46,6 +63,11 @@ export async function buildWorkbook(
 
   sheet.addRows(displayRows);
   sheet.getRow(1).font = { bold: true };
+  // Same red-on-bold treatment as buildTemplateWorkbook's required columns —
+  // one visual language across both file types.
+  columns.forEach((col, i) => {
+    if (col.required) sheet.getRow(1).getCell(i + 1).font = { bold: true, color: { argb: 'FFB91C1C' } };
+  });
   sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: columns.length } };
 
   const buffer = await workbook.xlsx.writeBuffer();

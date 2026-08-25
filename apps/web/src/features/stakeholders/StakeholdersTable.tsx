@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
-import { CheckCheck, ChevronDown, Download, MapPin, Plus, Trash2 } from 'lucide-react';
+import { CheckCheck, ChevronDown, Download, MapPin, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,14 +25,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ClientCombobox } from '@/components/ClientCombobox';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { CreatableCombobox, type CreatableComboboxOption } from '@/components/CreatableCombobox';
@@ -223,10 +216,7 @@ export function StakeholdersTable({
 
   const { data: jobTitleData } = useGetJobTitles({ take: 200 });
   const jobTitleRows = jobTitleData?.status === 200 ? jobTitleData.data : [];
-  const jobTitleOptions = React.useMemo(
-    () => jobTitleRows.map((j) => ({ id: j.id, name: j.name })),
-    [jobTitleRows],
-  );
+  const jobTitleOptions = React.useMemo(() => jobTitleRows.map((j) => ({ id: j.id, name: j.name })), [jobTitleRows]);
 
   const stakeholderFilters: DataGridFilter[] = React.useMemo(
     () => [
@@ -294,8 +284,7 @@ export function StakeholdersTable({
 
   const createRoleType = useCreateStakeholderRoleType({
     mutation: {
-      onSuccess: () =>
-        queryClient.invalidateQueries({ queryKey: ['/stakeholder-role-types'] }),
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/stakeholder-role-types'] }),
       onError: (err) => toast.error(err.message || 'Failed to add role type'),
     },
   });
@@ -332,22 +321,15 @@ export function StakeholdersTable({
       onError: (err) => toast.error(err.message || 'Failed to update stakeholder'),
     },
   });
-  const pendingRowId = updateStakeholderMutation.isPending
-    ? (updateStakeholderMutation.variables?.id ?? null)
-    : null;
+  const pendingRowId = updateStakeholderMutation.isPending ? (updateStakeholderMutation.variables?.id ?? null) : null;
 
   function handleQueryChange({ search, sorting, columnFilters }: DataGridQuery) {
-    const roleTypeFilter = columnFilters.find((f) => f.id === 'roleType')?.value as
-      string[] | undefined;
-    const accuracyFilter = columnFilters.find((f) => f.id === 'isAccurate')?.value as
-      string[] | undefined;
-    const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as
-      string[] | undefined;
-    const coverageFilter = columnFilters.find((f) => f.id === 'coverage')?.value as
-      string[] | undefined;
+    const roleTypeFilter = columnFilters.find((f) => f.id === 'roleType')?.value as string[] | undefined;
+    const accuracyFilter = columnFilters.find((f) => f.id === 'isAccurate')?.value as string[] | undefined;
+    const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as string[] | undefined;
+    const coverageFilter = columnFilters.find((f) => f.id === 'coverage')?.value as string[] | undefined;
     const sort = sorting[0];
-    const sortField =
-      sort && sort.id in GetStakeholdersSortBy ? (sort.id as GetStakeholdersSortBy) : undefined;
+    const sortField = sort && sort.id in GetStakeholdersSortBy ? (sort.id as GetStakeholdersSortBy) : undefined;
     setSearch(search.trim() || undefined);
     setRoleTypeIds(roleTypeFilter);
     setAccuracy(accuracyFilter?.length ? (accuracyFilter as GetStakeholdersAccuracyItem[]) : undefined);
@@ -399,8 +381,7 @@ export function StakeholdersTable({
     const succeeded = results.length - failed;
     queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
     const label = isAccurate === null ? 'Unchecked' : isAccurate ? 'Accurate' : 'Inaccurate';
-    if (succeeded > 0)
-      toast.success(`Marked ${succeeded} stakeholder${succeeded === 1 ? '' : 's'} as ${label}`);
+    if (succeeded > 0) toast.success(`Marked ${succeeded} stakeholder${succeeded === 1 ? '' : 's'} as ${label}`);
     if (failed > 0) toast.error(`Failed for ${failed} stakeholder${failed === 1 ? '' : 's'}`);
     setIsBulkUpdating(false);
     setSelected([]);
@@ -432,6 +413,13 @@ export function StakeholdersTable({
   // matching the current filters, unbounded.
   async function handleExport() {
     setIsExporting(true);
+    // A loading toast, not just the isExporting-driven button label — this
+    // is triggered from a DropdownMenuItem, and the dropdown closes the
+    // instant it's clicked, so a label change on that now-unmounted item is
+    // never actually seen. The toast (same `id` as the success/error below,
+    // so it morphs in place rather than stacking) is what's actually visible
+    // while an unbounded, potentially-slow export is in flight.
+    toast.loading('Exporting…', { id: 'export-stakeholders' });
     // The server has no ambient concept of "the viewer's timezone" — it only
     // ever sees UTC timestamps, so date/time export columns need this sent
     // along explicitly.
@@ -445,11 +433,21 @@ export function StakeholdersTable({
         });
       } else {
         await downloadFile(
-          getExportStakeholdersUrl({ q: search, roleTypeIds, accuracy, statuses, locationIds, sortBy, sortOrder, timezone }),
+          getExportStakeholdersUrl({
+            q: search,
+            roleTypeIds,
+            accuracy,
+            statuses,
+            locationIds,
+            sortBy,
+            sortOrder,
+            timezone,
+          }),
         );
       }
+      toast.success('Export ready', { id: 'export-stakeholders' });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Export failed');
+      toast.error(err instanceof Error ? err.message : 'Export failed', { id: 'export-stakeholders' });
     } finally {
       setIsExporting(false);
     }
@@ -491,14 +489,6 @@ export function StakeholdersTable({
         onSelectionChange={setSelected}
         enableRowRangeSelect
         hideSelectColumn
-        footerActions={
-          canCreate ? (
-            <Button size="sm" onClick={() => setCreating(true)}>
-              <Plus />
-              Add Stakeholder
-            </Button>
-          ) : undefined
-        }
         toolbar={
           <div className="flex items-center gap-2">
             {canCreate && canUpdate ? (
@@ -516,8 +506,8 @@ export function StakeholdersTable({
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <Button size="lg" disabled={isBulkUpdating}>
-                    {isBulkUpdating ? 'Updating…' : 'Bulk Actions'}
+                  <Button size="lg" disabled={isBulkUpdating || isExporting}>
+                    {isBulkUpdating ? 'Updating…' : isExporting ? 'Exporting…' : 'Bulk Actions'}
                     <ChevronDown />
                   </Button>
                 }
