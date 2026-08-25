@@ -48,7 +48,23 @@ const JOB_ORDER_INCLUDE = {
   // or link the company a role belongs to. industryId rides along purely for
   // the scope check below (a Job Order has no industry of its own, only via
   // its Client) and is stripped back out in `toEntity`.
-  client: { select: { industryId: true, companyName: true, displayId: true } },
+  client: {
+    select: {
+      industryId: true,
+      companyName: true,
+      displayId: true,
+      // Feeds the computed "key stakeholder" below — the most recently
+      // contacted stakeholder of this job order's client. Not a stored FK
+      // (see the entity's comment); every live stakeholder rides along here
+      // since client rosters are small and the pick happens in JS, where
+      // `orderBy: lastContactedAt desc` would put untouched (null) rows first
+      // under Postgres's default DESC-nulls-first ordering.
+      stakeholders: {
+        where: { deletedAt: null },
+        select: { id: true, firstName: true, lastName: true, email: true, mobile: true, linkedinUrl: true, lastContactedAt: true },
+      },
+    },
+  },
   // Who's working this job order — see JobOrderConsultant in schema.prisma.
   // Several consultants can be on the same job order concurrently.
   consultants: { select: { consultantId: true, consultant: { select: { fullName: true } } } },
@@ -62,9 +78,11 @@ const JOB_ORDER_INCLUDE = {
     select: {
       id: true,
       status: true,
+      shortlisted: true,
+      cddAccepted: true,
       candidateId: true,
       submittedAt: true,
-      candidate: { select: { firstName: true, lastName: true } },
+      candidate: { select: { firstName: true, lastName: true, email: true, mobile: true, linkedinUrl: true } },
       placement: { select: { baseSalary: true, feeValue: true, startDate: true } },
       interviews: {
         where: { deletedAt: null },
@@ -76,8 +94,25 @@ const JOB_ORDER_INCLUDE = {
   },
 } satisfies Prisma.JobOrderInclude;
 
+type ClientStakeholderForKeyContact = {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  mobile: string | null;
+  linkedinUrl: string | null;
+  lastContactedAt: Date | null;
+};
+
 type JobOrderWithRelations = {
-  client: { industryId: string; companyName: string; displayId: string } | null;
+  client:
+    | {
+        industryId: string;
+        companyName: string;
+        displayId: string;
+        stakeholders: ClientStakeholderForKeyContact[];
+      }
+    | null;
   consultants: { consultantId: string; consultant: { fullName: string } }[];
   jobTitle: { name: string } | null;
   jobRoleType: { name: string } | null;
@@ -85,13 +120,31 @@ type JobOrderWithRelations = {
   submissions: {
     id: string;
     status: SubmissionStatus;
+    shortlisted: boolean | null;
+    cddAccepted: boolean | null;
     candidateId: string;
     submittedAt: Date;
-    candidate: { firstName: string | null; lastName: string | null } | null;
+    candidate: {
+      firstName: string | null;
+      lastName: string | null;
+      email: string | null;
+      mobile: string | null;
+      linkedinUrl: string | null;
+    } | null;
     placement: { baseSalary: number | null; feeValue: number | null; startDate: Date | null } | null;
     interviews: { interviewDate: Date }[];
   }[];
 };
+
+/** Best guess at "who to talk to" for this job order's client: whoever was contacted most recently, falling back to the first stakeholder on file. No stakeholder at all → null (not "not configured yet" — see the entity's comment on why this isn't a stored field). */
+function pickKeyStakeholder(stakeholders: ClientStakeholderForKeyContact[]) {
+  if (stakeholders.length === 0) return null;
+  return stakeholders.reduce((best, s) => {
+    const bestTime = best.lastContactedAt?.getTime() ?? -Infinity;
+    const time = s.lastContactedAt?.getTime() ?? -Infinity;
+    return time > bestTime ? s : best;
+  });
+}
 
 /** A candidate is stored as first/last name, either of which may be missing. */
 function displayName(candidate: { firstName: string | null; lastName: string | null } | null): string {
@@ -126,6 +179,7 @@ type JobOrderExportRow = {
 
 function toEntity<T extends JobOrderWithRelations>(jobOrder: T) {
   const { submissions, client, consultants, jobTitle, jobRoleType, location, ...rest } = jobOrder;
+  const keyStakeholder = client ? pickKeyStakeholder(client.stakeholders) : null;
   return {
     ...rest,
     // `clientId` (on ...rest) is what you PATCH; these two are what you show
@@ -142,13 +196,25 @@ function toEntity<T extends JobOrderWithRelations>(jobOrder: T) {
       submissionId: s.id,
       candidateId: s.candidateId,
       candidateName: displayName(s.candidate),
+      candidateEmail: s.candidate?.email ?? null,
+      candidateMobile: s.candidate?.mobile ?? null,
+      candidateLinkedinUrl: s.candidate?.linkedinUrl ?? null,
       status: s.status,
+      shortlisted: s.shortlisted,
+      cddAccepted: s.cddAccepted,
       submittedAt: s.submittedAt,
       latestInterviewDate: s.interviews[0]?.interviewDate ?? null,
       placementBaseSalary: s.placement?.baseSalary ?? null,
       placementFeeValue: s.placement?.feeValue ?? null,
       placementStartDate: s.placement?.startDate ?? null,
     })),
+    keyStakeholderId: keyStakeholder?.id ?? null,
+    keyStakeholderName: keyStakeholder
+      ? [keyStakeholder.firstName, keyStakeholder.lastName].filter(Boolean).join(' ') || 'Unnamed contact'
+      : null,
+    keyStakeholderEmail: keyStakeholder?.email ?? null,
+    keyStakeholderMobile: keyStakeholder?.mobile ?? null,
+    keyStakeholderLinkedinUrl: keyStakeholder?.linkedinUrl ?? null,
   };
 }
 

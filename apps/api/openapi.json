@@ -9971,6 +9971,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "jobOrderId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by job order ID",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -10013,7 +10022,7 @@
             "bearer": []
           }
         ],
-        "summary": "List interview rounds, filtered by submissionId",
+        "summary": "List interview rounds, filtered by submissionId and/or jobOrderId",
         "tags": [
           "Interviews"
         ]
@@ -10589,6 +10598,253 @@
         "summary": "Remove a placement (soft-delete, recoverable)",
         "tags": [
           "Placements"
+        ]
+      }
+    },
+    "/uploads/tob": {
+      "post": {
+        "operationId": "uploadTobFile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResultEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upload a TOB's source document to R2",
+        "tags": [
+          "Uploads"
+        ]
+      }
+    },
+    "/uploads/job-order": {
+      "post": {
+        "operationId": "uploadJobOrderFile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResultEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upload a job order's JD/ad/other document to R2",
+        "tags": [
+          "Uploads"
+        ]
+      }
+    },
+    "/uploads/candidate": {
+      "post": {
+        "operationId": "uploadCandidateFile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResultEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upload a candidate's resume/document to R2",
+        "tags": [
+          "Uploads"
+        ]
+      }
+    },
+    "/uploads/view": {
+      "get": {
+        "operationId": "viewUploadedFile",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File contents"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Stream a previously uploaded file back (permission-gated by its owning entity's read permission)",
+        "tags": [
+          "Uploads"
         ]
       }
     }
@@ -12932,6 +13188,18 @@
           "candidateName": {
             "type": "string"
           },
+          "candidateEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "candidateMobile": {
+            "type": "string",
+            "nullable": true
+          },
+          "candidateLinkedinUrl": {
+            "type": "string",
+            "nullable": true
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -12940,6 +13208,16 @@
               "REJECTED",
               "PLACED"
             ]
+          },
+          "shortlisted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Client shortlisted this candidate to interview — tri-state, gates the interview stage"
+          },
+          "cddAccepted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Candidate accepted the offer — tri-state, gates the starting-date field"
           },
           "submittedAt": {
             "format": "date-time",
@@ -12969,7 +13247,12 @@
           "submissionId",
           "candidateId",
           "candidateName",
+          "candidateEmail",
+          "candidateMobile",
+          "candidateLinkedinUrl",
           "status",
+          "shortlisted",
+          "cddAccepted",
           "submittedAt",
           "latestInterviewDate",
           "placementBaseSalary",
@@ -13103,6 +13386,21 @@
             "nullable": true,
             "description": "Briefing notes — internal, distinct from the public-facing description/requirements copy"
           },
+          "jdFileUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Link to the job description document"
+          },
+          "clientAdsUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Link to the client's own published ad for this role"
+          },
+          "otherDocumentsUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Link to any other document supporting this job order"
+          },
           "status": {
             "type": "string",
             "enum": [
@@ -13147,6 +13445,27 @@
             "items": {
               "$ref": "#/components/schemas/JobOrderPipelineCandidateEntity"
             }
+          },
+          "keyStakeholderId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The client's most recently contacted stakeholder"
+          },
+          "keyStakeholderName": {
+            "type": "string",
+            "nullable": true
+          },
+          "keyStakeholderEmail": {
+            "type": "string",
+            "nullable": true
+          },
+          "keyStakeholderMobile": {
+            "type": "string",
+            "nullable": true
+          },
+          "keyStakeholderLinkedinUrl": {
+            "type": "string",
+            "nullable": true
           }
         },
         "required": [
@@ -13175,6 +13494,9 @@
           "description",
           "requirements",
           "notes",
+          "jdFileUrl",
+          "clientAdsUrl",
+          "otherDocumentsUrl",
           "status",
           "quality",
           "priorityLevel",
@@ -13182,7 +13504,12 @@
           "closedAt",
           "createdAt",
           "updatedAt",
-          "pipelineSubmissions"
+          "pipelineSubmissions",
+          "keyStakeholderId",
+          "keyStakeholderName",
+          "keyStakeholderEmail",
+          "keyStakeholderMobile",
+          "keyStakeholderLinkedinUrl"
         ]
       },
       "PaginatedJobOrdersEntity": {
@@ -13318,6 +13645,18 @@
             "description": "Priority: 1=High, 2=Medium, 3=Low",
             "example": 2,
             "default": 2
+          },
+          "jdFileUrl": {
+            "type": "string",
+            "description": "Link to the job description document"
+          },
+          "clientAdsUrl": {
+            "type": "string",
+            "description": "Link to the client's own published ad for this role"
+          },
+          "otherDocumentsUrl": {
+            "type": "string",
+            "description": "Link to any other document supporting this job order"
           }
         },
         "required": [
@@ -13412,6 +13751,18 @@
             "description": "Priority: 1=High, 2=Medium, 3=Low",
             "example": 2,
             "default": 2
+          },
+          "jdFileUrl": {
+            "type": "string",
+            "description": "Link to the job description document"
+          },
+          "clientAdsUrl": {
+            "type": "string",
+            "description": "Link to the client's own published ad for this role"
+          },
+          "otherDocumentsUrl": {
+            "type": "string",
+            "description": "Link to any other document supporting this job order"
           }
         }
       },
@@ -14786,6 +15137,16 @@
             "format": "date-time",
             "type": "string"
           },
+          "shortlisted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Client shortlisted this candidate to interview — tri-state, gates the interview stage"
+          },
+          "cddAccepted": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "Candidate accepted the offer — tri-state, gates the starting-date field"
+          },
           "notes": {
             "type": "string",
             "nullable": true
@@ -14808,6 +15169,8 @@
           "jobOrderTitle",
           "status",
           "submittedAt",
+          "shortlisted",
+          "cddAccepted",
           "notes",
           "createdAt",
           "updatedAt"
@@ -14834,6 +15197,16 @@
               "PLACED"
             ],
             "example": "SUBMITTED"
+          },
+          "shortlisted": {
+            "type": "boolean",
+            "description": "Client shortlisted this candidate to interview — tri-state, gates the interview stage",
+            "nullable": true
+          },
+          "cddAccepted": {
+            "type": "boolean",
+            "description": "Candidate accepted the offer — tri-state, gates the starting-date field",
+            "nullable": true
           },
           "notes": {
             "type": "string",
@@ -14866,6 +15239,16 @@
               "PLACED"
             ],
             "example": "SUBMITTED"
+          },
+          "shortlisted": {
+            "type": "boolean",
+            "description": "Client shortlisted this candidate to interview — tri-state, gates the interview stage",
+            "nullable": true
+          },
+          "cddAccepted": {
+            "type": "boolean",
+            "description": "Candidate accepted the offer — tri-state, gates the starting-date field",
+            "nullable": true
           },
           "notes": {
             "type": "string",
@@ -15212,6 +15595,23 @@
             ]
           }
         }
+      },
+      "UploadResultEntity": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Object key — pass to GET /uploads/view?key=... to fetch it back"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Original filename, as uploaded"
+          }
+        },
+        "required": [
+          "key",
+          "fileName"
+        ]
       },
       "ErrorResponse": {
         "type": "object",

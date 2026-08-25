@@ -872,6 +872,12 @@ model JobOrder {
   requirements String?
   notes        String? // "Briefing Notes" — internal recruiter notes, distinct from description/requirements (public-facing job-ad copy).
 
+  // Document links for this job order — same "just a URL, not always a real
+  // URL" reasoning as Tob.sourceFileLink (SharePoint links, bare paths, etc.).
+  jdFileUrl         String? // The job description document.
+  clientAdsUrl      String? // The client's own published ad for this role.
+  otherDocumentsUrl String? // Anything else supporting this job order.
+
   // Denormalized, kept in sync by SubmissionsService.recomputeJobOrderCounters
   // on every submission create/update/remove. Exist purely so the Job Orders
   // list can sort by them: Prisma's orderBy relation aggregates (_count/_max)
@@ -934,7 +940,17 @@ model CandidateSubmission {
   jobOrder    JobOrder         @relation(fields: [jobOrderId], references: [id], onDelete: Cascade)
   status      SubmissionStatus @default(SUBMITTED)
   submittedAt DateTime         @default(now())
-  notes       String?
+
+  // The Job Order pipeline table's three tick/cross stages, each a tri-state
+  // boolean of its own (null = undecided, not derived from `status` or from
+  // each other) — the UI gates each stage on the previous one being ticked,
+  // but that's a frontend concern, not a stored relationship between these
+  // columns. Interview outcome (PASSED/FAILED) is the middle stage; it
+  // already lives on Interview.outcome, not duplicated here.
+  shortlisted Boolean? // Client shortlisted this candidate to interview.
+  cddAccepted Boolean? // Candidate accepted the offer (set alongside creating the Placement — see PlacementsService).
+
+  notes String?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
   deletedAt   DateTime? // Soft delete: null = live

@@ -2,6 +2,7 @@
 
 import type { ColumnDef } from '@tanstack/react-table';
 import { Globe } from 'lucide-react';
+import Link from 'next/link';
 
 import { SeekIcon } from '@/components/BrandIcons';
 import { cityLabel, formatDate, suburbLabel, type JobResearch } from './schema';
@@ -32,7 +33,20 @@ export function getJobResearchColumns(): ColumnDef<JobResearch>[] {
       accessorKey: 'companyName',
       enableSorting: false,
       header: 'Company',
-      cell: ({ row }) => <span>{row.original.companyName ?? '—'}</span>,
+      cell: ({ row }) =>
+        row.original.companyName ? (
+          <Link
+            href={`/companies/${row.original.clientId}`}
+            onClick={(e) => e.stopPropagation()}
+            title={`${row.original.companyName} — opens company details`}
+            className="hover:underline"
+            data-no-row-drag
+          >
+            {row.original.companyName}
+          </Link>
+        ) : (
+          <span>—</span>
+        ),
     },
     {
       accessorKey: 'salaryRange',

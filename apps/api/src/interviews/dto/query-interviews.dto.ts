@@ -6,4 +6,9 @@ export class QueryInterviewsDto {
   @IsOptional()
   @IsString()
   submissionId?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by job order ID' })
+  @IsOptional()
+  @IsString()
+  jobOrderId?: string;
 }

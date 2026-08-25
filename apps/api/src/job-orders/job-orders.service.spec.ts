@@ -252,7 +252,7 @@ describe('JobOrdersService.findOne', () => {
     const { service } = makeService(
       withRelations({
         id: 'j1',
-        client: { industryId: 'finance' },
+        client: { industryId: 'finance', stakeholders: [] },
         location: { name: 'Perth', level: 'CITY', ancestorIds: ['perth', 'wa', 'au'] },
       }),
     );

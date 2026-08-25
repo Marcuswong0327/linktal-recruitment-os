@@ -94,7 +94,7 @@ export const getGetInterviewsUrl = (params?: GetInterviewsParams,) => {
 }
 
 /**
- * @summary List interview rounds, filtered by submissionId
+ * @summary List interview rounds, filtered by submissionId and/or jobOrderId
  */
 export const getInterviews = async (params?: GetInterviewsParams, options?: RequestInit): Promise<getInterviewsResponse> => {
 
@@ -165,7 +165,7 @@ export function useGetInterviews<TData = Awaited<ReturnType<typeof getInterviews
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary List interview rounds, filtered by submissionId
+ * @summary List interview rounds, filtered by submissionId and/or jobOrderId
  */
 
 export function useGetInterviews<TData = Awaited<ReturnType<typeof getInterviews>>, TError = ErrorResponse>(

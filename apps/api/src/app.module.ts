@@ -25,6 +25,7 @@ import { PlacementsModule } from './placements/placements.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 import { AuthModule } from './auth/auth.module';
 import { AuditModule } from './audit/audit.module';
+import { UploadsModule } from './uploads/uploads.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { AuditModule } from './audit/audit.module';
     InterviewsModule,
     PlacementsModule,
     AuditModule,
+    UploadsModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],

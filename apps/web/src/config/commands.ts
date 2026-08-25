@@ -1,4 +1,4 @@
-import { BookA, Building2, Contact, User, type LucideIcon } from 'lucide-react';
+import { BookA, Building2, ClipboardList, Contact, User, type LucideIcon } from 'lucide-react';
 import { navGroups, type NavItem, type RequiredPermission } from '@/config/nav';
 
 export type PageCommand = {
@@ -33,9 +33,9 @@ export type ActionCommand = {
 
 /**
  * Explicit, hand-picked list of "do something" commands (as opposed to plain
- * page navigation) — the GCP/AWS-style "Add a Stakeholder" entries. Job
- * Orders' add button is still `disabled` in its table, so it stays off this
- * list until that ships.
+ * page navigation) — the GCP/AWS-style "Add a Stakeholder" entries. This is
+ * also the list the header's global Add button renders, so it's the single
+ * source of truth for "everything the user can create" from anywhere.
  */
 export const actionCommands: ActionCommand[] = [
   {
@@ -51,6 +51,13 @@ export const actionCommands: ActionCommand[] = [
     href: '/candidates?new=1',
     icon: User,
     requiredPermission: { resource: 'candidate', action: 'create' },
+  },
+  {
+    title: 'Add Job Order',
+    description: 'Open a new position for a client',
+    href: '/job-orders/new',
+    icon: ClipboardList,
+    requiredPermission: { resource: 'job_order', action: 'create' },
   },
   {
     title: 'Add Stakeholder',
