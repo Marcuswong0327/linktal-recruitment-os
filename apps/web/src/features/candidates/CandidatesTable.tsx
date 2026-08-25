@@ -210,6 +210,13 @@ export function CandidatesTable({
   // current filters, unbounded.
   async function handleExport() {
     setIsExporting(true);
+    // A loading toast, not just the isExporting-driven button label — this
+    // is triggered from a DropdownMenuItem, and the dropdown closes the
+    // instant it's clicked, so a label change on that now-unmounted item is
+    // never actually seen. The toast (same `id` as the success/error below,
+    // so it morphs in place rather than stacking) is what's actually visible
+    // while an unbounded, potentially-slow export is in flight.
+    toast.loading('Exporting…', { id: 'export-candidates' });
     // The server has no ambient concept of "the viewer's timezone" — it only
     // ever sees UTC timestamps, so date/time export columns need this sent
     // along explicitly.
@@ -235,8 +242,9 @@ export function CandidatesTable({
           }),
         );
       }
+      toast.success('Export ready', { id: 'export-candidates' });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Export failed');
+      toast.error(err instanceof Error ? err.message : 'Export failed', { id: 'export-candidates' });
     } finally {
       setIsExporting(false);
     }
@@ -356,8 +364,8 @@ export function CandidatesTable({
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <Button size="lg" disabled={isBulkUpdating}>
-                    {isBulkUpdating ? 'Updating…' : 'Bulk Actions'}
+                  <Button size="lg" disabled={isBulkUpdating || isExporting}>
+                    {isBulkUpdating ? 'Updating…' : isExporting ? 'Exporting…' : 'Bulk Actions'}
                     <ChevronDown />
                   </Button>
                 }

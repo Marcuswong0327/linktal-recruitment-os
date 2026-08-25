@@ -21,8 +21,8 @@ import { QueryCandidateFacetsDto } from './dto/query-candidate-facets.dto';
 import { ExportCandidatesDto } from './dto/export-candidates.dto';
 import { UpdateCandidateContactHistoryDto } from './dto/update-candidate-contact-history.dto';
 import { buildWorkbook, resolveTimeZone, splitContactDateTime, ExportColumn } from '../common/xlsx-export';
-import { candidateStatusLabels } from '../common/export-labels';
 import { logExport } from '../common/audit-export';
+import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
 
 /** The subset of QueryCandidatesDto that `buildWhere` actually reads — shared with QueryCandidateFacetsDto, which omits pagination/sort/jobRoleTypeIds but still satisfies this structurally. */
 type CandidateFilterFields = Pick<
@@ -92,15 +92,30 @@ type CandidateWithRelations = {
   specializations: { specializationId: string; specialization: { name: string } }[];
 };
 
-/** The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept separate from the generic `toEntity<T>` return type, which erases extra fields when used across a second generic boundary. */
+/**
+ * The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept
+ * separate from the generic `toEntity<T>` return type, which erases extra
+ * fields when used across a second generic boundary. `locationPath` isn't
+ * something `toEntity` produces (it strips `ancestorIds` before returning) —
+ * `exportAll`/`exportByIds` compute it separately and merge it in, same
+ * pattern as ClientsService's `locationPaths`.
+ */
 type CandidateExportRow = {
+  displayId: string;
   firstName: string | null;
   lastName: string | null;
   email: string | null;
   mobile: string | null;
+  locationPath: string | null;
+  industry: string | null;
+  jobRoleType: string | null;
   currentRole: string | null;
   currentCompany: string | null;
-  location: string | null;
+  linkedinUrl: string | null;
+  seekTalentUrl: string | null;
+  rawResumeUrl: string | null;
+  editedResumeUrl: string | null;
+  specializations: string[];
   status: CandidateStatus;
   lastContactedAt: Date | null;
   lastContactType: string | null;
@@ -339,6 +354,24 @@ export class CandidatesService {
       .map((g) => ({ id: g.jobRoleTypeId as string, name: nameById.get(g.jobRoleTypeId as string)!, count: g._count }));
   }
 
+  /**
+   * Resolves each candidate's location to a full breadcrumb path — the exact
+   * format CANDIDATE_IMPORT_COLUMNS (candidates-import.service.ts) expects
+   * for its required Location column, so an exported sheet actually
+   * re-imports. Not something `toEntity` produces (it strips `ancestorIds`
+   * before returning) — same pattern as ClientsService's `locationPaths`.
+   */
+  private async withLocationPath<T extends CandidateWithRelations>(
+    candidates: T[],
+  ): Promise<(T & { locationPath: string | null })[]> {
+    const allLocations = await this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true } });
+    const byId = buildLocationById(allLocations);
+    return candidates.map((c) => ({
+      ...c,
+      locationPath: c.location ? locationBreadcrumbPath(c.location, byId) : null,
+    }));
+  }
+
   /** Every row matching the current filters, unbounded — no `skip`/`take`. */
   async exportAll(query: ExportCandidatesDto, user: AuthUser): Promise<Buffer> {
     const where = this.buildWhere(query, user);
@@ -346,7 +379,8 @@ export class CandidatesService {
     const candidates = await this.prisma.candidate.findMany({ where, orderBy, include: CANDIDATE_INCLUDE });
     const { timezone: _timezone, ...filters } = query;
     await logExport(this.base, 'Candidate', { count: candidates.length, filters });
-    return this.buildExportWorkbook(candidates.map(toEntity), query.timezone);
+    const withPath = await this.withLocationPath(candidates);
+    return this.buildExportWorkbook(withPath.map(toEntity), query.timezone);
   }
 
   /** An explicit row selection — scope is still re-applied server-side (defense-in-depth), so an out-of-scope id is silently dropped rather than exported. */
@@ -355,19 +389,35 @@ export class CandidatesService {
     if (isScoped(user)) and.push(candidateScope(user));
     const candidates = await this.prisma.candidate.findMany({ where: { AND: and }, include: CANDIDATE_INCLUDE });
     await logExport(this.base, 'Candidate', { count: candidates.length, requestedIds: ids });
-    return this.buildExportWorkbook(candidates.map(toEntity), timezone);
+    const withPath = await this.withLocationPath(candidates);
+    return this.buildExportWorkbook(withPath.map(toEntity), timezone);
   }
 
   private buildExportWorkbook(candidates: CandidateExportRow[], timezone?: string): Promise<Buffer> {
     const tz = resolveTimeZone(timezone);
+    // Header text and value format (Location: full breadcrumb path;
+    // Specializations: `;`-separated bare names; Status: the raw enum text,
+    // not a humanized label — "Unsuccessful" wouldn't match the "UNS" import
+    // expects) are deliberately identical to CANDIDATE_IMPORT_COLUMNS
+    // (candidates-import.service.ts), for the same "Export to Excel → edit →
+    // re-upload" round trip ImportDialog's own instructions promise.
     const columns: ExportColumn[] = [
-      { header: 'Candidate Name', key: 'name' },
+      { header: 'Display ID', key: 'displayId' },
+      { header: 'First Name', key: 'firstName' },
+      { header: 'Last Name', key: 'lastName' },
       { header: 'Email', key: 'email' },
       { header: 'Mobile', key: 'mobile' },
+      { header: 'Location', key: 'location', required: true },
+      { header: 'Industry', key: 'industry', required: true },
+      { header: 'Job Role Type', key: 'jobRoleType' },
       { header: 'Current Role', key: 'currentRole' },
       { header: 'Current Company', key: 'currentCompany' },
-      { header: 'Location', key: 'location' },
-      { header: 'Status', key: 'status' },
+      { header: 'LinkedIn URL', key: 'linkedinUrl' },
+      { header: 'Seek Talent URL', key: 'seekTalentUrl' },
+      { header: 'Raw Resume URL', key: 'rawResumeUrl' },
+      { header: 'Edited Resume URL', key: 'editedResumeUrl' },
+      { header: 'Specializations', key: 'specializations' },
+      { header: 'Status', key: 'status', required: true },
       { header: 'Last Contacted Date', key: 'lastContactedDate' },
       { header: 'Last Contacted Time', key: 'lastContactedTime' },
       { header: 'Last Contact Method', key: 'lastContactType' },
@@ -377,13 +427,22 @@ export class CandidatesService {
     const rows = candidates.map((c) => {
       const { date, time } = splitContactDateTime(c.lastContactedAt, tz);
       return {
-        name: [c.firstName, c.lastName].filter(Boolean).join(' '),
+        displayId: c.displayId,
+        firstName: c.firstName ?? '',
+        lastName: c.lastName ?? '',
         email: c.email ?? '',
         mobile: c.mobile ?? '',
+        location: c.locationPath ?? '',
+        industry: c.industry ?? '',
+        jobRoleType: c.jobRoleType ?? '',
         currentRole: c.currentRole ?? '',
         currentCompany: c.currentCompany ?? '',
-        location: c.location ?? '',
-        status: candidateStatusLabels[c.status],
+        linkedinUrl: c.linkedinUrl ?? '',
+        seekTalentUrl: c.seekTalentUrl ?? '',
+        rawResumeUrl: c.rawResumeUrl ?? '',
+        editedResumeUrl: c.editedResumeUrl ?? '',
+        specializations: c.specializations.join('; '),
+        status: c.status,
         lastContactedDate: date,
         lastContactedTime: time,
         lastContactType: c.lastContactType ?? '',

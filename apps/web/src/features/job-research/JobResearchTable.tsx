@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { keepPreviousData } from '@tanstack/react-query';
 
@@ -40,6 +41,7 @@ export function JobResearchTable({
   /** Committed from the search gate's action bar — this table has no filter UI of its own. */
   filters: JobResearchAppliedFilters;
 }) {
+  const router = useRouter();
   const [page, setPage] = React.useState(1);
   // Seeded from the gate's "Sort by" selection; a column header click can
   // still override it locally afterward, same as any other DataGrid.
@@ -47,6 +49,20 @@ export function JobResearchTable({
   const [sortOrder, setSortOrder] = React.useState<GetJobResearchSortOrder>(filters.sortOrder ?? 'desc');
   const [selected, setSelected] = React.useState<JobResearch[]>([]);
   const [isExporting, setIsExporting] = React.useState(false);
+
+  // Same selection-order tracking as CompaniesTable, and for the same
+  // reason: DataGrid reports rows in table order, not click order, but
+  // Enrich Stakeholders needs the order rows were actually selected in.
+  // Here it's row-selection order, not company order directly — several
+  // research rows can share a company, so the enrich handler below dedupes
+  // clientIds by first appearance in this order.
+  const selectionOrderRef = React.useRef<string[]>([]);
+  function handleSelectionChange(rows: JobResearch[]) {
+    const ids = new Set(rows.map((r) => r.id));
+    selectionOrderRef.current = selectionOrderRef.current.filter((id) => ids.has(id));
+    for (const row of rows) if (!selectionOrderRef.current.includes(row.id)) selectionOrderRef.current.push(row.id);
+    setSelected(rows);
+  }
 
   // A new `filters` object only ever arrives from a fresh "View" click in the
   // gate (even an unchanged re-search) — always worth restarting pagination
@@ -93,6 +109,13 @@ export function JobResearchTable({
   // current filters, unbounded. Same pattern as CompaniesTable's export.
   async function handleExport() {
     setIsExporting(true);
+    // A loading toast, not just the isExporting-driven button label — this
+    // is triggered from a DropdownMenuItem, and the dropdown closes the
+    // instant it's clicked, so a label change on that now-unmounted item is
+    // never actually seen. The toast (same `id` as the success/error below,
+    // so it morphs in place rather than stacking) is what's actually visible
+    // while an unbounded, potentially-slow export is in flight.
+    toast.loading('Exporting…', { id: 'export-job-research' });
     // The server has no ambient concept of "the viewer's timezone" — it only
     // ever sees UTC timestamps, so date/time export columns need this sent
     // along explicitly.
@@ -117,18 +140,26 @@ export function JobResearchTable({
           }),
         );
       }
+      toast.success('Export ready', { id: 'export-job-research' });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Export failed');
+      toast.error(err instanceof Error ? err.message : 'Export failed', { id: 'export-job-research' });
     } finally {
       setIsExporting(false);
     }
   }
 
-  // Placeholder — not wired up to a real backend action yet. Scope (what
-  // "enrich" actually looks up/writes) is still being clarified; this just
-  // reserves the menu slot so the bulk-actions UI is in place ahead of it.
+  // Maps selected Job Research rows -> their companies, in selection order,
+  // deduped (several research rows can share a client) -> the same
+  // StakeholderEnrichmentWorkspace CompaniesTable's Enrich Stakeholders
+  // opens, keyed by clientId instead of the research row's own id.
   function handleEnrichStakeholders() {
-    toast.info("Enrich Stakeholders isn't wired up yet — coming soon.");
+    const clientIdByRowId = new Map(selected.map((r) => [r.id, r.clientId]));
+    const clientIds: string[] = [];
+    for (const rowId of selectionOrderRef.current) {
+      const clientId = clientIdByRowId.get(rowId);
+      if (clientId && !clientIds.includes(clientId)) clientIds.push(clientId);
+    }
+    router.push(`/stakeholders/enrich?clientIds=${encodeURIComponent(clientIds.join(','))}`);
   }
 
   const columns = React.useMemo(() => getJobResearchColumns(), []);
@@ -150,15 +181,15 @@ export function JobResearchTable({
       hideSearch
       emptyState="No job orders match these filters."
       getRowId={(r) => r.id}
-      onSelectionChange={setSelected}
+      onSelectionChange={handleSelectionChange}
       enableRowRangeSelect
       hideSelectColumn
       toolbar={
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
-              <Button size="lg">
-                Bulk Actions
+              <Button size="lg" disabled={isExporting}>
+                {isExporting ? 'Exporting…' : 'Bulk Actions'}
                 <ChevronDown />
               </Button>
             }
@@ -168,10 +199,12 @@ export function JobResearchTable({
               <Download />
               {isExporting ? 'Exporting…' : 'Export to Excel'}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleEnrichStakeholders}>
-              <Sparkles />
-              Enrich Stakeholders
-            </DropdownMenuItem>
+            {selected.length > 0 ? (
+              <DropdownMenuItem onClick={handleEnrichStakeholders}>
+                <Sparkles />
+                Enrich Stakeholders
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       }

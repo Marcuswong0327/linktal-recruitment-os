@@ -11,7 +11,8 @@ import { QueryJobOrdersDto } from './dto/query-job-orders.dto';
 import { ExportJobOrdersDto } from './dto/export-job-orders.dto';
 import { buildWorkbook, formatExportDate, resolveTimeZone, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
-import { jobOrderStatusLabels, jobOrderQualityLabels } from '../common/export-labels';
+import { jobOrderQualityLabels } from '../common/export-labels';
+import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
 
 /** The subset of QueryJobOrdersDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination but still satisfies this structurally. */
 type JobOrderFilterFields = Pick<
@@ -152,7 +153,15 @@ function displayName(candidate: { firstName: string | null; lastName: string | n
   return name || 'Unknown candidate';
 }
 
-/** The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept separate from the generic `toEntity<T>` return type, which erases extra fields when used across a second generic boundary (same reasoning as ClientExportRow). */
+/**
+ * The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept
+ * separate from the generic `toEntity<T>` return type, which erases extra
+ * fields when used across a second generic boundary (same reasoning as
+ * ClientExportRow). `locationPath` isn't something `toEntity` produces (it
+ * strips `ancestorIds` before returning) — `exportAll`/`exportByIds` compute
+ * it separately and merge it in, same pattern as ClientsService's
+ * `locationPaths`.
+ */
 type JobOrderExportRow = {
   displayId: string;
   clientName: string | null;
@@ -160,6 +169,7 @@ type JobOrderExportRow = {
   jobTitle: string | null;
   jobRoleType: string | null;
   location: string | null;
+  locationPath: string | null;
   status: JobOrderStatus;
   quality: JobOrderQuality;
   priorityLevel: number | null;
@@ -354,6 +364,23 @@ export class JobOrdersService {
     };
   }
 
+  /**
+   * Resolves each job order's location to a full breadcrumb path — the exact
+   * format JOB_ORDER_IMPORT_COLUMNS (job-orders-import.service.ts) expects,
+   * so an exported sheet actually re-imports. Same pattern as ClientsService's
+   * `locationPaths`.
+   */
+  private async withLocationPath<T extends JobOrderWithRelations>(
+    jobOrders: T[],
+  ): Promise<(T & { locationPath: string | null })[]> {
+    const allLocations = await this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true } });
+    const byId = buildLocationById(allLocations);
+    return jobOrders.map((jo) => ({
+      ...jo,
+      locationPath: jo.location ? locationBreadcrumbPath(jo.location, byId) : null,
+    }));
+  }
+
   /** Every row matching the current filters, unbounded — no `skip`/`take`. */
   async exportAll(query: ExportJobOrdersDto, user: AuthUser): Promise<Buffer> {
     const where = this.buildWhere(query, user);
@@ -361,7 +388,8 @@ export class JobOrdersService {
     const jobOrders = await this.prisma.jobOrder.findMany({ where, orderBy, include: JOB_ORDER_INCLUDE });
     const { timezone: _timezone, ...filters } = query;
     await logExport(this.base, 'JobOrder', { count: jobOrders.length, filters });
-    return this.buildExportWorkbook(jobOrders.map((jo) => toEntity(jo)), query.timezone);
+    const withPath = await this.withLocationPath(jobOrders);
+    return this.buildExportWorkbook(withPath.map((jo) => toEntity(jo)), query.timezone);
   }
 
   /** An explicit row selection — scope is still re-applied server-side (defense-in-depth), so an out-of-scope id is silently dropped rather than exported. */
@@ -370,26 +398,34 @@ export class JobOrdersService {
     if (isScoped(user)) and.push(jobOrderScope(user));
     const jobOrders = await this.prisma.jobOrder.findMany({ where: { AND: and }, include: JOB_ORDER_INCLUDE });
     await logExport(this.base, 'JobOrder', { count: jobOrders.length, requestedIds: ids });
-    return this.buildExportWorkbook(jobOrders.map((jo) => toEntity(jo)), timezone);
+    const withPath = await this.withLocationPath(jobOrders);
+    return this.buildExportWorkbook(withPath.map((jo) => toEntity(jo)), timezone);
   }
 
   private buildExportWorkbook(jobOrders: JobOrderExportRow[], timezone?: string): Promise<Buffer> {
     const tz = resolveTimeZone(timezone);
+    // Header text and value format (Location: full breadcrumb path; Status:
+    // the raw enum text, not a humanized label — "On Hold" wouldn't match
+    // the "ON_HOLD" import expects; Priority Level: the raw 1/2/3, not the
+    // High/Medium/Low label, same reasoning) are deliberately identical to
+    // JOB_ORDER_IMPORT_COLUMNS (job-orders-import.service.ts), for the same
+    // "Export to Excel → edit → re-upload" round trip ImportDialog's own
+    // instructions promise.
     const columns: ExportColumn[] = [
       { header: 'Display ID', key: 'displayId' },
       { header: 'Client', key: 'clientName' },
-      { header: 'Client Display ID', key: 'clientDisplayId' },
+      { header: 'Client Display ID', key: 'clientDisplayId', required: true },
       { header: 'Job Title', key: 'jobTitle' },
       { header: 'Job Role Type', key: 'jobRoleType' },
       { header: 'Location', key: 'location' },
-      { header: 'Status', key: 'status' },
-      { header: 'Quality', key: 'quality' },
-      { header: 'Priority', key: 'priorityLevel' },
+      { header: 'Status', key: 'status', required: true },
+      { header: 'Quality', key: 'quality', required: true },
+      { header: 'Priority Level', key: 'priorityLevel' },
       { header: 'Salary Min', key: 'salaryMin' },
       { header: 'Salary Max', key: 'salaryMax' },
-      { header: 'Currency', key: 'salaryCurrency' },
+      { header: 'Salary Currency', key: 'salaryCurrency' },
       { header: 'Estimated Value', key: 'estimatedValue' },
-      { header: 'Openings', key: 'openings' },
+      { header: 'Openings', key: 'openings', required: true },
       { header: 'Filled', key: 'filledCount' },
       { header: 'Consultants', key: 'consultants' },
       { header: 'Description', key: 'description', wrap: true },
@@ -398,17 +434,16 @@ export class JobOrdersService {
       { header: 'Received', key: 'receivedAt' },
       { header: 'Closed', key: 'closedAt' },
     ];
-    const priorityLabels: Record<number, string> = { 1: 'High', 2: 'Medium', 3: 'Low' };
     const rows = jobOrders.map((jo) => ({
       displayId: jo.displayId,
       clientName: jo.clientName ?? '',
       clientDisplayId: jo.clientDisplayId ?? '',
       jobTitle: jo.jobTitle ?? '',
       jobRoleType: jo.jobRoleType ?? '',
-      location: jo.location ?? '',
-      status: jobOrderStatusLabels[jo.status],
+      location: jo.locationPath ?? '',
+      status: jo.status,
       quality: jobOrderQualityLabels[jo.quality],
-      priorityLevel: jo.priorityLevel != null ? (priorityLabels[jo.priorityLevel] ?? jo.priorityLevel) : '',
+      priorityLevel: jo.priorityLevel ?? '',
       salaryMin: jo.salaryMin ?? '',
       salaryMax: jo.salaryMax ?? '',
       salaryCurrency: jo.salaryCurrency ?? '',
