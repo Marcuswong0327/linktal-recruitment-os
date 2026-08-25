@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, StakeholderStatus } from '@prisma/client';
 import { EXTENDED_PRISMA } from '../prisma/extended-prisma.provider';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
@@ -10,9 +10,11 @@ import { UpdateStakeholderDto } from './dto/update-stakeholder.dto';
 import { AccuracyFilter, QueryStakeholdersDto } from './dto/query-stakeholders.dto';
 import { CreateStakeholderContactHistoryDto } from './dto/create-stakeholder-contact-history.dto';
 import { ExportStakeholdersDto } from './dto/export-stakeholders.dto';
+import { EnrichmentStakeholdersDto } from './dto/enrichment-stakeholders.dto';
 import { classifyJobTitle } from './role-type-classifier';
 import { buildWorkbook, resolveTimeZone, splitContactDateTime, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
+import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
 
 /** The subset of QueryStakeholdersDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination/sort but still satisfies this structurally. */
 type StakeholderFilterFields = Pick<
@@ -40,7 +42,11 @@ type StakeholderFilterFields = Pick<
 // own right; see the `stakeholderScope` comment in common/scope.ts for why
 // that changed to full inheritance from the client.
 const STAKEHOLDER_INCLUDE = {
-  client: { select: { companyName: true } },
+  // displayId feeds the export sheet's Client Display ID column — required
+  // to match STAKEHOLDER_IMPORT_COLUMNS (stakeholders-import.service.ts) on
+  // a re-uploaded export, since companyName alone can't resolve back to a
+  // specific client (names aren't guaranteed unique).
+  client: { select: { companyName: true, displayId: true } },
   jobTitle: { select: { name: true } },
   stakeholderRoleType: { select: { name: true } },
   coverage: { select: { locationId: true, location: { select: { name: true, ancestorIds: true } } } },
@@ -57,7 +63,7 @@ const STAKEHOLDER_INCLUDE = {
 } satisfies Prisma.StakeholderInclude;
 
 type StakeholderWithRelations = {
-  client: { companyName: string } | null;
+  client: { companyName: string; displayId: string } | null;
   jobTitle: { name: string } | null;
   stakeholderRoleType: { name: string } | null;
   coverage: { locationId: string; location: { name: string; ancestorIds: string[] } }[];
@@ -69,6 +75,12 @@ type StakeholderWithRelations = {
   }[];
 };
 
+// Same bounded-bulk-operation ceiling as MAX_IMPORT_ROWS (xlsx-import.ts) and
+// SELECT_ALL_CAP (CandidatesTable.tsx) — the enrichment workspace is a
+// hand-picked set of companies, never realistically this large; this exists
+// only to fail loudly instead of returning an unbounded result set.
+const MAX_ENRICHMENT_ROWS = 5000;
+
 const STAKEHOLDER_STATUS_LABELS: Record<StakeholderStatus, string> = {
   COLD: 'Cold',
   WARM: 'Warm',
@@ -76,18 +88,29 @@ const STAKEHOLDER_STATUS_LABELS: Record<StakeholderStatus, string> = {
   DATA_NOT_ACCURATE: 'Data Not Accurate',
 };
 
-/** The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept separate from the generic `toEntity<T>` return type, which erases extra fields when used across a second generic boundary. */
+/**
+ * The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept
+ * separate from the generic `toEntity<T>` return type, which erases extra
+ * fields when used across a second generic boundary. `coveragePaths` isn't
+ * something `toEntity` produces (it strips `ancestorIds` before returning) —
+ * `exportAll`/`exportByIds` compute it separately and merge it in, same
+ * pattern as ClientsService's `locationPaths`.
+ */
 type StakeholderExportRow = {
+  displayId: string;
   firstName: string | null;
   lastName: string | null;
   companyName: string | null;
-  coverage: string[];
+  clientDisplayId: string | null;
+  coveragePaths: string[];
   roleType: string | null;
   jobTitle: string | null;
+  linkedinUrl: string | null;
   email: string | null;
   mobile: string | null;
   status: StakeholderStatus;
   isAccurate: boolean | null;
+  inaccurateReason: string | null;
   lastContactedAt: Date | null;
   lastContactType: string | null;
   lastContactedBy: string | null;
@@ -293,6 +316,29 @@ export class StakeholdersService {
     return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }
 
+  /**
+   * Resolves each stakeholder's client displayId and coverage locations to
+   * full breadcrumb paths — the exact format STAKEHOLDER_IMPORT_COLUMNS
+   * (stakeholders-import.service.ts) expects for Client Display ID/Coverage
+   * Locations, so an exported sheet actually re-imports. Neither field
+   * survives `toEntity` in that shape (it resolves `client` down to just
+   * `companyName`, and strips `coverage`'s `ancestorIds`), so this computes
+   * them from the raw Prisma rows and merges them in as extra fields
+   * `toEntity`'s return type doesn't otherwise carry — same pattern as
+   * ClientsService's `withLocationPaths`.
+   */
+  private async withExportExtras<T extends StakeholderWithRelations>(
+    stakeholders: T[],
+  ): Promise<(T & { clientDisplayId: string | null; coveragePaths: string[] })[]> {
+    const allLocations = await this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true } });
+    const byId = buildLocationById(allLocations);
+    return stakeholders.map((s) => ({
+      ...s,
+      clientDisplayId: s.client?.displayId ?? null,
+      coveragePaths: s.coverage.map((c) => locationBreadcrumbPath(c.location, byId)),
+    }));
+  }
+
   /** Every row matching the current filters, unbounded — no `skip`/`take`. */
   async exportAll(query: ExportStakeholdersDto, user: AuthUser): Promise<Buffer> {
     const where = this.buildWhere(query, user);
@@ -300,7 +346,8 @@ export class StakeholdersService {
     const stakeholders = await this.prisma.stakeholder.findMany({ where, orderBy, include: STAKEHOLDER_INCLUDE });
     const { timezone: _timezone, ...filters } = query;
     await logExport(this.base, 'Stakeholder', { count: stakeholders.length, filters });
-    return this.buildExportWorkbook(stakeholders.map(toEntity), query.timezone);
+    const withExtras = await this.withExportExtras(stakeholders);
+    return this.buildExportWorkbook(withExtras.map(toEntity), query.timezone);
   }
 
   /** An explicit row selection — scope is still re-applied server-side (defense-in-depth, delegated to the client's scope, same as `findAll`), so an out-of-scope id is silently dropped rather than exported. */
@@ -309,20 +356,54 @@ export class StakeholdersService {
     if (isScoped(user)) and.push(stakeholderScope(user));
     const stakeholders = await this.prisma.stakeholder.findMany({ where: { AND: and }, include: STAKEHOLDER_INCLUDE });
     await logExport(this.base, 'Stakeholder', { count: stakeholders.length, requestedIds: ids });
-    return this.buildExportWorkbook(stakeholders.map(toEntity), timezone);
+    const withExtras = await this.withExportExtras(stakeholders);
+    return this.buildExportWorkbook(withExtras.map(toEntity), timezone);
+  }
+
+  /**
+   * Backs the cross-company enrichment workspace: every stakeholder across
+   * an explicit, required set of companies, unbounded (no `skip`/`take`) —
+   * same "return everything matching" shape as `exportAll`, but JSON
+   * entities instead of a workbook, since this feeds a live grid rather than
+   * a download. `MAX_ENRICHMENT_ROWS` is a safety net, not a real limit: a
+   * hand-picked company selection never realistically approaches it.
+   */
+  async findForEnrichment(query: EnrichmentStakeholdersDto, user: AuthUser) {
+    const where = this.buildWhere(query, user);
+    const orderBy = this.buildOrderBy(query.sortBy, query.sortOrder);
+    const total = await this.prisma.stakeholder.count({ where });
+    if (total > MAX_ENRICHMENT_ROWS) {
+      throw new BadRequestException({
+        code: 'TOO_MANY_ROWS',
+        message: `${total} stakeholders match this selection; the enrichment workspace supports up to ${MAX_ENRICHMENT_ROWS}. Narrow the company selection.`,
+      });
+    }
+    const stakeholders = await this.prisma.stakeholder.findMany({ where, orderBy, include: STAKEHOLDER_INCLUDE });
+    return stakeholders.map(toEntity);
   }
 
   private buildExportWorkbook(stakeholders: StakeholderExportRow[], timezone?: string): Promise<Buffer> {
     const tz = resolveTimeZone(timezone);
+    // Header text and value format (Coverage Locations: `;`-separated
+    // breadcrumb paths; Details Accurate: Yes/No/blank, never "Unchecked" —
+    // blank is this field's own accepted way to say "not yet checked") are
+    // deliberately identical to STAKEHOLDER_IMPORT_COLUMNS
+    // (stakeholders-import.service.ts), for the same "Export to Excel → edit
+    // → re-upload" round trip ImportDialog's own instructions promise.
     const columns: ExportColumn[] = [
-      { header: 'Contact Name', key: 'name' },
-      { header: 'Company', key: 'company' },
-      { header: 'Coverage', key: 'coverage' },
-      { header: 'Role type', key: 'roleType' },
-      { header: 'Job title', key: 'jobTitle' },
+      { header: 'Display ID', key: 'displayId' },
+      { header: 'Client Display ID', key: 'clientDisplayId', required: true },
+      { header: 'First Name', key: 'firstName' },
+      { header: 'Last Name', key: 'lastName' },
+      { header: 'Job Title', key: 'jobTitle' },
+      { header: 'Role Type', key: 'roleType' },
+      { header: 'LinkedIn URL', key: 'linkedinUrl' },
       { header: 'Email', key: 'email' },
       { header: 'Mobile', key: 'mobile' },
-      { header: 'Details accurate', key: 'detailsAccurate' },
+      { header: 'Coverage Locations', key: 'coverageLocations' },
+      { header: 'Details Accurate', key: 'detailsAccurate' },
+      { header: 'Inaccurate Reason', key: 'inaccurateReason' },
+      { header: 'Company', key: 'company' },
       { header: 'Status', key: 'status' },
       { header: 'Last Contacted Date', key: 'lastContactedDate' },
       { header: 'Last Contacted Time', key: 'lastContactedTime' },
@@ -333,14 +414,19 @@ export class StakeholdersService {
     const rows = stakeholders.map((s) => {
       const { date, time } = splitContactDateTime(s.lastContactedAt, tz);
       return {
-        name: [s.firstName, s.lastName].filter(Boolean).join(' '),
-        company: s.companyName ?? '',
-        coverage: s.coverage.join(', '),
-        roleType: s.roleType ?? '',
+        displayId: s.displayId,
+        clientDisplayId: s.clientDisplayId ?? '',
+        firstName: s.firstName ?? '',
+        lastName: s.lastName ?? '',
         jobTitle: s.jobTitle ?? '',
+        roleType: s.roleType ?? '',
+        linkedinUrl: s.linkedinUrl ?? '',
         email: s.email ?? '',
         mobile: s.mobile ?? '',
-        detailsAccurate: s.isAccurate === null ? 'Unchecked' : s.isAccurate ? 'Yes' : 'No',
+        coverageLocations: s.coveragePaths.join('; '),
+        detailsAccurate: s.isAccurate === null ? '' : s.isAccurate ? 'Yes' : 'No',
+        inaccurateReason: s.inaccurateReason ?? '',
+        company: s.companyName ?? '',
         status: STAKEHOLDER_STATUS_LABELS[s.status],
         lastContactedDate: date,
         lastContactedTime: time,

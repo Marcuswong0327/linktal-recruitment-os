@@ -255,6 +255,49 @@ describe('StakeholdersService.findAll — scope', () => {
   });
 });
 
+describe('StakeholdersService.findForEnrichment', () => {
+  function setup(total = 0) {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(total);
+    const prisma = { stakeholder: { findMany, count } } as unknown as ExtendedPrismaClient;
+    const service = new StakeholdersService(prisma, makeBase().base);
+    return { findMany, count, service };
+  }
+
+  it('fetches every matching row with no skip/take, scoped by the given clientIds', async () => {
+    const { findMany, service } = setup();
+    await service.findForEnrichment(
+      { clientIds: ['c1', 'c3', 'c2'], sortOrder: SortOrder.asc } as never,
+      makeUser({ roleName: 'manager' }),
+    );
+    const call = findMany.mock.calls[0][0];
+    expect(call.where).toEqual({ clientId: { in: ['c1', 'c3', 'c2'] } });
+    expect(call.skip).toBeUndefined();
+    expect(call.take).toBeUndefined();
+  });
+
+  it('throws when the match count exceeds the safety cap, before fetching rows', async () => {
+    const { findMany, service } = setup(5001);
+    await expect(
+      service.findForEnrichment(
+        { clientIds: ['c1'], sortOrder: SortOrder.asc } as never,
+        makeUser({ roleName: 'manager' }),
+      ),
+    ).rejects.toThrow(/5000/);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it('maps rows through toEntity, same as findAll', async () => {
+    const { findMany, service } = setup(1);
+    findMany.mockResolvedValueOnce([withRelations({ id: 's1', client: { companyName: 'Acme' } })]);
+    const result = await service.findForEnrichment(
+      { clientIds: ['c1'], sortOrder: SortOrder.asc } as never,
+      makeUser({ roleName: 'manager' }),
+    );
+    expect(result).toEqual([expect.objectContaining({ id: 's1', companyName: 'Acme' })]);
+  });
+});
+
 // findOne no longer gates on scope — it's a plain existence check now.
 describe('StakeholdersService.findOne', () => {
   function makeService(stakeholder: unknown) {

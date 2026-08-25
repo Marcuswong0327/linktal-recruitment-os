@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 
 // Matches the existing SELECT_ALL_CAP precedent in
@@ -5,6 +6,21 @@ import ExcelJS from 'exceljs';
 // this app already treats as needing a sane ceiling.
 export const MAX_IMPORT_ROWS = 5000;
 export const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024;
+
+// Appended to a required column's header text — on the downloadable template
+// (buildTemplateWorkbook) AND on every entity's "Export to Excel" sheet
+// (xlsx-export.ts's buildWorkbook), so it's visually marked in Excel itself,
+// not just styled. Exported so xlsx-export.ts can reuse the exact same
+// marker rather than a second copy that could drift — an export sheet is
+// also what "Export to Excel → edit → re-upload to update" re-imports (see
+// ImportDialog's own instructions), and someone editing that file can blank
+// out a required column without ever seeing the template's own warning, so
+// the export needs the same visual cue. `parseWorkbook` strips it back off
+// before matching a re-uploaded file's header row either way, so a template
+// OR an export sheet, filled in without anyone touching the header row,
+// still matches. Without stripping this, every required column on either
+// flow fails the header check outright, every time.
+export const REQUIRED_HEADER_SUFFIX = ' *';
 
 /** An in-cell Excel dropdown for a Data-sheet column. Only ever set this on a
  *  single-value column — Excel's list validation can only replace a cell's
@@ -70,10 +86,22 @@ function cellToString(value: ExcelJS.CellValue): string {
  */
 export async function parseWorkbook(buffer: Buffer, columns: ImportColumn[]): Promise<ParsedWorkbook> {
   const workbook = new ExcelJS.Workbook();
-  // exceljs's own .d.ts resolves a `Buffer` type incompatible with this
-  // project's @types/node (a real duplicate-package version-skew issue, not
-  // a mistake in the value itself) — the runtime call is fine either way.
-  await workbook.xlsx.load(buffer as any);
+  try {
+    // exceljs's own .d.ts resolves a `Buffer` type incompatible with this
+    // project's @types/node (a real duplicate-package version-skew issue, not
+    // a mistake in the value itself) — the runtime call is fine either way.
+    await workbook.xlsx.load(buffer as any);
+  } catch {
+    // A real-world upload here is routinely not a real .xlsx at all — a CSV
+    // (or anything else) saved/renamed with an .xlsx extension, or a
+    // genuinely corrupted file. ExcelJS throws on anything that isn't a
+    // valid OOXML zip; without this catch that throw was uncaught, surfacing
+    // to the user as a generic 500 instead of a clear, actionable 400.
+    throw new BadRequestException({
+      code: 'INVALID_WORKBOOK',
+      message: "Couldn't read this file as an .xlsx workbook — is it a real Excel file (not a renamed .csv or another format)?",
+    });
+  }
   const sheet = workbook.worksheets[0];
   if (!sheet) {
     return { rows: [], headerErrors: ['The uploaded file has no worksheet.'] };
@@ -81,7 +109,10 @@ export async function parseWorkbook(buffer: Buffer, columns: ImportColumn[]): Pr
 
   const headerByColumnIndex = new Map<number, string>();
   sheet.getRow(1).eachCell({ includeEmpty: false }, (cell, colNumber) => {
-    const text = cellToString(cell.value);
+    const raw = cellToString(cell.value);
+    // Strip the template's own required-column marker back off before
+    // matching — see REQUIRED_HEADER_SUFFIX's doc.
+    const text = raw.endsWith(REQUIRED_HEADER_SUFFIX) ? raw.slice(0, -REQUIRED_HEADER_SUFFIX.length) : raw;
     if (text) headerByColumnIndex.set(colNumber, text);
   });
 
@@ -161,7 +192,7 @@ export async function buildTemplateWorkbook(
 
   const dataSheet = workbook.addWorksheet(sheetName, { views: [{ state: 'frozen', ySplit: 1 }] });
   dataSheet.columns = columns.map(({ header, key, required }) => ({
-    header: required ? `${header} *` : header,
+    header: required ? `${header}${REQUIRED_HEADER_SUFFIX}` : header,
     key,
     width: Math.max(header.length + 4, 14),
   }));
@@ -263,14 +294,27 @@ export function buildNameIndex(rows: { id: string; name: string }[]): Map<string
  */
 type LocationRow = { id: string; name: string; ancestorIds: string[] };
 
-/** The breadcrumb path for one location — factored out so buildLocationPathIndex (the matcher) and buildLocationReferenceSheet (what a user copies from) can never silently drift apart. */
-function locationBreadcrumbPath(loc: LocationRow, byId: Map<string, LocationRow>): string {
+/**
+ * The breadcrumb path for one location — factored out so
+ * buildLocationPathIndex (the matcher), buildLocationReferenceSheet (what a
+ * user copies from), and every entity's export sheet (what a re-uploaded
+ * file's Location column must already look like, for the round trip to
+ * actually resolve) all draw from the exact same logic, so they can never
+ * silently drift apart. `loc` only needs `name`/`ancestorIds` — an export
+ * row's already-resolved location doesn't carry its own `id`.
+ */
+export function locationBreadcrumbPath(loc: { name: string; ancestorIds: string[] }, byId: Map<string, LocationRow>): string {
   const ancestorNames = [...loc.ancestorIds].reverse().map((id) => byId.get(id)?.name ?? '?');
   return [...ancestorNames.slice(0, -1), loc.name].join(' > ');
 }
 
+/** `id -> full row` lookup for `locationBreadcrumbPath`'s `byId` argument — one place building this map, instead of every export service re-deriving the same one-liner. */
+export function buildLocationById(locations: LocationRow[]): Map<string, LocationRow> {
+  return new Map(locations.map((l) => [l.id, l]));
+}
+
 export function buildLocationPathIndex(locations: LocationRow[]): Map<string, string> {
-  const byId = new Map(locations.map((l) => [l.id, l]));
+  const byId = buildLocationById(locations);
   const index = new Map<string, string>();
   for (const loc of locations) {
     index.set(locationBreadcrumbPath(loc, byId).toLowerCase(), loc.id);

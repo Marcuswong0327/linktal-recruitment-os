@@ -207,7 +207,13 @@ describe('JobResearchService.exportAll / exportByIds', () => {
     const findMany = jest.fn().mockResolvedValue(rows.map((r) => withRelations(r)));
     const auditCreate = jest.fn().mockResolvedValue({});
     const prisma = { clientJobResearch: { findMany } } as unknown as ExtendedPrismaClient;
-    const base = { auditLog: { create: auditCreate } } as unknown as PrismaService;
+    const base = {
+      auditLog: { create: auditCreate },
+      // withExportExtras resolves each row's Location to a breadcrumb path
+      // (see xlsx-import.ts's locationBreadcrumbPath) — an empty catalog is
+      // fine here since these tests don't assert on the Location column.
+      location: { findMany: jest.fn().mockResolvedValue([]) },
+    } as unknown as PrismaService;
     return { service: new JobResearchService(prisma, base), findMany, auditCreate };
   }
 

@@ -21,6 +21,7 @@ import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
 import { UpdateStakeholderDto } from './dto/update-stakeholder.dto';
 import { QueryStakeholdersDto } from './dto/query-stakeholders.dto';
 import { ExportStakeholdersDto } from './dto/export-stakeholders.dto';
+import { EnrichmentStakeholdersDto } from './dto/enrichment-stakeholders.dto';
 import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
 import { ImportOptionsDto } from '../common/dto/import-options.dto';
 import { XLSX_CONTENT_TYPE, exportFilename } from '../common/xlsx-export';
@@ -91,6 +92,18 @@ export class StakeholdersController {
       type: XLSX_CONTENT_TYPE,
       disposition: `attachment; filename="${exportFilename('stakeholders')}"`,
     });
+  }
+
+  @Get('enrichment')
+  @RequirePermission('stakeholder', 'read')
+  @ApiOperation({
+    operationId: 'getStakeholdersForEnrichment',
+    summary:
+      'Every stakeholder across a required set of company IDs — unbounded, not paginated. Backs the cross-company enrichment workspace.',
+  })
+  @ApiResponse({ status: 200, description: 'Stakeholders across the given companies', type: [StakeholderEntity] })
+  findForEnrichment(@Query() query: EnrichmentStakeholdersDto, @CurrentUser() user: AuthUser) {
+    return this.stakeholders.findForEnrichment(query, user);
   }
 
   @Get('import/template')

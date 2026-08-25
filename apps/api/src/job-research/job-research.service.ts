@@ -13,6 +13,7 @@ import { ExportJobResearchDto } from './dto/export-job-research.dto';
 import { buildWorkbook, formatExportDate, resolveTimeZone, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
 import { clientStatusLabels } from '../common/export-labels';
+import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
 
 /** The subset of QueryJobResearchDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination but still satisfies this structurally. */
 type JobResearchFilterFields = Pick<
@@ -45,7 +46,11 @@ type JobResearchFilterFields = Pick<
 // to show/link) and the export sheet's own Client Display ID column.
 const JOB_RESEARCH_INCLUDE = {
   client: { select: { companyName: true, displayId: true, industryId: true } },
-  consultant: { select: { fullName: true } },
+  // displayId feeds the export sheet's Consultant Display ID column —
+  // required to match JOB_RESEARCH_IMPORT_COLUMNS
+  // (job-research-import.service.ts) on a re-uploaded export, since a
+  // consultant's name alone isn't guaranteed unique.
+  consultant: { select: { fullName: true, displayId: true } },
   jobTitle: { select: { name: true } },
   jobRoleType: { select: { name: true } },
   location: { select: { name: true, level: true, ancestorIds: true } },
@@ -54,20 +59,29 @@ const JOB_RESEARCH_INCLUDE = {
 
 type JobResearchWithRelations = {
   client: { companyName: string; displayId: string; industryId: string | null } | null;
-  consultant: { fullName: string } | null;
+  consultant: { fullName: string; displayId: string } | null;
   jobTitle: { name: string } | null;
   jobRoleType: { name: string } | null;
   location: { name: string; level: string; ancestorIds: string[] } | null;
   jobOrder: { id: string } | null;
 };
 
-/** The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept separate from the generic `toEntity<T>` return type, which erases extra fields when used across a second generic boundary (same reasoning as JobOrderExportRow). */
+/**
+ * The fields `buildExportWorkbook` reads off a `toEntity`-shaped row — kept
+ * separate from the generic `toEntity<T>` return type, which erases extra
+ * fields when used across a second generic boundary (same reasoning as
+ * JobOrderExportRow). `consultantDisplayId`/`locationPath` aren't something
+ * `toEntity` produces — `exportAll`/`exportByIds` compute them separately
+ * and merge them in, same pattern as ClientsService's `locationPaths`.
+ */
 type JobResearchExportRow = {
   displayId: string;
   companyName: string | null;
   clientDisplayId: string | null;
   consultant: string | null;
+  consultantDisplayId: string | null;
   location: string | null;
+  locationPath: string | null;
   jobTitle: string | null;
   jobRoleType: string | null;
   status: ClientStatus | null;
@@ -240,6 +254,26 @@ export class JobResearchService {
     return { data: data.map(toEntity), total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }
 
+  /**
+   * Resolves each row's consultant to their displayId and location to a full
+   * breadcrumb path — the exact format JOB_RESEARCH_IMPORT_COLUMNS
+   * (job-research-import.service.ts) expects for Consultant Display ID /
+   * Location, so an exported sheet actually re-imports. Neither survives
+   * `toEntity` in that shape — same pattern as ClientsService's
+   * `locationPaths`/StakeholdersService's `withExportExtras`.
+   */
+  private async withExportExtras<T extends JobResearchWithRelations>(
+    research: T[],
+  ): Promise<(T & { consultantDisplayId: string | null; locationPath: string | null })[]> {
+    const allLocations = await this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true } });
+    const byId = buildLocationById(allLocations);
+    return research.map((r) => ({
+      ...r,
+      consultantDisplayId: r.consultant?.displayId ?? null,
+      locationPath: r.location ? locationBreadcrumbPath(r.location, byId) : null,
+    }));
+  }
+
   /** Every row matching the current filters, unbounded — no `skip`/`take`. */
   async exportAll(query: ExportJobResearchDto, user: AuthUser): Promise<Buffer> {
     const where = this.buildWhere(query, user);
@@ -247,7 +281,8 @@ export class JobResearchService {
     const research = await this.prisma.clientJobResearch.findMany({ where, orderBy, include: JOB_RESEARCH_INCLUDE });
     const { timezone: _timezone, ...filters } = query;
     await logExport(this.base, 'ClientJobResearch', { count: research.length, filters });
-    return this.buildExportWorkbook(research.map(toEntity), query.timezone);
+    const withExtras = await this.withExportExtras(research);
+    return this.buildExportWorkbook(withExtras.map(toEntity), query.timezone);
   }
 
   /** An explicit row selection — scope is still re-applied server-side (defense-in-depth), so an out-of-scope id is silently dropped rather than exported. */
@@ -256,16 +291,23 @@ export class JobResearchService {
     if (isScoped(user)) and.push(jobResearchScope(user));
     const research = await this.prisma.clientJobResearch.findMany({ where: { AND: and }, include: JOB_RESEARCH_INCLUDE });
     await logExport(this.base, 'ClientJobResearch', { count: research.length, requestedIds: ids });
-    return this.buildExportWorkbook(research.map(toEntity), timezone);
+    const withExtras = await this.withExportExtras(research);
+    return this.buildExportWorkbook(withExtras.map(toEntity), timezone);
   }
 
   private buildExportWorkbook(research: JobResearchExportRow[], timezone?: string): Promise<Buffer> {
     const tz = resolveTimeZone(timezone);
+    // Header text and value format (Location: full breadcrumb path;
+    // Consultant Display ID: the consultant's own displayId, not their
+    // resolved name; Is Contacted: Yes/No) are deliberately identical to
+    // JOB_RESEARCH_IMPORT_COLUMNS (job-research-import.service.ts), for the
+    // same "Export to Excel → edit → re-upload" round trip ImportDialog's
+    // own instructions promise.
     const columns: ExportColumn[] = [
       { header: 'Display ID', key: 'displayId' },
       { header: 'Client', key: 'companyName' },
-      { header: 'Client Display ID', key: 'clientDisplayId' },
-      { header: 'Consultant', key: 'consultant' },
+      { header: 'Client Display ID', key: 'clientDisplayId', required: true },
+      { header: 'Consultant Display ID', key: 'consultantDisplayId' },
       { header: 'Location', key: 'location' },
       { header: 'Job Title', key: 'jobTitle' },
       { header: 'Job Role Type', key: 'jobRoleType' },
@@ -275,18 +317,19 @@ export class JobResearchService {
       { header: 'Posted Date', key: 'postedDate' },
       { header: 'Contact Email', key: 'contactEmailFromAd' },
       { header: 'Salary Range', key: 'salaryRange' },
-      { header: 'Contacted', key: 'isContacted' },
+      { header: 'Is Contacted', key: 'isContacted', required: true },
+      { header: 'Notes', key: 'notes', wrap: true },
+      { header: 'Consultant', key: 'consultant' },
       { header: 'Last Contacted', key: 'lastContactedAt' },
       { header: 'Researched At', key: 'researchedAt' },
       { header: 'Has Job Order', key: 'hasJobOrder' },
-      { header: 'Notes', key: 'notes', wrap: true },
     ];
     const rows = research.map((r) => ({
       displayId: r.displayId,
       companyName: r.companyName ?? '',
       clientDisplayId: r.clientDisplayId ?? '',
-      consultant: r.consultant ?? '',
-      location: r.location ?? '',
+      consultantDisplayId: r.consultantDisplayId ?? '',
+      location: r.locationPath ?? '',
       jobTitle: r.jobTitle ?? '',
       jobRoleType: r.jobRoleType ?? '',
       status: r.status ? clientStatusLabels[r.status] : '',
@@ -296,10 +339,11 @@ export class JobResearchService {
       contactEmailFromAd: r.contactEmailFromAd ?? '',
       salaryRange: r.salaryRange ?? '',
       isContacted: r.isContacted ? 'Yes' : 'No',
+      notes: r.notes ?? '',
+      consultant: r.consultant ?? '',
       lastContactedAt: formatExportDate(r.lastContactedAt, tz),
       researchedAt: formatExportDate(r.researchedAt, tz),
       hasJobOrder: r.jobOrderId ? 'Yes' : 'No',
-      notes: r.notes ?? '',
     }));
     return buildWorkbook('Job Research', columns, rows);
   }

@@ -3828,6 +3828,196 @@
         ]
       }
     },
+    "/stakeholders/enrichment": {
+      "get": {
+        "operationId": "getStakeholdersForEnrichment",
+        "parameters": [
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to most recently created.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "displayId",
+                "firstName",
+                "lastName",
+                "createdAt",
+                "lastContactedAt"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "asc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Free-text search across firstName, lastName, email, displayId and mobile",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by client ID (exact match)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "jobTitle",
+            "required": false,
+            "in": "query",
+            "description": "Filter by job title (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "roleTypeIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by role type ID(s) (see /stakeholder-role-types)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "jobTitleIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by JobTitle id(s)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "locationIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by Location id(s) matched against a stakeholder's own coverage (not its client's location). Selecting a country or state matches every stakeholder whose coverage sits beneath it, via the ancestor path — same semantics as Client.locationIds.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "accuracy",
+            "required": false,
+            "in": "query",
+            "description": "Filter by verification state (one or more): 'true' (Accurate), 'false' (Inaccurate), 'unchecked' (not yet verified). Omit for all.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "true",
+                  "false",
+                  "unchecked"
+                ]
+              }
+            }
+          },
+          {
+            "name": "statuses",
+            "required": false,
+            "in": "query",
+            "description": "Filter by relationship-warmth status (one or more). Omit for all.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "COLD",
+                  "WARM",
+                  "UNS",
+                  "DATA_NOT_ACCURATE"
+                ]
+              }
+            }
+          },
+          {
+            "name": "clientIds",
+            "required": true,
+            "in": "query",
+            "description": "Company IDs to fetch stakeholders for — required, at least one.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stakeholders across the given companies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StakeholderEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every stakeholder across a required set of company IDs — unbounded, not paginated. Backs the cross-company enrichment workspace.",
+        "tags": [
+          "Stakeholders"
+        ]
+      }
+    },
     "/stakeholders/import/template": {
       "get": {
         "operationId": "getStakeholderImportTemplate",
