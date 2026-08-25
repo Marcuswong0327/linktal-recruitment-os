@@ -2,10 +2,8 @@
 
 import type * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Phone } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { ComboboxSelect } from '@/components/ComboboxSelect';
 import { ConsultantAvatar } from '@/components/ConsultantCombobox';
 import { ContactMethodsCell } from '@/components/ContactMethodsCell';
@@ -142,8 +140,6 @@ interface StakeholderColumnsOptions {
   pendingRowId: string | null;
   /** Absent when the caller lacks `stakeholder:update` — controls render read-only. */
   canUpdate: boolean;
-  /** Adds a trailing "Log Contact" row action — only the enrichment workspace passes this; every other caller (StakeholdersTable) is unchanged without it. */
-  onLogContact?: (stakeholder: StakeholderEntity) => void;
 }
 
 export function getStakeholderColumns({
@@ -153,7 +149,6 @@ export function getStakeholderColumns({
   onStatusChange,
   pendingRowId,
   canUpdate,
-  onLogContact,
 }: StakeholderColumnsOptions): ColumnDef<StakeholderEntity>[] {
   return [
     {
@@ -315,28 +310,5 @@ export function getStakeholderColumns({
         );
       },
     },
-    ...(onLogContact
-      ? [
-          {
-            id: 'logContact',
-            header: '',
-            enableSorting: false,
-            meta: { align: 'center' as const },
-            cell: ({ row }) => (
-              <div onClick={(e) => e.stopPropagation()}>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  title="Log Contact"
-                  onClick={() => onLogContact(row.original)}
-                >
-                  <Phone />
-                </Button>
-              </div>
-            ),
-          } satisfies ColumnDef<StakeholderEntity>,
-        ]
-      : []),
   ];
 }

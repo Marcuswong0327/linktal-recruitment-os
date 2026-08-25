@@ -2,28 +2,23 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
 import { DataGrid } from '@/components/DataGrid';
-import { LogContactSheet, type LogContactValues } from '@/components/LogContactSheet';
 import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
 import { downloadFile } from '@/lib/api/fetcher';
 import {
   getExportStakeholdersByIdsUrl,
   getGetStakeholdersQueryKey,
-  useAddStakeholderContactHistory,
   useGetStakeholdersForEnrichment,
   useUpdateStakeholder,
 } from '@/lib/api/generated/stakeholders/stakeholders';
 import { useCreateStakeholderRoleType, useGetStakeholderRoleTypes } from '@/lib/api/generated/stakeholder-role-types/stakeholder-role-types';
-import type {
-  CreateStakeholderContactHistoryDto,
-  StakeholderEntity,
-  UpdateStakeholderDto,
-} from '@/lib/api/generated/types';
+import type { StakeholderEntity, UpdateStakeholderDto } from '@/lib/api/generated/types';
 import { getStakeholderColumns, roleTypeStyle, type StakeholderStatus } from './columns';
 
 /**
@@ -44,8 +39,8 @@ export function StakeholderEnrichmentWorkspace({
   clientIds: string[];
   canUpdate: boolean;
 }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
-  const [loggingContactFor, setLoggingContactFor] = React.useState<StakeholderEntity | null>(null);
   const [selected, setSelected] = React.useState<StakeholderEntity[]>([]);
   const [isExporting, setIsExporting] = React.useState(false);
 
@@ -113,28 +108,6 @@ export function StakeholderEnrichmentWorkspace({
     [updateStakeholderMutation],
   );
 
-  const addContactHistory = useAddStakeholderContactHistory({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
-        toast.success('Contact logged');
-        setLoggingContactFor(null);
-      },
-      onError: (err) => toast.error(err.message || 'Failed to log contact'),
-    },
-  });
-  function handleLogContact(values: LogContactValues) {
-    if (!loggingContactFor) return;
-    addContactHistory.mutate({
-      id: loggingContactFor.id,
-      data: {
-        contactType: values.contactType,
-        contactedAt: values.contactedAt,
-        ...(values.notes ? { notes: values.notes } : {}),
-      } as unknown as CreateStakeholderContactHistoryDto,
-    });
-  }
-
   const columns = React.useMemo(
     () =>
       getStakeholderColumns({
@@ -144,7 +117,6 @@ export function StakeholderEnrichmentWorkspace({
         onStatusChange: handleStatusChange,
         pendingRowId,
         canUpdate,
-        onLogContact: setLoggingContactFor,
       }),
     [roleTypeOptions, handleRoleTypeChange, handleStatusChange, pendingRowId, canUpdate],
   );
@@ -206,6 +178,11 @@ export function StakeholderEnrichmentWorkspace({
         searchPlaceholder="Search stakeholders…"
         emptyState="No stakeholders found for the selected companies."
         getRowId={(s) => s.id}
+        // Logging a contact now lives on the stakeholder's own detail page
+        // (LogContactRow, an inline row in that page's own contact-history
+        // table) — there's no more standalone modal to trigger from a flat
+        // list, so a row click routes there instead, same as StakeholdersTable.
+        onRowClick={(s) => router.push(`/stakeholders/${s.id}`)}
         onSelectionChange={setSelected}
         enableRowRangeSelect
         toolbar={
@@ -214,14 +191,6 @@ export function StakeholderEnrichmentWorkspace({
             {isExporting ? 'Exporting…' : `Export to Excel${selected.length > 0 ? ` (${selected.length})` : ''}`}
           </Button>
         }
-      />
-
-      <LogContactSheet
-        open={loggingContactFor !== null}
-        onOpenChange={(open) => !open && setLoggingContactFor(null)}
-        subjectLabel={loggingContactFor ? [loggingContactFor.firstName, loggingContactFor.lastName].filter(Boolean).join(' ') : ''}
-        isSaving={addContactHistory.isPending}
-        onSave={handleLogContact}
       />
     </PageLayout>
   );
