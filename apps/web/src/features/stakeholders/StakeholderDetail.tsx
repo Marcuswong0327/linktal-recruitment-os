@@ -544,23 +544,30 @@ function StakeholderEditForm({
               <CardTitle className="flex items-center gap-2">Information</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4">
-              <FormField label="First name" htmlFor="firstName">
-                <Input
-                  id="firstName"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  disabled={!canEdit}
-                />
-              </FormField>
-              <FormField label="Last name" htmlFor="lastName">
-                <Input
-                  id="lastName"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  disabled={!canEdit}
-                />
-              </FormField>
-              <FormField label="Job title" htmlFor="jobTitle" description="The company's own words for the role.">
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="First name" htmlFor="firstName">
+                  <Input
+                    id="firstName"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    disabled={!canEdit}
+                  />
+                </FormField>
+                <FormField label="Last name" htmlFor="lastName">
+                  <Input
+                    id="lastName"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    disabled={!canEdit}
+                  />
+                </FormField>
+              </div>
+              <FormField
+                label="Job title"
+                htmlFor="jobTitle"
+                description="The company's own words for the role."
+                orientation="horizontal"
+              >
                 <CreatableCombobox
                   id="jobTitle"
                   value={jobTitleId}
@@ -574,6 +581,7 @@ function StakeholderEditForm({
                 label="Role type"
                 htmlFor="roleType"
                 description="Your classification of the contact's function."
+                orientation="horizontal"
               >
                 <CreatableCombobox
                   id="roleType"
@@ -610,7 +618,7 @@ function StakeholderEditForm({
                   </div>
                 </div>
                 <Collapsible.Panel className="flex flex-col gap-3 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
-                  <FormField label="Email" htmlFor="email">
+                  <FormField label="Email" htmlFor="email" orientation="horizontal">
                     <Input
                       id="email"
                       type="email"
@@ -619,10 +627,10 @@ function StakeholderEditForm({
                       disabled={!canEdit}
                     />
                   </FormField>
-                  <FormField label="Mobile" htmlFor="mobile">
+                  <FormField label="Mobile" htmlFor="mobile" orientation="horizontal">
                     <Input id="mobile" value={mobile} onChange={(e) => setMobile(e.target.value)} disabled={!canEdit} />
                   </FormField>
-                  <FormField label="LinkedIn URL" htmlFor="linkedinUrl">
+                  <FormField label="LinkedIn URL" htmlFor="linkedinUrl" orientation="horizontal">
                     <Input
                       id="linkedinUrl"
                       value={linkedinUrl}
@@ -637,7 +645,7 @@ function StakeholderEditForm({
 
           <Card>
             <CardContent className="grid gap-4">
-              <FormField label="Status" htmlFor="status">
+              <FormField label="Status" htmlFor="status" orientation="horizontal">
                 <EnumSelect
                   id="status"
                   value={status}
@@ -650,6 +658,7 @@ function StakeholderEditForm({
                 label="Coverage"
                 htmlFor="coverage"
                 description="Which places this contact covers. A broader pick (a whole state or country) automatically covers everywhere inside it."
+                orientation="horizontal"
               >
                 <LocationMultiSelect id="coverage" selected={coverage} onChange={setCoverage} disabled={!canEdit} />
               </FormField>

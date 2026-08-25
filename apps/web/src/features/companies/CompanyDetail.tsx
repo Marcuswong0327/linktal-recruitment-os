@@ -961,7 +961,7 @@ function CompanyEditForm({
                 <CardTitle className="flex items-center gap-2">Information</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4">
-                <FormField label="Company name" htmlFor="companyName" required>
+                <FormField label="Company name" htmlFor="companyName" required orientation="horizontal">
                   <Input
                     id="companyName"
                     value={companyName}
@@ -969,7 +969,7 @@ function CompanyEditForm({
                     disabled={!canEdit}
                   />
                 </FormField>
-                <FormField label="Industry" htmlFor="industry" required>
+                <FormField label="Industry" htmlFor="industry" required orientation="horizontal">
                   <CreatableCombobox
                     id="industry"
                     value={industryId}
@@ -986,6 +986,7 @@ function CompanyEditForm({
                   label="Specialization"
                   htmlFor="specialization"
                   description={!industryId ? 'Pick an industry first' : undefined}
+                  orientation="horizontal"
                 >
                   <SpecializationCombobox
                     id="specialization"
@@ -1048,10 +1049,10 @@ function CompanyEditForm({
                     </div>
                   </div>
                   <Collapsible.Panel className="flex flex-col gap-3 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
-                    <FormField label="Company Website" htmlFor="website">
+                    <FormField label="Company Website" htmlFor="website" orientation="horizontal">
                       <UrlField id="website" value={website} onChange={setWebsite} disabled={!canEdit} icon={Globe} />
                     </FormField>
-                    <FormField label="LinkedIn Job Market URL" htmlFor="linkedinJobMarketUrl">
+                    <FormField label="LinkedIn Job Market URL" htmlFor="linkedinJobMarketUrl" orientation="horizontal">
                       <UrlField
                         id="linkedinJobMarketUrl"
                         value={linkedinJobMarketUrl}
@@ -1060,7 +1061,7 @@ function CompanyEditForm({
                         icon={LinkedinIcon}
                       />
                     </FormField>
-                    <FormField label="Seek/JobStreet URL" htmlFor="seekJobMarketUrl">
+                    <FormField label="Seek/JobStreet URL" htmlFor="seekJobMarketUrl" orientation="horizontal">
                       <UrlField
                         id="seekJobMarketUrl"
                         value={seekJobMarketUrl}
@@ -1085,7 +1086,7 @@ function CompanyEditForm({
                 <div>
                   <span className="text-sm font-medium">Office addresses</span>
                 </div>
-                <FormField label="Address(es)" htmlFor="addresses" description="One per line.">
+                <FormField label="Address(es)" htmlFor="addresses" description="One per line." orientation="horizontal">
                   <textarea
                     id="addresses"
                     value={addresses}
@@ -1094,7 +1095,12 @@ function CompanyEditForm({
                     className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
                   />
                 </FormField>
-                <FormField label="Suburbs / postcodes" htmlFor="suburbsAndPostcodes" description="One per line.">
+                <FormField
+                  label="Suburbs / postcodes"
+                  htmlFor="suburbsAndPostcodes"
+                  description="One per line."
+                  orientation="horizontal"
+                >
                   <textarea
                     id="suburbsAndPostcodes"
                     value={suburbsAndPostcodes}

@@ -735,13 +735,15 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
               <CardTitle className="flex items-center gap-2">Information</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4">
-              <FormField label="First name" htmlFor="firstName">
-                <Input id="firstName" {...register('firstName')} />
-              </FormField>
-              <FormField label="Last name" htmlFor="lastName">
-                <Input id="lastName" {...register('lastName')} />
-              </FormField>
-              <FormField label="Industry" htmlFor="industry" required>
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="First name" htmlFor="firstName">
+                  <Input id="firstName" {...register('firstName')} />
+                </FormField>
+                <FormField label="Last name" htmlFor="lastName">
+                  <Input id="lastName" {...register('lastName')} />
+                </FormField>
+              </div>
+              <FormField label="Industry" htmlFor="industry" required orientation="horizontal">
                 <CreatableCombobox
                   id="industry"
                   value={industryId}
@@ -751,7 +753,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   placeholder="Select industry…"
                 />
               </FormField>
-              <FormField label="Role type" htmlFor="roleType">
+              <FormField label="Role type" htmlFor="roleType" orientation="horizontal">
                 <CreatableCombobox
                   id="roleType"
                   value={roleTypeId}
@@ -765,6 +767,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                 label="Specialization"
                 htmlFor="specialization"
                 description={!industryId ? 'Pick an industry first' : undefined}
+                orientation="horizontal"
               >
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-wrap gap-1.5">
@@ -821,16 +824,16 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   </div>
                 </div>
                 <Collapsible.Panel className="flex flex-col gap-3 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
-                  <FormField label="Email" htmlFor="email">
+                  <FormField label="Email" htmlFor="email" orientation="horizontal">
                     <Input id="email" type="email" {...register('email')} />
                   </FormField>
-                  <FormField label="Mobile" htmlFor="mobile">
+                  <FormField label="Mobile" htmlFor="mobile" orientation="horizontal">
                     <Input id="mobile" {...register('mobile')} />
                   </FormField>
-                  <FormField label="LinkedIn URL" htmlFor="linkedinUrl">
+                  <FormField label="LinkedIn URL" htmlFor="linkedinUrl" orientation="horizontal">
                     <Input id="linkedinUrl" {...register('linkedinUrl')} />
                   </FormField>
-                  <FormField label="Seek Talent URL" htmlFor="seekTalentUrl">
+                  <FormField label="Seek Talent URL" htmlFor="seekTalentUrl" orientation="horizontal">
                     <Input id="seekTalentUrl" {...register('seekTalentUrl')} />
                   </FormField>
                 </Collapsible.Panel>
@@ -838,7 +841,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
               <Separator />
 
-              <FormField label="Suburb" htmlFor="location">
+              <FormField label="Suburb" htmlFor="location" orientation="horizontal">
                 <LocationCombobox
                   id="location"
                   value={location}
