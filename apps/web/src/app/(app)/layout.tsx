@@ -1,5 +1,5 @@
 import { auth } from '@/auth';
-import { AddEntityButton } from '@/components/app-shell/AddEntityButton';
+import { GlobalAddButton } from '@/components/app-shell/GlobalAddButton';
 import { AppSidebar } from '@/components/app-shell/AppSidebar';
 import { CommandPaletteProvider, CommandPaletteTrigger } from '@/components/app-shell/GlobalCommandPalette';
 import { NotificationsToggle } from '@/components/app-shell/NotificationsToggle';
@@ -34,7 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
               <SidebarTrigger className="-ml-1" />
               <div className="ml-auto flex items-center gap-2">
-                <AddEntityButton permissions={permissions} />
+                <GlobalAddButton permissions={permissions} />
                 <CommandPaletteTrigger />
                 <NotificationsToggle />
               </div>
