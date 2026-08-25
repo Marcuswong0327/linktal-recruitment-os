@@ -52,11 +52,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { AddStakeholderRow, type AddStakeholderValues } from '@/components/AddStakeholderRow';
 import { AddTobRow, type AddTobValues } from '@/components/AddTobRow';
 import { LinkedinIcon, SeekIcon } from '@/components/BrandIcons';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { ConsultantAvatar, useConsultantLookup } from '@/components/ConsultantCombobox';
-import { CreatableCombobox } from '@/components/CreatableCombobox';
+import { CreatableCombobox, type CreatableComboboxOption } from '@/components/CreatableCombobox';
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
 import { LogContactRow, type LogContactValues } from '@/components/LogContactRow';
@@ -84,6 +85,11 @@ import {
   useCreateIndustry,
   useGetIndustries,
 } from '@/lib/api/generated/industries/industries';
+import {
+  getGetJobTitlesQueryKey,
+  useCreateJobTitle,
+  useGetJobTitles,
+} from '@/lib/api/generated/job-titles/job-titles';
 import { useGetJobOrders } from '@/lib/api/generated/job-orders/job-orders';
 import { useGetJobResearch } from '@/lib/api/generated/job-research/job-research';
 import {
@@ -91,14 +97,21 @@ import {
   useCreateSpecialization,
 } from '@/lib/api/generated/specializations/specializations';
 import {
+  getGetStakeholderRoleTypesQueryKey,
+  useCreateStakeholderRoleType,
+  useGetStakeholderRoleTypes,
+} from '@/lib/api/generated/stakeholder-role-types/stakeholder-role-types';
+import {
   getGetStakeholdersQueryKey,
   useAddStakeholderContactHistory,
+  useCreateStakeholder,
   useGetStakeholders,
 } from '@/lib/api/generated/stakeholders/stakeholders';
 import { getGetTobsQueryKey, useCreateTob, useGetTobs } from '@/lib/api/generated/tobs/tobs';
 import type {
   ClientEntity,
   CreateStakeholderContactHistoryDto,
+  CreateStakeholderDto,
   CreateTobDto,
   UpdateClientDto,
 } from '@/lib/api/generated/types';
@@ -488,6 +501,82 @@ function CompanyEditForm({
     });
   }
 
+  const [addStakeholderOpen, setAddStakeholderOpen] = React.useState(false);
+  const roleTypesParams = { take: 200 };
+  const { data: roleTypeData } = useGetStakeholderRoleTypes(roleTypesParams);
+  const roleTypeOptions: CreatableComboboxOption[] = (
+    roleTypeData?.status === 200 ? roleTypeData.data : []
+  ).map((r) => ({ id: r.id, name: r.name }));
+  const createStakeholderRoleType = useCreateStakeholderRoleType({
+    mutation: {
+      onError: (err) => toast.error(err.message || 'Failed to add role type'),
+    },
+  });
+  async function handleCreateRoleType(name: string) {
+    const res = await createStakeholderRoleType.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add role type');
+    // Patch the cache directly instead of only invalidating — the create
+    // sheet immediately selects the new row by id, so the option list needs
+    // to contain it before the next render, not after a refetch round-trip.
+    queryClient.setQueryData(
+      getGetStakeholderRoleTypesQueryKey(roleTypesParams),
+      (old: typeof roleTypeData) =>
+        old?.status === 200 && !old.data.some((r) => r.id === res.data.id)
+          ? { ...old, data: [...old.data, res.data] }
+          : old,
+    );
+    queryClient.invalidateQueries({ queryKey: getGetStakeholderRoleTypesQueryKey() });
+    return res.data;
+  }
+
+  const jobTitlesParams = { take: 200 };
+  const { data: jobTitleData } = useGetJobTitles(jobTitlesParams);
+  const jobTitleOptions: CreatableComboboxOption[] = (
+    jobTitleData?.status === 200 ? jobTitleData.data : []
+  ).map((j) => ({ id: j.id, name: j.name }));
+  const createJobTitle = useCreateJobTitle();
+  async function handleCreateJobTitle(name: string) {
+    const res = await createJobTitle.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add job title');
+    queryClient.setQueryData(
+      getGetJobTitlesQueryKey(jobTitlesParams),
+      (old: typeof jobTitleData) =>
+        old?.status === 200 && !old.data.some((j) => j.id === res.data.id)
+          ? { ...old, data: [...old.data, res.data] }
+          : old,
+    );
+    queryClient.invalidateQueries({ queryKey: getGetJobTitlesQueryKey() });
+    return res.data;
+  }
+
+  const createStakeholder = useCreateStakeholder({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
+        toast.success('Stakeholder added');
+        setAddStakeholderOpen(false);
+      },
+      onError: (err) => toast.error(err.message || 'Failed to add stakeholder'),
+    },
+  });
+  function handleAddStakeholder(values: AddStakeholderValues) {
+    createStakeholder.mutate({
+      data: {
+        clientId: company.id,
+        firstName: values.firstName || undefined,
+        lastName: values.lastName || undefined,
+        jobTitleId: values.jobTitleId || undefined,
+        roleTypeId: values.roleTypeId || undefined,
+        linkedinUrl: values.linkedinUrl || undefined,
+        email: values.email || undefined,
+        mobile: values.mobile || undefined,
+        coverageLocationIds: values.coverage.map((c) => c.id),
+        isAccurate: values.isAccurate ?? undefined,
+        inaccurateReason: values.inaccurateReason || undefined,
+      } as CreateStakeholderDto,
+    });
+  }
+
   // No per-record "owning consultant" on Client (deliberately removed —
   // see the SCOPING note in schema.prisma). The closest real answer to "who's
   // dealing with this company" is whoever's on this client's job orders.
@@ -745,20 +834,37 @@ function CompanyEditForm({
                   Stakeholders
                 </CardTitle>
               </div>
-              {canEdit && stakeholders.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleLogContactOpenChange(true)}
-                >
-                  <Phone />
-                  Log Contact History
-                </Button>
+              {canEdit ? (
+                <div className="flex items-center gap-2">
+                  {stakeholders.length > 0 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleLogContactOpenChange(true)}
+                    >
+                      <Phone />
+                      Log Contact History
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAddStakeholderOpen(true)}
+                  >
+                    <Plus />
+                    Add Stakeholder
+                  </Button>
+                </div>
               ) : null}
             </CardHeader>
             <CardContent>
-              {stakeholders.length > 0 ? (
+              {stakeholders.length === 0 && !canEdit ? (
+                <p className="text-sm text-muted-foreground">
+                  No stakeholders logged for this company yet.
+                </p>
+              ) : (
                 <div className="max-h-96 overflow-auto rounded-md border border-border">
                   <Table>
                     <TableHeader>
@@ -824,13 +930,22 @@ function CompanyEditForm({
                           </TableCell>
                         </TableRow>
                       ))}
+                      {canEdit ? (
+                        <AddStakeholderRow
+                          colSpan={5}
+                          open={addStakeholderOpen}
+                          onOpenChange={setAddStakeholderOpen}
+                          roleTypes={roleTypeOptions}
+                          onCreateRoleType={handleCreateRoleType}
+                          jobTitles={jobTitleOptions}
+                          onCreateJobTitle={handleCreateJobTitle}
+                          isSaving={createStakeholder.isPending}
+                          onSave={handleAddStakeholder}
+                        />
+                      ) : null}
                     </TableBody>
                   </Table>
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No stakeholders logged for this company yet.
-                </p>
               )}
             </CardContent>
           </Card>
