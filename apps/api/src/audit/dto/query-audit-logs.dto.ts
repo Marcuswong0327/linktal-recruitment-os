@@ -70,6 +70,14 @@ export class QueryAuditLogsDto {
   @IsString()
   actorId?: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Only entries written by this request — every change one user action made, including the rows it cascaded to. Read off any entry\'s own requestId.',
+  })
+  @IsOptional()
+  @IsString()
+  requestId?: string;
+
   @ApiPropertyOptional({ description: 'Only entries at/after this ISO date-time' })
   @IsOptional()
   @IsISO8601()

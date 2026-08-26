@@ -40,8 +40,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </div>
             </header>
             {/* bg-muted: --card and --background are both pure white in light
-                mode, so cards need a tinted canvas to separate from. */}
-            <div className="flex min-h-0 flex-1 flex-col overflow-auto bg-muted/50">{children}</div>
+                mode, so cards need a tinted canvas to separate from.
+                overscroll-contain: on the pages that scroll here rather than
+                inside their own grid (fillHeight={false}), a macOS elastic
+                bounce detaches the content from the top/bottom of the
+                scrollport and leaves a bare strip of this background behind
+                it. Containing the overscroll stops the bounce chaining and
+                keeps the ends of the list flush. */}
+            <div className="flex min-h-0 flex-1 flex-col overflow-auto overscroll-contain bg-muted/50">
+              {children}
+            </div>
           </SidebarInset>
         </SidebarProvider>
       </CommandPaletteProvider>

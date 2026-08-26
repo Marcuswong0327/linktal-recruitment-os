@@ -51,5 +51,17 @@ export interface AuditLogEntity {
   resolvedChanges: ResolvedChange[] | null;
   /** How many raw fields a CREATE snapshot omitted as noise (nulls, ids, timestamps). 0 for every other action. */
   omittedFieldCount: number;
+  /**
+     * The records this entry covers, resolved to labels and capped — a hand-picked export's selection, or the rows a bulk write touched. Null when the entry names no ids (a filtered export, or an ordinary single-record write where entityId already says which row).
+     * @nullable
+     */
+  affectedRecords: string[] | null;
+  /**
+     * Correlation id shared by every entry written by the same request — the key behind "part of a larger action".
+     * @nullable
+     */
+  requestId: string | null;
+  /** How many OTHER entries came from the same request. 0 when this entry stands alone. */
+  relatedCount: number;
   createdAt: string;
 }

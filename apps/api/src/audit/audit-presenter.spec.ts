@@ -200,7 +200,15 @@ describe('presentRow — entity/actor labels', () => {
     const presented = presentRow(r, labels, true);
     expect(presented.entityLabel).toBe('CDD-000042 · Jane Doe');
     expect(presented.entityDeleted).toBe(false);
-    expect(presented.actorName).toBe('CST-000005 · Sarah Chen');
+    // The entity keeps its displayId (support quotes it, and two records can
+    // share a name); the actor drops it — as the subject of a sentence it
+    // pushed the person's name off the front of every entry.
+    expect(presented.actorName).toBe('Sarah Chen');
+  });
+
+  it('leaves an actor label alone when it carries no displayId prefix', () => {
+    const labels: LabelMap = new Map([['Consultant:consultant-1', { label: 'Sarah Chen', deleted: false }]]);
+    expect(presentRow(row({ actorId: 'consultant-1' }), labels, true).actorName).toBe('Sarah Chen');
   });
 
   it('a "(bulk)" row never gets an entity label lookup', () => {
@@ -237,5 +245,136 @@ describe('presentRow — a composite-key entity ("(unknown)" entityId) synthesiz
     const r = row({ entityType: 'ConsultantIndustry', entityId: '(unknown)', changes: null });
     const presented = presentRow(r, new Map(), true);
     expect(presented.entityLabel).toBeNull();
+  });
+});
+
+describe('presentRow — relation payloads and structured values', () => {
+  it('drops a relation payload that has a scalar fk sibling, keeping the resolved one', () => {
+    // A create snapshot carries both the column (`clientId`) and the relation
+    // Prisma selected back (`client`). Both map to the field label "Client",
+    // so keeping them printed the relationship twice — once resolved, once as
+    // the literal text "[object Object]".
+    const r = row({
+      action: 'CREATE',
+      entityType: 'Tob',
+      changes: { clientId: 'client-1', client: { companyName: 'UOB Asset Management' }, fileName: 'terms.pdf' },
+    });
+    const labels: LabelMap = new Map([['Client:client-1', { label: 'CLI-001614 · UOB Asset Management', deleted: false }]]);
+    const presented = presentRow(r, labels, true);
+    const fields = presented.resolvedChanges!.map((c) => c.field);
+    expect(fields).toEqual(['clientId', 'fileName']);
+    expect(presented.resolvedChanges![0].to.label).toBe('CLI-001614 · UOB Asset Management');
+  });
+
+  it('does not count a dropped relation payload as an omitted field', () => {
+    const r = row({ action: 'CREATE', entityType: 'Tob', changes: { clientId: 'client-1', client: { companyName: 'X' } } });
+    // Only the duplicate went; nothing was hidden from the reader.
+    expect(presentRow(r, new Map(), true).omittedFieldCount).toBe(0);
+  });
+
+  it('summarises an object with no fk sibling instead of rendering "[object Object]"', () => {
+    const r = row({ action: 'CREATE', changes: { workHistory: [{ company: 'Acme', role: 'Fitter', period: '2020 - 2021' }] } });
+    const presented = presentRow(r, new Map(), true);
+    expect(presented.resolvedChanges![0].to.label).toBe('Acme · Fitter · 2020 - 2021');
+  });
+
+  it('renders an array of plain strings as a readable list', () => {
+    const r = row({ action: 'CREATE', entityType: 'Client', changes: { addresses: ['12 Jalan Ampang', '4 Jalan Tun Razak'] } });
+    const presented = presentRow(r, new Map(), true);
+    expect(presented.resolvedChanges![0].to.label).toBe('12 Jalan Ampang; 4 Jalan Tun Razak');
+  });
+
+  it('falls back to a count when an array\'s objects have no scalar leaves at all', () => {
+    const r = row({ action: 'CREATE', changes: { coverage: [{ nested: {} }, { nested: {} }] } });
+    const presented = presentRow(r, new Map(), true);
+    expect(presented.resolvedChanges![0].to.label).toBe('2 items');
+  });
+});
+
+describe('presentRow — an entry names the records it covers', () => {
+  const exportRow = (metadata: unknown) =>
+    row({ action: 'EXPORT', entityType: 'Client', entityId: '(bulk)', metadata: metadata as never });
+
+  it('resolves requestedIds to labels', () => {
+    const labels: LabelMap = new Map([['Client:client-1', { label: 'CLI-001614 · UOB Asset Management', deleted: false }]]);
+    expect(presentRow(exportRow({ requestedIds: ['client-1'], count: 1 }), labels, true).affectedRecords).toEqual([
+      'CLI-001614 · UOB Asset Management',
+    ]);
+  });
+
+  it('is null for a filtered export — there is no explicit list to name', () => {
+    expect(presentRow(exportRow({ filters: { locationIds: ['loc-1'] }, count: 1528 }), new Map(), true).affectedRecords).toBeNull();
+  });
+
+  it('is null for every non-export action', () => {
+    expect(presentRow(row({ metadata: { requestedIds: ['cand-1'] } }), new Map(), true).affectedRecords).toBeNull();
+  });
+
+  it('collectRefs requests labels for an export\'s named ids', () => {
+    const request: LabelRequest = new Map();
+    collectRefs([exportRow({ requestedIds: ['client-1', 'client-2'] })], request);
+    expect(request.get('Client')).toEqual(new Set(['client-1', 'client-2']));
+  });
+});
+
+describe('presentRow — id arrays resolve to names', () => {
+  const roleRow = (permissionIds: string[]) =>
+    row({ entityType: 'Role', changes: { permissionIds: { from: [], to: permissionIds } } });
+
+  const labels: LabelMap = new Map([
+    ['Permission:p1', { label: 'Candidate: read', deleted: false }],
+    ['Permission:p2', { label: 'Client: update', deleted: false }],
+  ]);
+
+  it('renders permissionIds as permission names, not raw cuids', () => {
+    const presented = presentRow(roleRow(['p1', 'p2']), labels, true);
+    expect(presented.resolvedChanges![0].fieldLabel).toBe('Permissions');
+    expect(presented.resolvedChanges![0].to).toMatchObject({
+      kind: 'fk-list',
+      label: 'Candidate: read, Client: update',
+    });
+  });
+
+  it('counts ids it could not resolve rather than printing them raw', () => {
+    const presented = presentRow(roleRow(['p1', 'gone-1', 'gone-2']), labels, true);
+    expect(presented.resolvedChanges![0].to.label).toBe('Candidate: read, and 2 more');
+  });
+
+  it('an empty list reads as empty, not as an odd zero-length sentence', () => {
+    expect(presentRow(roleRow([]), labels, true).resolvedChanges![0].to.label).toBeNull();
+  });
+
+  it('collectRefs gathers both sides of an id-array diff', () => {
+    const request: LabelRequest = new Map();
+    collectRefs([row({ entityType: 'Role', changes: { permissionIds: { from: ['p1'], to: ['p2', 'p3'] } } })], request);
+    expect(request.get('Permission')).toEqual(new Set(['p1', 'p2', 'p3']));
+  });
+});
+
+describe('presentRow — a JSON object shows its content, not its plumbing', () => {
+  it('a candidate note reads as the note, dropping its id, author id and timestamp', () => {
+    const r = row({
+      changes: {
+        notes: {
+          from: [],
+          to: [
+            {
+              id: 'cmsebvyeo0004ny0ticqp95vo',
+              by: 'fa4ccdd0-d3ab-4ce3-a6c0-f6ce61a6344c',
+              content: 'Very unprofessional',
+              timestamp: '2026-08-11T14:47:08.181Z',
+            },
+          ],
+        },
+      },
+    });
+    expect(presentRow(r, new Map(), true).resolvedChanges![0].to.label).toBe('Very unprofessional');
+  });
+
+  it('de-duplicates a value stored under two keys', () => {
+    const r = row({
+      changes: { recipients: { from: [], to: [{ email: 'a@b.com', firstName: 'Marcus', toEmail: 'a@b.com' }] } },
+    });
+    expect(presentRow(r, new Map(), true).resolvedChanges![0].to.label).toBe('a@b.com · Marcus');
   });
 });

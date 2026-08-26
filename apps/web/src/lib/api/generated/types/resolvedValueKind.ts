@@ -7,13 +7,15 @@
  */
 
 /**
- * "fk" = raw was an id resolved via targetType; "enum" = raw was a schema enum value; "plain" = shown as-is
+ * "fk" = raw was an id resolved via targetType; "fk-list" = raw was an array of ids, label is the resolved names; "enum" = raw was a schema enum value; "date" = raw is an ISO instant the client must format in the reader's own timezone (label is null); "plain" = shown as-is
  */
 export type ResolvedValueKind = typeof ResolvedValueKind[keyof typeof ResolvedValueKind];
 
 
 export const ResolvedValueKind = {
   fk: 'fk',
+  'fk-list': 'fk-list',
   enum: 'enum',
+  date: 'date',
   plain: 'plain',
 } as const;

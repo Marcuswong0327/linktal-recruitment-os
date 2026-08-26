@@ -5,20 +5,31 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
-import type { ExportAuditLogsAction } from './exportAuditLogsAction';
-import type { ExportAuditLogsSortBy } from './exportAuditLogsSortBy';
-import type { ExportAuditLogsSortOrder } from './exportAuditLogsSortOrder';
+import type { GetAuditActionCountsAction } from './getAuditActionCountsAction';
+import type { GetAuditActionCountsSortBy } from './getAuditActionCountsSortBy';
+import type { GetAuditActionCountsSortOrder } from './getAuditActionCountsSortOrder';
 
-export type ExportAuditLogsParams = {
+export type GetAuditActionCountsParams = {
+/**
+ * Page number (1-based)
+ * @minimum 1
+ */
+page?: number;
+/**
+ * Items per page
+ * @minimum 1
+ * @maximum 100
+ */
+pageSize?: number;
 /**
  * Column to sort by. Defaults to createdAt.
  */
-sortBy?: ExportAuditLogsSortBy;
-sortOrder?: ExportAuditLogsSortOrder;
+sortBy?: GetAuditActionCountsSortBy;
+sortOrder?: GetAuditActionCountsSortOrder;
 /**
  * Filter by action
  */
-action?: ExportAuditLogsAction;
+action?: GetAuditActionCountsAction;
 /**
  * Filter by entity type, e.g. "Candidate"
  */
@@ -39,8 +50,4 @@ from?: string;
  * Only entries at/before this ISO date-time
  */
 to?: string;
-/**
- * IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid.
- */
-timezone?: string;
 };

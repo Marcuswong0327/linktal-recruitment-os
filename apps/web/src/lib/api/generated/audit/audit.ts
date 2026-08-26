@@ -25,9 +25,12 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AuditActionCountEntity,
+  AuditEntityTypeEntity,
   ErrorResponse,
   ExportAuditLogsParams,
   ExportByIdsDto,
+  GetAuditActionCountsParams,
   GetAuditLogsParams,
   PaginatedAuditLogsEntity
 } from '../types';
@@ -174,6 +177,261 @@ export function useGetAuditLogs<TData = Awaited<ReturnType<typeof getAuditLogs>>
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetAuditLogsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getAuditEntityTypesResponse200 = {
+  data: AuditEntityTypeEntity[]
+  status: 200
+}
+
+export type getAuditEntityTypesResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getAuditEntityTypesResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getAuditEntityTypesResponseSuccess = (getAuditEntityTypesResponse200) & {
+  headers: Headers;
+};
+export type getAuditEntityTypesResponseError = (getAuditEntityTypesResponse400 | getAuditEntityTypesResponse500) & {
+  headers: Headers;
+};
+
+export type getAuditEntityTypesResponse = (getAuditEntityTypesResponseSuccess | getAuditEntityTypesResponseError)
+
+export const getGetAuditEntityTypesUrl = () => {
+
+
+
+
+  return `/audit-logs/entity-types`
+}
+
+/**
+ * @summary Every record type the activity log can be filtered by, with display labels
+ */
+export const getAuditEntityTypes = async ( options?: RequestInit): Promise<getAuditEntityTypesResponse> => {
+
+  return customFetch<getAuditEntityTypesResponse>(getGetAuditEntityTypesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAuditEntityTypesQueryKey = () => {
+    return [
+    `/audit-logs/entity-types`
+    ] as const;
+    }
+
+
+export const getGetAuditEntityTypesQueryOptions = <TData = Awaited<ReturnType<typeof getAuditEntityTypes>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuditEntityTypes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAuditEntityTypesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAuditEntityTypes>>> = ({ signal }) => getAuditEntityTypes({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAuditEntityTypes>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAuditEntityTypesQueryResult = NonNullable<Awaited<ReturnType<typeof getAuditEntityTypes>>>
+export type GetAuditEntityTypesQueryError = ErrorResponse
+
+
+export function useGetAuditEntityTypes<TData = Awaited<ReturnType<typeof getAuditEntityTypes>>, TError = ErrorResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuditEntityTypes>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAuditEntityTypes>>,
+          TError,
+          Awaited<ReturnType<typeof getAuditEntityTypes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAuditEntityTypes<TData = Awaited<ReturnType<typeof getAuditEntityTypes>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuditEntityTypes>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAuditEntityTypes>>,
+          TError,
+          Awaited<ReturnType<typeof getAuditEntityTypes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAuditEntityTypes<TData = Awaited<ReturnType<typeof getAuditEntityTypes>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuditEntityTypes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Every record type the activity log can be filtered by, with display labels
+ */
+
+export function useGetAuditEntityTypes<TData = Awaited<ReturnType<typeof getAuditEntityTypes>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuditEntityTypes>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetAuditEntityTypesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export type getAuditActionCountsResponse200 = {
+  data: AuditActionCountEntity[]
+  status: 200
+}
+
+export type getAuditActionCountsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getAuditActionCountsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getAuditActionCountsResponseSuccess = (getAuditActionCountsResponse200) & {
+  headers: Headers;
+};
+export type getAuditActionCountsResponseError = (getAuditActionCountsResponse400 | getAuditActionCountsResponse500) & {
+  headers: Headers;
+};
+
+export type getAuditActionCountsResponse = (getAuditActionCountsResponseSuccess | getAuditActionCountsResponseError)
+
+export const getGetAuditActionCountsUrl = (params?: GetAuditActionCountsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/audit-logs/action-counts?${stringifiedParams}` : `/audit-logs/action-counts`
+}
+
+/**
+ * @summary Per-action entry totals under the current filters (across every page, not just the loaded one)
+ */
+export const getAuditActionCounts = async (params?: GetAuditActionCountsParams, options?: RequestInit): Promise<getAuditActionCountsResponse> => {
+
+  return customFetch<getAuditActionCountsResponse>(getGetAuditActionCountsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAuditActionCountsQueryKey = (params?: GetAuditActionCountsParams,) => {
+    return [
+    `/audit-logs/action-counts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAuditActionCountsQueryOptions = <TData = Awaited<ReturnType<typeof getAuditActionCounts>>, TError = ErrorResponse>(params?: GetAuditActionCountsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuditActionCounts>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAuditActionCountsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAuditActionCounts>>> = ({ signal }) => getAuditActionCounts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAuditActionCounts>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetAuditActionCountsQueryResult = NonNullable<Awaited<ReturnType<typeof getAuditActionCounts>>>
+export type GetAuditActionCountsQueryError = ErrorResponse
+
+
+export function useGetAuditActionCounts<TData = Awaited<ReturnType<typeof getAuditActionCounts>>, TError = ErrorResponse>(
+ params: undefined |  GetAuditActionCountsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuditActionCounts>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAuditActionCounts>>,
+          TError,
+          Awaited<ReturnType<typeof getAuditActionCounts>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAuditActionCounts<TData = Awaited<ReturnType<typeof getAuditActionCounts>>, TError = ErrorResponse>(
+ params?: GetAuditActionCountsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuditActionCounts>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getAuditActionCounts>>,
+          TError,
+          Awaited<ReturnType<typeof getAuditActionCounts>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetAuditActionCounts<TData = Awaited<ReturnType<typeof getAuditActionCounts>>, TError = ErrorResponse>(
+ params?: GetAuditActionCountsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuditActionCounts>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Per-action entry totals under the current filters (across every page, not just the loaded one)
+ */
+
+export function useGetAuditActionCounts<TData = Awaited<ReturnType<typeof getAuditActionCounts>>, TError = ErrorResponse>(
+ params?: GetAuditActionCountsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getAuditActionCounts>>, TError, TData>>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetAuditActionCountsQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

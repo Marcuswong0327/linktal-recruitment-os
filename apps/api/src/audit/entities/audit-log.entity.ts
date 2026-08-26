@@ -57,5 +57,26 @@ export class AuditLogEntity {
   })
   omittedFieldCount!: number;
 
+  @ApiProperty({
+    type: [String],
+    nullable: true,
+    example: ['CLI-001614 · UOB Asset Management (Malaysia)'],
+    description:
+      'The records this entry covers, resolved to labels and capped — a hand-picked export\'s selection, or the rows a bulk write touched. Null when the entry names no ids (a filtered export, or an ordinary single-record write where entityId already says which row).',
+  })
+  affectedRecords!: string[] | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Correlation id shared by every entry written by the same request — the key behind "part of a larger action".',
+  })
+  requestId!: string | null;
+
+  @ApiProperty({
+    description: 'How many OTHER entries came from the same request. 0 when this entry stands alone.',
+  })
+  relatedCount!: number;
+
   @ApiProperty() createdAt!: Date;
 }

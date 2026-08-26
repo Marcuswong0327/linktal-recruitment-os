@@ -6,6 +6,8 @@
  * OpenAPI spec version: 1.0
  */
 
+export * from './auditActionCountEntity';
+export * from './auditEntityTypeEntity';
 export * from './auditLogEntity';
 export * from './auditLogEntityChanges';
 export * from './auditLogEntityMetadata';
@@ -90,6 +92,10 @@ export * from './exportStakeholdersParams';
 export * from './exportStakeholdersSortBy';
 export * from './exportStakeholdersSortOrder';
 export * from './exportStakeholdersStatusesItem';
+export * from './getAuditActionCountsAction';
+export * from './getAuditActionCountsParams';
+export * from './getAuditActionCountsSortBy';
+export * from './getAuditActionCountsSortOrder';
 export * from './getAuditLogsAction';
 export * from './getAuditLogsParams';
 export * from './getAuditLogsSortBy';

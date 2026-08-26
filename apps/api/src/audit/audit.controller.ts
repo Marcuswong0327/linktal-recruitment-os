@@ -8,6 +8,8 @@ import { ExportAuditLogsDto } from './dto/export-audit-logs.dto';
 import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
 import { XLSX_CONTENT_TYPE, exportFilename } from '../common/xlsx-export';
 import { PaginatedAuditLogsEntity } from './entities/paginated-audit-logs.entity';
+import { AuditEntityTypeEntity } from './entities/audit-entity-type.entity';
+import { AuditActionCountEntity } from './entities/audit-action-count.entity';
 
 @ApiTags('Audit')
 @ApiBearerAuth()
@@ -24,6 +26,28 @@ export class AuditController {
   @ApiResponse({ status: 200, description: 'Paginated audit logs', type: PaginatedAuditLogsEntity })
   findAll(@Query() query: QueryAuditLogsDto, @CurrentUser() user: AuthUser) {
     return this.audit.findAll(query, user);
+  }
+
+  @Get('entity-types')
+  @RequirePermission('audit', 'read')
+  @ApiOperation({
+    operationId: 'getAuditEntityTypes',
+    summary: 'Every record type the activity log can be filtered by, with display labels',
+  })
+  @ApiResponse({ status: 200, description: 'Record-type filter options', type: [AuditEntityTypeEntity] })
+  entityTypes() {
+    return this.audit.entityTypes();
+  }
+
+  @Get('action-counts')
+  @RequirePermission('audit', 'read')
+  @ApiOperation({
+    operationId: 'getAuditActionCounts',
+    summary: 'Per-action entry totals under the current filters (across every page, not just the loaded one)',
+  })
+  @ApiResponse({ status: 200, description: 'Counts per action', type: [AuditActionCountEntity] })
+  actionCounts(@Query() query: QueryAuditLogsDto) {
+    return this.audit.actionCounts(query);
   }
 
   @Get('export')
