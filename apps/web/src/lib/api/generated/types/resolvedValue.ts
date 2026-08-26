@@ -19,7 +19,7 @@ export interface ResolvedValue {
      * @nullable
      */
   label: string | null;
-  /** "fk" = raw was an id resolved via targetType; "enum" = raw was a schema enum value; "plain" = shown as-is */
+  /** "fk" = raw was an id resolved via targetType; "fk-list" = raw was an array of ids, label is the resolved names; "enum" = raw was a schema enum value; "date" = raw is an ISO instant the client must format in the reader's own timezone (label is null); "plain" = shown as-is */
   kind: ResolvedValueKind;
   /** The model the id was resolved against (e.g. "Industry") — enables deep-linking from the UI. Only present when kind is "fk". */
   targetType?: string;

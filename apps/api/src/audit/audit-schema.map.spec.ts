@@ -127,7 +127,16 @@ describe('fieldLabel', () => {
     expect(fieldLabel('consultantId')).toBe('Consultant');
   });
   it('falls back to camelCase -> Title Case for anything not overridden', () => {
-    expect(fieldLabel('reportsToId')).toBe('Reports to id');
     expect(fieldLabel('currentCompany')).toBe('Current company');
+  });
+
+  it('strips a trailing "Id" — the value beside the label is a resolved name, not an id', () => {
+    expect(fieldLabel('reportsToId')).toBe('Reports to');
+    expect(fieldLabel('contactedById')).toBe('Contacted by');
+    expect(fieldLabel('stakeholderId')).toBe('Stakeholder');
+  });
+
+  it('keeps displayId readable rather than letting the strip leave a bare "Display"', () => {
+    expect(fieldLabel('displayId')).toBe('Reference');
   });
 });
