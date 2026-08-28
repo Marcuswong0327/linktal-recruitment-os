@@ -220,7 +220,7 @@ export function LocationMultiSelect({
                   <Combobox.Item
                     key={valueId}
                     value={valueId}
-                    className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   >
                     <span className="min-w-0 flex-1 truncate">{location?.name ?? valueId}</span>
                     {location ? (
@@ -263,6 +263,8 @@ export interface LocationFilterButtonProps {
   placeholder?: string;
   /** Resolves an already-selected id to a display name when it's not in the current search results — same reasoning as `LocationFilter`'s `labelFor`. Only used when `compact` is false. */
   labelFor?: (id: string) => string;
+  /** Narrows results to nodes at or beneath this location (e.g. a selected Country), same as the API's `underId`. Omit for an unrestricted search. */
+  underId?: string;
 }
 
 /**
@@ -281,6 +283,7 @@ export function LocationFilterButton({
   compact = true,
   placeholder,
   labelFor,
+  underId,
 }: LocationFilterButtonProps) {
   const [inputValue, setInputValue] = React.useState('');
   const [debouncedQuery, setDebouncedQuery] = React.useState('');
@@ -292,12 +295,19 @@ export function LocationFilterButton({
 
   const searchEnabled = browsable || debouncedQuery.length >= MIN_QUERY_LENGTH;
   const { data, isFetching } = useGetLocations(
-    { q: debouncedQuery || undefined, level, take: 20 },
+    { q: debouncedQuery || undefined, level, underId, take: 20 },
     { query: { enabled: searchEnabled, placeholderData: keepPreviousData } },
   );
   const results: LocationEntity[] = searchEnabled && data?.status === 200 ? data.data : [];
   const resultsById = React.useMemo(() => new Map(results.map((r) => [r.id, r])), [results]);
-  const items = React.useMemo(() => results.map((r) => r.id), [results]);
+  // Selected ids not in the current search results still need to render as a
+  // checked row — otherwise a selection made from a different query (or
+  // before the popup was ever opened) is invisible once the user reopens it.
+  const items = React.useMemo(() => {
+    const ids = results.map((r) => r.id);
+    const idSet = new Set(ids);
+    return [...ids, ...selected.filter((id) => !idSet.has(id))];
+  }, [results, selected]);
 
   React.useEffect(() => {
     if (!onResolve) return;
@@ -374,7 +384,7 @@ export function LocationFilterButton({
                   <Combobox.Item
                     key={id}
                     value={id}
-                    className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   >
                     <span
                       className={cn(
@@ -382,9 +392,9 @@ export function LocationFilterButton({
                         checked && 'border-primary bg-primary text-primary-foreground',
                       )}
                     >
-                      {checked ? <Check className="size-3" /> : null}
+                      {checked ? <Check className="size-3 !text-primary-foreground" /> : null}
                     </span>
-                    <span className="min-w-0 flex-1 truncate">{location?.name ?? id}</span>
+                    <span className="min-w-0 flex-1 truncate">{location?.name ?? labelFor?.(id) ?? id}</span>
                     {location ? (
                       <span className="shrink-0 text-xs text-muted-foreground">{LEVEL_LABEL[location.level]}</span>
                     ) : null}

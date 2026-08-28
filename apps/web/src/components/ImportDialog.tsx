@@ -130,17 +130,29 @@ export function ImportDialog({ entityLabel, templateUrl, upload, onImported }: I
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Import {entityLabel}</DialogTitle>
-          <DialogDescription>
-            Adding new {entityLabel.toLowerCase()}? Download the template below, leave the Display ID column blank
-            on every row, fill in the rest, and upload it here. Updating existing ones instead? Don&apos;t use this
-            template — use &quot;Export to Excel&quot; on the main page to download your current data (it already
-            has each row&apos;s Display ID filled in), edit values there, and upload that file here instead. A
-            filled-in Display ID always matches that exact existing record, and every other column becomes its
-            complete new state — so an optional column left blank on an update row clears it.
-          </DialogDescription>
+          <DialogDescription>Upload a spreadsheet to add new {entityLabel.toLowerCase()} or update existing ones.</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
+          <dl className="flex flex-col gap-1.5 text-sm text-muted-foreground">
+            <div className="flex gap-1.5">
+              <dt className="shrink-0 font-medium text-foreground">Adding new:</dt>
+              <dd>Download the template below, leave Display ID blank, fill in the rest, and upload it.</dd>
+            </div>
+            <div className="flex gap-1.5">
+              <dt className="shrink-0 font-medium text-foreground">Updating existing:</dt>
+              <dd>
+                Skip the template — export your current data instead, edit it, and upload that file. Each row&apos;s
+                Display ID is what matches it to the existing record.
+              </dd>
+            </div>
+          </dl>
+          <p className="flex items-start gap-1.5 rounded-lg bg-warning/10 px-3 py-2 text-sm text-warning-foreground">
+            <AlertCircle className="mt-0.5 size-4 shrink-0 text-warning" />
+            On an update row, every column becomes that record&apos;s new value — leaving an optional one blank
+            clears it.
+          </p>
+
           <Button type="button" variant="outline" size="sm" className="self-start" onClick={handleDownloadTemplate}>
             <Download />
             Download template

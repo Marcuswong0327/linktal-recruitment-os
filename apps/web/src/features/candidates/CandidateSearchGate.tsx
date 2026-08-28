@@ -4,13 +4,12 @@ import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Search, User, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
-import { EnumSelect } from '@/components/EnumSelect';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
 import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@/lib/api/generated/industries/industries';
@@ -181,7 +180,15 @@ export function CandidateSearchGate({
     specializationIds: specializationIds.length ? specializationIds : undefined,
     locationIds: countryIds.length || cityIds.length ? [...countryIds, ...cityIds] : undefined,
   };
-  const { data: jobRoleTypeFacetsData } = useGetCandidateJobRoleTypeFacets(jobRoleTypeFacetQuery);
+  // `placeholderData: keepPreviousData` — without it, TanStack Query drops
+  // `data` to undefined on every query-key change (any of statuses/industry/
+  // specialization/location changing), which briefly emptied `jobRoleTypeFacets`
+  // below and made the Role Type filter's selected chips flash blank (e.g.
+  // right after picking a City). Keeping the previous facets visible while
+  // the new ones load fixes that.
+  const { data: jobRoleTypeFacetsData } = useGetCandidateJobRoleTypeFacets(jobRoleTypeFacetQuery, {
+    query: { placeholderData: keepPreviousData },
+  });
   const jobRoleTypeFacets = React.useMemo(
     () => (jobRoleTypeFacetsData?.status === 200 ? jobRoleTypeFacetsData.data : []),
     [jobRoleTypeFacetsData],
@@ -270,6 +277,7 @@ export function CandidateSearchGate({
           <FilterField label="Industry">
             <DataGridFacetedFilter
               title="Industry"
+              placeholder="All industries"
               options={industryOptions}
               selected={industryIds}
               onChange={setIndustryIds}
@@ -285,6 +293,7 @@ export function CandidateSearchGate({
               title="Specialization"
               labelFor={(id) => specializationNames[id] ?? id}
               onResolve={registerSpecializationName}
+              industryIds={industryIds}
             />
           </FilterField>
           <FilterField label="City">
@@ -292,6 +301,7 @@ export function CandidateSearchGate({
               selected={cityIds}
               onChange={setCityIds}
               level="CITY"
+              underId={countryIds.length === 1 ? countryIds[0] : undefined}
               compact={false}
               placeholder="All cities"
               title="City"
@@ -310,6 +320,7 @@ export function CandidateSearchGate({
           <FilterField label="Status">
             <DataGridFacetedFilter
               title="Status"
+              placeholder="All statuses"
               options={statusOptions}
               selected={statuses}
               onChange={setStatuses}
@@ -317,12 +328,14 @@ export function CandidateSearchGate({
             />
           </FilterField>
           <FilterField label="Sorted By">
-            <EnumSelect
-              id="candidates-sort"
-              value={sortByValue}
-              onValueChange={(v) => setSortByValue(v as SortByValue)}
+            <DataGridFacetedFilter
+              title="Sorted By"
+              placeholder="Default order"
+              single
               options={sortByOptions}
-              placeholder="Select sorting"
+              selected={sortByValue ? [sortByValue] : []}
+              onChange={(values) => setSortByValue((values[0] as SortByValue) ?? '')}
+              triggerClassName="w-full justify-between"
             />
           </FilterField>
         </div>

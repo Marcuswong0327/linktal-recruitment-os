@@ -233,7 +233,7 @@ export function SpecializationMultiSelect({
                     <Combobox.Item
                       key={id}
                       value={id}
-                      className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                      className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                     >
                       <Plus className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="min-w-0 flex-1 truncate">Create &quot;{trimmed}&quot;</span>
@@ -247,7 +247,7 @@ export function SpecializationMultiSelect({
                   <Combobox.Item
                     key={id}
                     value={id}
-                    className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   >
                     <Badge className={cn('rounded-md font-normal', colorFor(id))}>{name}</Badge>
                     {hasTagMenu ? (
@@ -321,6 +321,7 @@ export function SpecializationFilterButton({
   compact = true,
   placeholder,
   labelFor,
+  industryIds,
 }: {
   selected: string[];
   onChange: (ids: string[]) => void;
@@ -333,18 +334,27 @@ export function SpecializationFilterButton({
   placeholder?: string;
   /** Resolves an already-selected id to a display name when it's not in the current search results. Only used when `compact` is false. */
   labelFor?: (id: string) => string;
+  /** Narrows results to specializations under these industries (OR). Omit/empty for an unrestricted search. */
+  industryIds?: string[];
 }) {
   const [inputValue, setInputValue] = React.useState('');
   const debouncedQuery = useDebounced(inputValue, DEBOUNCE_MS);
   const [open, setOpen] = React.useState(false);
 
   const { data, isFetching } = useGetSpecializations(
-    { q: debouncedQuery || undefined, take: PAGE_SIZE },
+    { q: debouncedQuery || undefined, take: PAGE_SIZE, industryIds: industryIds?.length ? industryIds : undefined },
     { query: { enabled: open, placeholderData: keepPreviousData } },
   );
   const results = React.useMemo(() => (data?.status === 200 ? data.data : []), [data]);
   const resultsById = React.useMemo(() => new Map(results.map((r) => [r.id, r])), [results]);
-  const items = React.useMemo(() => results.map((r) => r.id), [results]);
+  // Selected ids not in the current search results still need to render as a
+  // checked row — otherwise a selection made from a different query (or
+  // before the popup was ever opened) is invisible once the user reopens it.
+  const items = React.useMemo(() => {
+    const ids = results.map((r) => r.id);
+    const idSet = new Set(ids);
+    return [...ids, ...selected.filter((id) => !idSet.has(id))];
+  }, [results, selected]);
 
   React.useEffect(() => {
     if (!onResolve) return;
@@ -423,7 +433,7 @@ export function SpecializationFilterButton({
                   <Combobox.Item
                     key={id}
                     value={id}
-                    className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   >
                     <span
                       className={cn(
@@ -431,9 +441,9 @@ export function SpecializationFilterButton({
                         checked && 'border-primary bg-primary text-primary-foreground',
                       )}
                     >
-                      {checked ? <Check className="size-3" /> : null}
+                      {checked ? <Check className="size-3 !text-primary-foreground" /> : null}
                     </span>
-                    <span className="min-w-0 flex-1 truncate">{spec?.name ?? id}</span>
+                    <span className="min-w-0 flex-1 truncate">{spec?.name ?? labelFor?.(id) ?? id}</span>
                   </Combobox.Item>
                 );
               }}
@@ -609,14 +619,14 @@ export function SpecializationCombobox({
                   <Combobox.Item
                     key={itemId}
                     value={itemId}
-                    className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   >
                     {isCreate ? <Plus className="size-3.5 shrink-0 text-muted-foreground" /> : null}
                     <span className="min-w-0 flex-1 truncate">
                       {isCreate ? `Add "${trimmed}"` : (knownById.current.get(itemId) ?? itemId)}
                     </span>
                     <Combobox.ItemIndicator className="shrink-0">
-                      <Check className="size-4" />
+                      <Check className="size-4 !text-primary" />
                     </Combobox.ItemIndicator>
                   </Combobox.Item>
                 );

@@ -313,7 +313,7 @@ export function TagMultiSelect({
                       <Combobox.Item
                         key={value}
                         value={value}
-                        className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                        className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                       >
                         <Plus className="size-3.5 shrink-0 text-muted-foreground" />
                         <span className="min-w-0 flex-1 truncate">
@@ -328,7 +328,7 @@ export function TagMultiSelect({
                     <Combobox.Item
                       key={value}
                       value={value}
-                      className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                      className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                     >
                       {/* No selected-state checkmark here — the trigger's own
                           chips above already show what's selected. */}
@@ -479,7 +479,7 @@ export function TagFilterButton({
                   <Combobox.Item
                     key={value}
                     value={value}
-                    className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   >
                     <Badge
                       className={cn('rounded-md font-normal', colorFor(option?.colorKey ?? value))}
@@ -487,7 +487,7 @@ export function TagFilterButton({
                       {option?.label ?? value}
                     </Badge>
                     <Combobox.ItemIndicator className="ml-auto shrink-0">
-                      <Check className="size-4" />
+                      <Check className="size-4 !text-primary" />
                     </Combobox.ItemIndicator>
                   </Combobox.Item>
                 );

@@ -1424,6 +1424,18 @@ export function DataGrid<TData>({
             minWidth: '100%',
             ...(isVirtual ? { display: 'grid' } : {}),
           }}
+          overlay={
+            !isLoading && rows.length === 0 ? (
+              // A `<div>`, not `<p>` — `emptyState` is caller-supplied and
+              // routinely nests its own block elements (e.g. CandidatesTable's
+              // multi-line hint), which isn't valid inside a `<p>`.
+              <div className="max-w-sm text-center text-sm text-muted-foreground">
+                {!hasData && !isFiltered
+                  ? (emptyState ?? 'No records yet.')
+                  : 'No results match your search.'}
+              </div>
+            ) : null
+          }
           className={cn(
             !isVirtual && 'table-fixed',
             '[&_td]:border-r [&_th]:border-r [&_td:last-child]:border-r-0 [&_th:last-child]:border-r-0 [&_td]:py-1.5',
@@ -1636,18 +1648,7 @@ export function DataGrid<TData>({
                   </TableRow>
                 ) : null}
               </>
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={totalColumns}
-                  className="h-32 text-center text-sm text-muted-foreground"
-                >
-                  {!hasData && !isFiltered
-                    ? (emptyState ?? 'No records yet.')
-                    : 'No results match your search.'}
-                </TableCell>
-              </TableRow>
-            )}
+            ) : null}
           </TableBody>
         </Table>
       </div>

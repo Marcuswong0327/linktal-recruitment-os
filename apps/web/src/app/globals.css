@@ -188,6 +188,38 @@ body {
   html {
     @apply font-sans;
   }
+
+  /* Tailwind v4 preflight no longer sets cursor: pointer on <button> (it
+     matches native browser behaviour instead). Restore it here for every
+     native/ARIA interactive control so buttons, icon buttons, and Base UI
+     primitives rendered as non-<button> elements (checkbox, select trigger,
+     tabs, etc.) all get a pointer cursor by default. */
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']):not([data-disabled]),
+  [role='checkbox']:not([aria-disabled='true']):not([data-disabled]),
+  [role='switch']:not([aria-disabled='true']):not([data-disabled]),
+  [role='tab']:not([aria-disabled='true']):not([data-disabled]),
+  [role='menuitem']:not([aria-disabled='true']):not([data-disabled]),
+  [role='option']:not([aria-disabled='true']):not([data-disabled]),
+  select:not(:disabled),
+  summary {
+    cursor: pointer;
+  }
+
+  /* The calendar-icon indicator on native <input type="date"> doesn't
+     inherit cursor from the rule above — it's a pseudo-element, not a
+     button/role-based one — and Chrome/Safari otherwise show a text
+     cursor over it even though clicking it opens the date picker. */
+  input[type='date']:not(:disabled)::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+  }
+
+  /* Same story for the browser-rendered "Choose File" button on
+     <input type="file"> — it's a pseudo-element, not a real <button>. */
+  input[type='file']:not(:disabled)::file-selector-button,
+  input[type='file']:not(:disabled)::-webkit-file-upload-button {
+    cursor: pointer;
+  }
 }
 
 /* Countdown bar showing time left before a sonner toast auto-dismisses.

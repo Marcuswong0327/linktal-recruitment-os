@@ -2,7 +2,22 @@ import * as React from 'react';
 
 import { cn } from '@/lib/utils';
 
-function Table({ className, ...props }: React.ComponentProps<'table'>) {
+function Table({
+  className,
+  overlay,
+  ...props
+}: React.ComponentProps<'table'> & {
+  /**
+   * Rendered centered over the visible viewport of the scroll container —
+   * not over the (possibly much wider/taller) `<table>` itself — so an
+   * empty/no-results state stays centered on screen regardless of scroll
+   * position, instead of centering against the full scrolled table and
+   * ending up off to the side. Absolutely positioned against
+   * `table-container` (not a descendant of the scrolling `<table>`), which
+   * is what keeps it from scrolling away with the table's content.
+   */
+  overlay?: React.ReactNode;
+}) {
   return (
     <div data-slot="table-container" className="relative h-full w-full overflow-auto">
       <table
@@ -10,6 +25,11 @@ function Table({ className, ...props }: React.ComponentProps<'table'>) {
         className={cn('w-full caption-bottom text-sm', className)}
         {...props}
       />
+      {overlay ? (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
+          {overlay}
+        </div>
+      ) : null}
     </div>
   );
 }
