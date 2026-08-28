@@ -1680,6 +1680,12 @@ export function DataGrid<TData>({
                     <TableCell
                       colSpan={totalColumns}
                       className="py-3 text-center text-xs text-muted-foreground"
+                      // `colSpan` only stretches the cell under real table
+                      // layout — virtualized rows make their `TableRow` a
+                      // flex container (for absolute positioning), which
+                      // turns colSpan into a no-op and left-aligns this cell
+                      // at its shrink-to-fit content width instead.
+                      style={isVirtual ? { display: 'flex', width: '100%', justifyContent: 'center' } : undefined}
                     >
                       -- END OF LIST --
                     </TableCell>

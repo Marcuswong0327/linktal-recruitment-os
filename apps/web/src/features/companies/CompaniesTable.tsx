@@ -64,6 +64,10 @@ export function CompaniesTable({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
+  // The DataGrid's own free-text box — distinct from the gate's committed
+  // filters above it (search-as-you-type, no "Search" click required), same
+  // pattern as CandidatesTable.
+  const [search, setSearch] = React.useState<string | undefined>();
   // Seeded from the gate's "Sort by" selection; a column header click can
   // still override it locally afterward, same as any other DataGrid.
   const [sortBy, setSortBy] = React.useState<GetClientsSortBy | undefined>(filters.sortBy);
@@ -105,6 +109,7 @@ export function CompaniesTable({
     {
       page,
       pageSize: PAGE_SIZE,
+      q: search,
       statuses: filters.statuses as GetClientsStatusesItem[] | undefined,
       industryIds: filters.industryIds,
       specializationIds: filters.specializationIds,
@@ -120,13 +125,14 @@ export function CompaniesTable({
   const result = data?.status === 200 ? data.data : undefined;
   const companies = useInfinitePages(result?.data, page, isFetching);
 
-  // Sorting is the only thing the grid itself still reports — search and
-  // faceted filters both moved up into the gate's action bar.
-  function handleQueryChange({ sorting }: DataGridQuery) {
+  // The grid itself reports search (its own free-text box) and sorting —
+  // faceted filters still live entirely in the gate's action bar.
+  function handleQueryChange({ search, sorting }: DataGridQuery) {
     const sort = sorting[0];
     const sortField = sort && sort.id in GetClientsSortBy ? (sort.id as GetClientsSortBy) : undefined;
     setSortBy(sortField);
     setSortOrder(sort?.desc ? 'desc' : 'asc');
+    setSearch(search.trim() || undefined);
     setPage(1);
   }
 
@@ -237,6 +243,7 @@ export function CompaniesTable({
       } else {
         await downloadFile(
           getExportClientsUrl({
+            q: search,
             statuses: filters.statuses as GetClientsStatusesItem[] | undefined,
             industryIds: filters.industryIds,
             specializationIds: filters.specializationIds,
@@ -285,7 +292,7 @@ export function CompaniesTable({
         data={companies}
         isLoading={isLoading}
         isFetching={isFetching}
-        hideSearch
+        searchPlaceholder="Search companies…"
         emptyState="No companies match these filters."
         getRowId={(c) => c.id}
         onRowClick={(c) => router.push(`/companies/${c.id}`)}

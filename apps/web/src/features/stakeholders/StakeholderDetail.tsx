@@ -652,6 +652,8 @@ function StakeholderEditForm({
                   options={roleTypeOptions}
                   onCreate={handleCreateRoleType}
                   disabled={!canEdit}
+                  clearable
+                  title="Role type"
                 />
               </FormField>
 
