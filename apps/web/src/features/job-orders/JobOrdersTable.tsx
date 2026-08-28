@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronDown, Download, Plus, Rocket, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQueries, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,7 +29,7 @@ import {
 } from '@/components/ConsultantCombobox';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
-import { useGetClients } from '@/lib/api/generated/clients/clients';
+import { getGetClientQueryOptions } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import {
   deleteJobOrder as deleteJobOrderRequest,
@@ -97,15 +97,6 @@ export function JobOrdersTable({
     { query: { placeholderData: keepPreviousData } },
   );
 
-  // Client-side join: the API returns clientId only, so this resolves it once
-  // for the table.
-  const { data: clientsData } = useGetClients({ pageSize: 100 });
-  const clients = clientsData?.status === 200 ? clientsData.data.data : [];
-  const clientName = React.useCallback(
-    (id: string) => clients.find((c) => c.id === id)?.companyName ?? 'Unknown client',
-    [clients],
-  );
-
   // pageSize is capped at 100 server-side (query-consultants.dto.ts) — this
   // is a single unpaginated fetch, so if consultant headcount ever exceeds
   // 100, the overflow silently won't appear here, including as options in
@@ -146,6 +137,25 @@ export function JobOrdersTable({
 
   const result = data?.status === 200 ? data.data : undefined;
   const jobOrders = result?.data ?? [];
+
+  // Client-side join: the API returns clientId only. GET /clients is capped
+  // at pageSize=100 server-side (query-clients.dto.ts) while the client
+  // roster runs into the thousands, so a single capped fetch (the old
+  // approach) missed most clients and fell back to "Unknown client" even
+  // though the client existed — fetch each of this page's distinct
+  // clientIds individually instead, same as JobOrderDetail's own
+  // useGetClient(jobOrder.clientId), mirroring useSeedFiltersFromScope's
+  // per-id useQueries pattern.
+  const clientIds = React.useMemo(() => [...new Set(jobOrders.map((j) => j.clientId))], [jobOrders]);
+  const clientQueries = useQueries({ queries: clientIds.map((id) => getGetClientQueryOptions(id)) });
+  const clientName = React.useCallback(
+    (id: string) => {
+      const query = clientQueries[clientIds.indexOf(id)];
+      const res = query?.data;
+      return res?.status === 200 ? res.data.companyName : 'Unknown client';
+    },
+    [clientQueries, clientIds],
+  );
 
   function handleQueryChange({ search, columnFilters, sorting }: DataGridQuery) {
     const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as
@@ -255,8 +265,7 @@ export function JobOrdersTable({
 
   // Drag-select is the only way rows get picked (checkboxes stay hidden, same
   // as the Candidates table) — mousedown on a row and drag to range-select,
-  // like a spreadsheet. onRowClick still navigates on a plain click; a real
-  // drag suppresses it (see DataGrid's enableRowRangeSelect doc).
+  // like a spreadsheet.
   function handleSelectionChange(rows: JobOrder[]) {
     setSelectedJobOrders(rows);
   }
@@ -282,9 +291,6 @@ export function JobOrdersTable({
         // viewport height when there aren't enough rows — see DataGrid's
         // fillHeight doc.
         fillHeight={false}
-        // Job Order info isn't directly editable from the main sheet (2.2) —
-        // every row (not just the title link) opens the dedicated page.
-        onRowClick={(jobOrder) => router.push(`/job-orders/${jobOrder.id}`)}
         emptyState="No job orders yet. Create one against a client to get started."
         getRowId={(j) => j.id}
         enableRowRangeSelect

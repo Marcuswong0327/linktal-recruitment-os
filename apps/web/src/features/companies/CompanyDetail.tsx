@@ -136,6 +136,7 @@ const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
 // bookmark keeps behaving the same way.
 const BACK_TARGETS: Record<string, { href: string; label: string }> = {
   stakeholders: { href: '/stakeholders', label: 'Stakeholders' },
+  'job-orders': { href: '/job-orders', label: 'Job Orders' },
 };
 
 function useBackTarget() {

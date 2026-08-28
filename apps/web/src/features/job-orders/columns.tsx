@@ -76,7 +76,21 @@ export function getJobOrderColumns({ clientName }: JobOrderColumnsOptions): Colu
       accessorKey: 'clientId',
       header: 'Client',
       enableSorting: false,
-      cell: ({ row }) => <span>{clientName(row.original.clientId)}</span>,
+      cell: ({ row }) => {
+        const { clientId } = row.original;
+        return (
+          <Link
+            href={`/companies/${clientId}?from=job-orders`}
+            onClick={(e) => e.stopPropagation()}
+            title={`${clientName(clientId)} — opens its own page`}
+            className="flex min-w-0 items-center gap-1 truncate hover:underline"
+            data-no-row-drag
+          >
+            <span className="truncate">{clientName(clientId)}</span>
+            <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" />
+          </Link>
+        );
+      },
     },
     {
       accessorKey: 'jobTitle',
