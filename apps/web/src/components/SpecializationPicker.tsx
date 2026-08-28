@@ -176,14 +176,27 @@ export function SpecializationMultiSelect({
         disabled={disabled}
         onClick={() => setOpen(true)}
         className={cn(
-          'absolute inset-0 rounded-md outline-none transition-colors hover:bg-accent/50 disabled:pointer-events-none',
+          // `group-hover`, not `hover` — see TagMultiSelect's own catcher
+          // for why (keys off TableCell's `group` so a hover anywhere in
+          // the cell, padding included, lights up this one, cell-wide box).
+          'absolute inset-0 rounded-md outline-none transition-colors group-hover:bg-accent/50 disabled:pointer-events-none',
           open && 'bg-accent/50',
         )}
       />
       <Combobox.Trigger
         aria-label={selected.length === 0 ? `Add ${title.toLowerCase()}` : undefined}
-        className="relative inline-flex max-w-full flex-wrap items-center gap-1 rounded-md border border-transparent px-1 py-0.5 text-left outline-none transition-colors hover:bg-accent/50 disabled:pointer-events-none disabled:opacity-50"
+        className={cn(
+          // No background/hover of its own — see TagMultiSelect's Trigger.
+          'relative flex min-h-8 w-full max-w-full flex-wrap items-center gap-1 rounded-md border border-transparent px-1 py-0.5 text-left outline-none transition-colors disabled:pointer-events-none disabled:opacity-50',
+          selected.length === 0 && 'justify-center',
+        )}
       >
+        {selected.length === 0 ? (
+          <Plus
+            aria-hidden
+            className="size-4 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
+          />
+        ) : null}
         {selected.map((id) => (
           <Badge key={id} className={cn('gap-1 rounded-md pr-1 font-normal', colorFor(id))}>
             {labelFor(id)}

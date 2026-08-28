@@ -166,9 +166,7 @@ export function getConsultantColumns({
     {
       accessorKey: 'email',
       header: 'Email',
-      cell: ({ row }) => (
-        <span className="block truncate text-muted-foreground">{row.original.email}</span>
-      ),
+      cell: ({ row }) => <span className="block truncate text-muted-foreground">{row.original.email}</span>,
     },
     {
       id: 'roleName',
@@ -238,10 +236,7 @@ export function getConsultantColumns({
       cell: ({ row }) => {
         const user = row.original;
         const disabled = (isSelf(user) && !isAdmin) || pendingId === user.id;
-        const options = [
-          activeStatusOption,
-          user.pendingApproval ? pendingStatusOption : inactiveStatusOption,
-        ];
+        const options = [activeStatusOption, user.pendingApproval ? pendingStatusOption : inactiveStatusOption];
         return (
           <ComboboxSelect
             title="Status"
@@ -268,8 +263,15 @@ export function getConsultantColumns({
           {
             id: 'industries',
             header: 'Industries',
-            size: 200,
+            // Wide enough for the longest real Industry name ("Banking
+            // Financial Services") to sit with real margin, not just
+            // technically fit — `flex-wrap` on the badges means a tight fit
+            // wraps instead of overflowing, so it never trips the DataGrid's
+            // own overflow-based auto-sizing (see strictMinSize's doc) and
+            // would otherwise just look cramped forever.
+            size: 260,
             enableSorting: false,
+            meta: { fillCell: true, strictMinSize: true },
             cell: ({ row }: { row: { original: Consultant } }) => {
               const user = row.original;
               const selected = user.industryIds ?? [];
@@ -306,8 +308,11 @@ export function getConsultantColumns({
           {
             id: 'specializations',
             header: 'Specializations',
-            size: 200,
+            // See the Industries column's own comment on `size` — same
+            // reasoning, same fix.
+            size: 260,
             enableSorting: false,
+            meta: { fillCell: true, strictMinSize: true },
             cell: ({ row }: { row: { original: Consultant } }) => {
               const user = row.original;
               const selected = user.specializationIds ?? [];
@@ -362,6 +367,11 @@ export function getConsultantColumns({
             header: 'Locations',
             size: 220,
             enableSorting: false,
+            // Not flagged as cramped like Industries/Specializations, but
+            // same `flex-wrap` badges — same defensive floor against a
+            // manual resize squeezing a long location name (e.g. "Negeri
+            // Sembilan") uncomfortably.
+            meta: { fillCell: true, strictMinSize: true },
             cell: ({ row }: { row: { original: Consultant } }) => {
               const user = row.original;
               const names = user.locations ?? [];
@@ -389,6 +399,7 @@ export function getConsultantColumns({
                   }
                   disabled={disabled}
                   placeholder="No locations"
+                  bare
                 />
               );
             },
@@ -400,9 +411,7 @@ export function getConsultantColumns({
       header: 'Joined',
       size: 140,
       meta: { align: 'center' },
-      cell: ({ row }) => (
-        <span className="text-muted-foreground">{formatDate(row.original.createdAt)}</span>
-      ),
+      cell: ({ row }) => <span className="text-muted-foreground">{formatDate(row.original.createdAt)}</span>,
     },
   ];
 }

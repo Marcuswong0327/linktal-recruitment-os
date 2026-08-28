@@ -109,11 +109,13 @@ interface TagMultiSelectProps {
 }
 
 /**
- * Notion-style multi-select property. Closed state shows nothing but the
- * selected tags (each with its own X to remove it directly) — a true-empty
- * cell when there's nothing selected, not a placeholder. Opening it reveals
- * a search box ("Search for an option…"), a separator, then the catalog:
- * clicking a row there toggles it on/off, same as any other Combobox list.
+ * Notion-style multi-select property. Closed state shows the selected tags
+ * (each with its own X to remove it directly); with nothing selected, a
+ * centered `+` fills the cell instead of a placeholder — a discoverable
+ * "click to add" affordance rather than a true-empty cell. Opening it
+ * reveals a search box ("Search for an option…"), a separator, then the
+ * catalog: clicking a row there toggles it on/off, same as any other
+ * Combobox list.
  */
 export function TagMultiSelect({
   title,
@@ -222,17 +224,36 @@ export function TagMultiSelect({
         disabled={disabled}
         onClick={() => setOpen(true)}
         className={cn(
-          'absolute inset-0 rounded-md outline-none transition-colors hover:bg-accent/50 disabled:pointer-events-none',
+          // `group-hover`, not `hover` — this box already spans the true
+          // cell (see the doc above), but Trigger stacks on top of it and
+          // would otherwise steal the pointer for its own, `w-full`-but-
+          // still-cell-*content*-box-bound area, only leaving this one
+          // reacting to hovers that land in the cell's own padding. Keying
+          // off TableCell's own `group` (DataGrid.tsx) instead makes a
+          // hover anywhere in the cell — padding included — light up the
+          // same, single, edge-to-edge highlight.
+          'absolute inset-0 rounded-md outline-none transition-colors group-hover:bg-accent/50 disabled:pointer-events-none',
           open && 'bg-accent/50',
         )}
       />
       <Combobox.Trigger
         aria-label={selected.length === 0 ? `Add ${title.toLowerCase()}` : undefined}
         className={cn(
-          'relative inline-flex max-w-full flex-wrap items-center gap-1 rounded-md border border-transparent px-1 py-0.5 text-left outline-none transition-colors hover:bg-accent/50 disabled:pointer-events-none disabled:opacity-50',
+          // No background/hover of its own — the catcher above (now
+          // spanning the full cell via TableCell's `group`) is the only
+          // highlight, so it isn't a smaller, visibly inset pill sitting on
+          // top of the true cell-wide one.
+          'relative flex min-h-8 w-full max-w-full flex-wrap items-center gap-1 rounded-md border border-transparent px-1 py-0.5 text-left outline-none transition-colors disabled:pointer-events-none disabled:opacity-50',
+          selected.length === 0 && 'justify-center',
           triggerClassName,
         )}
       >
+        {selected.length === 0 ? (
+          <Plus
+            aria-hidden
+            className="size-4 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
+          />
+        ) : null}
         {selected.map((value) => {
           const option = byId.get(value) ?? { value, label: value };
           return (
