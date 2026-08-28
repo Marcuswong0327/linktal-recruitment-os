@@ -67,7 +67,7 @@ export function contactRecencyClassName(iso: string | null): string {
   return 'text-foreground';
 }
 
-/** Filters committed from the search gate's action bar — CandidatesTable has no filter UI of its own; this is its entire query beyond pagination. */
+/** Filters committed from the search gate's action bar — CandidatesTable has no filter UI of its own beyond this and its own free-text search box. */
 export interface CandidateAppliedFilters {
   statuses?: CandidateStatus[];
   industryIds?: string[];
