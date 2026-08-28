@@ -150,7 +150,7 @@ export function ConsultantComboboxPopup({ byId, labelFor, footer, anchor }: Cons
                 <Combobox.Item
                   key={consultantId}
                   value={consultantId}
-                  className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                  className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                 >
                   <ConsultantAvatar consultantId={consultantId} name={consultant?.fullName} />
                   <span className="flex min-w-0 flex-1 flex-col">
@@ -160,7 +160,7 @@ export function ConsultantComboboxPopup({ byId, labelFor, footer, anchor }: Cons
                     ) : null}
                   </span>
                   <Combobox.ItemIndicator className="shrink-0">
-                    <Check className="size-4" />
+                    <Check className="size-4 !text-primary" />
                   </Combobox.ItemIndicator>
                 </Combobox.Item>
               );

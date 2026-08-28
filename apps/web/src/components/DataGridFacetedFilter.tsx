@@ -42,6 +42,17 @@ interface DataGridFacetedFilterProps {
   compact?: boolean;
   /** Disables the trigger — e.g. while a row's own mutation is in flight, or the caller lacks edit permission. */
   disabled?: boolean;
+  /**
+   * Placeholder shown when nothing's selected, e.g. "All industries" — same
+   * pattern as the other action-bar filters (Country/City/Specialization).
+   * Passing this also drops the persistent `title` prefix from inside the
+   * trigger: a caller that supplies a placeholder is, by construction, one
+   * that already shows the field's name elsewhere (e.g. a `FilterField`
+   * label above it), so repeating it inside the button too is redundant and
+   * eats into the trigger's limited width. Only used when `compact` is
+   * false; omit to keep the old title-prefixed trigger.
+   */
+  placeholder?: string;
 }
 
 export function DataGridFacetedFilter({
@@ -53,6 +64,7 @@ export function DataGridFacetedFilter({
   triggerClassName,
   compact = false,
   disabled = false,
+  placeholder,
 }: DataGridFacetedFilterProps) {
   const selectedSet = new Set(selected);
 
@@ -96,6 +108,22 @@ export function DataGridFacetedFilter({
       >
         {compact ? (
           <ListFilter className={selectedSet.size > 0 ? '' : 'opacity-60'} />
+        ) : placeholder ? (
+          // A `placeholder` caller already labels this field externally (a
+          // `FilterField` above it) — just the value/placeholder, no title
+          // prefix, same shape as LocationFilterButton/SpecializationFilterButton.
+          <>
+            <span
+              className={cn('min-w-0 flex-1 truncate text-left', selectedSet.size === 0 && 'text-muted-foreground')}
+            >
+              {selectedSet.size === 0
+                ? placeholder
+                : selectedSet.size === 1
+                  ? (options.find((o) => o.value === selected[0])?.label ?? selected[0])
+                  : `${selectedSet.size} selected`}
+            </span>
+            <ChevronDown className="ml-auto shrink-0 opacity-50" />
+          </>
         ) : (
           <>
             <span className="shrink-0">{title}</span>
@@ -137,7 +165,7 @@ export function DataGridFacetedFilter({
                         isChecked && 'border-primary bg-primary text-primary-foreground',
                       )}
                     >
-                      {isChecked ? <Check className="size-3" /> : null}
+                      {isChecked ? <Check className="size-3 !text-primary-foreground" /> : null}
                     </span>
                     {option.variant ? (
                       <Badge variant={option.variant} className="rounded-md">

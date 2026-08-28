@@ -43,6 +43,10 @@ export function JobResearchTable({
 }) {
   const router = useRouter();
   const [page, setPage] = React.useState(1);
+  // The DataGrid's own free-text box — distinct from the gate's committed
+  // filters above it (search-as-you-type, no "Search" click required), same
+  // pattern as CandidatesTable.
+  const [search, setSearch] = React.useState<string | undefined>();
   // Seeded from the gate's "Sort by" selection; a column header click can
   // still override it locally afterward, same as any other DataGrid.
   const [sortBy, setSortBy] = React.useState<GetJobResearchSortBy | undefined>(filters.sortBy);
@@ -78,6 +82,7 @@ export function JobResearchTable({
     {
       page,
       pageSize: PAGE_SIZE,
+      q: search,
       statuses: filters.statuses as GetJobResearchStatusesItem[] | undefined,
       industryIds: filters.industryIds,
       specializationIds: filters.specializationIds,
@@ -93,13 +98,14 @@ export function JobResearchTable({
   const result = data?.status === 200 ? data.data : undefined;
   const rows = useInfinitePages(result?.data, page, isFetching);
 
-  // Sorting is the only thing the grid itself still reports — search and
-  // faceted filters both live in the gate's action bar.
-  function handleQueryChange({ sorting }: DataGridQuery) {
+  // The grid itself reports search (its own free-text box) and sorting —
+  // faceted filters still live entirely in the gate's action bar.
+  function handleQueryChange({ search, sorting }: DataGridQuery) {
     const sort = sorting[0];
     const sortField = sort && sort.id in GetJobResearchSortBy ? (sort.id as GetJobResearchSortBy) : undefined;
     setSortBy(sortField);
     setSortOrder(sort?.desc ? 'desc' : 'asc');
+    setSearch(search.trim() || undefined);
     setPage(1);
   }
 
@@ -130,6 +136,7 @@ export function JobResearchTable({
       } else {
         await downloadFile(
           getExportJobResearchUrl({
+            q: search,
             statuses: filters.statuses as unknown as ExportJobResearchStatusesItem[] | undefined,
             industryIds: filters.industryIds,
             specializationIds: filters.specializationIds,
@@ -178,7 +185,7 @@ export function JobResearchTable({
       data={rows}
       isLoading={isLoading}
       isFetching={isFetching}
-      hideSearch
+      searchPlaceholder="Search job research…"
       emptyState="No job orders match these filters."
       getRowId={(r) => r.id}
       onSelectionChange={handleSelectionChange}

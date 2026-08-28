@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Combobox } from '@base-ui/react/combobox';
 import { keepPreviousData } from '@tanstack/react-query';
-import { Check, ChevronDown, ListFilter, Loader2, X } from 'lucide-react';
+import { Check, ChevronDown, ListFilter, Loader2, Plus, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -42,6 +42,17 @@ interface LocationMultiSelectProps {
   disabled?: boolean;
   placeholder?: string;
   triggerClassName?: string;
+  /**
+   * Drops the always-on `bg-input/50` field chrome in favor of a
+   * hover-only background, matching `TagMultiSelect`'s trigger — for a
+   * table-cell column (e.g. Consultants' Locations) sitting next to
+   * `TagMultiSelect`-backed columns (Industries, Specializations), where
+   * the badges should read the same way: sitting directly on the cell,
+   * not boxed in a second, always-visible pill. Leave off (default) for
+   * standalone form fields, where a visible field boundary matching
+   * `LocationCombobox`/`ConsultantCombobox` is the intent.
+   */
+  bare?: boolean;
 }
 
 /**
@@ -61,6 +72,7 @@ export function LocationMultiSelect({
   disabled = false,
   placeholder = 'Search locations…',
   triggerClassName,
+  bare = false,
 }: LocationMultiSelectProps) {
   // Tracked only for the click-catcher's own `bg-accent/50` hover-alike
   // styling below — not passed to Combobox.Root as a controlled `open` (see
@@ -123,8 +135,13 @@ export function LocationMultiSelect({
           nearest positioned ancestor up the tree, which outside a
           (`relative`) TableCell is easily the whole page shell
           (`SidebarInset`), ballooning the invisible hover/click target over
-          everything below it. */}
-      <div className="relative">
+          everything below it. `bare` skips it deliberately instead: it's
+          only ever used inside a DataGrid cell, whose own TableCell is both
+          `relative` *and* the nearby, correctly-sized ancestor this would
+          otherwise recreate — going straight to it (rather than this div's
+          own, TableCell-padding-excluded box) is what lets the catcher
+          below reach the cell's true, padding-included edges. */}
+      <div className={cn(!bare && 'relative')}>
         {/* Same full-cell overlay pattern as TagMultiSelect/ComboboxSelect —
             clicking anywhere in the field's empty space (not just directly on
             the trigger's own shrink-wrapped box) opens the picker. Trigger is
@@ -146,7 +163,12 @@ export function LocationMultiSelect({
           onClick={() => triggerRef.current?.click()}
           className={cn(
             'absolute inset-0 rounded-2xl outline-none transition-colors disabled:pointer-events-none',
-            !disabled && 'hover:bg-accent/50',
+            !disabled &&
+              // `group-hover` (keys off TableCell's own `group`, so hovering
+              // anywhere in the cell — its padding included — lights up
+              // this single, edge-to-edge box) for `bare`; plain `hover` for
+              // a standalone form field, which has no such ancestor.
+              (bare ? 'group-hover:bg-accent/50' : 'hover:bg-accent/50'),
             open && 'bg-accent/50',
           )}
         />
@@ -155,15 +177,32 @@ export function LocationMultiSelect({
           id={id}
           aria-label={selected.length === 0 ? placeholder : undefined}
           className={cn(
-            'relative flex min-h-9 w-full flex-wrap items-center gap-1 rounded-2xl border border-transparent bg-input/50 px-2 py-1.5 text-left outline-none disabled:pointer-events-none disabled:opacity-50',
+            'relative flex min-h-9 w-full flex-wrap items-center gap-1 rounded-2xl border border-transparent px-2 py-1.5 text-left outline-none transition-colors disabled:pointer-events-none disabled:opacity-50',
+            // No background/hover of its own in `bare` mode — the catcher
+            // above is the only highlight (see its own comment). A
+            // standalone form field keeps its persistent `bg-input/50`.
+            !bare && 'bg-input/50',
+            // Centers the `+` (below) dead in the cell — only while empty;
+            // populated badges stay left-aligned/wrapped as usual.
+            bare && selected.length === 0 && 'justify-center',
             triggerClassName,
           )}
         >
           {selected.length === 0 ? (
-            <span className="pointer-events-none text-sm text-muted-foreground">{placeholder}</span>
+            bare ? (
+              <Plus
+                aria-hidden
+                className="size-4 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
+              />
+            ) : (
+              <span className="pointer-events-none text-sm text-muted-foreground">{placeholder}</span>
+            )
           ) : (
             selected.map((option) => (
-              <Badge key={option.id} className="gap-1 rounded-md pr-1 font-normal">
+              // text-sm, not Badge's own text-xs default — matches the
+              // placeholder's own size (see the `span` above) so an empty
+              // vs. populated trigger doesn't visibly change type size.
+              <Badge key={option.id} className="gap-1 rounded-md pr-1 text-sm font-normal">
                 {option.name}
                 {option.level ? (
                   <span className="text-[10px] tracking-wide text-muted-foreground uppercase">
@@ -220,7 +259,7 @@ export function LocationMultiSelect({
                   <Combobox.Item
                     key={valueId}
                     value={valueId}
-                    className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   >
                     <span className="min-w-0 flex-1 truncate">{location?.name ?? valueId}</span>
                     {location ? (
@@ -263,6 +302,8 @@ export interface LocationFilterButtonProps {
   placeholder?: string;
   /** Resolves an already-selected id to a display name when it's not in the current search results — same reasoning as `LocationFilter`'s `labelFor`. Only used when `compact` is false. */
   labelFor?: (id: string) => string;
+  /** Narrows results to nodes at or beneath this location (e.g. a selected Country), same as the API's `underId`. Omit for an unrestricted search. */
+  underId?: string;
 }
 
 /**
@@ -281,6 +322,7 @@ export function LocationFilterButton({
   compact = true,
   placeholder,
   labelFor,
+  underId,
 }: LocationFilterButtonProps) {
   const [inputValue, setInputValue] = React.useState('');
   const [debouncedQuery, setDebouncedQuery] = React.useState('');
@@ -292,12 +334,19 @@ export function LocationFilterButton({
 
   const searchEnabled = browsable || debouncedQuery.length >= MIN_QUERY_LENGTH;
   const { data, isFetching } = useGetLocations(
-    { q: debouncedQuery || undefined, level, take: 20 },
+    { q: debouncedQuery || undefined, level, underId, take: 20 },
     { query: { enabled: searchEnabled, placeholderData: keepPreviousData } },
   );
   const results: LocationEntity[] = searchEnabled && data?.status === 200 ? data.data : [];
   const resultsById = React.useMemo(() => new Map(results.map((r) => [r.id, r])), [results]);
-  const items = React.useMemo(() => results.map((r) => r.id), [results]);
+  // Selected ids not in the current search results still need to render as a
+  // checked row — otherwise a selection made from a different query (or
+  // before the popup was ever opened) is invisible once the user reopens it.
+  const items = React.useMemo(() => {
+    const ids = results.map((r) => r.id);
+    const idSet = new Set(ids);
+    return [...ids, ...selected.filter((id) => !idSet.has(id))];
+  }, [results, selected]);
 
   React.useEffect(() => {
     if (!onResolve) return;
@@ -374,7 +423,7 @@ export function LocationFilterButton({
                   <Combobox.Item
                     key={id}
                     value={id}
-                    className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   >
                     <span
                       className={cn(
@@ -382,9 +431,9 @@ export function LocationFilterButton({
                         checked && 'border-primary bg-primary text-primary-foreground',
                       )}
                     >
-                      {checked ? <Check className="size-3" /> : null}
+                      {checked ? <Check className="size-3 !text-primary-foreground" /> : null}
                     </span>
-                    <span className="min-w-0 flex-1 truncate">{location?.name ?? id}</span>
+                    <span className="min-w-0 flex-1 truncate">{location?.name ?? labelFor?.(id) ?? id}</span>
                     {location ? (
                       <span className="shrink-0 text-xs text-muted-foreground">{LEVEL_LABEL[location.level]}</span>
                     ) : null}

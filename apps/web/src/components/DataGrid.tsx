@@ -126,6 +126,27 @@ export interface DataGridColumnMeta {
    * to their own natural size.
    */
   grow?: boolean;
+  /**
+   * Stretches this column's cell-content wrapper to the cell's full
+   * (already-fixed) width, instead of the default shrink-to-fit sizing that
+   * lets `[data-measure-column]` report a column's true natural content
+   * width (see the sizing passes below). Needed for any cell whose content
+   * wants to center itself horizontally in the cell — e.g. `TagMultiSelect`/
+   * `LocationMultiSelect`'s empty-state `+`, which otherwise sits pinned to
+   * the left: `justify-center` on a `flex w-full` trigger only has room to
+   * center within if *something* upstream is actually cell-width, and the
+   * shrink-to-fit wrapper never is (it sizes to content, i.e. to the `+`
+   * icon itself). Requires a hardcoded `size`: pairing this with a column
+   * whose `size` itself falls back to `measured` would let the stretched
+   * wrapper's own width feed back into that same `measured` value. Pairing
+   * with `strictMinSize` (whose *floor* reads `measured`, not `size`) is
+   * fine, and often wanted together — the floor can only ever be pushed up
+   * to this column's own hardcoded `size` by the stretch, or higher still by
+   * a genuinely-unwrappable overflow (a single badge wider than the
+   * column), which is exactly the case `strictMinSize` exists to protect
+   * against.
+   */
+  fillCell?: boolean;
 }
 
 function columnAlignClass(meta: unknown): string | undefined {
@@ -218,15 +239,36 @@ function DataGridBodyRowInner<TData>({
       onMouseEnter={enableRowRangeSelect ? () => onMouseEnterRow(row) : undefined}
       onContextMenu={hasContextMenu ? () => onRowContextMenu(row) : undefined}
       onClick={onRowClick ? () => onRowClick(row) : undefined}
-      className={cn(onRowClick && 'cursor-pointer')}
+      // `group` (only when a row click actually navigates somewhere) so a
+      // column's own cell content can key a hover affordance — e.g.
+      // underlining a name — off hovering anywhere in the row, not just that
+      // cell.
+      className={cn(onRowClick && 'group cursor-pointer')}
     >
       {row.getVisibleCells().map((cell) => (
         <TableCell
           key={cell.id}
-          className={columnAlignClass(cell.column.columnDef.meta)}
-          style={isVirtual ? { display: 'flex', width: cell.column.getSize() } : undefined}
+          // `group` so cell content can key a hover reveal (e.g. the
+          // Industries/Specializations/Locations empty-state `+`) off
+          // hovering the *whole* cell, padding included — not just its own,
+          // narrower inner box.
+          className={cn('group', columnAlignClass(cell.column.columnDef.meta))}
+          // `align-middle` (Tailwind, in TableCell's own className) is a
+          // `vertical-align` rule — a no-op once `display: 'flex'` here
+          // takes the cell out of table layout. `alignItems: 'center'`
+          // recreates the same effect: without it, flex's default `stretch`
+          // leaves single-line content pinned to the top of whatever height
+          // a taller sibling cell forces the row to, instead of centered in
+          // it.
+          style={isVirtual ? { display: 'flex', width: cell.column.getSize(), alignItems: 'center' } : undefined}
         >
-          <span data-measure-column={cell.column.id} className="inline-block max-w-full">
+          <span
+            data-measure-column={cell.column.id}
+            className={cn(
+              'inline-block max-w-full',
+              (cell.column.columnDef.meta as DataGridColumnMeta | undefined)?.fillCell && 'w-full flex-1',
+            )}
+          >
             {flexRender(cell.column.columnDef.cell, cell.getContext())}
           </span>
         </TableCell>
@@ -1424,6 +1466,18 @@ export function DataGrid<TData>({
             minWidth: '100%',
             ...(isVirtual ? { display: 'grid' } : {}),
           }}
+          overlay={
+            !isLoading && rows.length === 0 ? (
+              // A `<div>`, not `<p>` — `emptyState` is caller-supplied and
+              // routinely nests its own block elements (e.g. CandidatesTable's
+              // multi-line hint), which isn't valid inside a `<p>`.
+              <div className="max-w-sm text-center text-sm text-muted-foreground">
+                {!hasData && !isFiltered
+                  ? (emptyState ?? 'No records yet.')
+                  : 'No results match your search.'}
+              </div>
+            ) : null
+          }
           className={cn(
             !isVirtual && 'table-fixed',
             '[&_td]:border-r [&_th]:border-r [&_td:last-child]:border-r-0 [&_th:last-child]:border-r-0 [&_td]:py-1.5',
@@ -1630,24 +1684,19 @@ export function DataGrid<TData>({
                     <TableCell
                       colSpan={totalColumns}
                       className="py-3 text-center text-xs text-muted-foreground"
+                      // `colSpan` only stretches the cell under real table
+                      // layout — virtualized rows make their `TableRow` a
+                      // flex container (for absolute positioning), which
+                      // turns colSpan into a no-op and left-aligns this cell
+                      // at its shrink-to-fit content width instead.
+                      style={isVirtual ? { display: 'flex', width: '100%', justifyContent: 'center' } : undefined}
                     >
                       -- END OF LIST --
                     </TableCell>
                   </TableRow>
                 ) : null}
               </>
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={totalColumns}
-                  className="h-32 text-center text-sm text-muted-foreground"
-                >
-                  {!hasData && !isFiltered
-                    ? (emptyState ?? 'No records yet.')
-                    : 'No results match your search.'}
-                </TableCell>
-              </TableRow>
-            )}
+            ) : null}
           </TableBody>
         </Table>
       </div>

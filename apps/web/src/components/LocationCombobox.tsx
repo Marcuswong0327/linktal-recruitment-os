@@ -110,7 +110,7 @@ export function LocationCombobox({ id, value, onChange, disabled = false, placeh
                   <Combobox.Item
                     key={valueId}
                     value={valueId}
-                    className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   >
                     <span className="min-w-0 flex-1 truncate">{location?.name ?? valueId}</span>
                     {location ? (

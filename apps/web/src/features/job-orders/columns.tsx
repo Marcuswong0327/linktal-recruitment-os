@@ -9,7 +9,14 @@ import { ConsultantAvatar } from '@/components/ConsultantCombobox';
 import { isPipelineDragEnabled } from '@/lib/feature-flags';
 import { PipelineSheetTrigger } from './PipelineSheet';
 import type { JobOrder } from './schema';
-import { jobOrderQualityLabels, jobOrderStatusLabels, qualityVariant, statusVariant } from './schema';
+import {
+  jobOrderQualityLabels,
+  jobOrderStatusLabels,
+  priorityLabels,
+  priorityVariant,
+  qualityVariant,
+  statusVariant,
+} from './schema';
 
 const dateFormatter = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
 
@@ -49,10 +56,41 @@ export function getJobOrderColumns({ clientName }: JobOrderColumnsOptions): Colu
       ),
     },
     {
+      // 'priorityLevel' — must exist so JobOrdersTable's header filter for
+      // this columnId (see jobOrderFilters) has a real column to attach to;
+      // without it, TanStack logs "Column with id 'priorityLevel' does not
+      // exist" the moment any filter is applied. Not a GetJobOrdersSortBy
+      // field, so unsortable, same as Status/Quality above.
+      accessorKey: 'priorityLevel',
+      header: 'Priority',
+      enableSorting: false,
+      size: 100,
+      meta: { align: 'center' },
+      cell: ({ row }) => {
+        const { priorityLevel } = row.original;
+        if (priorityLevel == null) return <span className="text-muted-foreground">—</span>;
+        return <Badge variant={priorityVariant[priorityLevel]}>{priorityLabels[priorityLevel]}</Badge>;
+      },
+    },
+    {
       accessorKey: 'clientId',
       header: 'Client',
       enableSorting: false,
-      cell: ({ row }) => <span>{clientName(row.original.clientId)}</span>,
+      cell: ({ row }) => {
+        const { clientId } = row.original;
+        return (
+          <Link
+            href={`/companies/${clientId}?from=job-orders`}
+            onClick={(e) => e.stopPropagation()}
+            title={`${clientName(clientId)} — opens its own page`}
+            className="flex min-w-0 items-center gap-1 truncate hover:underline"
+            data-no-row-drag
+          >
+            <span className="truncate">{clientName(clientId)}</span>
+            <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" />
+          </Link>
+        );
+      },
     },
     {
       accessorKey: 'jobTitle',

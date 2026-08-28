@@ -77,6 +77,10 @@ export function CandidatesTable({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
+  // The DataGrid's own free-text box — distinct from the gate's committed
+  // filters above it (search-as-you-type, no "Search" click required), same
+  // pattern as ConsultantsTable.
+  const [search, setSearch] = React.useState<string | undefined>();
   // Seeded from the gate's "Sort by" selection; a column header click can
   // still override it locally afterward (only Last Contacted At's header is
   // sortable — see candidateColumns).
@@ -108,6 +112,7 @@ export function CandidatesTable({
     {
       page,
       pageSize: PAGE_SIZE,
+      q: search,
       statuses: filters.statuses as GetCandidatesStatusesItem[] | undefined,
       industryIds: filters.industryIds,
       jobRoleTypeIds: filters.jobRoleTypeIds,
@@ -150,6 +155,7 @@ export function CandidatesTable({
           getCandidates({
             page: p,
             pageSize: fetchPageSize,
+            q: search,
             statuses: filters.statuses as GetCandidatesStatusesItem[] | undefined,
             industryIds: filters.industryIds,
             jobRoleTypeIds: filters.jobRoleTypeIds,
@@ -174,16 +180,15 @@ export function CandidatesTable({
     setSelectAllMode(false);
   }
 
-  // Sorting is the only thing the grid itself still reports — search and
-  // faceted filters both live in the gate's action bar. Only Last Contacted
-  // At's column header is sortable (see candidateColumns), so this is
-  // effectively single-purpose, but stays generic like CompaniesTable's
-  // equivalent handler.
-  function handleQueryChange({ sorting }: DataGridQuery) {
+  // The grid itself reports search (its own free-text box) and sorting —
+  // faceted filters still live entirely in the gate's action bar. Only Last
+  // Contacted At's column header is sortable (see candidateColumns).
+  function handleQueryChange({ search, sorting }: DataGridQuery) {
     const sort = sorting[0];
     const sortField = sort && sort.id in GetCandidatesSortBy ? (sort.id as GetCandidatesSortBy) : undefined;
     setSortBy(sortField);
     setSortOrder(sort?.desc ? 'desc' : 'asc');
+    setSearch(search.trim() || undefined);
     setPage(1);
   }
 
@@ -231,6 +236,7 @@ export function CandidatesTable({
       } else {
         await downloadFile(
           getExportCandidatesUrl({
+            q: search,
             statuses: filters.statuses as GetCandidatesStatusesItem[] | undefined,
             industryIds: filters.industryIds,
             jobRoleTypeIds: filters.jobRoleTypeIds,
@@ -320,7 +326,7 @@ export function CandidatesTable({
         data={candidates}
         isLoading={isLoading}
         isFetching={isFetching}
-        hideSearch
+        searchPlaceholder="Search candidates…"
         getRowId={(c) => c.id}
         onRowClick={(candidate) => router.push(`/candidates/${candidate.id}`)}
         onSelectionChange={handleSelectionChange}
