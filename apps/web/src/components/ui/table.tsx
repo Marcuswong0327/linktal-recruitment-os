@@ -72,12 +72,13 @@ function TableRow({ className, ...props }: React.ComponentProps<'tr'>) {
     <tr
       data-slot="table-row"
       className={cn(
-        'border-b border-border transition-colors data-[state=selected]:bg-primary/10 data-[state=selected]:ring-1 data-[state=selected]:ring-inset data-[state=selected]:ring-primary/50 data-[state=selected]:hover:bg-primary/15',
-        // Keeps the tbody's even-row stripe going through the selected state
-        // instead of flattening into one solid block — same idea, tinted
-        // primary instead of muted, at higher specificity so it wins over
-        // the plain data-[state=selected] rule above on even rows.
-        '[&:nth-child(even)]:data-[state=selected]:bg-primary/15 [&:nth-child(even)]:data-[state=selected]:hover:bg-primary/20',
+        'border-b border-border transition-colors hover:bg-muted data-[state=selected]:bg-primary/10 data-[state=selected]:ring-1 data-[state=selected]:ring-inset data-[state=selected]:ring-primary/50 data-[state=selected]:hover:bg-primary/15',
+        // Keeps the tbody's even-row stripe going through the hover/selected
+        // states instead of flattening into one solid block — same idea,
+        // tinted muted/primary respectively, at higher specificity (the
+        // extra `:nth-child(even)` term) so these win over the plain rules
+        // above on even rows, which the zebra stripe would otherwise beat.
+        '[&:nth-child(even)]:hover:bg-muted [&:nth-child(even)]:data-[state=selected]:bg-primary/15 [&:nth-child(even)]:data-[state=selected]:hover:bg-primary/20',
         className,
       )}
       {...props}
