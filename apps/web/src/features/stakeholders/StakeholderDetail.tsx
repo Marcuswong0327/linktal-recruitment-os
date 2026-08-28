@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   ChevronDown,
@@ -105,6 +105,21 @@ function initials(name: string) {
     .toUpperCase();
 }
 
+// The "Back" button normally returns to the Stakeholders list, but a
+// stakeholder can also be reached from its Company's own Stakeholders card
+// — in that case Back should return there instead of a list the visitor
+// never opened. Origin comes in as `?from=company` on the link that brought
+// them here, not browser history, so a page refresh or a bookmark keeps
+// behaving the same way. Mirrors CompanyDetail's own useBackTarget.
+function useBackTarget(stakeholder?: Pick<StakeholderEntity, 'clientId' | 'companyName'>) {
+  const searchParams = useSearchParams();
+  const from = searchParams.get('from');
+  if (from === 'company' && stakeholder?.clientId) {
+    return { href: `/companies/${stakeholder.clientId}`, label: stakeholder.companyName ?? 'Company' };
+  }
+  return { href: '/stakeholders', label: 'Stakeholders' };
+}
+
 /** One icon per contact method (Email/Mobile/LinkedIn) — click opens it (Mobile copies instead, see ContactCopyButton). A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. Mirrors CompanyDetail's LinkIconButton for its Website field. */
 function ContactIconButton({
   icon: Icon,
@@ -185,6 +200,7 @@ export function StakeholderDetail({
 }) {
   const { data, isLoading, isError, error } = useGetStakeholder(id);
   const stakeholder = data?.status === 200 ? data.data : undefined;
+  const backTarget = useBackTarget(stakeholder);
 
   if (isLoading) {
     return (
@@ -205,9 +221,9 @@ export function StakeholderDetail({
           </p>
         </div>
         <div>
-          <Button variant="outline" nativeButton={false} render={<Link href="/stakeholders" />}>
+          <Button variant="outline" nativeButton={false} render={<Link href={backTarget.href} />}>
             <ArrowLeft />
-            Back to stakeholders
+            Back to {backTarget.label.toLowerCase()}
           </Button>
         </div>
       </PageLayout>
@@ -236,6 +252,7 @@ function StakeholderEditForm({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const backTarget = useBackTarget(stakeholder);
 
   const [firstName, setFirstName] = React.useState(stakeholder.firstName ?? '');
   const [lastName, setLastName] = React.useState(stakeholder.lastName ?? '');
@@ -404,7 +421,7 @@ function StakeholderEditForm({
       onCommitted: () => queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() }),
       onUndo: () => queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() }),
     });
-    router.push('/stakeholders');
+    router.push(backTarget.href);
   }
 
   const currentStatus = stakeholderStatusOptions.find((o) => o.value === stakeholder.status)!;
@@ -430,11 +447,11 @@ function StakeholderEditForm({
           variant="ghost"
           size="sm"
           nativeButton={false}
-          render={<Link href="/stakeholders" />}
+          render={<Link href={backTarget.href} />}
           className="-ml-2 self-start text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft />
-          Back to Stakeholders
+          Back to {backTarget.label}
         </Button>
 
         <div className="flex flex-wrap items-center justify-between gap-4">

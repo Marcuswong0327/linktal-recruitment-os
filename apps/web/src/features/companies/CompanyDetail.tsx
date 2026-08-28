@@ -911,7 +911,7 @@ function CompanyEditForm({
                         <TableRow key={s.id} className="divide-x divide-border">
                           <TableCell className="whitespace-normal">
                             <Link
-                              href={`/stakeholders/${s.id}`}
+                              href={`/stakeholders/${s.id}?from=company`}
                               className="text-foreground hover:underline"
                             >
                               {[s.firstName, s.lastName].filter(Boolean).join(' ') ||

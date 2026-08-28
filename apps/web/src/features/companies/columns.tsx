@@ -49,7 +49,9 @@ export function getCompanyColumns({
             <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
               {initials(client.companyName)}
             </span>
-            <span className="truncate font-medium text-foreground">{client.companyName}</span>
+            <span className="truncate font-medium text-foreground group-hover:underline">
+              {client.companyName}
+            </span>
           </div>
         );
       },

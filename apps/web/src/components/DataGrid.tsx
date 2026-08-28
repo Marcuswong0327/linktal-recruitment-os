@@ -239,7 +239,11 @@ function DataGridBodyRowInner<TData>({
       onMouseEnter={enableRowRangeSelect ? () => onMouseEnterRow(row) : undefined}
       onContextMenu={hasContextMenu ? () => onRowContextMenu(row) : undefined}
       onClick={onRowClick ? () => onRowClick(row) : undefined}
-      className={cn(onRowClick && 'cursor-pointer')}
+      // `group` (only when a row click actually navigates somewhere) so a
+      // column's own cell content can key a hover affordance — e.g.
+      // underlining a name — off hovering anywhere in the row, not just that
+      // cell.
+      className={cn(onRowClick && 'group cursor-pointer')}
     >
       {row.getVisibleCells().map((cell) => (
         <TableCell
