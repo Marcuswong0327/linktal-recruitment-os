@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Check, Mail, Phone, Plus, X } from 'lucide-react';
+import { Check, Mail, Phone, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -18,7 +18,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { CandidateCombobox } from '@/components/CandidateCombobox';
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { LinkedinIcon } from '@/components/BrandIcons';
+import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { cn } from '@/lib/utils';
 import { getGetCandidatesQueryKey } from '@/lib/api/generated/candidates/candidates';
 import {
@@ -40,6 +42,7 @@ import {
 import {
   getGetSubmissionsQueryKey,
   useCreateSubmission,
+  useDeleteSubmission,
   useUpdateSubmission,
 } from '@/lib/api/generated/submissions/submissions';
 import type {
@@ -251,6 +254,7 @@ function PipelineRow({
   onAccept,
   onDecline,
   onStartDateChange,
+  onRemove,
   saving,
 }: {
   index: number;
@@ -263,6 +267,7 @@ function PipelineRow({
   onAccept: () => void;
   onDecline: (value: boolean | null) => void;
   onStartDateChange: (date: string) => void;
+  onRemove: () => void;
   saving: boolean;
 }) {
   // Each stage is its own tri-state column (null = undecided) — not derived
@@ -367,6 +372,18 @@ function PipelineRow({
           ) : null}
         </div>
       </TableCell>
+      <TableCell>
+        <button
+          type="button"
+          disabled={saving || accepted}
+          onClick={onRemove}
+          title={accepted ? "Can't remove a placed candidate" : 'Remove from pipeline'}
+          aria-label="Remove from pipeline"
+          className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+      </TableCell>
     </TableRow>
   );
 }
@@ -451,6 +468,21 @@ export function JobOrderPipelineCard({
       onError: (err) => toast.error(err.message || 'Failed to submit'),
     },
   });
+
+  const [confirmingRemove, setConfirmingRemove] = React.useState<JobOrderPipelineCandidateEntity | null>(null);
+  const deleteSubmission = useDeleteSubmission();
+
+  function handleRemove(row: JobOrderPipelineCandidateEntity) {
+    setConfirmingRemove(null);
+    // No restore endpoint for Submission — delayed mode: nothing is sent to
+    // the server until the undo window elapses, so Undo is exact.
+    deleteWithUndo({
+      label: `${row.candidateName ?? 'this candidate'} from the pipeline`,
+      deleteFn: () => deleteSubmission.mutateAsync({ id: row.submissionId }),
+      onCommitted: invalidateAll,
+      onUndo: invalidateAll,
+    });
+  }
 
   function handleSubmitCandidate() {
     if (!pickerValue) return;
@@ -553,6 +585,7 @@ export function JobOrderPipelineCard({
                   <TableHead>Client Shortlisted to Interview</TableHead>
                   <TableHead>Interview Date &amp; Outcome</TableHead>
                   <TableHead>CDD Accepted &amp; Starting Date</TableHead>
+                  <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -622,6 +655,7 @@ export function JobOrderPipelineCard({
                       if (placement)
                         updatePlacement.mutate({ id: placement.id, data: { startDate: date } });
                     }}
+                    onRemove={() => setConfirmingRemove(row)}
                   />
                 ))}
               </TableBody>
@@ -629,6 +663,15 @@ export function JobOrderPipelineCard({
           </div>
         )}
       </CardContent>
+
+      <ConfirmDeleteDialog
+        open={confirmingRemove !== null}
+        onOpenChange={(open) => !open && setConfirmingRemove(null)}
+        title="Remove from pipeline?"
+        description="You can undo this from the toast right after, or it's gone for good."
+        confirmLabel="Remove"
+        onConfirm={() => confirmingRemove && handleRemove(confirmingRemove)}
+      />
     </Card>
   );
 }
