@@ -142,6 +142,17 @@ const BACK_TARGETS: Record<string, { href: string; label: string }> = {
 function useBackTarget() {
   const searchParams = useSearchParams();
   const from = searchParams.get('from');
+  // A specific Job Order's Company link (JobOrderDetail) carries its own id
+  // (and title, for the button label) instead of a static target — unlike
+  // the list-level `from=job-orders`, this returns to the exact detail page
+  // the visitor came from, not the list.
+  if (from === 'job-order') {
+    const jobOrderId = searchParams.get('jobOrderId');
+    const jobOrderTitle = searchParams.get('jobOrderTitle');
+    if (jobOrderId) {
+      return { href: `/job-orders/${jobOrderId}`, label: jobOrderTitle || 'Job Order' };
+    }
+  }
   return (from && BACK_TARGETS[from]) || { href: '/companies', label: 'Companies' };
 }
 
