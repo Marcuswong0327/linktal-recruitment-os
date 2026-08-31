@@ -11,7 +11,7 @@ export interface CreateStakeholderDto {
   /** Client ID this stakeholder belongs to */
   clientId: string;
   /** First name */
-  firstName?: string;
+  firstName: string;
   /** Last name */
   lastName?: string;
   /** Job title ID (see /job-titles) — the company's own words for the role */

@@ -8,6 +8,7 @@ import { keepPreviousData, useQueries, useQueryClient } from '@tanstack/react-qu
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { TableBody } from '@/components/ui/table';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +28,7 @@ import {
   ConsultantFilterButton,
   useConsultantLookup,
 } from '@/components/ConsultantCombobox';
+import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
 import { getGetClientQueryOptions, useGetClients } from '@/lib/api/generated/clients/clients';
@@ -141,6 +143,13 @@ export function JobOrdersTable({
     try {
       const res = await createJobOrderRequest({ clientId: values.clientId, jobTitleId: values.jobTitleId });
       if (res.status !== 201) throw new Error('Failed to create job order');
+      // Reset to page 1, not just invalidate — since this table went
+      // infinite-scroll, a new row can shift every row's position across
+      // whatever later pages are already loaded via useInfinitePages, and
+      // invalidating alone only refetches the currently-mounted page,
+      // leaving the rest stale and misaligned (duplicate ids once
+      // flattened — see the identical fix on StakeholdersTable's create).
+      setPage(1);
       queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
       toast.success(`${res.data.jobTitle} added`);
       setQuickAddOpen(false);
@@ -183,7 +192,7 @@ export function JobOrdersTable({
   );
 
   const result = data?.status === 200 ? data.data : undefined;
-  const jobOrders = result?.data ?? [];
+  const jobOrders = useInfinitePages(result?.data, page, isFetching);
 
   // Client-side join: the API returns clientId only. GET /clients is capped
   // at pageSize=100 server-side (query-clients.dto.ts) while the client
@@ -343,31 +352,33 @@ export function JobOrdersTable({
         isFetching={isFetching}
         searchPlaceholder="Search job orders…"
         filters={jobOrderFilters}
-        // Size to actual content instead of stretching to fill leftover
-        // viewport height when there aren't enough rows — see DataGrid's
-        // fillHeight doc.
-        fillHeight={false}
         emptyState="No job orders yet. Create one against a client to get started."
         getRowId={(j) => j.id}
         enableRowRangeSelect
         hideSelectColumn
         onSelectionChange={handleSelectionChange}
         // Issue #131 — Client + Role only; everything else is filled in
-        // later from the created job order's own detail page. Renders as
-        // the actual last row in the grid, right before "-- END OF LIST --".
-        trailingRow={(colSpan) => (
-          <JobOrderQuickAddRow
-            colSpan={colSpan}
-            open={quickAddOpen}
-            onOpenChange={setQuickAddOpen}
-            triggerDisabled={!canCreate}
-            clients={clients}
-            jobTitles={jobTitles}
-            onCreateJobTitle={handleCreateJobTitle}
-            isSaving={isQuickAdding}
-            onSave={handleQuickAdd}
-          />
-        )}
+        // later from the created job order's own detail page. Floats over
+        // the grid's bottom edge rather than sitting in the row model or
+        // pushing new content below the table — sidesteps the whole
+        // virtualization/height-fighting problem entirely.
+        bottomOverlay={
+          <table className="w-full">
+            <TableBody>
+              <JobOrderQuickAddRow
+                colSpan={1}
+                open={quickAddOpen}
+                onOpenChange={setQuickAddOpen}
+                triggerDisabled={!canCreate}
+                clients={clients}
+                jobTitles={jobTitles}
+                onCreateJobTitle={handleCreateJobTitle}
+                isSaving={isQuickAdding}
+                onSave={handleQuickAdd}
+              />
+            </TableBody>
+          </table>
+        }
         toolbar={
           <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
             <Button size="lg" variant="outline" onClick={handleExport} disabled={isExporting}>
@@ -497,6 +508,8 @@ export function JobOrdersTable({
           pageCount: result?.pageCount ?? 1,
           onPageChange: setPage,
           onQueryChange: handleQueryChange,
+          infiniteScroll: true,
+          isFetchingNextPage: isFetching && page > 1,
         }}
       />
 

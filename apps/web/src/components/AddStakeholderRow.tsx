@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 
+import { ClientCombobox } from '@/components/ClientCombobox';
 import { InlineAddRow } from '@/components/InlineAddRow';
 import { Input } from '@/components/ui/input';
 import { CreatableCombobox, type CreatableComboboxOption } from '@/components/CreatableCombobox';
@@ -9,8 +10,10 @@ import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
 import { accuracyOptions } from '@/features/stakeholders/columns';
+import type { ClientEntity } from '@/lib/api/generated/types';
 
 export interface AddStakeholderValues {
+  clientId: string;
   firstName: string;
   lastName: string;
   jobTitleId: string;
@@ -28,6 +31,15 @@ interface AddStakeholderRowProps {
   colSpan: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  triggerDisabled?: boolean;
+  /**
+   * Company roster — passing this renders a required "Company" picker, for
+   * callers not already scoped to one company (e.g. the standalone
+   * Stakeholders list). Omit it (as CompanyDetail's own stakeholders
+   * sub-table does) to leave `clientId` out of the form entirely; the caller
+   * sets it itself from page context.
+   */
+  clients?: ClientEntity[];
   roleTypes: CreatableComboboxOption[];
   onCreateRoleType: (name: string) => Promise<CreatableComboboxOption>;
   jobTitles: CreatableComboboxOption[];
@@ -37,6 +49,7 @@ interface AddStakeholderRowProps {
 }
 
 const emptyValues: AddStakeholderValues = {
+  clientId: '',
   firstName: '',
   lastName: '',
   jobTitleId: '',
@@ -49,11 +62,19 @@ const emptyValues: AddStakeholderValues = {
   inaccurateReason: '',
 };
 
-/** Add a new stakeholder for this company — inline row on the company detail page's Stakeholders table. `clientId` isn't collected here since it's always this company. */
+/**
+ * Add a new stakeholder — reused as CompanyDetail's own "add a stakeholder
+ * for this company" sub-table row (no `clients` prop; `clientId` isn't
+ * collected here since it's always this company) and as the standalone
+ * Stakeholders list's quick-add row (`clients` passed, Company + Name are
+ * the two critical fields — see issue #131).
+ */
 export function AddStakeholderRow({
   colSpan,
   open,
   onOpenChange,
+  triggerDisabled,
+  clients,
   roleTypes,
   onCreateRoleType,
   jobTitles,
@@ -72,18 +93,57 @@ export function AddStakeholderRow({
     setValues((v) => ({ ...v, [key]: value }));
   }
 
+  // Standalone Stakeholders list (`clients` passed): Company + Name only,
+  // typed directly into the row (Notion-style) — every other field here is
+  // "rest optional… fill in later via detail view" per issue #131, so it
+  // isn't worth surfacing at all in the quick-add. CompanyDetail's own
+  // sub-table (no `clients`) keeps the full stacked form — `clientId` is
+  // implicit there, but the rest of these fields are genuinely meant to be
+  // set at add-time for that flow.
+  if (clients) {
+    return (
+      <InlineAddRow
+        colSpan={colSpan}
+        open={open}
+        onOpenChange={onOpenChange}
+        triggerDisabled={triggerDisabled}
+        triggerLabel="Add a new stakeholder"
+        isSaving={isSaving}
+        onSave={() => onSave(values)}
+        canSave={values.firstName !== '' && values.clientId !== ''}
+        saveLabel="Add stakeholder"
+        layout="inline"
+      >
+        <ClientCombobox
+          value={values.clientId}
+          onValueChange={(id) => set('clientId', id)}
+          clients={clients}
+          className="w-44"
+        />
+        <Input
+          value={values.firstName}
+          onChange={(e) => set('firstName', e.target.value)}
+          placeholder="Name"
+          className="w-40"
+        />
+      </InlineAddRow>
+    );
+  }
+
   return (
     <InlineAddRow
       colSpan={colSpan}
       open={open}
       onOpenChange={onOpenChange}
+      triggerDisabled={triggerDisabled}
       triggerLabel="Add a new stakeholder"
       isSaving={isSaving}
       onSave={() => onSave(values)}
+      canSave={values.firstName !== ''}
       saveLabel="Add stakeholder"
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <FormField label="First name" htmlFor="stakeholder-first-name">
+        <FormField label="First name" htmlFor="stakeholder-first-name" required>
           <Input
             id="stakeholder-first-name"
             value={values.firstName}

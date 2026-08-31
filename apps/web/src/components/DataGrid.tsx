@@ -354,16 +354,12 @@ interface DataGridProps<TData> {
   /** Shown when there are zero rows (before filtering). */
   emptyState?: React.ReactNode;
   /**
-   * Rendered as the last row in the table body, right before the
-   * "-- END OF LIST --" marker on the final page — e.g. an `InlineAddRow`
-   * quick-add trigger. Called with the grid's actual column count (accounting
-   * for the select column etc.) to pass straight through as `colSpan`. Must
-   * return a `<TableRow>` (or fragment of them); DataGrid doesn't wrap it.
-   * Not supported together with `server.infiniteScroll` (virtualized rows
-   * are absolutely positioned by row index, which this row doesn't
-   * participate in) — only render it in paginated/non-virtual mode.
+   * Floats over the bottom edge of the grid, pinned in place regardless of
+   * scroll position or row virtualization — e.g. a quick-add trigger. Purely
+   * a visual overlay: doesn't participate in the row model, doesn't affect
+   * table height, works the same in paginated and infinite-scroll mode.
    */
-  trailingRow?: (colSpan: number) => React.ReactNode;
+  bottomOverlay?: React.ReactNode;
   /** Renders shimmer rows instead of data — use while the query is fetching. */
   isLoading?: boolean;
   /**
@@ -446,7 +442,7 @@ export function DataGrid<TData>({
   footerActions,
   onRowClick,
   emptyState,
-  trailingRow,
+  bottomOverlay,
   isLoading = false,
   isFetching = false,
   skeletonRows = 8,
@@ -1456,7 +1452,10 @@ export function DataGrid<TData>({
       >
       <div
         ref={gridContainerRef}
-        className={cn('overflow-hidden rounded-xl border border-border bg-card', fillHeight && 'min-h-0 flex-1')}
+        className={cn(
+          'relative overflow-hidden rounded-xl border border-border bg-card',
+          fillHeight && 'min-h-0 flex-1',
+        )}
       >
         {/* Vertical gridlines + tight rows for the spreadsheet look.
             table-fixed: widths come from the header row (header.getSize(),
@@ -1616,13 +1615,7 @@ export function DataGrid<TData>({
           >
             {isLoading ? (
               renderSkeletonRows(skeletonRows, 'skeleton', isVirtual)
-            ) : rows.length === 0 ? (
-              // Zero rows: `emptyState` renders as an overlay on the Table
-              // itself (see `overlay` prop above), so this is just the
-              // trailing row alone — e.g. a quick-add trigger still needs to
-              // be reachable on an otherwise-empty list.
-              (!isVirtual ? trailingRow?.(totalColumns) : null)
-            ) : (
+            ) : rows.length > 0 ? (
               <>
                 {isVirtual
                   ? rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -1666,7 +1659,6 @@ export function DataGrid<TData>({
                         isVirtual={false}
                       />
                     ))}
-                {!isVirtual ? trailingRow?.(totalColumns) : null}
                 {server?.infiniteScroll && server.page < server.pageCount && server.isFetchingNextPage
                   ? // Full skeleton rows, not a bare spinner — see
                     // renderSkeletonRows' doc for why. Capped well under
@@ -1715,9 +1707,14 @@ export function DataGrid<TData>({
                   </TableRow>
                 ) : null}
               </>
-            )}
+            ) : null}
           </TableBody>
         </Table>
+        {bottomOverlay ? (
+          <div className="absolute inset-x-0 bottom-0 z-10 flex justify-center border-t border-border bg-card/95 backdrop-blur-sm">
+            {bottomOverlay}
+          </div>
+        ) : null}
       </div>
       </OptionalContextMenu>
       {/* Footer: row count, plus page controls in server mode */}
