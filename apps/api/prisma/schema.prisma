@@ -735,6 +735,14 @@ model Candidate {
   industryId String
   industry   Industry @relation(fields: [industryId], references: [id], onDelete: Restrict)
 
+  // Free-text "Suburb & Postcode" (e.g. "Merrylands 2160 NSW") — deliberately
+  // separate from locationId above, not a replacement for it. Suburb-level
+  // Location rows (and postcodes) were never loaded from GeoNames — City is
+  // the finest grant the scope resolver actually has (see
+  // docs/scope-explained.md) — so this can't be a structured pick like
+  // locationId is. Purely descriptive; plays no part in scoping.
+  suburbAndPostcode String?
+
   specializations CandidateSpecialization[]
 
   // The consultant's classification of what this person does. There's no

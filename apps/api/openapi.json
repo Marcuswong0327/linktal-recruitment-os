@@ -11495,6 +11495,11 @@
             "nullable": true,
             "description": "Which rung of the geography tree `location` sits on — a candidate known only to city level has no suburb"
           },
+          "suburbAndPostcode": {
+            "type": "string",
+            "nullable": true,
+            "description": "Free-text suburb and postcode, e.g. \"Merrylands 2160 NSW\" — not tied to the Location tree (suburb-level rows and postcodes were never loaded) and plays no part in scoping."
+          },
           "industryId": {
             "type": "string",
             "description": "Required — the industry arm of the scope resolver relies on it"
@@ -11631,12 +11636,12 @@
           "currentSalary": {
             "type": "string",
             "nullable": true,
-            "description": "Free text, from the most recent CandidateContactHistory row — e.g. \"35 per hour\". Null if never contacted. Display-only, no sort/filter."
+            "description": "Free text, e.g. \"35 per hour\". A direct edit on the candidate wins if one has been made; otherwise this is the most recent CandidateContactHistory row's value. Null if never set either way. Display-only, no sort/filter."
           },
           "expectedSalary": {
             "type": "string",
             "nullable": true,
-            "description": "Free text, from the most recent CandidateContactHistory row — e.g. \"above 47\". Null if never contacted. Display-only, no sort/filter."
+            "description": "Free text, e.g. \"above 47\". Same direct-edit-wins-over-latest-contact precedence as currentSalary."
           },
           "createdAt": {
             "format": "date-time",
@@ -11657,6 +11662,7 @@
           "locationId",
           "location",
           "locationLevel",
+          "suburbAndPostcode",
           "industryId",
           "industry",
           "jobRoleTypeId",
@@ -11954,6 +11960,11 @@
             "type": "string",
             "description": "Industry ID (see /industries)"
           },
+          "suburbAndPostcode": {
+            "type": "string",
+            "description": "Free-text suburb and postcode, e.g. \"Merrylands 2160 NSW\" — not tied to the Location tree",
+            "example": "Merrylands 2160 NSW"
+          },
           "jobRoleTypeId": {
             "type": "string",
             "description": "Job role type ID (see /job-role-types)"
@@ -12070,6 +12081,11 @@
           "industryId": {
             "type": "string",
             "description": "Industry ID (see /industries)"
+          },
+          "suburbAndPostcode": {
+            "type": "string",
+            "description": "Free-text suburb and postcode, e.g. \"Merrylands 2160 NSW\" — not tied to the Location tree",
+            "example": "Merrylands 2160 NSW"
           },
           "jobRoleTypeId": {
             "type": "string",

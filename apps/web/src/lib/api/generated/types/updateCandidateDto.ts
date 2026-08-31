@@ -22,6 +22,8 @@ export interface UpdateCandidateDto {
   locationId?: string;
   /** Industry ID (see /industries) */
   industryId?: string;
+  /** Free-text suburb and postcode, e.g. "Merrylands 2160 NSW" — not tied to the Location tree */
+  suburbAndPostcode?: string;
   /** Job role type ID (see /job-role-types) */
   jobRoleTypeId?: string;
   /** Title at their current employer, in the employer's own words */
