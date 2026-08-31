@@ -77,6 +77,20 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
   workHistory!: Prisma.JsonValue;
   @ApiProperty({
     type: 'array',
+    items: { type: 'object' },
+    nullable: true,
+    description: '[{ key, fileName }] — older/superseded resume or document versions',
+  })
+  historicFiles!: Prisma.JsonValue;
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'object' },
+    nullable: true,
+    description: '[{ key, fileName }] — other supporting documents attached to the candidate',
+  })
+  otherDocuments!: Prisma.JsonValue;
+  @ApiProperty({
+    type: 'array',
     items: { type: 'string' },
     description: 'Resolved specialization names',
   })

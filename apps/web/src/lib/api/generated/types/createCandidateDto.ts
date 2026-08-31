@@ -6,6 +6,7 @@
  * OpenAPI spec version: 1.0
  */
 import type { CreateCandidateDtoStatus } from './createCandidateDtoStatus';
+import type { DocumentFileDto } from './documentFileDto';
 import type { WorkHistoryItemDto } from './workHistoryItemDto';
 
 export interface CreateCandidateDto {
@@ -31,12 +32,16 @@ export interface CreateCandidateDto {
   linkedinUrl?: string;
   /** Seek Talent Search profile URL */
   seekTalentUrl?: string;
-  /** Raw resume file URL — the original, as submitted */
+  /** Raw resume file — object storage key from POST /candidates/upload, not a URL */
   rawResumeUrl?: string;
-  /** Edited resume file URL — Linktal's own reformatted version */
+  /** Edited resume file — Linktal's own reformatted version, object storage key from POST /candidates/upload, not a URL */
   editedResumeUrl?: string;
   /** Work history entries */
   workHistory?: WorkHistoryItemDto[];
+  /** Older/superseded resume or document versions */
+  historicFiles?: DocumentFileDto[];
+  /** Other supporting documents */
+  otherDocuments?: DocumentFileDto[];
   /** Specialization IDs (see /specializations) */
   specializationIds?: string[];
   /** Status; defaults to COLD when omitted */

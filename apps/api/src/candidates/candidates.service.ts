@@ -170,11 +170,17 @@ function contains(value?: string) {
  * touch `this`, so hoisting is a zero-risk move.
  */
 export function toPrismaData<T extends CreateCandidateDto | UpdateCandidateDto>(dto: T) {
-  const { workHistory, specializationIds: _specializationIds, ...rest } = dto;
+  const { workHistory, historicFiles, otherDocuments, specializationIds: _specializationIds, ...rest } = dto;
   return {
     ...rest,
     ...(workHistory !== undefined
       ? { workHistory: workHistory as unknown as Prisma.InputJsonValue }
+      : {}),
+    ...(historicFiles !== undefined
+      ? { historicFiles: historicFiles as unknown as Prisma.InputJsonValue }
+      : {}),
+    ...(otherDocuments !== undefined
+      ? { otherDocuments: otherDocuments as unknown as Prisma.InputJsonValue }
       : {}),
   };
 }

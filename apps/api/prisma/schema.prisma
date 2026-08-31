@@ -750,6 +750,8 @@ model Candidate {
   rawResumeUrl    String? // "Raw Resume File" — the original, as-submitted resume.
   editedResumeUrl String? // "Linktal Edited File" — Linktal's own reformatted version.
   workHistory     Json? // JSONB: [{company, role, period}] — consolidated timeline replacing the sheet's separate "Previous Company 1/2", "Previous Role 1/2" columns. `period` is free text ("2020 - 2021 (1 year)"); the source never stores parseable dates.
+  historicFiles   Json? // JSONB: [{key, fileName}] — older/superseded resume or document versions, uploaded the same way as rawResumeUrl/editedResumeUrl.
+  otherDocuments  Json? // JSONB: [{key, fileName}] — any other supporting document (references, certs, etc.) attached to the candidate.
 
   status CandidateStatus @default(COLD)
 

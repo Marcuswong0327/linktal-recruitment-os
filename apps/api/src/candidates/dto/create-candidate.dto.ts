@@ -35,6 +35,17 @@ export class WorkHistoryItemDto {
   period?: string;
 }
 
+/** One entry in a candidate's historic files or other documents (stored as JSONB) — an uploaded object's key plus its display filename. */
+export class DocumentFileDto {
+  @ApiProperty({ description: 'Uploaded object storage key (see POST /candidates/upload)' })
+  @IsString()
+  key!: string;
+
+  @ApiProperty({ description: 'Original filename' })
+  @IsString()
+  fileName!: string;
+}
+
 export class CreateCandidateDto {
   @ApiPropertyOptional({ description: 'First name', example: 'John' })
   @IsOptional()
@@ -100,14 +111,14 @@ export class CreateCandidateDto {
   @IsUrl()
   seekTalentUrl?: string;
 
-  @ApiPropertyOptional({ description: 'Raw resume file URL — the original, as submitted' })
+  @ApiPropertyOptional({ description: 'Raw resume file — object storage key from POST /candidates/upload, not a URL' })
   @IsOptional()
-  @IsUrl()
+  @IsString()
   rawResumeUrl?: string;
 
-  @ApiPropertyOptional({ description: "Edited resume file URL — Linktal's own reformatted version" })
+  @ApiPropertyOptional({ description: "Edited resume file — Linktal's own reformatted version, object storage key from POST /candidates/upload, not a URL" })
   @IsOptional()
-  @IsUrl()
+  @IsString()
   editedResumeUrl?: string;
 
   @ApiPropertyOptional({ description: 'Work history entries', type: WorkHistoryItemDto, isArray: true })
@@ -116,6 +127,20 @@ export class CreateCandidateDto {
   @ValidateNested({ each: true })
   @Type(() => WorkHistoryItemDto)
   workHistory?: WorkHistoryItemDto[];
+
+  @ApiPropertyOptional({ description: 'Older/superseded resume or document versions', type: DocumentFileDto, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DocumentFileDto)
+  historicFiles?: DocumentFileDto[];
+
+  @ApiPropertyOptional({ description: 'Other supporting documents', type: DocumentFileDto, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DocumentFileDto)
+  otherDocuments?: DocumentFileDto[];
 
   @ApiPropertyOptional({ description: 'Specialization IDs (see /specializations)', type: String, isArray: true })
   @IsOptional()

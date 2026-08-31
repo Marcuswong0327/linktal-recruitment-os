@@ -38,6 +38,7 @@ import { useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { FileUploadField } from '@/components/FileUploadField';
 import { FormField } from '@/components/FormField';
+import { MultiFileUploadField, type DocumentFile } from '@/components/MultiFileUploadField';
 import { LocationCombobox, type LocationValue } from '@/components/LocationCombobox';
 import {
   LogCandidateContactRow,
@@ -179,6 +180,21 @@ function sameIds(a: string[], b: string[]) {
   return sortedA.every((id, i) => id === sortedB[i]);
 }
 
+/** Candidate.historicFiles/otherDocuments come back as `Prisma.JsonValue` (unknown shape at the type level) — narrow to the `{key, fileName}[]` this page actually writes. */
+function asDocumentFiles(value: unknown): DocumentFile[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (v): v is DocumentFile =>
+      !!v && typeof v === 'object' && typeof (v as DocumentFile).key === 'string' && typeof (v as DocumentFile).fileName === 'string',
+  );
+}
+
+/** True when two file lists hold the same keys in the same order. */
+function sameFiles(a: DocumentFile[], b: DocumentFile[]) {
+  if (a.length !== b.length) return false;
+  return a.every((f, i) => f.key === b[i]?.key && f.fileName === b[i]?.fileName);
+}
+
 /** One icon per contact method (Email/Mobile/LinkedIn/Seek Talent) — click opens it. A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. Mirrors CompanyDetail's LinkIconButton for its Website field. */
 function ContactIconButton({
   icon: Icon,
@@ -294,6 +310,12 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
   );
   const [rawResumeUrl, setRawResumeUrl] = React.useState(candidate.rawResumeUrl ?? '');
   const [editedResumeUrl, setEditedResumeUrl] = React.useState(candidate.editedResumeUrl ?? '');
+  const [historicFiles, setHistoricFiles] = React.useState<DocumentFile[]>(
+    asDocumentFiles(candidate.historicFiles),
+  );
+  const [otherDocuments, setOtherDocuments] = React.useState<DocumentFile[]>(
+    asDocumentFiles(candidate.otherDocuments),
+  );
   // Purely a display toggle for the Contact row below — not part of isDirty.
   const [editingContact, setEditingContact] = React.useState(false);
 
@@ -353,7 +375,9 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
     !sameIds(specializationIds, candidate.specializationIds) ||
     (location?.id ?? '') !== (candidate.locationId ?? '') ||
     rawResumeUrl !== (candidate.rawResumeUrl ?? '') ||
-    editedResumeUrl !== (candidate.editedResumeUrl ?? '');
+    editedResumeUrl !== (candidate.editedResumeUrl ?? '') ||
+    !sameFiles(historicFiles, asDocumentFiles(candidate.historicFiles)) ||
+    !sameFiles(otherDocuments, asDocumentFiles(candidate.otherDocuments));
 
   const uploadCandidateFile = useUploadCandidateFile();
   async function handleUploadFile(file: File) {
@@ -391,6 +415,8 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
         locationId: location?.id ?? candidate.locationId,
         rawResumeUrl: rawResumeUrl || null,
         editedResumeUrl: editedResumeUrl || null,
+        historicFiles,
+        otherDocuments,
       } as UpdateCandidateDto,
     });
     setEditingContact(false);
@@ -783,18 +809,21 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
             </CardHeader>
             <CardContent>
               <div className="overflow-auto rounded-md border border-border">
-                <Table>
+                {/* table-fixed + equal-width headers so a long filename truncates
+                    inside its own column instead of stretching the table and
+                    pushing the other 3 columns out of view. */}
+                <Table className="table-fixed">
                   <TableHeader>
                     <TableRow className="divide-x divide-border">
-                      <TableHead>Raw Resume</TableHead>
-                      <TableHead>Linktal Resume</TableHead>
-                      <TableHead>Historic Files</TableHead>
-                      <TableHead>Other Documents</TableHead>
+                      <TableHead className="w-1/4">Raw Resume</TableHead>
+                      <TableHead className="w-1/4">Linktal Resume</TableHead>
+                      <TableHead className="w-1/4">Historic Files</TableHead>
+                      <TableHead className="w-1/4">Other Documents</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    <TableRow className="divide-x divide-border">
-                      <TableCell>
+                    <TableRow className="divide-x divide-border align-top">
+                      <TableCell className="whitespace-normal">
                         <FileUploadField
                           id="rawResumeUrl"
                           value={rawResumeUrl}
@@ -802,7 +831,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                           upload={handleUploadFile}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-normal">
                         <FileUploadField
                           id="editedResumeUrl"
                           value={editedResumeUrl}
@@ -810,15 +839,21 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                           upload={handleUploadFile}
                         />
                       </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-muted-foreground" title="Not tracked yet">
-                          —
-                        </span>
+                      <TableCell className="whitespace-normal">
+                        <MultiFileUploadField
+                          id="historicFiles"
+                          value={historicFiles}
+                          onChange={setHistoricFiles}
+                          upload={handleUploadFile}
+                        />
                       </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-muted-foreground" title="Not tracked yet">
-                          —
-                        </span>
+                      <TableCell className="whitespace-normal">
+                        <MultiFileUploadField
+                          id="otherDocuments"
+                          value={otherDocuments}
+                          onChange={setOtherDocuments}
+                          upload={handleUploadFile}
+                        />
                       </TableCell>
                     </TableRow>
                   </TableBody>
