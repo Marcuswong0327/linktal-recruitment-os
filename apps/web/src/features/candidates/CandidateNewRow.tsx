@@ -5,6 +5,12 @@ import { toast } from 'sonner';
 
 import { GridCellCombobox } from '@/components/GridCellCombobox';
 import { GridCellInput } from '@/components/GridCellInput';
+import {
+  GridCellContactInput,
+  emptyContact,
+  type ContactKind,
+  type ContactValues,
+} from '@/components/GridCellContactInput';
 import { GridCellLocationCombobox } from '@/components/GridCellLocationCombobox';
 import { focusNewRowStart, type DataGridNewRow } from '@/components/DataGrid';
 import type { CreatableComboboxOption } from '@/components/CreatableCombobox';
@@ -13,23 +19,35 @@ import type { CreateCandidateDto, IndustryEntity } from '@/lib/api/generated/typ
 interface CandidateDraft {
   firstName: string;
   lastName: string;
-  email: string;
+  contact: ContactValues;
   locationId: string;
   industryId: string;
   jobRoleTypeId: string;
   currentSalary: string;
   expectedSalary: string;
+  /** Becomes a CandidateContactHistory row after the candidate saves — see `onCreate`. */
+  notes: string;
 }
+
+// Candidates carry a Seek profile link as well as the common three — the
+// Contact column already displays it (see ./columns).
+const CANDIDATE_CONTACT_SLOTS: ContactKind[] = [
+  'email',
+  'mobile',
+  'linkedinUrl',
+  'seekTalentUrl',
+];
 
 const emptyDraft: CandidateDraft = {
   firstName: '',
   lastName: '',
-  email: '',
+  contact: emptyContact,
   locationId: '',
   industryId: '',
   jobRoleTypeId: '',
   currentSalary: '',
   expectedSalary: '',
+  notes: '',
 };
 
 interface UseCandidateNewRowOptions {
@@ -42,8 +60,16 @@ interface UseCandidateNewRowOptions {
   userIndustryIds: string[];
   jobRoleTypes: CreatableComboboxOption[];
   onCreateJobRoleType: (name: string) => Promise<CreatableComboboxOption>;
-  /** Persists the record. Resolve to commit and clear the row; reject to keep what was typed. */
-  onCreate: (dto: CreateCandidateDto) => Promise<void>;
+  /**
+   * Persists the record. Resolve to commit and clear the row; reject to keep
+   * what was typed.
+   *
+   * `note` is passed separately because it isn't a candidate field at all: the
+   * table's Notes column shows `lastContactNotes`, resolved live from the most
+   * recent CandidateContactHistory row, so a note typed here has to become one
+   * of those after the candidate itself exists.
+   */
+  onCreate: (dto: CreateCandidateDto, note?: string) => Promise<void>;
   disabled?: boolean;
 }
 
@@ -113,13 +139,16 @@ export function useCandidateNewRow({
         industryId: draft.industryId,
         ...(draft.firstName.trim() ? { firstName: draft.firstName.trim() } : {}),
         ...(draft.lastName.trim() ? { lastName: draft.lastName.trim() } : {}),
-        ...(draft.email.trim() ? { email: draft.email.trim() } : {}),
+        ...(draft.contact.email ? { email: draft.contact.email } : {}),
+        ...(draft.contact.mobile ? { mobile: draft.contact.mobile } : {}),
+        ...(draft.contact.linkedinUrl ? { linkedinUrl: draft.contact.linkedinUrl } : {}),
+        ...(draft.contact.seekTalentUrl ? { seekTalentUrl: draft.contact.seekTalentUrl } : {}),
         ...(draft.jobRoleTypeId ? { jobRoleTypeId: draft.jobRoleTypeId } : {}),
         // Salary fields are free text on purpose — the source data records
         // things like "35 per hour" (see CLAUDE.md).
         ...(draft.currentSalary.trim() ? { currentSalary: draft.currentSalary.trim() } : {}),
         ...(draft.expectedSalary.trim() ? { expectedSalary: draft.expectedSalary.trim() } : {}),
-      });
+      }, draft.notes.trim() || undefined);
       setDraft(freshDraft());
       requestAnimationFrame(() => focusNewRowStart());
     } catch {
@@ -175,12 +204,21 @@ export function useCandidateNewRow({
       />
     ),
     contact: (
-      <GridCellInput
-        type="email"
-        value={draft.email}
-        onChange={(e) => set('email', e.target.value)}
+      <GridCellContactInput
+        value={draft.contact}
+        onChange={(next) => set('contact', next)}
+        slots={CANDIDATE_CONTACT_SLOTS}
         disabled={disabled || isSaving}
-        aria-label="Email"
+      />
+    ),
+    // Writes a contact-history row, not a field on the candidate — the column
+    // is a live view of the latest one (see `onCreate`).
+    notes: (
+      <GridCellInput
+        value={draft.notes}
+        onChange={(e) => set('notes', e.target.value)}
+        disabled={disabled || isSaving}
+        aria-label="Notes"
       />
     ),
     currentSalary: (

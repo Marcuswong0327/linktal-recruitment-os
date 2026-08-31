@@ -55,6 +55,9 @@ import {
 
 const SELECT_COLUMN_ID = '__select';
 
+/** Minimum width a new-row column is widened to while one of its editors has focus. */
+const NEW_ROW_FOCUS_WIDTH = 320;
+
 /**
  * Row-height guess for the virtualizer (infiniteScroll mode only) — refined
  * per-row afterward via its `measureElement` callback, so this only needs to
@@ -208,10 +211,14 @@ function DataGridNewRowCells<TData>({
   table,
   isVirtual,
   newRow,
+  onEditorFocus,
+  onEditorBlur,
 }: {
   table: ReactTable<TData>;
   isVirtual: boolean;
   newRow: DataGridNewRow;
+  onEditorFocus: (columnId: string) => void;
+  onEditorBlur: (columnId: string) => void;
 }) {
   const columns = table.getVisibleLeafColumns();
 
@@ -277,7 +284,23 @@ function DataGridNewRowCells<TData>({
               width: column.getSize(),
               ...(isVirtual ? { display: 'flex', alignItems: 'center' } : {}),
             }}
-            className={cn('py-1 align-middle', columnAlignClass(column.columnDef.meta))}
+            // whitespace-normal, unlike a data cell: several badges (a
+            // coverage set, say) stack onto their own lines and grow the row
+            // taller instead of being cut off at the column edge.
+            className={cn(
+              'py-1 align-middle whitespace-normal',
+              columnAlignClass(column.columnDef.meta),
+            )}
+            // Focus/blur bubble, so this catches whichever editor inside the
+            // cell was entered.
+            onFocus={() => onEditorFocus(column.id)}
+            onBlur={(e) => {
+              // Ignore focus moving *within* the cell (input → its own
+              // remove button), which would otherwise shrink and re-grow.
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                onEditorBlur(column.id);
+              }
+            }}
           >
             {editor ?? null}
           </TableCell>
@@ -1306,6 +1329,36 @@ export function DataGrid<TData>({
   // itself uses, and what most real infinite-scroll UIs do.
   const isVirtual = !!server?.infiniteScroll;
 
+  // A focused editor in the new row widens its column to at least this, so a
+  // long value (an email, a company name) is readable while it's being typed
+  // rather than cut off at a narrow column's edge. The column really widens —
+  // header and every row with it — instead of the editor spilling over its
+  // neighbours, which just hid whatever was underneath.
+  const restoreSizingRef = React.useRef<Record<string, number | undefined>>({});
+
+  const widenColumnForEditor = React.useCallback((columnId: string) => {
+    setColumnSizing((prev) => {
+      const current = prev[columnId] ?? table.getColumn(columnId)?.getSize() ?? 0;
+      if (current >= NEW_ROW_FOCUS_WIDTH) return prev;
+      // Remember what to put back — `undefined` means "there was no explicit
+      // size", which restores to the column's own measured/declared width.
+      restoreSizingRef.current[columnId] = prev[columnId];
+      return { ...prev, [columnId]: NEW_ROW_FOCUS_WIDTH };
+    });
+  }, [table]);
+
+  const restoreColumnAfterEditor = React.useCallback((columnId: string) => {
+    setColumnSizing((prev) => {
+      if (!(columnId in restoreSizingRef.current)) return prev;
+      const previous = restoreSizingRef.current[columnId];
+      delete restoreSizingRef.current[columnId];
+      const next = { ...prev };
+      if (previous === undefined) delete next[columnId];
+      else next[columnId] = previous;
+      return next;
+    });
+  }, []);
+
   // Same gate the marker carried when it lived inside TableBody: real rows
   // on screen, and no further page left to load.
   const showEndOfList =
@@ -1855,7 +1908,13 @@ export function DataGrid<TData>({
               style={isVirtual ? { display: 'grid' } : undefined}
             >
               {newRow ? (
-                <DataGridNewRowCells table={table} isVirtual={isVirtual} newRow={newRow} />
+                <DataGridNewRowCells
+                  table={table}
+                  isVirtual={isVirtual}
+                  newRow={newRow}
+                  onEditorFocus={widenColumnForEditor}
+                  onEditorBlur={restoreColumnAfterEditor}
+                />
               ) : null}
               {showEndOfList ? (
                 <TableRow style={isVirtual ? { display: 'flex', width: '100%' } : undefined}>

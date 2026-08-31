@@ -3,11 +3,19 @@
 import * as React from 'react';
 import { toast } from 'sonner';
 
-import { EnumSelect } from '@/components/EnumSelect';
+import { GridCellEnumCombobox } from '@/components/GridCellEnumCombobox';
 import { GridCellClientCombobox } from '@/components/GridCellClientCombobox';
 import { GridCellCombobox } from '@/components/GridCellCombobox';
 import { GridCellInput } from '@/components/GridCellInput';
-import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
+import {
+  GridCellContactInput,
+  emptyContact,
+  type ContactValues,
+} from '@/components/GridCellContactInput';
+import {
+  GridCellLocationMultiSelect,
+  type LocationChoice,
+} from '@/components/GridCellLocationCombobox';
 import { splitFullName } from '@/lib/split-full-name';
 import { focusNewRowStart, type DataGridNewRow } from '@/components/DataGrid';
 import type { CreatableComboboxOption } from '@/components/CreatableCombobox';
@@ -23,8 +31,9 @@ interface StakeholderDraft {
   fullName: string;
   jobTitleId: string;
   roleTypeId: string;
-  email: string;
-  coverage: LocationOption[];
+  /** Email / phone / LinkedIn, filed by shape from one box — see GridCellContactInput. */
+  contact: ContactValues;
+  coverage: LocationChoice[];
   status: string;
 }
 
@@ -33,16 +42,10 @@ const emptyDraft: StakeholderDraft = {
   fullName: '',
   jobTitleId: '',
   roleTypeId: '',
-  email: '',
+  contact: emptyContact,
   coverage: [],
   status: '',
 };
-
-// An untouched enum cell should read as an empty table cell, not a form
-// control — see the identical treatment in `useJobOrderNewRow`.
-const unsetTrigger =
-  'w-fit border-transparent bg-transparent hover:border-border hover:bg-input/50 ' +
-  '[&_svg]:opacity-0 hover:[&_svg]:opacity-60 focus-visible:[&_svg]:opacity-60';
 
 interface UseStakeholderNewRowOptions {
   jobTitles: CreatableComboboxOption[];
@@ -92,7 +95,9 @@ export function useStakeholderNewRow({
         ...(lastName ? { lastName } : {}),
         ...(draft.jobTitleId ? { jobTitleId: draft.jobTitleId } : {}),
         ...(draft.roleTypeId ? { roleTypeId: draft.roleTypeId } : {}),
-        ...(draft.email.trim() ? { email: draft.email.trim() } : {}),
+        ...(draft.contact.email ? { email: draft.contact.email } : {}),
+        ...(draft.contact.mobile ? { mobile: draft.contact.mobile } : {}),
+        ...(draft.contact.linkedinUrl ? { linkedinUrl: draft.contact.linkedinUrl } : {}),
         ...(draft.coverage.length
           ? { coverageLocationIds: draft.coverage.map((l) => l.id) }
           : {}),
@@ -129,11 +134,10 @@ export function useStakeholderNewRow({
       />
     ),
     coverage: (
-      <LocationMultiSelect
+      <GridCellLocationMultiSelect
         selected={draft.coverage}
         onChange={(next) => set('coverage', next)}
         disabled={disabled || isSaving}
-        placeholder=""
       />
     ),
     roleType: (
@@ -155,22 +159,18 @@ export function useStakeholderNewRow({
       />
     ),
     contact: (
-      <GridCellInput
-        type="email"
-        value={draft.email}
-        onChange={(e) => set('email', e.target.value)}
+      <GridCellContactInput
+        value={draft.contact}
+        onChange={(next) => set('contact', next)}
         disabled={disabled || isSaving}
-        aria-label="Email"
       />
     ),
     status: (
-      <EnumSelect
+      <GridCellEnumCombobox
         value={draft.status}
         onValueChange={(v) => set('status', v)}
         options={stakeholderStatusOptions}
         disabled={disabled || isSaving}
-        size="badge"
-        className={draft.status ? 'w-fit' : unsetTrigger}
       />
     ),
   };

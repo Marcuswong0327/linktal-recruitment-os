@@ -35,6 +35,12 @@ interface GridCellComboboxProps {
   onQueryChange?: (query: string) => void;
   /** Replaces the default "No matches." when the list is empty. */
   emptyMessage?: string;
+  /**
+   * Empty the box after a pick instead of leaving the chosen name in it — for
+   * a cell that collects several values, where the box is a staging area and
+   * the picks live outside it as chips.
+   */
+  clearOnSelect?: boolean;
 }
 
 /**
@@ -65,6 +71,7 @@ export function GridCellCombobox({
   serverSearched = false,
   onQueryChange,
   emptyMessage = 'No matches.',
+  clearOnSelect = false,
 }: GridCellComboboxProps) {
   const byId = React.useMemo(() => new Map(options.map((o) => [o.id, o])), [options]);
   const selectedName = byId.get(value)?.name ?? '';
@@ -132,7 +139,8 @@ export function GridCellCombobox({
       return;
     }
     onValueChange(itemId);
-    setInputValue(byId.get(itemId)?.name ?? '');
+    setInputValue(clearOnSelect ? '' : (byId.get(itemId)?.name ?? ''));
+    if (clearOnSelect) onQueryChange?.('');
     setOpen(false);
   }
 

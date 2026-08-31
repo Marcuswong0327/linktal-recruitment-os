@@ -7,7 +7,7 @@ import { ConsultantMultiSelect } from '@/components/ConsultantCombobox';
 import type { CreatableComboboxOption } from '@/components/CreatableCombobox';
 import { GridCellClientCombobox } from '@/components/GridCellClientCombobox';
 import { GridCellCombobox } from '@/components/GridCellCombobox';
-import { EnumSelect } from '@/components/EnumSelect';
+import { GridCellEnumCombobox } from '@/components/GridCellEnumCombobox';
 import { focusNewRowStart, type DataGridNewRow } from '@/components/DataGrid';
 import type {
   ConsultantEntity,
@@ -25,13 +25,6 @@ interface JobOrderDraft {
   priorityLevel: string;
   consultantIds: string[];
 }
-
-// An untouched enum cell should read as an empty table cell, not a form
-// control: no pill border, no fill, and the chevron only surfacing on
-// hover/focus so the cell is still discoverable as something you can click.
-const unsetTrigger =
-  'w-fit border-transparent bg-transparent hover:border-border hover:bg-input/50 ' +
-  '[&_svg]:opacity-0 hover:[&_svg]:opacity-60 focus-visible:[&_svg]:opacity-60';
 
 const emptyDraft: JobOrderDraft = {
   clientId: '',
@@ -104,33 +97,27 @@ export function useJobOrderNewRow({
 
   const editors: Record<string, React.ReactNode> = {
     status: (
-      <EnumSelect
+      <GridCellEnumCombobox
         value={draft.status}
         onValueChange={(v) => set('status', v)}
         options={statusOptions}
         disabled={disabled || isSaving}
-        size="badge"
-        className={draft.status ? 'w-fit' : unsetTrigger}
       />
     ),
     quality: (
-      <EnumSelect
+      <GridCellEnumCombobox
         value={draft.quality}
         onValueChange={(v) => set('quality', v)}
         options={qualityOptions}
         disabled={disabled || isSaving}
-        size="badge"
-        className={draft.quality ? 'w-fit' : unsetTrigger}
       />
     ),
     priorityLevel: (
-      <EnumSelect
+      <GridCellEnumCombobox
         value={draft.priorityLevel}
         onValueChange={(v) => set('priorityLevel', v)}
         options={priorityOptions}
         disabled={disabled || isSaving}
-        size="badge"
-        className={draft.priorityLevel ? 'w-fit' : unsetTrigger}
       />
     ),
     clientId: (

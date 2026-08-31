@@ -3,10 +3,13 @@
 import * as React from 'react';
 import { toast } from 'sonner';
 
-import { EnumSelect } from '@/components/EnumSelect';
+import { GridCellEnumCombobox } from '@/components/GridCellEnumCombobox';
 import { GridCellInput } from '@/components/GridCellInput';
 import { GridCellSpecializationCombobox } from '@/components/GridCellSpecializationCombobox';
-import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
+import {
+  GridCellLocationMultiSelect,
+  type LocationChoice,
+} from '@/components/GridCellLocationCombobox';
 import { focusNewRowStart, type DataGridNewRow } from '@/components/DataGrid';
 import type {
   ClientEntityQuality,
@@ -20,7 +23,7 @@ interface CompanyDraft {
   specializationId: string;
   /** Carried alongside the specialization — see the note on this hook. */
   industryId: string;
-  locations: LocationOption[];
+  locations: LocationChoice[];
   status: string;
   quality: string;
 }
@@ -33,10 +36,6 @@ const emptyDraft: CompanyDraft = {
   status: '',
   quality: '',
 };
-
-const unsetTrigger =
-  'w-fit border-transparent bg-transparent hover:border-border hover:bg-input/50 ' +
-  '[&_svg]:opacity-0 hover:[&_svg]:opacity-60 focus-visible:[&_svg]:opacity-60';
 
 interface UseCompanyNewRowOptions {
   /** Persists the record. Resolve to commit and clear the row; reject to keep what was typed. */
@@ -122,31 +121,26 @@ export function useCompanyNewRow({
       />
     ),
     locations: (
-      <LocationMultiSelect
+      <GridCellLocationMultiSelect
         selected={draft.locations}
         onChange={(next) => set('locations', next)}
         disabled={disabled || isSaving}
-        placeholder=""
       />
     ),
     status: (
-      <EnumSelect
+      <GridCellEnumCombobox
         value={draft.status}
         onValueChange={(v) => set('status', v)}
         options={statusOptions}
         disabled={disabled || isSaving}
-        size="badge"
-        className={draft.status ? 'w-fit' : unsetTrigger}
       />
     ),
     quality: (
-      <EnumSelect
+      <GridCellEnumCombobox
         value={draft.quality}
         onValueChange={(v) => set('quality', v)}
         options={qualityOptions}
         disabled={disabled || isSaving}
-        size="badge"
-        className={draft.quality ? 'w-fit' : unsetTrigger}
       />
     ),
   };

@@ -40,6 +40,7 @@ import { downloadFile } from '@/lib/api/fetcher';
 import {
   deleteCandidate,
   getCandidates,
+  addCandidateContactHistory,
   createCandidate as createCandidateRequest,
   getExportCandidatesByIdsUrl,
   getExportCandidatesUrl,
@@ -122,10 +123,24 @@ export function CandidatesTable({
   }
 
   // Rethrows so the new row keeps the typed-in draft on failure.
-  async function handleCreateCandidate(dto: CreateCandidateDto) {
+  async function handleCreateCandidate(dto: CreateCandidateDto, note?: string) {
     try {
       const res = await createCandidateRequest(dto);
       if (res.status !== 201) throw new Error('Failed to create candidate');
+      // The Notes column reads the latest CandidateContactHistory row, so a
+      // note typed in the new row lands as one. SCREENING/'call' is the shape
+      // of a first contact and is what the bulk of existing history uses;
+      // both stay editable from the candidate's detail page.
+      if (note) {
+        const noted = await addCandidateContactHistory(res.data.id, {
+          contactType: 'call',
+          category: 'SCREENING',
+          screeningNotes: note,
+        });
+        // Non-fatal: the candidate is already saved, so surface the note
+        // failing rather than making it look like the whole row didn't take.
+        if (noted.status !== 201) toast.error('Candidate saved, but the note could not be added');
+      }
       // Back to page 1 for the same reason every other table does it: a new
       // row shifts positions across the pages useInfinitePages already holds.
       setPage(1);
