@@ -11968,6 +11968,16 @@
             "description": "Current company",
             "example": "Acme Corp"
           },
+          "currentSalary": {
+            "type": "string",
+            "description": "Free text, not a number — the source records values like \"35 per hour\"",
+            "example": "35 per hour"
+          },
+          "expectedSalary": {
+            "type": "string",
+            "description": "Free text, same reasoning as currentSalary",
+            "example": "55-60"
+          },
           "linkedinUrl": {
             "type": "string",
             "description": "LinkedIn URL",
@@ -12074,6 +12084,16 @@
             "type": "string",
             "description": "Current company",
             "example": "Acme Corp"
+          },
+          "currentSalary": {
+            "type": "string",
+            "description": "Free text, not a number — the source records values like \"35 per hour\"",
+            "example": "35 per hour"
+          },
+          "expectedSalary": {
+            "type": "string",
+            "description": "Free text, same reasoning as currentSalary",
+            "example": "55-60"
           },
           "linkedinUrl": {
             "type": "string",

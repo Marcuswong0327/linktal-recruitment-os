@@ -101,6 +101,25 @@ export class CreateCandidateDto {
   @IsString()
   currentCompany?: string;
 
+  // Direct edit, separate from the salary logged per-contact on
+  // CandidateContactHistory — see the column comment on
+  // Candidate.currentSalary/expectedSalary in schema.prisma for how the two
+  // interact when read back.
+  @ApiPropertyOptional({
+    description: 'Free text, not a number — the source records values like "35 per hour"',
+    example: '35 per hour',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  currentSalary?: string;
+
+  @ApiPropertyOptional({ description: 'Free text, same reasoning as currentSalary', example: '55-60' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  expectedSalary?: string;
+
   @ApiPropertyOptional({ description: 'LinkedIn URL', example: 'https://linkedin.com/in/johnsmith' })
   @IsOptional()
   @IsUrl()

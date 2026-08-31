@@ -90,6 +90,8 @@ type CandidateWithRelations = {
   jobRoleType: { name: string } | null;
   location: { name: string; level: string; ancestorIds: string[] } | null;
   specializations: { specializationId: string; specialization: { name: string } }[];
+  currentSalary: string | null;
+  expectedSalary: string | null;
 };
 
 /**
@@ -147,10 +149,12 @@ function toEntity<T extends CandidateWithRelations>(candidate: T) {
     // exactly the field it also sorts/filters by, or a row can display "3
     // months ago" while a "3+ months" filter silently excludes it.
     lastContactDate: latest?.contactedAt ?? null,
-    // Same latest-contact row, same free-text-not-numbers reasoning as the
-    // column comment on CandidateContactHistory — display-only, no sort/filter.
-    currentSalary: latest?.currentSalary ?? null,
-    expectedSalary: latest?.expectedSalary ?? null,
+    // `rest.currentSalary`/`rest.expectedSalary` is the Candidate's own
+    // column — set only by a direct edit on the detail page (see the schema
+    // comment). Prefer it when present; otherwise fall through to the latest
+    // logged contact's value, same as before this column existed.
+    currentSalary: rest.currentSalary ?? latest?.currentSalary ?? null,
+    expectedSalary: rest.expectedSalary ?? latest?.expectedSalary ?? null,
   };
 }
 

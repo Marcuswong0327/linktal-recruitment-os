@@ -28,6 +28,10 @@ export interface CreateCandidateDto {
   currentRole?: string;
   /** Current company */
   currentCompany?: string;
+  /** Free text, not a number — the source records values like "35 per hour" */
+  currentSalary?: string;
+  /** Free text, same reasoning as currentSalary */
+  expectedSalary?: string;
   /** LinkedIn URL */
   linkedinUrl?: string;
   /** Seek Talent Search profile URL */

@@ -745,6 +745,15 @@ model Candidate {
 
   currentRole     String? // "Lastest Role" — free text on purpose, it's the employer's title.
   currentCompany  String?
+  // Direct edit from the candidate detail page — for correcting a typo in
+  // what's already shown, not for logging a new salary event (that's still
+  // CandidateContactHistory.currentSalary/expectedSalary via "Log Contact").
+  // When set, the API prefers this over the latest logged contact's value;
+  // when null (the default for every candidate that's never been directly
+  // edited), the latest logged contact's value shows through unchanged. Free
+  // text, same reasoning as CandidateContactHistory.currentSalary.
+  currentSalary   String?
+  expectedSalary  String?
   linkedinUrl     String?
   seekTalentUrl   String?
   rawResumeUrl    String? // "Raw Resume File" — the original, as-submitted resume.
