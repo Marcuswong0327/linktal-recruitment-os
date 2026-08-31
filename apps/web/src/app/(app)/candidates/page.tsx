@@ -9,7 +9,7 @@ export default async function CandidatesPage() {
 
   return (
     <PageLayout>
-      <PageHeader title="Candidates" description="Every candidate in scope — filter, sort and manage the pipeline." />
+      <PageHeader title="Candidates" />
       {hasPermission(session, 'candidate', 'read') ? (
         <CandidateSearchGate
           canCreate={hasPermission(session, 'candidate', 'create')}

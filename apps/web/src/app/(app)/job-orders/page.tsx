@@ -9,7 +9,7 @@ export default async function JobOrdersPage() {
 
   return (
     <PageLayout>
-      <PageHeader title="Job Orders" description="Live roles — linked to a client and an assigned consultant." />
+      <PageHeader title="Job Orders" />
       {hasPermission(session, 'job_order', 'read') ? (
         <JobOrdersTable
           canCreate={hasPermission(session, 'job_order', 'create')}

@@ -9,10 +9,7 @@ export default async function StakeholdersPage() {
 
   return (
     <PageLayout>
-      <PageHeader
-        title="Stakeholders"
-        description="Every contact across your client companies — filter, sort and log outreach."
-      />
+      <PageHeader title="Stakeholders" />
       {hasPermission(session, 'stakeholder', 'read') ? (
         <StakeholdersTable
           canCreate={hasPermission(session, 'stakeholder', 'create')}
