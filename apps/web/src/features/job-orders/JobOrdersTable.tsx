@@ -49,7 +49,7 @@ import type {
   GetJobOrdersStatusesItem,
   UpdateJobOrderDto,
 } from '@/lib/api/generated/types';
-import { getJobOrderColumns } from './columns';
+import { getJobOrderColumns, type JobOrderRow } from './columns';
 import {
   type JobOrder,
   jobOrderQualities,
@@ -148,13 +148,22 @@ export function JobOrdersTable({
   // per-id useQueries pattern.
   const clientIds = React.useMemo(() => [...new Set(jobOrders.map((j) => j.clientId))], [jobOrders]);
   const clientQueries = useQueries({ queries: clientIds.map((id) => getGetClientQueryOptions(id)) });
-  const clientName = React.useCallback(
-    (id: string) => {
-      const query = clientQueries[clientIds.indexOf(id)];
-      const res = query?.data;
-      return res?.status === 200 ? res.data.companyName : 'Unknown client';
-    },
-    [clientQueries, clientIds],
+
+  // Baked onto each row (not left as a separate resolver fn) — DataGrid's
+  // row component is memoized keyed off `row`/`data` identity (see
+  // DataGridBodyRow's doc), so a resolver whose *return value* changes as
+  // these queries resolve, without `row.original` itself changing, never
+  // triggers a re-render: the row keeps rendering whatever "Unknown client"
+  // closure it first mounted with. Folding the name into row data means
+  // DataGrid sees genuinely new row objects once the names resolve.
+  const jobOrdersWithClientName = React.useMemo<JobOrderRow[]>(
+    () =>
+      jobOrders.map((j) => {
+        const query = clientQueries[clientIds.indexOf(j.clientId)];
+        const res = query?.data;
+        return { ...j, clientName: res?.status === 200 ? res.data.companyName : 'Unknown client' };
+      }),
+    [jobOrders, clientQueries, clientIds],
   );
 
   function handleQueryChange({ search, columnFilters, sorting }: DataGridQuery) {
@@ -261,7 +270,7 @@ export function JobOrdersTable({
     setSelectedJobOrders([]);
   }
 
-  const columns = React.useMemo(() => getJobOrderColumns({ clientName }), [clientName]);
+  const columns = React.useMemo(() => getJobOrderColumns(), []);
 
   // Drag-select is the only way rows get picked (checkboxes stay hidden, same
   // as the Candidates table) — mousedown on a row and drag to range-select,
@@ -282,7 +291,7 @@ export function JobOrdersTable({
     <>
       <DataGrid
         columns={columns}
-        data={jobOrders}
+        data={jobOrdersWithClientName}
         isLoading={isLoading}
         isFetching={isFetching}
         searchPlaceholder="Search job orders…"

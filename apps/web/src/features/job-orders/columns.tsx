@@ -24,12 +24,16 @@ function formatDate(iso: string | null | undefined) {
   return iso ? dateFormatter.format(new Date(iso)) : '—';
 }
 
-interface JobOrderColumnsOptions {
-  /** Resolves a clientId to a display name (client-side join — the API returns IDs only). */
-  clientName: (id: string) => string;
-}
+// The API returns clientId only — JobOrdersTable resolves it client-side
+// (per-id join) and bakes the result onto each row before handing data to
+// DataGrid. It has to live on the row itself rather than be passed in as a
+// separate resolver function: DataGrid memoizes its row component keyed off
+// `row`/`data` identity (see DataGridBodyRow's doc), so a resolver closure
+// that later starts returning a different value for the same clientId never
+// forces a re-render — only a changed `row.original` does.
+export type JobOrderRow = JobOrder & { clientName: string };
 
-export function getJobOrderColumns({ clientName }: JobOrderColumnsOptions): ColumnDef<JobOrder>[] {
+export function getJobOrderColumns(): ColumnDef<JobOrderRow>[] {
   return [
     {
       accessorKey: 'status',
@@ -77,16 +81,16 @@ export function getJobOrderColumns({ clientName }: JobOrderColumnsOptions): Colu
       header: 'Client',
       enableSorting: false,
       cell: ({ row }) => {
-        const { clientId } = row.original;
+        const { clientId, clientName } = row.original;
         return (
           <Link
             href={`/companies/${clientId}?from=job-orders`}
             onClick={(e) => e.stopPropagation()}
-            title={`${clientName(clientId)} — opens its own page`}
+            title={`${clientName} — opens its own page`}
             className="flex min-w-0 items-center gap-1 truncate hover:underline"
             data-no-row-drag
           >
-            <span className="truncate">{clientName(clientId)}</span>
+            <span className="truncate">{clientName}</span>
             <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" />
           </Link>
         );
