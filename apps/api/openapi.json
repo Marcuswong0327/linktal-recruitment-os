@@ -14242,7 +14242,8 @@
           }
         },
         "required": [
-          "clientId"
+          "clientId",
+          "jobTitleId"
         ]
       },
       "UpdateJobOrderDto": {

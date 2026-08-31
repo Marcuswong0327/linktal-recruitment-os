@@ -91,7 +91,7 @@ describe('JobOrdersService.create', () => {
     const prisma = { jobOrder: { create } } as unknown as ExtendedPrismaClient;
     const service = new JobOrdersService(prisma, base);
 
-    await service.create({ clientId: 'cl1' }, makeUser());
+    await service.create({ clientId: 'cl1', jobTitleId: 'jt-1' }, makeUser());
 
     expect(create.mock.calls[0][0].data).not.toHaveProperty('consultants');
   });

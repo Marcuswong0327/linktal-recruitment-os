@@ -11,10 +11,12 @@ export class CreateJobOrderDto {
   // classification of the same job (see JobTitle / JobRoleType in
   // schema.prisma). Both are catalog ids — a title new to the catalog is
   // created through /job-titles first, not invented here on the way past.
-  @ApiPropertyOptional({ description: "Job title ID (see /job-titles) — the client's own words for the role" })
-  @IsOptional()
+  // jobTitleId is required at creation (client feedback batch 2026-08-29,
+  // issue #131) — jobRoleTypeId stays optional, it's the consultant's own
+  // classification and can be filled in later from the detail page.
+  @ApiProperty({ description: "Job title ID (see /job-titles) — the client's own words for the role" })
   @IsString()
-  jobTitleId?: string;
+  jobTitleId!: string;
 
   @ApiPropertyOptional({ description: "Job role type ID (see /job-role-types) — the consultant's classification" })
   @IsOptional()

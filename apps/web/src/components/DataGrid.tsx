@@ -353,6 +353,17 @@ interface DataGridProps<TData> {
   onRowClick?: (row: TData) => void;
   /** Shown when there are zero rows (before filtering). */
   emptyState?: React.ReactNode;
+  /**
+   * Rendered as the last row in the table body, right before the
+   * "-- END OF LIST --" marker on the final page — e.g. an `InlineAddRow`
+   * quick-add trigger. Called with the grid's actual column count (accounting
+   * for the select column etc.) to pass straight through as `colSpan`. Must
+   * return a `<TableRow>` (or fragment of them); DataGrid doesn't wrap it.
+   * Not supported together with `server.infiniteScroll` (virtualized rows
+   * are absolutely positioned by row index, which this row doesn't
+   * participate in) — only render it in paginated/non-virtual mode.
+   */
+  trailingRow?: (colSpan: number) => React.ReactNode;
   /** Renders shimmer rows instead of data — use while the query is fetching. */
   isLoading?: boolean;
   /**
@@ -435,6 +446,7 @@ export function DataGrid<TData>({
   footerActions,
   onRowClick,
   emptyState,
+  trailingRow,
   isLoading = false,
   isFetching = false,
   skeletonRows = 8,
@@ -1604,7 +1616,13 @@ export function DataGrid<TData>({
           >
             {isLoading ? (
               renderSkeletonRows(skeletonRows, 'skeleton', isVirtual)
-            ) : rows.length > 0 ? (
+            ) : rows.length === 0 ? (
+              // Zero rows: `emptyState` renders as an overlay on the Table
+              // itself (see `overlay` prop above), so this is just the
+              // trailing row alone — e.g. a quick-add trigger still needs to
+              // be reachable on an otherwise-empty list.
+              (!isVirtual ? trailingRow?.(totalColumns) : null)
+            ) : (
               <>
                 {isVirtual
                   ? rowVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -1648,6 +1666,7 @@ export function DataGrid<TData>({
                         isVirtual={false}
                       />
                     ))}
+                {!isVirtual ? trailingRow?.(totalColumns) : null}
                 {server?.infiniteScroll && server.page < server.pageCount && server.isFetchingNextPage
                   ? // Full skeleton rows, not a bare spinner — see
                     // renderSkeletonRows' doc for why. Capped well under
@@ -1696,7 +1715,7 @@ export function DataGrid<TData>({
                   </TableRow>
                 ) : null}
               </>
-            ) : null}
+            )}
           </TableBody>
         </Table>
       </div>
