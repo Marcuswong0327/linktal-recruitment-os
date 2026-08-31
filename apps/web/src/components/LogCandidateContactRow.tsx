@@ -6,7 +6,6 @@ import { InlineAddRow } from '@/components/InlineAddRow';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { Input } from '@/components/ui/input';
-import { contactTypeOptions } from '@/lib/contact-types';
 import {
   contactCategoryOptions,
   outreachChannelOptions,
@@ -41,6 +40,10 @@ function toLocalDatetimeInputValue(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// Client decision (feedback item 18): Contact Method is no longer a field in
+// this form — every candidate contact logged here defaults to a call.
+const DEFAULT_CONTACT_TYPE = 'call';
+
 /**
  * Candidate-specific "log a contact" inline row — a separate component from
  * the shared `LogContactRow` (used verbatim by Stakeholders) because
@@ -56,7 +59,6 @@ export function LogCandidateContactRow({
   isSaving,
   onSave,
 }: LogCandidateContactRowProps) {
-  const [contactType, setContactType] = React.useState<string>(contactTypeOptions[0].value);
   const [category, setCategory] = React.useState<ContactCategory>(contactCategoryOptions[0].value);
   const [screeningNotes, setScreeningNotes] = React.useState('');
   const [outreachCampaignNotes, setOutreachCampaignNotes] = React.useState('');
@@ -67,7 +69,6 @@ export function LogCandidateContactRow({
 
   React.useEffect(() => {
     if (!open) return;
-    setContactType(contactTypeOptions[0].value);
     setCategory(contactCategoryOptions[0].value);
     setScreeningNotes('');
     setOutreachCampaignNotes('');
@@ -79,7 +80,7 @@ export function LogCandidateContactRow({
 
   function handleSave() {
     onSave({
-      contactType,
+      contactType: DEFAULT_CONTACT_TYPE,
       category,
       screeningNotes: category === 'SCREENING' ? screeningNotes.trim() || null : null,
       outreachCampaignNotes: category === 'OUTREACH' ? outreachCampaignNotes.trim() || null : null,
@@ -102,14 +103,6 @@ export function LogCandidateContactRow({
       savingLabel="Logging…"
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <FormField label="Contact method" htmlFor="contact-type" required>
-          <EnumSelect
-            id="contact-type"
-            value={contactType}
-            onValueChange={setContactType}
-            options={contactTypeOptions}
-          />
-        </FormField>
         <FormField label="Kind of note" htmlFor="contact-category" required>
           <EnumSelect
             id="contact-category"
