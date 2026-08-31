@@ -19,7 +19,7 @@ export interface LogCandidateContactValues {
   screeningNotes: string | null;
   outreachCampaignNotes: string | null;
   outreachChannel: OutreachChannel | null;
-  /** ISO 8601 */
+  /** Date-only, YYYY-MM-DD — no time component (client decision, feedback item 17). */
   contactedAt: string;
   /** Free text, e.g. "35 per hour" — see CandidateContactHistory.currentSalary. */
   currentSalary: string | null;
@@ -35,9 +35,9 @@ interface LogCandidateContactRowProps {
   onSave: (values: LogCandidateContactValues) => void;
 }
 
-function toLocalDatetimeInputValue(date: Date) {
+function toLocalDateInputValue(date: Date) {
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 // Client decision (feedback item 18): Contact Method is no longer a field in
@@ -63,7 +63,7 @@ export function LogCandidateContactRow({
   const [screeningNotes, setScreeningNotes] = React.useState('');
   const [outreachCampaignNotes, setOutreachCampaignNotes] = React.useState('');
   const [outreachChannel, setOutreachChannel] = React.useState<OutreachChannel | ''>('');
-  const [contactedAt, setContactedAt] = React.useState(() => toLocalDatetimeInputValue(new Date()));
+  const [contactedAt, setContactedAt] = React.useState(() => toLocalDateInputValue(new Date()));
   const [currentSalary, setCurrentSalary] = React.useState('');
   const [expectedSalary, setExpectedSalary] = React.useState('');
 
@@ -73,7 +73,7 @@ export function LogCandidateContactRow({
     setScreeningNotes('');
     setOutreachCampaignNotes('');
     setOutreachChannel('');
-    setContactedAt(toLocalDatetimeInputValue(new Date()));
+    setContactedAt(toLocalDateInputValue(new Date()));
     setCurrentSalary('');
     setExpectedSalary('');
   }, [open]);
@@ -85,7 +85,7 @@ export function LogCandidateContactRow({
       screeningNotes: category === 'SCREENING' ? screeningNotes.trim() || null : null,
       outreachCampaignNotes: category === 'OUTREACH' ? outreachCampaignNotes.trim() || null : null,
       outreachChannel: category === 'OUTREACH' && outreachChannel ? outreachChannel : null,
-      contactedAt: new Date(contactedAt).toISOString(),
+      contactedAt,
       currentSalary: currentSalary.trim() || null,
       expectedSalary: expectedSalary.trim() || null,
     });
@@ -119,7 +119,7 @@ export function LogCandidateContactRow({
         >
           <input
             id="contact-date"
-            type="datetime-local"
+            type="date"
             value={contactedAt}
             onChange={(e) => setContactedAt(e.target.value)}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/30"
