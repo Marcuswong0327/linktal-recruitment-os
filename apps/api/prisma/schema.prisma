@@ -735,6 +735,14 @@ model Candidate {
   industryId String
   industry   Industry @relation(fields: [industryId], references: [id], onDelete: Restrict)
 
+  // Free-text "Suburb & Postcode" (e.g. "Merrylands 2160 NSW") — deliberately
+  // separate from locationId above, not a replacement for it. Suburb-level
+  // Location rows (and postcodes) were never loaded from GeoNames — City is
+  // the finest grant the scope resolver actually has (see
+  // docs/scope-explained.md) — so this can't be a structured pick like
+  // locationId is. Purely descriptive; plays no part in scoping.
+  suburbAndPostcode String?
+
   specializations CandidateSpecialization[]
 
   // The consultant's classification of what this person does. There's no
@@ -745,6 +753,15 @@ model Candidate {
 
   currentRole     String? // "Lastest Role" — free text on purpose, it's the employer's title.
   currentCompany  String?
+  // Direct edit from the candidate detail page — for correcting a typo in
+  // what's already shown, not for logging a new salary event (that's still
+  // CandidateContactHistory.currentSalary/expectedSalary via "Log Contact").
+  // When set, the API prefers this over the latest logged contact's value;
+  // when null (the default for every candidate that's never been directly
+  // edited), the latest logged contact's value shows through unchanged. Free
+  // text, same reasoning as CandidateContactHistory.currentSalary.
+  currentSalary   String?
+  expectedSalary  String?
   linkedinUrl     String?
   seekTalentUrl   String?
   rawResumeUrl    String? // "Raw Resume File" — the original, as-submitted resume.

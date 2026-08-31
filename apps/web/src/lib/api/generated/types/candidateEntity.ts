@@ -35,6 +35,11 @@ export interface CandidateEntity {
      * @nullable
      */
   locationLevel: CandidateEntityLocationLevel;
+  /**
+     * Free-text suburb and postcode, e.g. "Merrylands 2160 NSW" — not tied to the Location tree (suburb-level rows and postcodes were never loaded) and plays no part in scoping.
+     * @nullable
+     */
+  suburbAndPostcode: string | null;
   /** Required — the industry arm of the scope resolver relies on it */
   industryId: string;
   /**
@@ -126,12 +131,12 @@ export interface CandidateEntity {
      */
   lastContactDate: string | null;
   /**
-     * Free text, from the most recent CandidateContactHistory row — e.g. "35 per hour". Null if never contacted. Display-only, no sort/filter.
+     * Free text, e.g. "35 per hour". A direct edit on the candidate wins if one has been made; otherwise this is the most recent CandidateContactHistory row's value. Null if never set either way. Display-only, no sort/filter.
      * @nullable
      */
   currentSalary: string | null;
   /**
-     * Free text, from the most recent CandidateContactHistory row — e.g. "above 47". Null if never contacted. Display-only, no sort/filter.
+     * Free text, e.g. "above 47". Same direct-edit-wins-over-latest-contact precedence as currentSalary.
      * @nullable
      */
   expectedSalary: string | null;

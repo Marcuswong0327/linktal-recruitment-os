@@ -6,7 +6,6 @@ import { InlineAddRow } from '@/components/InlineAddRow';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { Input } from '@/components/ui/input';
-import { contactTypeOptions } from '@/lib/contact-types';
 import {
   contactCategoryOptions,
   outreachChannelOptions,
@@ -20,7 +19,7 @@ export interface LogCandidateContactValues {
   screeningNotes: string | null;
   outreachCampaignNotes: string | null;
   outreachChannel: OutreachChannel | null;
-  /** ISO 8601 */
+  /** Date-only, YYYY-MM-DD — no time component (client decision, feedback item 17). */
   contactedAt: string;
   /** Free text, e.g. "35 per hour" — see CandidateContactHistory.currentSalary. */
   currentSalary: string | null;
@@ -36,10 +35,14 @@ interface LogCandidateContactRowProps {
   onSave: (values: LogCandidateContactValues) => void;
 }
 
-function toLocalDatetimeInputValue(date: Date) {
+function toLocalDateInputValue(date: Date) {
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
+
+// Client decision (feedback item 18): Contact Method is no longer a field in
+// this form — every candidate contact logged here defaults to a call.
+const DEFAULT_CONTACT_TYPE = 'call';
 
 /**
  * Candidate-specific "log a contact" inline row — a separate component from
@@ -56,35 +59,33 @@ export function LogCandidateContactRow({
   isSaving,
   onSave,
 }: LogCandidateContactRowProps) {
-  const [contactType, setContactType] = React.useState<string>(contactTypeOptions[0].value);
   const [category, setCategory] = React.useState<ContactCategory>(contactCategoryOptions[0].value);
   const [screeningNotes, setScreeningNotes] = React.useState('');
   const [outreachCampaignNotes, setOutreachCampaignNotes] = React.useState('');
   const [outreachChannel, setOutreachChannel] = React.useState<OutreachChannel | ''>('');
-  const [contactedAt, setContactedAt] = React.useState(() => toLocalDatetimeInputValue(new Date()));
+  const [contactedAt, setContactedAt] = React.useState(() => toLocalDateInputValue(new Date()));
   const [currentSalary, setCurrentSalary] = React.useState('');
   const [expectedSalary, setExpectedSalary] = React.useState('');
 
   React.useEffect(() => {
     if (!open) return;
-    setContactType(contactTypeOptions[0].value);
     setCategory(contactCategoryOptions[0].value);
     setScreeningNotes('');
     setOutreachCampaignNotes('');
     setOutreachChannel('');
-    setContactedAt(toLocalDatetimeInputValue(new Date()));
+    setContactedAt(toLocalDateInputValue(new Date()));
     setCurrentSalary('');
     setExpectedSalary('');
   }, [open]);
 
   function handleSave() {
     onSave({
-      contactType,
+      contactType: DEFAULT_CONTACT_TYPE,
       category,
       screeningNotes: category === 'SCREENING' ? screeningNotes.trim() || null : null,
       outreachCampaignNotes: category === 'OUTREACH' ? outreachCampaignNotes.trim() || null : null,
       outreachChannel: category === 'OUTREACH' && outreachChannel ? outreachChannel : null,
-      contactedAt: new Date(contactedAt).toISOString(),
+      contactedAt,
       currentSalary: currentSalary.trim() || null,
       expectedSalary: expectedSalary.trim() || null,
     });
@@ -102,14 +103,6 @@ export function LogCandidateContactRow({
       savingLabel="Logging…"
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <FormField label="Contact method" htmlFor="contact-type" required>
-          <EnumSelect
-            id="contact-type"
-            value={contactType}
-            onValueChange={setContactType}
-            options={contactTypeOptions}
-          />
-        </FormField>
         <FormField label="Kind of note" htmlFor="contact-category" required>
           <EnumSelect
             id="contact-category"
@@ -126,7 +119,7 @@ export function LogCandidateContactRow({
         >
           <input
             id="contact-date"
-            type="datetime-local"
+            type="date"
             value={contactedAt}
             onChange={(e) => setContactedAt(e.target.value)}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/30"

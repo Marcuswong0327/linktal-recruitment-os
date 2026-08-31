@@ -22,12 +22,18 @@ export interface CreateCandidateDto {
   locationId: string;
   /** Industry ID (see /industries) */
   industryId: string;
+  /** Free-text suburb and postcode, e.g. "Merrylands 2160 NSW" — not tied to the Location tree */
+  suburbAndPostcode?: string;
   /** Job role type ID (see /job-role-types) */
   jobRoleTypeId?: string;
   /** Title at their current employer, in the employer's own words */
   currentRole?: string;
   /** Current company */
   currentCompany?: string;
+  /** Free text, not a number — the source records values like "35 per hour" */
+  currentSalary?: string;
+  /** Free text, same reasoning as currentSalary */
+  expectedSalary?: string;
   /** LinkedIn URL */
   linkedinUrl?: string;
   /** Seek Talent Search profile URL */
