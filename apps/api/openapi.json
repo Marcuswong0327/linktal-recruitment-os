@@ -11548,6 +11548,22 @@
             "nullable": true,
             "description": "[{ company, role, period }] — `period` is free text, the source never stores parseable dates"
           },
+          "historicFiles": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "nullable": true,
+            "description": "[{ key, fileName }] — older/superseded resume or document versions"
+          },
+          "otherDocuments": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "nullable": true,
+            "description": "[{ key, fileName }] — other supporting documents attached to the candidate"
+          },
           "specializations": {
             "type": "array",
             "items": {
@@ -11652,6 +11668,8 @@
           "rawResumeUrl",
           "editedResumeUrl",
           "workHistory",
+          "historicFiles",
+          "otherDocuments",
           "specializations",
           "specializationIds",
           "status",
@@ -11888,6 +11906,23 @@
           }
         }
       },
+      "DocumentFileDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Uploaded object storage key (see POST /candidates/upload)"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Original filename"
+          }
+        },
+        "required": [
+          "key",
+          "fileName"
+        ]
+      },
       "CreateCandidateDto": {
         "type": "object",
         "properties": {
@@ -11944,17 +11979,31 @@
           },
           "rawResumeUrl": {
             "type": "string",
-            "description": "Raw resume file URL — the original, as submitted"
+            "description": "Raw resume file — object storage key from POST /candidates/upload, not a URL"
           },
           "editedResumeUrl": {
             "type": "string",
-            "description": "Edited resume file URL — Linktal's own reformatted version"
+            "description": "Edited resume file — Linktal's own reformatted version, object storage key from POST /candidates/upload, not a URL"
           },
           "workHistory": {
             "description": "Work history entries",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/WorkHistoryItemDto"
+            }
+          },
+          "historicFiles": {
+            "description": "Older/superseded resume or document versions",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentFileDto"
+            }
+          },
+          "otherDocuments": {
+            "description": "Other supporting documents",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentFileDto"
             }
           },
           "specializationIds": {
@@ -12037,17 +12086,31 @@
           },
           "rawResumeUrl": {
             "type": "string",
-            "description": "Raw resume file URL — the original, as submitted"
+            "description": "Raw resume file — object storage key from POST /candidates/upload, not a URL"
           },
           "editedResumeUrl": {
             "type": "string",
-            "description": "Edited resume file URL — Linktal's own reformatted version"
+            "description": "Edited resume file — Linktal's own reformatted version, object storage key from POST /candidates/upload, not a URL"
           },
           "workHistory": {
             "description": "Work history entries",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/WorkHistoryItemDto"
+            }
+          },
+          "historicFiles": {
+            "description": "Older/superseded resume or document versions",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentFileDto"
+            }
+          },
+          "otherDocuments": {
+            "description": "Other supporting documents",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentFileDto"
             }
           },
           "specializationIds": {

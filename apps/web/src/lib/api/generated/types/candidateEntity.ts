@@ -5,8 +5,10 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { CandidateEntityHistoricFilesItem } from './candidateEntityHistoricFilesItem';
 import type { CandidateEntityLastContactCategory } from './candidateEntityLastContactCategory';
 import type { CandidateEntityLocationLevel } from './candidateEntityLocationLevel';
+import type { CandidateEntityOtherDocumentsItem } from './candidateEntityOtherDocumentsItem';
 import type { CandidateEntityStatus } from './candidateEntityStatus';
 import type { CandidateEntityWorkHistoryItem } from './candidateEntityWorkHistoryItem';
 
@@ -73,6 +75,16 @@ export interface CandidateEntity {
      * @nullable
      */
   workHistory: CandidateEntityWorkHistoryItem[] | null;
+  /**
+     * [{ key, fileName }] — older/superseded resume or document versions
+     * @nullable
+     */
+  historicFiles: CandidateEntityHistoricFilesItem[] | null;
+  /**
+     * [{ key, fileName }] — other supporting documents attached to the candidate
+     * @nullable
+     */
+  otherDocuments: CandidateEntityOtherDocumentsItem[] | null;
   /** Resolved specialization names */
   specializations: string[];
   /** Specialization IDs backing `specializations` — what an editable multi-select actually binds to */
