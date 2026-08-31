@@ -16,11 +16,13 @@ export class CreateStakeholderDto {
   @IsString()
   clientId!: string;
 
-  @ApiPropertyOptional({ description: 'First name', example: 'Jane' })
-  @IsOptional()
+  // Required at creation (client feedback batch 2026-08-29, issue #131) —
+  // lastName stays optional, "Stakeholder Name" in the quick-add spec maps
+  // to this single field.
+  @ApiProperty({ description: 'First name', example: 'Jane' })
   @IsString()
   @MaxLength(60)
-  firstName?: string;
+  firstName!: string;
 
   @ApiPropertyOptional({ description: 'Last name', example: 'Doe' })
   @IsOptional()

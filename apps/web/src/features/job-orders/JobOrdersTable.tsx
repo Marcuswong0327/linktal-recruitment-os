@@ -1,14 +1,14 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { ChevronDown, Download, Plus, Rocket, Trash2 } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ChevronDown, Download, Rocket, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueries, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { TableBody } from '@/components/ui/table';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,16 +22,19 @@ import { Combobox } from '@base-ui/react/combobox';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { ImportDialog } from '@/components/ImportDialog';
+import { JobOrderQuickAddRow } from '@/components/JobOrderQuickAddRow';
 import {
   ConsultantComboboxPopup,
   ConsultantFilterButton,
   useConsultantLookup,
 } from '@/components/ConsultantCombobox';
+import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
-import { getGetClientQueryOptions } from '@/lib/api/generated/clients/clients';
+import { getGetClientQueryOptions, useGetClients } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import {
+  createJobOrder as createJobOrderRequest,
   deleteJobOrder as deleteJobOrderRequest,
   getExportJobOrdersByIdsUrl,
   getExportJobOrdersUrl,
@@ -42,6 +45,7 @@ import {
   useGetJobOrders,
   useImportJobOrders,
 } from '@/lib/api/generated/job-orders/job-orders';
+import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
 import type {
   ConsultantEntity,
   GetJobOrdersSortBy,
@@ -76,6 +80,7 @@ export function JobOrdersTable({
   canDelete?: boolean;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
@@ -91,6 +96,19 @@ export function JobOrdersTable({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [consultantPickerOpen, setConsultantPickerOpen] = React.useState(false);
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
+  const [quickAddOpen, setQuickAddOpen] = React.useState(false);
+  const [isQuickAdding, setIsQuickAdding] = React.useState(false);
+
+  // Opened via the global header's "Add Job Order" button, or the command
+  // palette's "Add Job Order" action (both navigate to `/job-orders?new=1`)
+  // — strip the param immediately so refresh/back doesn't reopen the row.
+  // Same pattern as CompaniesSearchGate's `?new=1` handling for its Sheet.
+  React.useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      setQuickAddOpen(true);
+      router.replace('/job-orders');
+    }
+  }, [searchParams, router]);
 
   const { data, isLoading, isFetching, isError, error } = useGetJobOrders(
     { page, pageSize: PAGE_SIZE, q: search, statuses, priorityLevels, consultantIds, sortBy, sortOrder },
@@ -103,6 +121,44 @@ export function JobOrdersTable({
   // the filter and the bulk "Add consultant" picker below.
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
+
+  // Same pageSize:100 cap JobOrderDetail's own Client picker already lives
+  // with — pre-existing limitation, not introduced here (see JobOrdersTable's
+  // clientQueries above for the per-id pattern used for *display*, which
+  // doesn't apply to a picker that needs the whole roster to search over).
+  const { data: clientsData } = useGetClients({ pageSize: 100 });
+  const clients = clientsData?.status === 200 ? clientsData.data.data : [];
+
+  const { data: jobTitleData } = useGetJobTitles({ take: 200 });
+  const jobTitles = jobTitleData?.status === 200 ? jobTitleData.data : [];
+  const createJobTitle = useCreateJobTitle();
+  async function handleCreateJobTitle(name: string) {
+    const res = await createJobTitle.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add job title');
+    return res.data;
+  }
+
+  async function handleQuickAdd(values: { clientId: string; jobTitleId: string }) {
+    setIsQuickAdding(true);
+    try {
+      const res = await createJobOrderRequest({ clientId: values.clientId, jobTitleId: values.jobTitleId });
+      if (res.status !== 201) throw new Error('Failed to create job order');
+      // Reset to page 1, not just invalidate — since this table went
+      // infinite-scroll, a new row can shift every row's position across
+      // whatever later pages are already loaded via useInfinitePages, and
+      // invalidating alone only refetches the currently-mounted page,
+      // leaving the rest stale and misaligned (duplicate ids once
+      // flattened — see the identical fix on StakeholdersTable's create).
+      setPage(1);
+      queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
+      toast.success(`${res.data.jobTitle} added`);
+      setQuickAddOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create job order');
+    } finally {
+      setIsQuickAdding(false);
+    }
+  }
 
   const consultantFilterOptions = React.useMemo(
     () => consultants.map((c) => ({ value: c.id, label: c.fullName })),
@@ -136,7 +192,7 @@ export function JobOrdersTable({
   );
 
   const result = data?.status === 200 ? data.data : undefined;
-  const jobOrders = result?.data ?? [];
+  const jobOrders = useInfinitePages(result?.data, page, isFetching);
 
   // Client-side join: the API returns clientId only. GET /clients is capped
   // at pageSize=100 server-side (query-clients.dto.ts) while the client
@@ -296,15 +352,33 @@ export function JobOrdersTable({
         isFetching={isFetching}
         searchPlaceholder="Search job orders…"
         filters={jobOrderFilters}
-        // Size to actual content instead of stretching to fill leftover
-        // viewport height when there aren't enough rows — see DataGrid's
-        // fillHeight doc.
-        fillHeight={false}
         emptyState="No job orders yet. Create one against a client to get started."
         getRowId={(j) => j.id}
         enableRowRangeSelect
         hideSelectColumn
         onSelectionChange={handleSelectionChange}
+        // Issue #131 — Client + Role only; everything else is filled in
+        // later from the created job order's own detail page. Floats over
+        // the grid's bottom edge rather than sitting in the row model or
+        // pushing new content below the table — sidesteps the whole
+        // virtualization/height-fighting problem entirely.
+        bottomOverlay={
+          <table className="w-full">
+            <TableBody>
+              <JobOrderQuickAddRow
+                colSpan={1}
+                open={quickAddOpen}
+                onOpenChange={setQuickAddOpen}
+                triggerDisabled={!canCreate}
+                clients={clients}
+                jobTitles={jobTitles}
+                onCreateJobTitle={handleCreateJobTitle}
+                isSaving={isQuickAdding}
+                onSave={handleQuickAdd}
+              />
+            </TableBody>
+          </table>
+        }
         toolbar={
           <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
             <Button size="lg" variant="outline" onClick={handleExport} disabled={isExporting}>
@@ -434,24 +508,12 @@ export function JobOrdersTable({
           pageCount: result?.pageCount ?? 1,
           onPageChange: setPage,
           onQueryChange: handleQueryChange,
+          infiniteScroll: true,
+          isFetchingNextPage: isFetching && page > 1,
         }}
       />
 
-      {/* Bottom-of-sheet, not the toolbar (2.1) — Adding is a navigation to
-          the dedicated create page (2.2), not an inline quick-add. */}
       <div className="flex justify-center gap-3">
-        {canCreate ? (
-          <Button size="lg" nativeButton={false} render={<Link href="/job-orders/new" />}>
-            <Plus />
-            Add Job Order
-          </Button>
-        ) : (
-          <Button size="lg" disabled title="You don't have permission to add job orders">
-            <Plus />
-            Add Job Order
-          </Button>
-        )}
-
         {/* 2.5: choose between our own stakeholder contacts or Seek to
             go find more clients. */}
         <DropdownMenu>

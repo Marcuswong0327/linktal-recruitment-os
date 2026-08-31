@@ -9,7 +9,7 @@ export default async function JobOpeningSearchPage() {
 
   return (
     <PageLayout>
-      <PageHeader title="Job Opening Search" description="Market research — job ads found online, filter and log the ones worth chasing." />
+      <PageHeader title="Job Opening Search" />
       {hasPermission(session, 'job_research', 'read') ? (
         <JobResearchSearchGate canCreate={hasPermission(session, 'job_research', 'create')} />
       ) : (

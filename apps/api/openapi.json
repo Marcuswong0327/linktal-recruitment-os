@@ -13321,7 +13321,8 @@
           }
         },
         "required": [
-          "clientId"
+          "clientId",
+          "firstName"
         ]
       },
       "UpdateStakeholderDto": {
@@ -14242,7 +14243,8 @@
           }
         },
         "required": [
-          "clientId"
+          "clientId",
+          "jobTitleId"
         ]
       },
       "UpdateJobOrderDto": {

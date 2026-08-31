@@ -353,6 +353,13 @@ interface DataGridProps<TData> {
   onRowClick?: (row: TData) => void;
   /** Shown when there are zero rows (before filtering). */
   emptyState?: React.ReactNode;
+  /**
+   * Floats over the bottom edge of the grid, pinned in place regardless of
+   * scroll position or row virtualization — e.g. a quick-add trigger. Purely
+   * a visual overlay: doesn't participate in the row model, doesn't affect
+   * table height, works the same in paginated and infinite-scroll mode.
+   */
+  bottomOverlay?: React.ReactNode;
   /** Renders shimmer rows instead of data — use while the query is fetching. */
   isLoading?: boolean;
   /**
@@ -435,6 +442,7 @@ export function DataGrid<TData>({
   footerActions,
   onRowClick,
   emptyState,
+  bottomOverlay,
   isLoading = false,
   isFetching = false,
   skeletonRows = 8,
@@ -1444,7 +1452,10 @@ export function DataGrid<TData>({
       >
       <div
         ref={gridContainerRef}
-        className={cn('overflow-hidden rounded-xl border border-border bg-card', fillHeight && 'min-h-0 flex-1')}
+        className={cn(
+          'relative overflow-hidden rounded-xl border border-border bg-card',
+          fillHeight && 'min-h-0 flex-1',
+        )}
       >
         {/* Vertical gridlines + tight rows for the spreadsheet look.
             table-fixed: widths come from the header row (header.getSize(),
@@ -1699,6 +1710,11 @@ export function DataGrid<TData>({
             ) : null}
           </TableBody>
         </Table>
+        {bottomOverlay ? (
+          <div className="absolute inset-x-0 bottom-0 z-10 flex justify-center border-t border-border bg-card/95 backdrop-blur-sm">
+            {bottomOverlay}
+          </div>
+        ) : null}
       </div>
       </OptionalContextMenu>
       {/* Footer: row count, plus page controls in server mode */}
