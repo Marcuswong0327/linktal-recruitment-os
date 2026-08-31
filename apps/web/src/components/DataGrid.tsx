@@ -8,6 +8,7 @@ import {
   type FilterFn,
   type Row,
   type RowSelectionState,
+  type Table as ReactTable,
   type SortingState,
   flexRender,
   getCoreRowModel,
@@ -37,6 +38,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -152,6 +154,137 @@ export interface DataGridColumnMeta {
 function columnAlignClass(meta: unknown): string | undefined {
   const align = (meta as DataGridColumnMeta | undefined)?.align;
   return align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : undefined;
+}
+
+/**
+ * Puts the caret back at the start of the `newRow` row — call after a
+ * successful commit so the next record can be typed straight away without
+ * reaching for the mouse. Reaches through the DOM rather than threading a
+ * ref out of DataGrid: the editors are caller-supplied nodes DataGrid only
+ * ever places, so it has nothing to attach a ref to, and the row is unique
+ * per grid.
+ */
+export function focusNewRowStart(root: ParentNode = document) {
+  const row = root.querySelector<HTMLElement>('[data-new-row]');
+  row?.querySelector<HTMLElement>('button, input, [tabindex]:not([tabindex="-1"])')?.focus();
+}
+
+/** See `DataGridProps.newRow`. */
+export interface DataGridNewRow {
+  /** Editor node per column id — a column with no entry renders an empty cell. */
+  editors: Record<string, React.ReactNode>;
+  /** Shift+Enter from any cell commits — only fires when `canCommit`. */
+  onCommit: () => void;
+  /** Escape clears the row back to empty. */
+  onReset: () => void;
+  /** False while required fields are missing — blocks Enter and disables ✓. */
+  canCommit: boolean;
+  /**
+   * Fired when a commit gesture lands while `canCommit` is false. Optional,
+   * but worth implementing: without it Enter on an incomplete row does
+   * nothing at all, which reads as a broken key rather than as a validation
+   * result. The caller implements it because only the caller knows which of
+   * its fields are required.
+   */
+  onInvalidCommit?: () => void;
+  /** A create is in flight — the whole row is disabled so a second Enter can't double-submit. */
+  isSaving: boolean;
+}
+
+/**
+ * The `newRow` row itself — one cell per visible column, mirroring the header
+ * row's own width/display style branch exactly so the editors line up with
+ * their columns through horizontal scroll and column resizing alike.
+ *
+ * Keyboard model is the spreadsheet one: Tab/Shift-Tab move between cells
+ * (native DOM order, nothing to implement), Escape clears the row, and it is
+ * finished by Enter — from any cell, once no suggestion list is open — or by
+ * Shift+Enter, which finishes it regardless of what is open. While a list is
+ * open, plain Enter belongs to it. Committing is a no-op while required
+ * fields are missing; `onCommit` is responsible for putting focus back at the
+ * start of the row after a successful save.
+ */
+function DataGridNewRowCells<TData>({
+  table,
+  isVirtual,
+  newRow,
+}: {
+  table: ReactTable<TData>;
+  isVirtual: boolean;
+  newRow: DataGridNewRow;
+}) {
+  const columns = table.getVisibleLeafColumns();
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      newRow.onReset();
+      return;
+    }
+    if (e.key !== 'Enter') return;
+    const target = e.target as HTMLElement | null;
+
+    function commit() {
+      e.preventDefault();
+      e.stopPropagation();
+      if (newRow.isSaving) return;
+      if (newRow.canCommit) newRow.onCommit();
+      else newRow.onInvalidCommit?.();
+    }
+
+    // Shift+Enter finishes the row from any cell, whatever is open at the
+    // time — the deliberate "I'm done" gesture.
+    if (e.shiftKey) {
+      commit();
+      return;
+    }
+
+    // An open list always wins plain Enter — that keystroke is choosing the
+    // highlighted suggestion, or creating the value just typed, and a
+    // half-filled record must not be saved by a press meant for a dropdown.
+    if (target?.closest('[role="listbox"], [role="dialog"], [aria-expanded="true"]')) return;
+
+    // With nothing open, Enter has no other meaning left in a cell, so it
+    // finishes the row wherever you are. Which cell you happen to be in
+    // doesn't matter: people stop entering wherever the record is done,
+    // not necessarily in the rightmost column.
+    commit();
+  }
+
+  return (
+    <TableRow
+      // No hover tint and no fill of its own — an empty row, not a form.
+      className="hover:bg-transparent"
+      style={isVirtual ? { display: 'flex', width: '100%' } : undefined}
+      onKeyDown={handleKeyDown}
+      aria-label="New row"
+      // Focus target after a commit — see `focusNewRowStart`.
+      data-new-row
+      // The row is a data-entry surface, not a record — the grid's own
+      // row-click/range-select handlers sit on tbody rows, but the
+      // right-click context menu is bound at container level and would
+      // otherwise offer "edit/delete" against whatever row was last
+      // selected while the user is typing in here.
+      data-no-row-drag
+      onContextMenu={(e) => e.stopPropagation()}
+    >
+      {columns.map((column) => {
+        const editor = newRow.editors[column.id];
+        return (
+          <TableCell
+            key={column.id}
+            style={{
+              width: column.getSize(),
+              ...(isVirtual ? { display: 'flex', alignItems: 'center' } : {}),
+            }}
+            className={cn('py-1 align-middle', columnAlignClass(column.columnDef.meta))}
+          >
+            {editor ?? null}
+          </TableCell>
+        );
+      })}
+    </TableRow>
+  );
 }
 
 /** Wraps `children` in a right-click menu when `content` is given; otherwise a passthrough. */
@@ -360,6 +493,23 @@ interface DataGridProps<TData> {
    * table height, works the same in paginated and infinite-scroll mode.
    */
   bottomOverlay?: React.ReactNode;
+  /**
+   * An always-present "type the new record here" row — the table's last row,
+   * in a `sticky bottom-0` `<tfoot>`, so it stays parked on the bottom edge
+   * while the data scrolls behind it.
+   *
+   * A real table row rather than an absolutely-positioned overlay (which is
+   * what `bottomOverlay` is): being in the table it scrolls *horizontally*
+   * with the columns and takes each cell's width from the same
+   * `column.getSize()` the header does, so the editors stay lined up with
+   * the columns they fill in. An overlay would stay put during horizontal
+   * scroll and drift out of alignment.
+   *
+   * `editors` is keyed by column id — columns without an entry render an
+   * empty cell, which is how computed/read-only columns (counts, timestamps)
+   * stay blank.
+   */
+  newRow?: DataGridNewRow;
   /** Renders shimmer rows instead of data — use while the query is fetching. */
   isLoading?: boolean;
   /**
@@ -443,6 +593,7 @@ export function DataGrid<TData>({
   onRowClick,
   emptyState,
   bottomOverlay,
+  newRow,
   isLoading = false,
   isFetching = false,
   skeletonRows = 8,
@@ -1155,6 +1306,11 @@ export function DataGrid<TData>({
   // itself uses, and what most real infinite-scroll UIs do.
   const isVirtual = !!server?.infiniteScroll;
 
+  // Same gate the marker carried when it lived inside TableBody: real rows
+  // on screen, and no further page left to load.
+  const showEndOfList =
+    !isLoading && rows.length > 0 && (!server || server.page >= server.pageCount);
+
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () =>
@@ -1163,6 +1319,14 @@ export function DataGrid<TData>({
     estimateSize: () => ROW_HEIGHT_ESTIMATE,
     overscan: 8,
     enabled: isVirtual,
+    // The virtualizer defaults to committing measurement-driven re-renders
+    // through `flushSync`. The `newRow` footer is a sticky row inside this
+    // same `display: grid` table, so a layout change it causes re-triggers
+    // row measurement while React is still committing — and `flushSync`
+    // there is the "called from inside a lifecycle method" error. A plain
+    // re-render is correct in that situation; the only cost is that a
+    // re-measure lands a frame later during a fast scroll.
+    useFlushSync: false,
     // Dynamic re-measurement — a cell can wrap to more than one line (a long
     // company name, etc.), so the flat estimate alone would misplace later
     // rows. Skipped in Firefox: it measures this row's own border height
@@ -1596,15 +1760,18 @@ export function DataGrid<TData>({
                           // row) so the scroll container's real scrollHeight
                           // — what fetchMoreOnBottomReached measures —
                           // accounts for it too, not just the real rows.
+                          // The next-page skeleton is still an absolutely
+                          // positioned child here and has to be reserved
+                          // for; the END OF LIST marker isn't — it moved to
+                          // the footer below, which contributes its own real
+                          // height to scrollHeight.
                           height:
                             rowVirtualizer.getTotalSize() +
                             (server?.infiniteScroll &&
                             server.page < server.pageCount &&
                             server.isFetchingNextPage
                               ? Math.min(server.pageSize, 12)
-                              : !server || server.page >= server.pageCount
-                                ? 1
-                                : 0) *
+                              : 0) *
                               ROW_HEIGHT_ESTIMATE,
                           position: 'relative',
                         }
@@ -1675,40 +1842,39 @@ export function DataGrid<TData>({
                       isVirtual ? rowVirtualizer.getTotalSize() : undefined,
                     )
                   : null}
-                {/* End-of-list marker on the final page. As the new last child
-                    it also restores the bottom border of the last data row
-                    (the primitive strips it from :last-child). */}
-                {!server || server.page >= server.pageCount ? (
-                  <TableRow
-                    style={
-                      isVirtual
-                        ? {
-                            display: 'flex',
-                            position: 'absolute',
-                            top: rowVirtualizer.getTotalSize(),
-                            left: 0,
-                            width: '100%',
-                          }
-                        : undefined
-                    }
-                  >
-                    <TableCell
-                      colSpan={totalColumns}
-                      className="py-3 text-center text-xs text-muted-foreground"
-                      // `colSpan` only stretches the cell under real table
-                      // layout — virtualized rows make their `TableRow` a
-                      // flex container (for absolute positioning), which
-                      // turns colSpan into a no-op and left-aligns this cell
-                      // at its shrink-to-fit content width instead.
-                      style={isVirtual ? { display: 'flex', width: '100%', justifyContent: 'center' } : undefined}
-                    >
-                      -- END OF LIST --
-                    </TableCell>
-                  </TableRow>
-                ) : null}
               </>
             ) : null}
           </TableBody>
+          {newRow || showEndOfList ? (
+            // Pinned to the bottom edge so the entry row stays reachable at
+            // any scroll position, with the end-of-list marker below it —
+            // the entry row is the table's last *row*, the marker closes off
+            // everything including it.
+            <TableFooter
+              className="sticky bottom-0 z-10 border-t border-border bg-card font-normal"
+              style={isVirtual ? { display: 'grid' } : undefined}
+            >
+              {newRow ? (
+                <DataGridNewRowCells table={table} isVirtual={isVirtual} newRow={newRow} />
+              ) : null}
+              {showEndOfList ? (
+                <TableRow style={isVirtual ? { display: 'flex', width: '100%' } : undefined}>
+                  <TableCell
+                    colSpan={totalColumns}
+                    className="py-3 text-center text-xs text-muted-foreground"
+                    // `colSpan` only stretches the cell under real table
+                    // layout — virtualized rows make their `TableRow` a flex
+                    // container, which turns colSpan into a no-op and
+                    // left-aligns this cell at its shrink-to-fit content
+                    // width instead.
+                    style={isVirtual ? { display: 'flex', width: '100%', justifyContent: 'center' } : undefined}
+                  >
+                    -- END OF LIST --
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableFooter>
+          ) : null}
         </Table>
         {bottomOverlay ? (
           <div className="absolute inset-x-0 bottom-0 z-10 flex justify-center border-t border-border bg-card/95 backdrop-blur-sm">

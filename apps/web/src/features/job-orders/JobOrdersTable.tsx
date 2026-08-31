@@ -8,7 +8,6 @@ import { keepPreviousData, useQueries, useQueryClient } from '@tanstack/react-qu
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { TableBody } from '@/components/ui/table';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,9 +19,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Combobox } from '@base-ui/react/combobox';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
+import {
+  DataGrid,
+  focusNewRowStart,
+  type DataGridFilter,
+  type DataGridQuery,
+} from '@/components/DataGrid';
 import { ImportDialog } from '@/components/ImportDialog';
-import { JobOrderQuickAddRow } from '@/components/JobOrderQuickAddRow';
 import {
   ConsultantComboboxPopup,
   ConsultantFilterButton,
@@ -31,7 +34,7 @@ import {
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
-import { getGetClientQueryOptions, useGetClients } from '@/lib/api/generated/clients/clients';
+import { getGetClientQueryOptions } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import {
   createJobOrder as createJobOrderRequest,
@@ -45,14 +48,20 @@ import {
   useGetJobOrders,
   useImportJobOrders,
 } from '@/lib/api/generated/job-orders/job-orders';
-import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
+import {
+  getGetJobTitlesQueryKey,
+  useCreateJobTitle,
+  useGetJobTitles,
+} from '@/lib/api/generated/job-titles/job-titles';
 import type {
   ConsultantEntity,
+  CreateJobOrderDto,
   GetJobOrdersSortBy,
   GetJobOrdersSortOrder,
   GetJobOrdersStatusesItem,
   UpdateJobOrderDto,
 } from '@/lib/api/generated/types';
+import { useJobOrderNewRow } from './JobOrderNewRow';
 import { getJobOrderColumns, type JobOrderRow } from './columns';
 import {
   type JobOrder,
@@ -96,16 +105,14 @@ export function JobOrdersTable({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [consultantPickerOpen, setConsultantPickerOpen] = React.useState(false);
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
-  const [quickAddOpen, setQuickAddOpen] = React.useState(false);
-  const [isQuickAdding, setIsQuickAdding] = React.useState(false);
-
-  // Opened via the global header's "Add Job Order" button, or the command
-  // palette's "Add Job Order" action (both navigate to `/job-orders?new=1`)
-  // — strip the param immediately so refresh/back doesn't reopen the row.
-  // Same pattern as CompaniesSearchGate's `?new=1` handling for its Sheet.
+  // Arrived from the global header's "Add Job Order" button or the command
+  // palette's "Add Job Order" action (both navigate to `/job-orders?new=1`).
+  // The new-row is always on screen now, so there's nothing to open — just
+  // put the caret in it. The param is stripped immediately so refresh/back
+  // doesn't re-steal focus, same as CompaniesSearchGate's `?new=1` handling.
   React.useEffect(() => {
     if (searchParams.get('new') === '1') {
-      setQuickAddOpen(true);
+      requestAnimationFrame(() => focusNewRowStart());
       router.replace('/job-orders');
     }
   }, [searchParams, router]);
@@ -122,26 +129,33 @@ export function JobOrdersTable({
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
 
-  // Same pageSize:100 cap JobOrderDetail's own Client picker already lives
-  // with — pre-existing limitation, not introduced here (see JobOrdersTable's
-  // clientQueries above for the per-id pattern used for *display*, which
-  // doesn't apply to a picker that needs the whole roster to search over).
-  const { data: clientsData } = useGetClients({ pageSize: 100 });
-  const clients = clientsData?.status === 200 ? clientsData.data.data : [];
 
   const { data: jobTitleData } = useGetJobTitles({ take: 200 });
   const jobTitles = jobTitleData?.status === 200 ? jobTitleData.data : [];
   const createJobTitle = useCreateJobTitle();
+  // Toasts on the way out as well as rethrowing: the combobox that calls
+  // this swallows the rejection (it only needs to stop showing a spinner),
+  // so without a toast here a failed create — a duplicate name, say — is
+  // completely silent and looks like the "Add …" option simply did nothing.
   async function handleCreateJobTitle(name: string) {
-    const res = await createJobTitle.mutateAsync({ data: { name } });
-    if (res.status !== 201) throw new Error('Failed to add job title');
-    return res.data;
+    try {
+      const res = await createJobTitle.mutateAsync({ data: { name } });
+      if (res.status !== 201) throw new Error('Failed to add job title');
+      // Nothing invalidates this list on create, so without it the new
+      // title is missing from the options everywhere until a remount.
+      queryClient.invalidateQueries({ queryKey: getGetJobTitlesQueryKey() });
+      return res.data;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add job title');
+      throw err;
+    }
   }
 
-  async function handleQuickAdd(values: { clientId: string; jobTitleId: string }) {
-    setIsQuickAdding(true);
+  // Rethrows on failure: useJobOrderNewRow keeps the typed-in draft when this
+  // rejects, so a failed save doesn't silently bin what the user entered.
+  async function handleCreateJobOrder(dto: CreateJobOrderDto) {
     try {
-      const res = await createJobOrderRequest({ clientId: values.clientId, jobTitleId: values.jobTitleId });
+      const res = await createJobOrderRequest(dto);
       if (res.status !== 201) throw new Error('Failed to create job order');
       // Reset to page 1, not just invalidate — since this table went
       // infinite-scroll, a new row can shift every row's position across
@@ -152,13 +166,19 @@ export function JobOrdersTable({
       setPage(1);
       queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
       toast.success(`${res.data.jobTitle} added`);
-      setQuickAddOpen(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to create job order');
-    } finally {
-      setIsQuickAdding(false);
+      throw err;
     }
   }
+
+  const newRow = useJobOrderNewRow({
+    jobTitles,
+    consultants,
+    onCreateJobTitle: handleCreateJobTitle,
+    onCreate: handleCreateJobOrder,
+    disabled: !canCreate,
+  });
 
   const consultantFilterOptions = React.useMemo(
     () => consultants.map((c) => ({ value: c.id, label: c.fullName })),
@@ -357,28 +377,11 @@ export function JobOrdersTable({
         enableRowRangeSelect
         hideSelectColumn
         onSelectionChange={handleSelectionChange}
-        // Issue #131 — Client + Role only; everything else is filled in
-        // later from the created job order's own detail page. Floats over
-        // the grid's bottom edge rather than sitting in the row model or
-        // pushing new content below the table — sidesteps the whole
-        // virtualization/height-fighting problem entirely.
-        bottomOverlay={
-          <table className="w-full">
-            <TableBody>
-              <JobOrderQuickAddRow
-                colSpan={1}
-                open={quickAddOpen}
-                onOpenChange={setQuickAddOpen}
-                triggerDisabled={!canCreate}
-                clients={clients}
-                jobTitles={jobTitles}
-                onCreateJobTitle={handleCreateJobTitle}
-                isSaving={isQuickAdding}
-                onSave={handleQuickAdd}
-              />
-            </TableBody>
-          </table>
-        }
+        // Excel-style entry: an always-present row pinned under the header,
+        // one editor per writable column, rows scrolling behind it. Replaces
+        // the old bottom-edge quick-add overlay (issue #131) — see
+        // `useJobOrderNewRow` for which fields it collects and why.
+        newRow={newRow}
         toolbar={
           <div className="flex animate-in items-center gap-2 fade-in-0 duration-200">
             <Button size="lg" variant="outline" onClick={handleExport} disabled={isExporting}>

@@ -23,6 +23,7 @@ import { UpdateCandidateContactHistoryDto } from './dto/update-candidate-contact
 import { buildWorkbook, resolveTimeZone, splitContactDateTime, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
 import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
+import { searchTokens } from '../common/search-tokens';
 
 /** The subset of QueryCandidatesDto that `buildWhere` actually reads — shared with QueryCandidateFacetsDto, which omits pagination/sort/jobRoleTypeIds but still satisfies this structurally. */
 type CandidateFilterFields = Pick<
@@ -265,21 +266,26 @@ export class CandidatesService {
     // are deliberately left out — substring matching inside a joined
     // many-to-many isn't worth the complexity for free-text search; they're
     // filter-only (specializationIds).
+    // One AND-ed clause per whitespace-separated term (see searchTokens) — a
+    // full name spans two columns, so matching the whole string against any
+    // single column finds nothing. Single-word queries are unchanged.
     if (q) {
-      and.push({
-        OR: [
-          { firstName: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { lastName: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { email: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { currentCompany: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { displayId: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { currentRole: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { location: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
-          { mobile: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { industry: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
-          { jobRoleType: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
-        ],
-      });
+      for (const term of searchTokens(q)) {
+        and.push({
+          OR: [
+            { firstName: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { lastName: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { email: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { currentCompany: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { displayId: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { currentRole: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { location: { name: { contains: term, mode: Prisma.QueryMode.insensitive } } },
+            { mobile: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { industry: { name: { contains: term, mode: Prisma.QueryMode.insensitive } } },
+            { jobRoleType: { name: { contains: term, mode: Prisma.QueryMode.insensitive } } },
+          ],
+        });
+      }
     }
 
     return and.length > 0 ? { AND: and } : {};

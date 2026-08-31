@@ -15,21 +15,31 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { DataGrid, type DataGridQuery } from '@/components/DataGrid';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  getGetJobTitlesQueryKey,
+  useCreateJobTitle,
+  useGetJobTitles,
+} from '@/lib/api/generated/job-titles/job-titles';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { downloadFile } from '@/lib/api/fetcher';
 import {
+  createJobResearch as createJobResearchRequest,
   getExportJobResearchByIdsUrl,
   getExportJobResearchUrl,
+  getGetJobResearchQueryKey,
   useGetJobResearch,
 } from '@/lib/api/generated/job-research/job-research';
 import { GetJobResearchSortBy } from '@/lib/api/generated/types/getJobResearchSortBy';
 import type {
+  CreateJobResearchDto,
   ExportJobResearchSortBy,
   ExportJobResearchSortOrder,
   ExportJobResearchStatusesItem,
   GetJobResearchSortOrder,
   GetJobResearchStatusesItem,
 } from '@/lib/api/generated/types';
+import { useJobResearchNewRow } from './JobResearchNewRow';
 import { getJobResearchColumns } from './columns';
 import type { JobResearch, JobResearchAppliedFilters } from './schema';
 
@@ -53,6 +63,39 @@ export function JobResearchTable({
   const [sortOrder, setSortOrder] = React.useState<GetJobResearchSortOrder>(filters.sortOrder ?? 'desc');
   const [selected, setSelected] = React.useState<JobResearch[]>([]);
   const [isExporting, setIsExporting] = React.useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: jobTitleData } = useGetJobTitles({ take: 200 });
+  const jobTitles = jobTitleData?.status === 200 ? jobTitleData.data : [];
+  const createJobTitle = useCreateJobTitle();
+
+  async function handleCreateJobTitle(name: string) {
+    try {
+      const res = await createJobTitle.mutateAsync({ data: { name } });
+      if (res.status !== 201) throw new Error('Failed to add job title');
+      queryClient.invalidateQueries({ queryKey: getGetJobTitlesQueryKey() });
+      return res.data;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add job title');
+      throw err;
+    }
+  }
+
+  // Rethrows so the new row keeps the typed-in draft on failure.
+  async function handleCreateJobResearch(dto: CreateJobResearchDto) {
+    try {
+      const res = await createJobResearchRequest(dto);
+      if (res.status !== 201) throw new Error('Failed to create research row');
+      // Back to page 1 for the same reason every other table does it: a new
+      // row shifts positions across the pages useInfinitePages already holds.
+      setPage(1);
+      queryClient.invalidateQueries({ queryKey: getGetJobResearchQueryKey() });
+      toast.success('Research row added');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create research row');
+      throw err;
+    }
+  }
 
   // Same selection-order tracking as CompaniesTable, and for the same
   // reason: DataGrid reports rows in table order, not click order, but
@@ -179,9 +222,17 @@ export function JobResearchTable({
     );
   }
 
+  const newRow = useJobResearchNewRow({
+    jobTitles,
+    onCreateJobTitle: handleCreateJobTitle,
+    onCreate: handleCreateJobResearch,
+    disabled: false,
+  });
+
   return (
     <DataGrid
       columns={columns}
+      newRow={newRow}
       data={rows}
       isLoading={isLoading}
       isFetching={isFetching}

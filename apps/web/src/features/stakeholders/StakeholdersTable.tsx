@@ -8,7 +8,6 @@ import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 import { CheckCheck, ChevronDown, Download, MapPin, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { TableBody } from '@/components/ui/table';
 import {
   ContextMenuItem,
   ContextMenuSub,
@@ -25,14 +24,17 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { AddStakeholderRow, type AddStakeholderValues } from '@/components/AddStakeholderRow';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
+import {
+  DataGrid,
+  focusNewRowStart,
+  type DataGridFilter,
+  type DataGridQuery,
+} from '@/components/DataGrid';
 import { LEVEL_LABEL, LocationFilterButton } from '@/components/LocationMultiSelect';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
-import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
 import {
   deleteStakeholder,
@@ -53,7 +55,6 @@ import {
 } from '@/lib/api/generated/stakeholder-role-types/stakeholder-role-types';
 import { GetStakeholdersSortBy } from '@/lib/api/generated/types/getStakeholdersSortBy';
 import type {
-  ClientEntity,
   CreateStakeholderDto,
   GetStakeholdersAccuracyItem,
   GetStakeholdersSortOrder,
@@ -62,6 +63,7 @@ import type {
   StakeholderEntity,
   UpdateStakeholderDto,
 } from '@/lib/api/generated/types';
+import { useStakeholderNewRow } from './StakeholderNewRow';
 import { getStakeholderColumns, stakeholderStatusOptions, type StakeholderStatus } from './columns';
 
 const PAGE_SIZE = 50;
@@ -86,22 +88,6 @@ const ROLE_TYPE_PALETTE: {
 ];
 function roleTypeStyle(index: number) {
   return ROLE_TYPE_PALETTE[index % ROLE_TYPE_PALETTE.length];
-}
-
-function buildStakeholderPayload(values: AddStakeholderValues): CreateStakeholderDto {
-  return {
-    clientId: values.clientId,
-    firstName: values.firstName,
-    lastName: values.lastName || undefined,
-    jobTitleId: values.jobTitleId || undefined,
-    roleTypeId: values.roleTypeId || undefined,
-    linkedinUrl: values.linkedinUrl || undefined,
-    email: values.email || undefined,
-    mobile: values.mobile || undefined,
-    coverageLocationIds: values.coverage.map((c) => c.id),
-    isAccurate: values.isAccurate ?? undefined,
-    inaccurateReason: values.inaccurateReason || undefined,
-  };
 }
 
 export function StakeholdersTable({
@@ -140,14 +126,15 @@ export function StakeholdersTable({
   const [isExporting, setIsExporting] = React.useState(false);
   const importStakeholders = useImportStakeholders();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
-  const [creating, setCreating] = React.useState(false);
 
-  // Opened via the global command palette's "Add a Stakeholder" action
-  // (`/stakeholders?new=1`) — strip the param immediately so refresh/back
-  // doesn't reopen the sheet.
+
+  // Arrived from the command palette's "Add a Stakeholder" action
+  // (`/stakeholders?new=1`). The new row is always on screen now, so there's
+  // nothing to open — just put the caret in it, then strip the param so
+  // refresh/back doesn't re-steal focus.
   React.useEffect(() => {
     if (searchParams.get('new') === '1') {
-      setCreating(true);
+      requestAnimationFrame(() => focusNewRowStart());
       router.replace('/stakeholders');
     }
   }, [searchParams, router]);
@@ -172,11 +159,6 @@ export function StakeholdersTable({
   const result = data?.status === 200 ? data.data : undefined;
   const stakeholders = useInfinitePages(result?.data, page, isFetching);
 
-  // Full roster for the Company picker — pageSize is capped at 100
-  // server-side (query-clients.dto.ts), same known limitation as the
-  // consultant lookup this pattern is borrowed from.
-  const { data: clientsData } = useGetClients({ pageSize: 100 });
-  const clients: ClientEntity[] = clientsData?.status === 200 ? clientsData.data.data : [];
 
   const { data: roleTypeData } = useGetStakeholderRoleTypes({ take: 200 });
   const roleTypeRows = roleTypeData?.status === 200 ? roleTypeData.data : [];
@@ -283,7 +265,6 @@ export function StakeholdersTable({
         setPage(1);
         queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
         toast.success('Stakeholder added');
-        setCreating(false);
       },
       onError: (err) => toast.error(err.message || 'Failed to add stakeholder'),
     },
@@ -316,9 +297,21 @@ export function StakeholdersTable({
     setPage(1);
   }
 
-  function handleCreate(values: AddStakeholderValues) {
-    createStakeholderMutation.mutate({ data: buildStakeholderPayload(values) });
+  // The new-row variant: awaited and rethrowing, so `useStakeholderNewRow`
+  // knows whether to clear the row or keep what was typed. The mutation's
+  // own onSuccess/onError still handle the page reset and toasts.
+  async function handleCreateFromNewRow(dto: CreateStakeholderDto) {
+    await createStakeholderMutation.mutateAsync({ data: dto });
   }
+
+  const newRow = useStakeholderNewRow({
+    jobTitles: jobTitleOptions,
+    roleTypes: roleTypeOptions,
+    onCreateJobTitle: handleCreateJobTitle,
+    onCreateRoleType: handleCreateRoleType,
+    onCreate: handleCreateFromNewRow,
+    disabled: !canCreate,
+  });
 
   const handleRoleTypeChange = React.useCallback(
     (stakeholder: StakeholderEntity, roleTypeId: string) => {
@@ -465,30 +458,11 @@ export function StakeholdersTable({
         onSelectionChange={setSelected}
         enableRowRangeSelect
         hideSelectColumn
-        // Issue #131 — Company + Name only; everything else is filled in
-        // later from the stakeholder's own detail page. Floats over the
-        // grid's bottom edge rather than sitting in the row model or
-        // pushing new content below the table — sidesteps the whole
-        // virtualization/height-fighting problem entirely.
-        bottomOverlay={
-          <table className="w-full">
-            <TableBody>
-              <AddStakeholderRow
-                colSpan={1}
-                open={creating}
-                onOpenChange={setCreating}
-                triggerDisabled={!canCreate}
-                clients={clients}
-                roleTypes={roleTypeOptions}
-                onCreateRoleType={handleCreateRoleType}
-                jobTitles={jobTitleOptions}
-                onCreateJobTitle={handleCreateJobTitle}
-                isSaving={createStakeholderMutation.isPending}
-                onSave={handleCreate}
-              />
-            </TableBody>
-          </table>
-        }
+        // Excel-style entry: an always-present row parked on the table's
+        // bottom edge, one editor per writable column, rows scrolling behind
+        // it. Replaces the old bottom-edge quick-add overlay (issue #131) —
+        // see `useStakeholderNewRow` for which fields it collects.
+        newRow={newRow}
         toolbar={
           <div className="flex items-center gap-2">
             {canCreate && canUpdate ? (

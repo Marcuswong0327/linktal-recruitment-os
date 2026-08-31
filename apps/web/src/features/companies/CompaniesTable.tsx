@@ -30,6 +30,7 @@ import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
 import {
+  createClient as createClientRequest,
   deleteClient,
   getExportClientsByIdsUrl,
   getExportClientsUrl,
@@ -43,7 +44,12 @@ import {
 } from '@/lib/api/generated/clients/clients';
 import { ImportDialog } from '@/components/ImportDialog';
 import { GetClientsSortBy } from '@/lib/api/generated/types/getClientsSortBy';
-import type { GetClientsSortOrder, GetClientsStatusesItem } from '@/lib/api/generated/types';
+import type {
+  CreateClientDto,
+  GetClientsSortOrder,
+  GetClientsStatusesItem,
+} from '@/lib/api/generated/types';
+import { useCompanyNewRow } from './CompanyNewRow';
 import { getCompanyColumns } from './columns';
 import { qualityOptions, statusOptions, type ClientQuality, type ClientStatus, type Company, type CompanyAppliedFilters } from './schema';
 
@@ -75,6 +81,27 @@ export function CompaniesTable({
   const [selected, setSelected] = React.useState<Company[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isExporting, setIsExporting] = React.useState(false);
+
+  // Rethrows so the new row keeps the typed-in draft on failure.
+  async function handleCreateClient(dto: CreateClientDto) {
+    try {
+      const res = await createClientRequest(dto);
+      if (res.status !== 201) throw new Error('Failed to create company');
+      // Back to page 1 for the same reason every other table does it: a new
+      // row shifts positions across the pages useInfinitePages already holds.
+      setPage(1);
+      queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey() });
+      toast.success(`${res.data.companyName} added`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create company');
+      throw err;
+    }
+  }
+
+  const newRow = useCompanyNewRow({
+    onCreate: handleCreateClient,
+    disabled: !canCreate,
+  });
   const importClients = useImportClients();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
 
@@ -288,6 +315,7 @@ export function CompaniesTable({
   return (
     <>
       <DataGrid
+        newRow={newRow}
         columns={columns}
         data={companies}
         isLoading={isLoading}

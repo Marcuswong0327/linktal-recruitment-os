@@ -251,6 +251,27 @@ describe('StakeholdersService.findAll — scope', () => {
     ]);
   });
 
+  // "Dr Joe" is stored as firstName "Dr" / lastName "Joe" — no single column
+  // contains the whole string, so an un-tokenised `contains` matched nothing.
+  it('ANDs one clause per word so a full name can span firstName and lastName', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ q: 'Dr Joe' }), makeUser({ roleName: 'manager' }));
+    const and = findMany.mock.calls[0][0].where.AND;
+    expect(and).toHaveLength(2);
+    expect(and[0].OR).toContainEqual({
+      firstName: { contains: 'Dr', mode: 'insensitive' },
+    });
+    expect(and[1].OR).toContainEqual({
+      lastName: { contains: 'Joe', mode: 'insensitive' },
+    });
+  });
+
+  it('leaves a single-word search as one clause, unchanged', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ q: 'Dr' }), makeUser({ roleName: 'manager' }));
+    expect(findMany.mock.calls[0][0].where.AND).toHaveLength(1);
+  });
+
   it('does not scope non-consultant roles', async () => {
     const { findMany, service } = setup();
     await service.findAll(baseQuery(), makeUser({ roleName: 'manager' }));

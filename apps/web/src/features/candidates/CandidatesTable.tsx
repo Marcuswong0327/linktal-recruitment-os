@@ -27,12 +27,20 @@ import {
 } from '@/components/ui/context-menu';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { DataGrid, type DataGridQuery } from '@/components/DataGrid';
+import { useGetIndustries } from '@/lib/api/generated/industries/industries';
+import {
+  getGetJobRoleTypesQueryKey,
+  useCreateJobRoleType,
+  useGetJobRoleTypes,
+} from '@/lib/api/generated/job-role-types/job-role-types';
+import { useCandidateNewRow } from './CandidateNewRow';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
 import {
   deleteCandidate,
   getCandidates,
+  createCandidate as createCandidateRequest,
   getExportCandidatesByIdsUrl,
   getExportCandidatesUrl,
   getGetCandidateImportTemplateUrl,
@@ -44,7 +52,11 @@ import {
 } from '@/lib/api/generated/candidates/candidates';
 import { ImportDialog } from '@/components/ImportDialog';
 import { GetCandidatesSortBy } from '@/lib/api/generated/types/getCandidatesSortBy';
-import type { GetCandidatesSortOrder, GetCandidatesStatusesItem } from '@/lib/api/generated/types';
+import type {
+  CreateCandidateDto,
+  GetCandidatesSortOrder,
+  GetCandidatesStatusesItem,
+} from '@/lib/api/generated/types';
 import { candidateColumns } from './columns';
 import {
   candidateStatuses,
@@ -89,6 +101,50 @@ export function CandidatesTable({
   const [selected, setSelected] = React.useState<Candidate[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isExporting, setIsExporting] = React.useState(false);
+
+  // Rosters for the new row's pickers.
+  const { data: industryData } = useGetIndustries();
+  const industries = industryData?.status === 200 ? industryData.data : [];
+  const { data: jobRoleTypeData } = useGetJobRoleTypes({ take: 200 });
+  const jobRoleTypes = jobRoleTypeData?.status === 200 ? jobRoleTypeData.data : [];
+  const createJobRoleType = useCreateJobRoleType();
+
+  async function handleCreateJobRoleType(name: string) {
+    try {
+      const res = await createJobRoleType.mutateAsync({ data: { name } });
+      if (res.status !== 201) throw new Error('Failed to add role type');
+      queryClient.invalidateQueries({ queryKey: getGetJobRoleTypesQueryKey() });
+      return res.data;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add role type');
+      throw err;
+    }
+  }
+
+  // Rethrows so the new row keeps the typed-in draft on failure.
+  async function handleCreateCandidate(dto: CreateCandidateDto) {
+    try {
+      const res = await createCandidateRequest(dto);
+      if (res.status !== 201) throw new Error('Failed to create candidate');
+      // Back to page 1 for the same reason every other table does it: a new
+      // row shifts positions across the pages useInfinitePages already holds.
+      setPage(1);
+      queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
+      toast.success('Candidate added');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create candidate');
+      throw err;
+    }
+  }
+
+  const newRow = useCandidateNewRow({
+    industries,
+    userIndustryIds: session?.user?.industryIds ?? [],
+    jobRoleTypes,
+    onCreateJobRoleType: handleCreateJobRoleType,
+    onCreate: handleCreateCandidate,
+    disabled: !canCreate,
+  });
   const importCandidates = useImportCandidates();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   // Selection is normally page-scoped (see DataGrid's onSelectionChange doc)
@@ -322,6 +378,7 @@ export function CandidatesTable({
       ) : null}
 
       <DataGrid
+        newRow={newRow}
         columns={candidateColumns}
         data={candidates}
         isLoading={isLoading}
