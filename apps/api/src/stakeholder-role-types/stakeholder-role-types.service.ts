@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { rankedNameSearch } from '../common/ranked-name-search';
 import { CreateStakeholderRoleTypeDto } from './dto/create-stakeholder-role-type.dto';
 import { QueryStakeholderRoleTypesDto } from './dto/query-stakeholder-role-types.dto';
 
@@ -15,15 +15,16 @@ export class StakeholderRoleTypesService {
    * whole table.
    */
   findAll(query: QueryStakeholderRoleTypesDto) {
-    const where: Prisma.StakeholderRoleTypeWhereInput = { isActive: true };
-    if (query.q) {
-      where.name = { contains: query.q, mode: Prisma.QueryMode.insensitive };
-    }
-    return this.prisma.stakeholderRoleType.findMany({
-      where,
-      orderBy: { name: 'asc' },
-      take: query.take,
-    });
+    // Prefix matches first (see rankedNameSearch) — typing "Tools" should
+    // surface "Tools Manufacturing" above a mid-word match on an earlier
+    // letter, which plain alphabetical ordering never does.
+    return rankedNameSearch(query.q, query.take, (match, take) =>
+      this.prisma.stakeholderRoleType.findMany({
+        where: { isActive: true, ...match },
+        orderBy: { name: 'asc' },
+        take,
+      }),
+    );
   }
 
   /**

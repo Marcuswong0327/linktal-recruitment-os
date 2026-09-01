@@ -5,10 +5,12 @@ import { toast } from 'sonner';
 
 import { GridCellClientCombobox } from '@/components/GridCellClientCombobox';
 import { GridCellCombobox } from '@/components/GridCellCombobox';
+import { GridCellLinkInput } from '@/components/GridCellLinkInput';
 import { GridCellInput } from '@/components/GridCellInput';
 import { GridCellLocationCombobox } from '@/components/GridCellLocationCombobox';
 import { focusNewRowStart, type DataGridNewRow } from '@/components/DataGrid';
 import type { CreatableComboboxOption } from '@/components/CreatableCombobox';
+import { useJobTitleOptions } from '@/hooks/use-catalog-options';
 import type { CreateJobResearchDto } from '@/lib/api/generated/types';
 
 interface JobResearchDraft {
@@ -18,6 +20,7 @@ interface JobResearchDraft {
   salaryRange: string;
   postedDate: string;
   seekUrl: string;
+  permanentUrl: string;
 }
 
 const emptyDraft: JobResearchDraft = {
@@ -27,6 +30,7 @@ const emptyDraft: JobResearchDraft = {
   salaryRange: '',
   postedDate: '',
   seekUrl: '',
+  permanentUrl: '',
 };
 
 /**
@@ -42,7 +46,6 @@ function todayLocal(): string {
 }
 
 interface UseJobResearchNewRowOptions {
-  jobTitles: CreatableComboboxOption[];
   onCreateJobTitle: (name: string) => Promise<CreatableComboboxOption>;
   /** Persists the record. Resolve to commit and clear the row; reject to keep what was typed. */
   onCreate: (dto: CreateJobResearchDto) => Promise<void>;
@@ -65,11 +68,13 @@ interface UseJobResearchNewRowOptions {
  * the same field.
  */
 export function useJobResearchNewRow({
-  jobTitles,
   onCreateJobTitle,
   onCreate,
   disabled = false,
 }: UseJobResearchNewRowOptions): DataGridNewRow {
+  // Server-searched: the Job Titles catalog is far larger than one page
+  // (see useJobTitleOptions).
+  const jobTitleSearch = useJobTitleOptions();
   const [draft, setDraft] = React.useState(emptyDraft);
   const [isSaving, setIsSaving] = React.useState(false);
 
@@ -99,6 +104,7 @@ export function useJobResearchNewRow({
         // DTO's date string expects.
         ...(draft.postedDate ? { postedDate: draft.postedDate } : {}),
         ...(draft.seekUrl.trim() ? { seekUrl: draft.seekUrl.trim() } : {}),
+        ...(draft.permanentUrl.trim() ? { permanentUrl: draft.permanentUrl.trim() } : {}),
       });
       // Back to today rather than blank — the next row is nearly always
       // logged the same day as this one.
@@ -123,7 +129,9 @@ export function useJobResearchNewRow({
       <GridCellCombobox
         value={draft.jobTitleId}
         onValueChange={(id) => set('jobTitleId', id)}
-        options={jobTitles}
+        options={jobTitleSearch.options}
+        serverSearched
+        onQueryChange={jobTitleSearch.onQueryChange}
         onCreate={onCreateJobTitle}
         disabled={disabled || isSaving}
       />
@@ -152,13 +160,14 @@ export function useJobResearchNewRow({
         aria-label="Posted date"
       />
     ),
+    // One box for both link fields — paste and press Enter, and the URL's own
+    // host decides whether it's the Seek listing or the archived copy (see
+    // GridCellLinkInput, mirroring the Contact column's behaviour).
     links: (
-      <GridCellInput
-        type="url"
-        value={draft.seekUrl}
-        onChange={(e) => set('seekUrl', e.target.value)}
+      <GridCellLinkInput
+        value={{ seekUrl: draft.seekUrl, permanentUrl: draft.permanentUrl }}
+        onChange={(next) => setDraft((d) => ({ ...d, ...next }))}
         disabled={disabled || isSaving}
-        aria-label="Seek URL"
       />
     ),
   };

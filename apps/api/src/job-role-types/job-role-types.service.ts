@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { rankedNameSearch } from '../common/ranked-name-search';
 import { CreateJobRoleTypeDto } from './dto/create-job-role-type.dto';
 import { QueryJobRoleTypesDto } from './dto/query-job-role-types.dto';
 
@@ -15,15 +15,16 @@ export class JobRoleTypesService {
    * whole table.
    */
   findAll(query: QueryJobRoleTypesDto) {
-    const where: Prisma.JobRoleTypeWhereInput = { isActive: true };
-    if (query.q) {
-      where.name = { contains: query.q, mode: Prisma.QueryMode.insensitive };
-    }
-    return this.prisma.jobRoleType.findMany({
-      where,
-      orderBy: { name: 'asc' },
-      take: query.take,
-    });
+    // Prefix matches first (see rankedNameSearch) — typing "Tools" should
+    // surface "Tools Manufacturing" above a mid-word match on an earlier
+    // letter, which plain alphabetical ordering never does.
+    return rankedNameSearch(query.q, query.take, (match, take) =>
+      this.prisma.jobRoleType.findMany({
+        where: { isActive: true, ...match },
+        orderBy: { name: 'asc' },
+        take,
+      }),
+    );
   }
 
   /**

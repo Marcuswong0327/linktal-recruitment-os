@@ -6,11 +6,11 @@ import { ClientCombobox } from '@/components/ClientCombobox';
 import { InlineAddRow } from '@/components/InlineAddRow';
 import { Input } from '@/components/ui/input';
 import { CreatableCombobox, type CreatableComboboxOption } from '@/components/CreatableCombobox';
+import { useJobTitleOptions } from '@/hooks/use-catalog-options';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
 import { accuracyOptions } from '@/features/stakeholders/columns';
-import type { ClientEntity } from '@/lib/api/generated/types';
 
 export interface AddStakeholderValues {
   clientId: string;
@@ -39,10 +39,10 @@ interface AddStakeholderRowProps {
    * sub-table does) to leave `clientId` out of the form entirely; the caller
    * sets it itself from page context.
    */
-  clients?: ClientEntity[];
+  /** Renders the compact inline layout with a Company picker — the standalone Stakeholders list. Omit for CompanyDetail's sub-table, where the client is implicit. */
+  withClientPicker?: boolean;
   roleTypes: CreatableComboboxOption[];
   onCreateRoleType: (name: string) => Promise<CreatableComboboxOption>;
-  jobTitles: CreatableComboboxOption[];
   onCreateJobTitle: (name: string) => Promise<CreatableComboboxOption>;
   isSaving: boolean;
   onSave: (values: AddStakeholderValues) => void;
@@ -64,7 +64,7 @@ const emptyValues: AddStakeholderValues = {
 
 /**
  * Add a new stakeholder — reused as CompanyDetail's own "add a stakeholder
- * for this company" sub-table row (no `clients` prop; `clientId` isn't
+ * for this company" sub-table row (no `withClientPicker`; `clientId` isn't
  * collected here since it's always this company) and as the standalone
  * Stakeholders list's quick-add row (`clients` passed, Company + Name are
  * the two critical fields — see issue #131).
@@ -74,14 +74,16 @@ export function AddStakeholderRow({
   open,
   onOpenChange,
   triggerDisabled,
-  clients,
+  withClientPicker,
   roleTypes,
   onCreateRoleType,
-  jobTitles,
   onCreateJobTitle,
   isSaving,
   onSave,
 }: AddStakeholderRowProps) {
+  // Server-searched: the Job Titles catalog is far larger than one page
+  // (see useJobTitleOptions).
+  const jobTitleSearch = useJobTitleOptions();
   const [values, setValues] = React.useState(emptyValues);
 
   // Reset every time the row opens, not just on first mount.
@@ -93,14 +95,14 @@ export function AddStakeholderRow({
     setValues((v) => ({ ...v, [key]: value }));
   }
 
-  // Standalone Stakeholders list (`clients` passed): Company + Name only,
+  // Standalone Stakeholders list (`withClientPicker`): Company + Name only,
   // typed directly into the row (Notion-style) — every other field here is
   // "rest optional… fill in later via detail view" per issue #131, so it
   // isn't worth surfacing at all in the quick-add. CompanyDetail's own
-  // sub-table (no `clients`) keeps the full stacked form — `clientId` is
+  // sub-table (no `withClientPicker`) keeps the full stacked form — `clientId` is
   // implicit there, but the rest of these fields are genuinely meant to be
   // set at add-time for that flow.
-  if (clients) {
+  if (withClientPicker) {
     return (
       <InlineAddRow
         colSpan={colSpan}
@@ -117,7 +119,6 @@ export function AddStakeholderRow({
         <ClientCombobox
           value={values.clientId}
           onValueChange={(id) => set('clientId', id)}
-          clients={clients}
           className="w-44"
         />
         <Input
@@ -162,7 +163,9 @@ export function AddStakeholderRow({
             id="stakeholder-job-title"
             value={values.jobTitleId}
             onValueChange={(id) => set('jobTitleId', id)}
-            options={jobTitles}
+            options={jobTitleSearch.options}
+        onQueryChange={jobTitleSearch.onQueryChange}
+        isFetching={jobTitleSearch.isFetching}
             onCreate={onCreateJobTitle}
           />
         </FormField>

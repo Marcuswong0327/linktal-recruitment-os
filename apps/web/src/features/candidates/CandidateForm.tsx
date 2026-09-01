@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
+import { useJobRoleTypeOptions } from '@/hooks/use-catalog-options';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
@@ -54,7 +55,6 @@ export function CandidateForm({
   title,
   description,
   industries,
-  roleTypes,
   onCreateIndustry,
   onCreateRoleType,
   isSaving,
@@ -64,13 +64,15 @@ export function CandidateForm({
   title: string;
   description: string;
   industries: { id: string; name: string }[];
-  roleTypes: { id: string; name: string }[];
   onCreateIndustry: (name: string) => Promise<{ id: string; name: string }>;
   onCreateRoleType: (name: string) => Promise<{ id: string; name: string }>;
   isSaving: boolean;
   onSave: (values: CandidateFormValues) => void;
   onCancel: () => void;
 }) {
+  // Server-searched: 267 role types against a 200-row page meant the tail of
+  // the catalog was unreachable here (see useJobRoleTypeOptions).
+  const roleTypeSearch = useJobRoleTypeOptions();
   const [firstName, setFirstName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
   const [email, setEmail] = React.useState('');
@@ -149,7 +151,9 @@ export function CandidateForm({
             id="candidate-role-type"
             value={jobRoleTypeId}
             onValueChange={setJobRoleTypeId}
-            options={roleTypes}
+            options={roleTypeSearch.options}
+            onQueryChange={roleTypeSearch.onQueryChange}
+            isFetching={roleTypeSearch.isFetching}
             onCreate={onCreateRoleType}
             clearable
           />

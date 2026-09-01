@@ -89,8 +89,7 @@ import {
 import {
   getGetJobTitlesQueryKey,
   useCreateJobTitle,
-  useGetJobTitles,
-} from '@/lib/api/generated/job-titles/job-titles';
+  } from '@/lib/api/generated/job-titles/job-titles';
 import { useGetJobOrders } from '@/lib/api/generated/job-orders/job-orders';
 import { useGetJobResearch } from '@/lib/api/generated/job-research/job-research';
 import {
@@ -561,22 +560,12 @@ function CompanyEditForm({
     return res.data;
   }
 
-  const jobTitlesParams = { take: 200 };
-  const { data: jobTitleData } = useGetJobTitles(jobTitlesParams);
-  const jobTitleOptions: CreatableComboboxOption[] = (
-    jobTitleData?.status === 200 ? jobTitleData.data : []
-  ).map((j) => ({ id: j.id, name: j.name }));
+  // The job title picker inside AddStakeholderRow searches the server itself
+  // now (see useJobTitleOptions), so there's no pre-fetched page to seed here.
   const createJobTitle = useCreateJobTitle();
   async function handleCreateJobTitle(name: string) {
     const res = await createJobTitle.mutateAsync({ data: { name } });
     if (res.status !== 201) throw new Error('Failed to add job title');
-    queryClient.setQueryData(
-      getGetJobTitlesQueryKey(jobTitlesParams),
-      (old: typeof jobTitleData) =>
-        old?.status === 200 && !old.data.some((j) => j.id === res.data.id)
-          ? { ...old, data: [...old.data, res.data] }
-          : old,
-    );
     queryClient.invalidateQueries({ queryKey: getGetJobTitlesQueryKey() });
     return res.data;
   }
@@ -979,7 +968,6 @@ function CompanyEditForm({
                           onOpenChange={setAddStakeholderOpen}
                           roleTypes={roleTypeOptions}
                           onCreateRoleType={handleCreateRoleType}
-                          jobTitles={jobTitleOptions}
                           onCreateJobTitle={handleCreateJobTitle}
                           isSaving={createStakeholder.isPending}
                           onSave={handleAddStakeholder}

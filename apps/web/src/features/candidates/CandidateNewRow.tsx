@@ -4,6 +4,7 @@ import * as React from 'react';
 import { toast } from 'sonner';
 
 import { GridCellCombobox } from '@/components/GridCellCombobox';
+import { useJobRoleTypeOptions } from '@/hooks/use-catalog-options';
 import { GridCellInput } from '@/components/GridCellInput';
 import {
   GridCellContactInput,
@@ -58,7 +59,6 @@ interface UseCandidateNewRowOptions {
    * recruiter sources into their own desk almost every time.
    */
   userIndustryIds: string[];
-  jobRoleTypes: CreatableComboboxOption[];
   onCreateJobRoleType: (name: string) => Promise<CreatableComboboxOption>;
   /**
    * Persists the record. Resolve to commit and clear the row; reject to keep
@@ -95,11 +95,12 @@ interface UseCandidateNewRowOptions {
 export function useCandidateNewRow({
   industries,
   userIndustryIds,
-  jobRoleTypes,
   onCreateJobRoleType,
   onCreate,
   disabled = false,
 }: UseCandidateNewRowOptions): DataGridNewRow {
+  // Server-searched — see useJobRoleTypeOptions.
+  const roleTypeSearch = useJobRoleTypeOptions();
   const industryOptions = React.useMemo(
     () => industries.map((i) => ({ id: i.id, name: i.name })),
     [industries],
@@ -163,7 +164,9 @@ export function useCandidateNewRow({
       <GridCellCombobox
         value={draft.jobRoleTypeId}
         onValueChange={(id) => set('jobRoleTypeId', id)}
-        options={jobRoleTypes}
+        options={roleTypeSearch.options}
+        serverSearched
+        onQueryChange={roleTypeSearch.onQueryChange}
         onCreate={onCreateJobRoleType}
         disabled={disabled || isSaving}
       />

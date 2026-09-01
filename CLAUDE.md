@@ -245,5 +245,5 @@ pnpm prisma:migrate   # Run migrations
 | `docs/workbook-import-discrepancies.md` | What the workbook importer can't resolve, and what needs deciding |
 | `docs/migrations.md` | DB migration workflow: rollout, rollback, deploy |
 | `docs/rbac-roles.md` | RBAC: permission matrix + the scoping rules (§3) |
-| `docs/ux-patterns.md` | Reusable frontend UX patterns — currently: delete confirmation + undo-toast |
+| `docs/ux-patterns.md` | Reusable frontend UX patterns: delete confirmation + undo-toast; confirm-before-commit |
 

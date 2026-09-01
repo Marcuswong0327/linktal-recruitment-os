@@ -24,12 +24,14 @@ import type { JobRoleTypeFacetEntity } from '@/lib/api/generated/types';
  * selected id; facets, an unbounded `groupBy`, always can as long as it has
  * at least one current match).
  *
- * The list only renders once the user has typed at least `MIN_QUERY_LENGTH`
- * characters — same "must type to browse" behavior as the City filter
- * (`LocationFilterButton` with `browsable` off), rather than dumping the
- * full (possibly 200+) facet list open on click.
+ * Opens straight onto the list rather than gating it behind a minimum query
+ * length. `facets` is already in memory and ordered by match count, so the
+ * first thing shown is the handful of role types that actually narrow this
+ * dataset — more useful than an empty box, and consistent with every other
+ * picker in the app, which all suggest before you type. Typing filters it,
+ * prefix matches first (mirroring the ranking the catalog endpoints apply
+ * server-side).
  */
-const MIN_QUERY_LENGTH = 2;
 
 export function RoleTypeFilter({
   selected,
@@ -44,24 +46,36 @@ export function RoleTypeFilter({
   labelFor: (id: string) => string;
 }) {
   const [inputValue, setInputValue] = React.useState('');
-  const searchEnabled = inputValue.trim().length >= MIN_QUERY_LENGTH;
+  const query = inputValue.trim().toLowerCase();
 
   const byId = React.useMemo(() => new Map(facets.map((f) => [f.id, f])), [facets]);
   const items = React.useMemo(() => {
-    const visible = searchEnabled ? facets.map((f) => f.id) : [];
+    // Filtered here rather than by the Combobox's own matcher so the order can
+    // be controlled: a name starting with what was typed comes first, and
+    // `facets` arrives count-ordered, so equal-rank entries keep that.
+    const matched = query
+      ? facets
+          .filter((f) => f.name.toLowerCase().includes(query))
+          .sort(
+            (a, b) =>
+              Number(b.name.toLowerCase().startsWith(query)) -
+              Number(a.name.toLowerCase().startsWith(query)),
+          )
+      : facets;
+    const visible = matched.map((f) => f.id);
     // Selected-but-not-in-current-facets (a filter combo that's since
     // narrowed this option to zero) still needs to render as a checked row —
-    // appended after the visible facets, in selection order, regardless of
-    // whether the list is currently gated behind typing.
+    // appended after the visible facets, in selection order.
     const ids = new Set(visible);
     return [...visible, ...selected.filter((id) => !ids.has(id))];
-  }, [facets, selected, searchEnabled]);
+  }, [facets, selected, query]);
 
   const resolveLabel = (id: string) => byId.get(id)?.name ?? labelFor(id);
 
   return (
     <Combobox.Root
       items={items}
+      filter={null} // ranked and filtered above — don't match a second time
       multiple
       value={selected}
       onValueChange={onChange}
@@ -105,7 +119,7 @@ export function RoleTypeFilter({
               />
             </div>
             <Combobox.Empty className="px-3 pb-3 text-center text-sm text-muted-foreground">
-              {!searchEnabled ? 'Type at least 2 characters to search.' : 'No role types match the current filters.'}
+              No role types match the current filters.
             </Combobox.Empty>
             <Combobox.List className="max-h-72 overflow-y-auto p-1 pt-0">
               {(id: string) => {

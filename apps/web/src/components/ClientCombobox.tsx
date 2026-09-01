@@ -1,10 +1,13 @@
 'use client';
 
+import * as React from 'react';
 import { useMemo, useCallback } from 'react';
 import { Combobox } from '@base-ui/react/combobox';
+import { keepPreviousData } from '@tanstack/react-query';
 import { Check, ChevronDown } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { useGetClients } from '@/lib/api/generated/clients/clients';
 import type { ClientEntity } from '@/lib/api/generated/types';
 
 /** Shared lookup + display helpers for any Combobox picking a client. */
@@ -79,27 +82,62 @@ interface ClientComboboxProps {
   id?: string;
   value: string;
   onValueChange: (value: string) => void;
-  clients: ClientEntity[];
+  /** The selected client's name, for the trigger — a server-searched list rarely still contains it. */
+  selectedLabel?: string;
   disabled?: boolean;
   className?: string;
 }
 
+const DEBOUNCE_MS = 300;
+const PAGE_SIZE = 20;
+
 /**
- * Searchable client picker. A plain dropdown doesn't scale once the client
- * roster grows — same reasoning as ConsultantCombobox — so this filters by
- * company name + industry.
+ * Searchable client picker, searched server-side.
+ *
+ * Deliberately not handed a pre-fetched array: there are ~1,650 clients and
+ * callers were passing `pageSize: 100`, so 94% of the roster simply wasn't
+ * selectable and which 100 you got was arbitrary. `GET /clients?q=` matches
+ * company name and industry, the same two fields the old local filter used.
  */
-export function ClientCombobox({ id, value, onValueChange, clients, disabled, className }: ClientComboboxProps) {
+export function ClientCombobox({
+  id,
+  value,
+  onValueChange,
+  selectedLabel,
+  disabled,
+  className,
+}: ClientComboboxProps) {
+  const [inputValue, setInputValue] = React.useState('');
+  const [debouncedQuery, setDebouncedQuery] = React.useState('');
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(inputValue.trim()), DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [inputValue]);
+
+  const { data } = useGetClients(
+    { q: debouncedQuery || undefined, pageSize: PAGE_SIZE },
+    { query: { placeholderData: keepPreviousData } },
+  );
+  const clients = React.useMemo(
+    () => (data?.status === 200 ? data.data.data : []),
+    [data],
+  );
   const { byId, items, labelFor, searchTextFor } = useClientLookup(clients);
 
   return (
     <Combobox.Root
       items={items}
+      filter={null} // server-searched — nothing to filter locally
       value={value}
       onValueChange={(next) => next != null && onValueChange(next)}
+      inputValue={inputValue}
+      onInputValueChange={setInputValue}
       itemToStringLabel={searchTextFor}
       itemToStringValue={(clientId) => clientId}
       disabled={disabled}
+      onOpenChange={(next) => {
+        if (next) setInputValue('');
+      }}
     >
       <Combobox.Trigger
         id={id}
@@ -109,7 +147,7 @@ export function ClientCombobox({ id, value, onValueChange, clients, disabled, cl
         )}
       >
         <span className={cn('min-w-0 flex-1 truncate text-left', !value && 'text-muted-foreground')}>
-          <Combobox.Value>{() => (value ? labelFor(value) : 'Select a client')}</Combobox.Value>
+          {value ? (byId.get(value)?.companyName ?? selectedLabel ?? 'Unknown') : 'Select a client'}
         </span>
         <Combobox.Icon className="text-muted-foreground">
           <ChevronDown className="pointer-events-none size-4 shrink-0" />

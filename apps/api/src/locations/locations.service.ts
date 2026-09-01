@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { LocationLevel, Prisma } from '@prisma/client';
+import { LocationLevel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { rankedNameSearch } from '../common/ranked-name-search';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { QueryLocationsDto } from './dto/query-locations.dto';
 
@@ -27,28 +28,23 @@ export class LocationsService {
    * beneath it without a recursive query).
    */
   findAll(query: QueryLocationsDto) {
-    const where: Prisma.LocationWhereInput = {};
-
-    if (query.q) {
-      where.name = { contains: query.q, mode: Prisma.QueryMode.insensitive };
-    }
-    if (query.level) {
-      where.level = query.level;
-    }
-    if (query.parentId) {
-      where.parentId = query.parentId;
-    }
-    if (query.underId) {
-      where.ancestorIds = { has: query.underId };
-    }
-
-    // Level before name so a mixed-level result reads top-down (countries,
-    // then states, then cities) instead of interleaving rungs alphabetically.
-    return this.prisma.location.findMany({
-      where,
-      orderBy: [{ level: 'asc' }, { name: 'asc' }],
-      take: query.take,
-    });
+    // Prefix matches first (see rankedNameSearch), then the existing
+    // level-before-name ordering within each group — so a mixed-level result
+    // still reads top-down (countries, then states, then cities) instead of
+    // interleaving rungs alphabetically, but a name that actually starts with
+    // what was typed is no longer buried under mid-word matches.
+    return rankedNameSearch(query.q, query.take, (match, take) =>
+      this.prisma.location.findMany({
+        where: {
+          ...match,
+          ...(query.level ? { level: query.level } : {}),
+          ...(query.parentId ? { parentId: query.parentId } : {}),
+          ...(query.underId ? { ancestorIds: { has: query.underId } } : {}),
+        },
+        orderBy: [{ level: 'asc' }, { name: 'asc' }],
+        take,
+      }),
+    );
   }
 
   async findOne(id: string) {

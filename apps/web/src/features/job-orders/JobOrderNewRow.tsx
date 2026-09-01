@@ -7,6 +7,7 @@ import { ConsultantMultiSelect } from '@/components/ConsultantCombobox';
 import type { CreatableComboboxOption } from '@/components/CreatableCombobox';
 import { GridCellClientCombobox } from '@/components/GridCellClientCombobox';
 import { GridCellCombobox } from '@/components/GridCellCombobox';
+import { useJobTitleOptions } from '@/hooks/use-catalog-options';
 import { GridCellEnumCombobox } from '@/components/GridCellEnumCombobox';
 import { focusNewRowStart, type DataGridNewRow } from '@/components/DataGrid';
 import type {
@@ -36,7 +37,6 @@ const emptyDraft: JobOrderDraft = {
 };
 
 interface UseJobOrderNewRowOptions {
-  jobTitles: CreatableComboboxOption[];
   consultants: ConsultantEntity[];
   onCreateJobTitle: (name: string) => Promise<CreatableComboboxOption>;
   /** Persists the record. Resolve to commit and clear the row; reject to keep what was typed. */
@@ -55,12 +55,13 @@ interface UseJobOrderNewRowOptions {
  * columns are computed (submission counts, timestamps) and render blank.
  */
 export function useJobOrderNewRow({
-  jobTitles,
   consultants,
   onCreateJobTitle,
   onCreate,
   disabled = false,
 }: UseJobOrderNewRowOptions): DataGridNewRow {
+  // Server-searched — see useJobTitleOptions.
+  const jobTitleSearch = useJobTitleOptions();
   const [draft, setDraft] = React.useState(emptyDraft);
   const [isSaving, setIsSaving] = React.useState(false);
 
@@ -131,7 +132,9 @@ export function useJobOrderNewRow({
       <GridCellCombobox
         value={draft.jobTitleId}
         onValueChange={(id) => set('jobTitleId', id)}
-        options={jobTitles}
+        options={jobTitleSearch.options}
+        serverSearched
+        onQueryChange={jobTitleSearch.onQueryChange}
         onCreate={onCreateJobTitle}
         disabled={disabled || isSaving}
       />

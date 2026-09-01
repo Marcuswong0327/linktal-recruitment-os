@@ -51,7 +51,6 @@ import {
 import {
   getGetJobTitlesQueryKey,
   useCreateJobTitle,
-  useGetJobTitles,
 } from '@/lib/api/generated/job-titles/job-titles';
 import type {
   ConsultantEntity,
@@ -93,7 +92,15 @@ export function JobOrdersTable({
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
-  const [statuses, setStatuses] = React.useState<GetJobOrdersStatusesItem[] | undefined>();
+  // The list opens narrowed to ACTIVE — the only status most of this page's
+  // work concerns; PLACED/CLOSED rows are history and otherwise bury the
+  // live roles. Seeded here *and* as DataGrid's `initialColumnFilters` (the
+  // grid doesn't fire onQueryChange on first render), so the request and the
+  // header chip agree from the first paint. Clearing the filter still shows
+  // every status — this is a default, not a restriction.
+  const [statuses, setStatuses] = React.useState<GetJobOrdersStatusesItem[] | undefined>([
+    'ACTIVE',
+  ]);
   const [priorityLevels, setPriorityLevels] = React.useState<number[] | undefined>();
   const [consultantIds, setConsultantIds] = React.useState<string[] | undefined>();
   const [sortBy, setSortBy] = React.useState<GetJobOrdersSortBy | undefined>();
@@ -105,8 +112,8 @@ export function JobOrdersTable({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [consultantPickerOpen, setConsultantPickerOpen] = React.useState(false);
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
-  // Arrived from the global header's "Add Job Order" button or the command
-  // palette's "Add Job Order" action (both navigate to `/job-orders?new=1`).
+  // Arrived from the command palette's "Add Job Order" action (navigates to
+  // `/job-orders?new=1`).
   // The new-row is always on screen now, so there's nothing to open — just
   // put the caret in it. The param is stripped immediately so refresh/back
   // doesn't re-steal focus, same as CompaniesSearchGate's `?new=1` handling.
@@ -130,8 +137,6 @@ export function JobOrdersTable({
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
 
 
-  const { data: jobTitleData } = useGetJobTitles({ take: 200 });
-  const jobTitles = jobTitleData?.status === 200 ? jobTitleData.data : [];
   const createJobTitle = useCreateJobTitle();
   // Toasts on the way out as well as rethrowing: the combobox that calls
   // this swallows the rejection (it only needs to stop showing a spinner),
@@ -173,7 +178,6 @@ export function JobOrdersTable({
   }
 
   const newRow = useJobOrderNewRow({
-    jobTitles,
     consultants,
     onCreateJobTitle: handleCreateJobTitle,
     onCreate: handleCreateJobOrder,
@@ -372,6 +376,7 @@ export function JobOrdersTable({
         isFetching={isFetching}
         searchPlaceholder="Search job orders…"
         filters={jobOrderFilters}
+        initialColumnFilters={[{ id: 'status', value: ['ACTIVE'] }]}
         emptyState="No job orders yet. Create one against a client to get started."
         getRowId={(j) => j.id}
         enableRowRangeSelect

@@ -55,10 +55,27 @@ describe('LocationsService.findAll', () => {
     const service = new LocationsService(prisma as unknown as PrismaService);
 
     await service.findAll(query({ q: 'syd', level: LocationLevel.CITY }));
+    // Prefix pass first, then the mid-word remainder — see rankedNameSearch.
     expect(prisma.location.findMany.mock.calls[0][0].where).toEqual({
-      name: { contains: 'syd', mode: 'insensitive' },
+      name: { startsWith: 'syd', mode: 'insensitive' },
       level: LocationLevel.CITY,
     });
+    expect(prisma.location.findMany.mock.calls[1][0].where).toEqual({
+      name: { contains: 'syd', mode: 'insensitive' },
+      NOT: { name: { startsWith: 'syd', mode: 'insensitive' } },
+      level: LocationLevel.CITY,
+    });
+  });
+
+  it('puts prefix matches ahead of mid-word ones', async () => {
+    const prisma = makePrisma();
+    prisma.location.findMany
+      .mockResolvedValueOnce([{ id: '1', name: 'Perth' }])
+      .mockResolvedValueOnce([{ id: '2', name: 'East Perth' }]);
+    const service = new LocationsService(prisma as unknown as PrismaService);
+
+    const rows = await service.findAll(query({ q: 'Perth' }));
+    expect(rows.map((r: { name: string }) => r.name)).toEqual(['Perth', 'East Perth']);
   });
 
   // Level before name, so a mixed-level result reads top-down instead of

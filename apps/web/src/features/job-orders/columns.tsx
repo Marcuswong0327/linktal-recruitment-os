@@ -6,8 +6,6 @@ import { ArrowUpRight } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { ConsultantAvatar } from '@/components/ConsultantCombobox';
-import { isPipelineDragEnabled } from '@/lib/feature-flags';
-import { PipelineSheetTrigger } from './PipelineSheet';
 import type { JobOrder } from './schema';
 import {
   jobOrderQualityLabels,
@@ -127,22 +125,16 @@ export function getJobOrderColumns(): ColumnDef<JobOrderRow>[] {
       size: 150,
       meta: { align: 'center' },
       // "Candidate-ing" = currently active in the pipeline (submitted,
-      // interviewing, or placed) — REJECTED candidates don't count. Adding/
-      // removing candidates from the pipeline happens on the job order's own
-      // page, not from this cell; the icon here only moves existing
-      // candidates between stages. Displayed count is still derived
+      // interviewing, or placed) — REJECTED candidates don't count. This cell
+      // is now a plain read-only count: adding, removing and re-staging
+      // candidates all happen on the job order's own page. Derived
       // client-side from pipelineSubmissions (always fresh on this response,
       // unlike the denormalized field, which only updates on the next
       // submission mutation) — same number either way barring a race.
       accessorFn: (row) => row.pipelineSubmissions.filter((s) => s.status !== 'REJECTED').length,
       cell: ({ row }) => {
         const count = row.original.pipelineSubmissions.filter((s) => s.status !== 'REJECTED').length;
-        return (
-          <div className="flex items-center justify-center gap-1">
-            <span className="tabular-nums">{count}</span>
-            {isPipelineDragEnabled ? <PipelineSheetTrigger jobOrder={row.original} /> : null}
-          </div>
-        );
+        return <span className="tabular-nums">{count}</span>;
       },
     },
     {

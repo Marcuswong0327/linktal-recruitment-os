@@ -12,13 +12,13 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
-import { getGetClientsQueryKey, useGetClients } from '@/lib/api/generated/clients/clients';
+import { getGetClientsQueryKey } from '@/lib/api/generated/clients/clients';
 import { useGetIndustries } from '@/lib/api/generated/industries/industries';
 import {
   getGetJobResearchQueryKey,
   useCreateJobResearch,
 } from '@/lib/api/generated/job-research/job-research';
-import { getGetJobTitlesQueryKey, useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
+import { getGetJobTitlesQueryKey, useCreateJobTitle } from '@/lib/api/generated/job-titles/job-titles';
 import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { buildJobResearchPayload, JobResearchForm, type JobResearchFormValues } from './JobResearchForm';
 import { JobResearchTable } from './JobResearchTable';
@@ -95,21 +95,15 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
   const industries = industriesData?.status === 200 ? industriesData.data : [];
   const industryOptions = React.useMemo(() => industries.map((i) => ({ value: i.id, label: i.name })), [industries]);
 
-  // `take: 200` (the endpoint's max) rather than the 50 default — same
-  // fallback-catalog reasoning as CandidateForm's role type picker.
-  const { data: jobTitlesData } = useGetJobTitles({ take: 200 });
-  const jobTitles = jobTitlesData?.status === 200 ? jobTitlesData.data : [];
 
-  const { data: clientsData } = useGetClients({ pageSize: 100 });
-  const clients = clientsData?.status === 200 ? clientsData.data.data : [];
 
   // Add-job-order lives here (not JobResearchTable) specifically so the
-  // global header's "Add Job Order" button works even before the gate's own
-  // table has ever mounted — same reasoning as CompaniesSearchGate's create sheet.
+  // command palette's "Add a Job Order" action works even before the gate's
+  // own table has ever mounted — same reasoning as CompaniesSearchGate's
+  // create sheet.
   const [creating, setCreating] = React.useState(false);
 
-  // Opened via the global header's "Add Job Order" button, or the command
-  // palette's "Add a Job Order" action (both navigate to
+  // Opened via the command palette's "Add a Job Order" action (navigates to
   // `/job-opening-search?new=1`) — strip the param immediately so
   // refresh/back doesn't reopen the sheet.
   React.useEffect(() => {
@@ -322,8 +316,6 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
             <JobResearchForm
               title="Add Job Orders Research"
               description="Log a job ad found in the market."
-              clients={clients}
-              jobTitles={jobTitles}
               onCreateJobTitle={handleCreateJobTitle}
               isSaving={createJobResearchMutation.isPending}
               onSave={handleCreate}

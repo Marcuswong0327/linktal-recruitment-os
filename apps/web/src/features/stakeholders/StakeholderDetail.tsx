@@ -56,7 +56,8 @@ import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { cn } from '@/lib/utils';
 import { useGetClientContactHistory } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
-import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
+import { useCreateJobTitle } from '@/lib/api/generated/job-titles/job-titles';
+import { useJobTitleOptions } from '@/hooks/use-catalog-options';
 import {
   useCreateStakeholderRoleType,
   useGetStakeholderRoleTypes,
@@ -300,12 +301,9 @@ function StakeholderEditForm({
     queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
   };
 
-  const { data: jobTitleData } = useGetJobTitles({ take: 200 });
-  const jobTitles = jobTitleData?.status === 200 ? jobTitleData.data : [];
-  const jobTitleOptions = React.useMemo(
-    () => jobTitles.map((j) => ({ id: j.id, name: j.name })),
-    [jobTitles],
-  );
+  // Server-searched — the catalog is far larger than one page (see
+  // useJobTitleOptions).
+  const jobTitleSearch = useJobTitleOptions();
   const createJobTitle = useCreateJobTitle();
   async function handleCreateJobTitle(name: string) {
     const res = await createJobTitle.mutateAsync({ data: { name } });
@@ -651,7 +649,10 @@ function StakeholderEditForm({
                   id="jobTitle"
                   value={jobTitleId}
                   onValueChange={setJobTitleId}
-                  options={jobTitleOptions}
+                  options={jobTitleSearch.options}
+                  onQueryChange={jobTitleSearch.onQueryChange}
+                  isFetching={jobTitleSearch.isFetching}
+                  selectedLabel={stakeholder.jobTitle ?? undefined}
                   onCreate={handleCreateJobTitle}
                   disabled={!canEdit}
                 />

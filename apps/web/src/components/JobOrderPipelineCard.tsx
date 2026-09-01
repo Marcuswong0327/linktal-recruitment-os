@@ -19,9 +19,12 @@ import {
 } from '@/components/ui/table';
 import { CandidateCombobox } from '@/components/CandidateCombobox';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+import { ConfirmSubmitCandidateDialog } from '@/components/ConfirmSubmitCandidateDialog';
 import { LinkedinIcon } from '@/components/BrandIcons';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { cn } from '@/lib/utils';
+import { snapToQuarterHour, toDateOnly } from '@/lib/datetime';
+import { DateTimeField } from '@/components/DateTimeField';
 import { getGetCandidatesQueryKey } from '@/lib/api/generated/candidates/candidates';
 import {
   getGetJobOrderQueryKey,
@@ -36,6 +39,7 @@ import {
 import {
   getGetPlacementsQueryKey,
   useCreatePlacement,
+  useDeletePlacement,
   useGetPlacements,
   useUpdatePlacement,
 } from '@/lib/api/generated/placements/placements';
@@ -51,6 +55,7 @@ import type {
   JobOrderEntity,
   JobOrderPipelineCandidateEntity,
   PlacementEntity,
+  UpdateSubmissionDto,
 } from '@/lib/api/generated/types';
 
 const shortDateFormatter = new Intl.DateTimeFormat('en-GB', {
@@ -243,6 +248,7 @@ function TickCrossPair({
 const dateInputClass =
   'h-7 w-32 rounded-md border border-input bg-transparent px-1.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30';
 
+
 function PipelineRow({
   index,
   row,
@@ -251,8 +257,7 @@ function PipelineRow({
   onShortlist,
   onInterviewDateChange,
   onInterviewOutcome,
-  onAccept,
-  onDecline,
+  onCdd,
   onStartDateChange,
   onRemove,
   saving,
@@ -264,8 +269,8 @@ function PipelineRow({
   onShortlist: (value: boolean | null) => void;
   onInterviewDateChange: (date: string) => void;
   onInterviewOutcome: (outcome: 'SCHEDULED' | 'PASSED' | 'FAILED') => void;
-  onAccept: () => void;
-  onDecline: (value: boolean | null) => void;
+  /** true = accepted (creates the placement), false = declined, null = undecided (deletes it again). */
+  onCdd: (next: boolean | null) => void;
   onStartDateChange: (date: string) => void;
   onRemove: () => void;
   saving: boolean;
@@ -284,14 +289,20 @@ function PipelineRow({
 
   const cddState: 'tick' | 'cross' | null =
     row.cddAccepted === true ? 'tick' : row.cddAccepted === false ? 'cross' : null;
-  // Ticking CDD Accepted creates the Placement in the same action (see
-  // onAccept below) — once that's happened it's locked, same "irreversible
-  // via this simple UI" reasoning as the rest of this table.
+  // Ticking CDD Accepted creates the Placement; un-ticking deletes it again.
+  // Nothing in this row locks after that — the API's placement delete fully
+  // reverses its own side effects (submission back to INTERVIEWING, candidate
+  // to WARM, the job order's filledCount decremented and un-PLACED, the client
+  // back to WARM if that was its only placement), so a mis-click here is
+  // correctable rather than permanent.
   const accepted = row.cddAccepted === true;
   // The candidate can't start before they interviewed — gates the Starting
   // date input's floor (both via the native date picker's `min` and an
   // explicit check, since a typed-in date can bypass `min`).
-  const interviewDateValue = toDateInputValue(interview?.interviewDate);
+  // Date part only: the interview is now a datetime while the start date below
+  // stays date-only, and comparing the two raw strings would make a same-day
+  // start look "earlier" than its interview.
+  const interviewDateValue = toDateOnly(interview?.interviewDate);
 
   return (
     <TableRow className="divide-x divide-border align-top">
@@ -314,7 +325,7 @@ function PipelineRow({
       <TableCell>
         <TickCrossPair
           state={shortlistState}
-          disabled={saving || accepted}
+          disabled={saving}
           onTick={() => onShortlist(shortlistState === 'tick' ? null : true)}
           onCross={() => onShortlist(shortlistState === 'cross' ? null : false)}
           tickLabel="Shortlisted for interview"
@@ -323,17 +334,18 @@ function PipelineRow({
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-2">
-          <input
-            type="date"
-            aria-label="Interview date"
-            value={toDateInputValue(interview?.interviewDate)}
-            onChange={(e) => e.target.value && onInterviewDateChange(e.target.value)}
-            disabled={saving || !interviewGateOpen || accepted}
-            className={dateInputClass}
+          <DateTimeField
+            value={interview?.interviewDate}
+            onChange={(iso) => iso && onInterviewDateChange(iso)}
+            disabled={saving || !interviewGateOpen}
+            size="sm"
+            dateAriaLabel="Interview date"
+            hourAriaLabel="Interview hour"
+            minuteAriaLabel="Interview minute"
           />
           <TickCrossPair
             state={outcomeState}
-            disabled={saving || !interviewGateOpen || !interview || accepted}
+            disabled={saving || !interviewGateOpen || !interview}
             onTick={() => onInterviewOutcome(outcomeState === 'tick' ? 'SCHEDULED' : 'PASSED')}
             onCross={() => onInterviewOutcome(outcomeState === 'cross' ? 'SCHEDULED' : 'FAILED')}
             tickLabel="Passed interview"
@@ -345,9 +357,9 @@ function PipelineRow({
         <div className="flex items-center gap-2">
           <TickCrossPair
             state={cddState}
-            disabled={saving || accepted}
-            onTick={onAccept}
-            onCross={() => onDecline(cddState === 'cross' ? null : false)}
+            disabled={saving}
+            onTick={() => onCdd(cddState === 'tick' ? null : true)}
+            onCross={() => onCdd(cddState === 'cross' ? null : false)}
             tickLabel="CDD accepted"
             crossLabel="CDD declined"
           />
@@ -377,7 +389,11 @@ function PipelineRow({
           type="button"
           disabled={saving || accepted}
           onClick={onRemove}
-          title={accepted ? "Can't remove a placed candidate" : 'Remove from pipeline'}
+          title={
+            accepted
+              ? 'Un-tick CDD accepted first — that deletes the placement'
+              : 'Remove from pipeline'
+          }
           aria-label="Remove from pipeline"
           className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
         >
@@ -398,12 +414,13 @@ function PipelineRow({
  */
 export function JobOrderPipelineCard({
   jobOrder,
-  candidates,
   clientIndustryId,
+  clientIndustry,
 }: {
   jobOrder: JobOrderEntity;
-  candidates: CandidateEntity[];
   clientIndustryId?: string | null;
+  /** Resolved industry name, for the mismatch copy in the confirm dialog. */
+  clientIndustry?: string | null;
 }) {
   const queryClient = useQueryClient();
 
@@ -449,6 +466,13 @@ export function JobOrderPipelineCard({
       onError: (err) => toast.error(err.message || 'Failed to record placement'),
     },
   });
+  const deletePlacement = useDeletePlacement({
+    mutation: {
+      onSuccess: invalidateAll,
+      onError: (err) => toast.error(err.message || 'Failed to undo the placement'),
+    },
+  });
+
   const updatePlacement = useUpdatePlacement({
     mutation: {
       onSuccess: invalidateAll,
@@ -457,17 +481,31 @@ export function JobOrderPipelineCard({
   });
 
   const [submitOpen, setSubmitOpen] = React.useState(false);
-  const [pickerValue, setPickerValue] = React.useState('');
+  const [pickedCandidate, setPickedCandidate] = React.useState<CandidateEntity | null>(null);
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = React.useState(false);
   const createSubmission = useCreateSubmission({
     mutation: {
       onSuccess: () => {
         invalidateAll();
-        setPickerValue('');
+        setPickedCandidate(null);
+        setConfirmSubmitOpen(false);
         setSubmitOpen(false);
+        toast.success('Submitted');
       },
+      // Leaves the dialog open so the message is read next to what caused it —
+      // notably the ALREADY_SUBMITTED conflict when someone else got there
+      // first between opening the picker and confirming.
       onError: (err) => toast.error(err.message || 'Failed to submit'),
     },
   });
+
+  // Everyone already in the pipeline, so the picker can grey them out. Live
+  // rows only, which is right: the API revives a soft-deleted submission
+  // rather than rejecting it, and those aren't in `pipelineSubmissions`.
+  const submittedCandidateIds = React.useMemo(
+    () => new Set(jobOrder.pipelineSubmissions.map((s) => s.candidateId)),
+    [jobOrder.pipelineSubmissions],
+  );
 
   const [confirmingRemove, setConfirmingRemove] = React.useState<JobOrderPipelineCandidateEntity | null>(null);
   const deleteSubmission = useDeleteSubmission();
@@ -484,24 +522,19 @@ export function JobOrderPipelineCard({
     });
   }
 
-  function handleSubmitCandidate() {
-    if (!pickerValue) return;
-    const candidate = candidates.find((c) => c.id === pickerValue);
-    const mismatch =
-      (!!clientIndustryId && candidate != null && candidate.industryId !== clientIndustryId) ||
-      (!!jobOrder.locationId && candidate != null && candidate.locationId !== jobOrder.locationId);
-    createSubmission.mutate(
-      { data: { candidateId: pickerValue, jobOrderId: jobOrder.id } },
-      {
-        onSuccess: () => {
-          toast[mismatch ? 'warning' : 'success'](
-            mismatch
-              ? "This candidate's industry or location doesn't match the job order's — still fine to submit, just a heads-up to double-check the fit."
-              : 'Submitted',
-          );
-        },
-      },
-    );
+  // Close the popover before opening the dialog rather than stacking the two:
+  // the modal dialog's focus trap would dismiss the popover at an
+  // unpredictable moment otherwise, and focus needs to land back on the
+  // trigger when the dialog closes.
+  function handleSubmitClick() {
+    if (!pickedCandidate) return;
+    setSubmitOpen(false);
+    setConfirmSubmitOpen(true);
+  }
+
+  function handleConfirmSubmit() {
+    if (!pickedCandidate) return;
+    createSubmission.mutate({ data: { candidateId: pickedCandidate.id, jobOrderId: jobOrder.id } });
   }
 
   const rows = React.useMemo(
@@ -532,12 +565,44 @@ export function JobOrderPipelineCard({
     [placements],
   );
 
+
+  /**
+   * Drops the placement backing a row, if there is one. The API's delete
+   * reverses everything its create did — submission back to INTERVIEWING,
+   * candidate to WARM, the job order's filledCount decremented (and un-PLACED
+   * if it had filled), and the client back to WARM when that was its only
+   * placement — so this is a genuine undo, not a dangling delete.
+   */
+  function clearPlacement(row: JobOrderPipelineCandidateEntity) {
+    const placement = placementBySubmission.get(row.submissionId);
+    if (placement) deletePlacement.mutate({ id: placement.id });
+  }
+
+  /**
+   * Pushes a stage failure onto the interview round, or takes it back off.
+   * Only ever touches an interview that already exists: inventing a round
+   * purely to stamp FAILED on it would put a meeting in the record that never
+   * happened. With no round scheduled there's nothing to fail.
+   */
+  function cascadeInterviewOutcome(row: JobOrderPipelineCandidateEntity, failed: boolean) {
+    const existing = interviewBySubmission.get(row.submissionId);
+    if (!existing) return;
+    if (failed) {
+      if (existing.outcome !== 'FAILED') {
+        updateInterview.mutate({ id: existing.id, data: { outcome: 'FAILED' } });
+      }
+    } else if (existing.outcome === 'FAILED') {
+      updateInterview.mutate({ id: existing.id, data: { outcome: 'SCHEDULED' } });
+    }
+  }
+
   const mutating =
     updateSubmission.isPending ||
     createInterview.isPending ||
     updateInterview.isPending ||
     createPlacement.isPending ||
-    updatePlacement.isPending;
+    updatePlacement.isPending ||
+    deletePlacement.isPending;
 
   return (
     <Card size="sm">
@@ -555,17 +620,12 @@ export function JobOrderPipelineCard({
           <PopoverContent align="end" className="w-72">
             <div className="flex flex-col gap-2">
               <CandidateCombobox
-                value={pickerValue}
-                onValueChange={setPickerValue}
-                candidates={candidates}
+                value={pickedCandidate}
+                onChange={setPickedCandidate}
+                disabledIds={submittedCandidateIds}
               />
-              <Button
-                type="button"
-                size="sm"
-                disabled={!pickerValue || createSubmission.isPending}
-                onClick={handleSubmitCandidate}
-              >
-                {createSubmission.isPending ? 'Submitting…' : 'Submit'}
+              <Button type="button" size="sm" disabled={!pickedCandidate} onClick={handleSubmitClick}>
+                Submit
               </Button>
             </div>
           </PopoverContent>
@@ -597,9 +657,20 @@ export function JobOrderPipelineCard({
                     interview={interviewBySubmission.get(row.submissionId) ?? null}
                     placement={placementBySubmission.get(row.submissionId) ?? null}
                     saving={mutating}
-                    onShortlist={(shortlisted) =>
-                      updateSubmission.mutate({ id: row.submissionId, data: { shortlisted } })
-                    }
+                    onShortlist={(shortlisted) => {
+                      // A failed stage fails everything after it — the client
+                      // saying no to an interview settles the CDD question
+                      // too, so leaving the later columns blank would just be
+                      // a to-do nobody can action. Both fields go in one
+                      // update rather than two, so the second can't clobber
+                      // the first.
+                      const data: UpdateSubmissionDto = { shortlisted };
+                      if (shortlisted === false) data.cddAccepted = false;
+                      else if (row.cddAccepted === false) data.cddAccepted = null;
+                      updateSubmission.mutate({ id: row.submissionId, data });
+                      cascadeInterviewOutcome(row, shortlisted === false);
+                      if (shortlisted === false) clearPlacement(row);
+                    }}
                     onInterviewDateChange={(date) => {
                       const existing = interviewBySubmission.get(row.submissionId);
                       if (existing) {
@@ -617,39 +688,55 @@ export function JobOrderPipelineCard({
                     onInterviewOutcome={(outcome) => {
                       const existing = interviewBySubmission.get(row.submissionId);
                       if (existing) updateInterview.mutate({ id: existing.id, data: { outcome } });
+                      // Same cascade one stage further down.
+                      if (outcome === 'FAILED') {
+                        clearPlacement(row);
+                        updateSubmission.mutate({
+                          id: row.submissionId,
+                          data: { cddAccepted: false },
+                        });
+                      } else if (row.cddAccepted === false) {
+                        updateSubmission.mutate({ id: row.submissionId, data: { cddAccepted: null } });
+                      }
                     }}
-                    onAccept={() => {
-                      // Checking CDD Accepted directly is a shortcut through the
-                      // earlier gates — backfill Shortlisted and a Passed
-                      // interview (creating one if the candidate never had one)
-                      // instead of requiring them ticked in order first.
-                      updateSubmission.mutate({
-                        id: row.submissionId,
-                        data: { shortlisted: true, cddAccepted: true },
-                      });
-                      const existingInterview = interviewBySubmission.get(row.submissionId);
-                      if (existingInterview) {
-                        if (existingInterview.outcome !== 'PASSED') {
-                          updateInterview.mutate({
-                            id: existingInterview.id,
-                            data: { outcome: 'PASSED' },
+                    onCdd={(next) => {
+                      if (next === true) {
+                        // Checking CDD Accepted directly is a shortcut through
+                        // the earlier gates — backfill Shortlisted and a Passed
+                        // interview (creating one if the candidate never had
+                        // one) instead of requiring them ticked in order first.
+                        updateSubmission.mutate({
+                          id: row.submissionId,
+                          data: { shortlisted: true, cddAccepted: true },
+                        });
+                        const existingInterview = interviewBySubmission.get(row.submissionId);
+                        if (existingInterview) {
+                          if (existingInterview.outcome !== 'PASSED') {
+                            updateInterview.mutate({
+                              id: existingInterview.id,
+                              data: { outcome: 'PASSED' },
+                            });
+                          }
+                        } else {
+                          createInterview.mutate({
+                            data: {
+                              submissionId: row.submissionId,
+                              roundLabel: 'Interview',
+                              interviewDate: snapToQuarterHour(new Date()).toISOString(),
+                              outcome: 'PASSED',
+                            },
                           });
                         }
-                      } else {
-                        createInterview.mutate({
-                          data: {
-                            submissionId: row.submissionId,
-                            roundLabel: 'Interview',
-                            interviewDate: new Date().toISOString().slice(0, 10),
-                            outcome: 'PASSED',
-                          },
-                        });
+                        createPlacement.mutate({ data: { submissionId: row.submissionId } });
+                        return;
                       }
-                      createPlacement.mutate({ data: { submissionId: row.submissionId } });
+                      // Declining or clearing both mean "not placed", so the
+                      // placement goes either way. Its delete endpoint undoes
+                      // the candidate/job-order/client side effects the create
+                      // applied, which is what makes this reversible at all.
+                      clearPlacement(row);
+                      updateSubmission.mutate({ id: row.submissionId, data: { cddAccepted: next } });
                     }}
-                    onDecline={(cddAccepted) =>
-                      updateSubmission.mutate({ id: row.submissionId, data: { cddAccepted } })
-                    }
                     onStartDateChange={(date) => {
                       const placement = placementBySubmission.get(row.submissionId);
                       if (placement)
@@ -663,6 +750,17 @@ export function JobOrderPipelineCard({
           </div>
         )}
       </CardContent>
+
+      <ConfirmSubmitCandidateDialog
+        open={confirmSubmitOpen}
+        candidate={pickedCandidate}
+        jobOrder={jobOrder}
+        clientIndustryId={clientIndustryId}
+        clientIndustry={clientIndustry}
+        isSubmitting={createSubmission.isPending}
+        onCancel={() => setConfirmSubmitOpen(false)}
+        onConfirm={handleConfirmSubmit}
+      />
 
       <ConfirmDeleteDialog
         open={confirmingRemove !== null}

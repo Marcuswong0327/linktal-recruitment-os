@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input';
 import { SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ClientCombobox } from '@/components/ClientCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
+import { useJobTitleOptions } from '@/hooks/use-catalog-options';
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
-import type { ClientEntity, CreateJobResearchDto } from '@/lib/api/generated/types';
+import type { CreateJobResearchDto } from '@/lib/api/generated/types';
 
 /** Editable fields for the create sheet. Editing an existing research row happens inline in its table row / a future detail view. */
 export interface JobResearchFormValues {
@@ -38,8 +39,6 @@ export function buildJobResearchPayload(values: JobResearchFormValues): CreateJo
 export function JobResearchForm({
   title,
   description,
-  clients,
-  jobTitles,
   onCreateJobTitle,
   isSaving,
   onSave,
@@ -47,13 +46,14 @@ export function JobResearchForm({
 }: {
   title: string;
   description: string;
-  clients: ClientEntity[];
-  jobTitles: { id: string; name: string }[];
   onCreateJobTitle: (name: string) => Promise<{ id: string; name: string }>;
   isSaving: boolean;
   onSave: (values: JobResearchFormValues) => void;
   onCancel: () => void;
 }) {
+  // Server-searched: the Job Titles catalog is far larger than one page
+  // (see useJobTitleOptions).
+  const jobTitleSearch = useJobTitleOptions();
   const [clientId, setClientId] = React.useState('');
   const [location, setLocation] = React.useState<LocationOption | null>(null);
   const [jobTitleId, setJobTitleId] = React.useState('');
@@ -76,14 +76,16 @@ export function JobResearchForm({
 
       <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
         <FormField label="Company" htmlFor="research-client" required>
-          <ClientCombobox id="research-client" value={clientId} onValueChange={setClientId} clients={clients} />
+          <ClientCombobox id="research-client" value={clientId} onValueChange={setClientId} />
         </FormField>
         <FormField label="Job title" htmlFor="research-job-title" description="The advertiser's own words.">
           <CreatableCombobox
             id="research-job-title"
             value={jobTitleId}
             onValueChange={setJobTitleId}
-            options={jobTitles}
+            options={jobTitleSearch.options}
+        onQueryChange={jobTitleSearch.onQueryChange}
+        isFetching={jobTitleSearch.isFetching}
             onCreate={onCreateJobTitle}
             clearable
           />

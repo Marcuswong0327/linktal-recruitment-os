@@ -27,7 +27,11 @@ import { Candidate, CandidateStatus, ContactCategory, LocationLevel, Prisma } fr
  * get plain strings instead of joining against /industries, /job-role-types,
  * /locations or /specializations themselves.
  */
-export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedById'> {
+// `mobileDigits` is omitted deliberately: it's the trigger-maintained
+// digits-only mirror of `mobile` that free-text phone search matches against
+// (see CandidatesService.buildWhere), an internal index, not information a
+// caller has any use for — `mobile` is the value of record.
+export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedById' | 'mobileDigits'> {
   @ApiProperty() id!: string;
   @ApiProperty({ example: 'CDD-000001' }) displayId!: string;
   @ApiProperty({ type: String, nullable: true, example: 'John' }) firstName!: string | null;

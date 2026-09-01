@@ -1,8 +1,8 @@
 # UX Patterns
 
 Reusable interaction patterns for the web app (`apps/web`), factored out once
-they showed up in enough places to be worth naming. Currently just one:
-delete confirmation + undo.
+they showed up in enough places to be worth naming: delete confirmation + undo,
+and confirmation before a non-destructive commit.
 
 ---
 
@@ -111,3 +111,45 @@ building on top of code that doesn't compile, or absorbing the whole
 Candidates API-client migration as a side effect. That migration is real,
 scoped separately, and should land first — then apply this pattern to
 Candidates as part of (or immediately after) that work.
+
+---
+
+## 2. Confirm before a non-destructive commit
+
+Some writes aren't destructive but still deserve a "are you sure?" — the ones
+where the only way back is to find and undo the thing you just created, and
+where the control that triggered them can't show you *what* you're about to
+commit. Submitting a candidate to a job order is the case this was written for:
+two candidates often share a name, so the picker alone can't confirm you got
+the right person.
+
+Shape (see `apps/web/src/components/ConfirmSubmitCandidateDialog.tsx`, and
+`apps/web/src/features/roles/RoleForm.tsx` for an inline instance):
+
+1. **Recap what's being committed** — restate the record and its target in
+   label/value rows. This is the whole point; a bare "Are you sure?" adds a
+   click and no information.
+2. **Surface warnings here, not after.** Anything advisory about the write
+   (e.g. the candidate's industry/location not matching the job order's)
+   belongs in the dialog, where it can still change the decision. The same
+   warning as a post-success toast is unactionable — the record already exists.
+3. `AlertDialogHeader` takes `icon` + `iconVariant`; switch to
+   `AlertTriangle` / `"warning"` when there's something to flag, and a neutral
+   icon otherwise.
+
+### Two traps in the primitives
+
+- **`AlertDialogAction` is a `Close`.** It dismisses the dialog on click, so a
+  `Submitting…` state on it is never visible and an error surfaces with the
+  dialog already gone. For a confirm that fires a real request, use a plain
+  `<Button>` and let the mutation's own success handler close the dialog —
+  then an error leaves it open, next to the toast explaining it.
+- **`AlertDialogAction` defaults to `variant="destructive"`.** Pass an explicit
+  variant on a non-destructive confirm, or it renders red.
+
+### Keep the subject mounted while it closes
+
+Drive `open` from its own boolean, not from `subject !== null`. The dialog
+animates out over ~150ms, and clearing the subject at the same moment blanks
+the recap mid-animation. (`ConfirmDeleteDialog` gets away with
+`confirmingRemove !== null` only because its copy is static.)
