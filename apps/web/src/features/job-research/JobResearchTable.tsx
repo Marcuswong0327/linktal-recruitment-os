@@ -15,21 +15,31 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { DataGrid, type DataGridQuery } from '@/components/DataGrid';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  getGetJobTitlesQueryKey,
+  useCreateJobTitle,
+  useGetJobTitles,
+} from '@/lib/api/generated/job-titles/job-titles';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { downloadFile } from '@/lib/api/fetcher';
 import {
+  createJobResearch as createJobResearchRequest,
   getExportJobResearchByIdsUrl,
   getExportJobResearchUrl,
+  getGetJobResearchQueryKey,
   useGetJobResearch,
 } from '@/lib/api/generated/job-research/job-research';
 import { GetJobResearchSortBy } from '@/lib/api/generated/types/getJobResearchSortBy';
 import type {
+  CreateJobResearchDto,
   ExportJobResearchSortBy,
   ExportJobResearchSortOrder,
   ExportJobResearchStatusesItem,
   GetJobResearchSortOrder,
   GetJobResearchStatusesItem,
 } from '@/lib/api/generated/types';
+import { useJobResearchNewRow } from './JobResearchNewRow';
 import { getJobResearchColumns } from './columns';
 import type { JobResearch, JobResearchAppliedFilters } from './schema';
 
@@ -43,12 +53,49 @@ export function JobResearchTable({
 }) {
   const router = useRouter();
   const [page, setPage] = React.useState(1);
+  // The DataGrid's own free-text box — distinct from the gate's committed
+  // filters above it (search-as-you-type, no "Search" click required), same
+  // pattern as CandidatesTable.
+  const [search, setSearch] = React.useState<string | undefined>();
   // Seeded from the gate's "Sort by" selection; a column header click can
   // still override it locally afterward, same as any other DataGrid.
   const [sortBy, setSortBy] = React.useState<GetJobResearchSortBy | undefined>(filters.sortBy);
   const [sortOrder, setSortOrder] = React.useState<GetJobResearchSortOrder>(filters.sortOrder ?? 'desc');
   const [selected, setSelected] = React.useState<JobResearch[]>([]);
   const [isExporting, setIsExporting] = React.useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: jobTitleData } = useGetJobTitles({ take: 200 });
+  const jobTitles = jobTitleData?.status === 200 ? jobTitleData.data : [];
+  const createJobTitle = useCreateJobTitle();
+
+  async function handleCreateJobTitle(name: string) {
+    try {
+      const res = await createJobTitle.mutateAsync({ data: { name } });
+      if (res.status !== 201) throw new Error('Failed to add job title');
+      queryClient.invalidateQueries({ queryKey: getGetJobTitlesQueryKey() });
+      return res.data;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add job title');
+      throw err;
+    }
+  }
+
+  // Rethrows so the new row keeps the typed-in draft on failure.
+  async function handleCreateJobResearch(dto: CreateJobResearchDto) {
+    try {
+      const res = await createJobResearchRequest(dto);
+      if (res.status !== 201) throw new Error('Failed to create research row');
+      // Back to page 1 for the same reason every other table does it: a new
+      // row shifts positions across the pages useInfinitePages already holds.
+      setPage(1);
+      queryClient.invalidateQueries({ queryKey: getGetJobResearchQueryKey() });
+      toast.success('Research row added');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create research row');
+      throw err;
+    }
+  }
 
   // Same selection-order tracking as CompaniesTable, and for the same
   // reason: DataGrid reports rows in table order, not click order, but
@@ -78,6 +125,7 @@ export function JobResearchTable({
     {
       page,
       pageSize: PAGE_SIZE,
+      q: search,
       statuses: filters.statuses as GetJobResearchStatusesItem[] | undefined,
       industryIds: filters.industryIds,
       specializationIds: filters.specializationIds,
@@ -93,13 +141,14 @@ export function JobResearchTable({
   const result = data?.status === 200 ? data.data : undefined;
   const rows = useInfinitePages(result?.data, page, isFetching);
 
-  // Sorting is the only thing the grid itself still reports — search and
-  // faceted filters both live in the gate's action bar.
-  function handleQueryChange({ sorting }: DataGridQuery) {
+  // The grid itself reports search (its own free-text box) and sorting —
+  // faceted filters still live entirely in the gate's action bar.
+  function handleQueryChange({ search, sorting }: DataGridQuery) {
     const sort = sorting[0];
     const sortField = sort && sort.id in GetJobResearchSortBy ? (sort.id as GetJobResearchSortBy) : undefined;
     setSortBy(sortField);
     setSortOrder(sort?.desc ? 'desc' : 'asc');
+    setSearch(search.trim() || undefined);
     setPage(1);
   }
 
@@ -130,6 +179,7 @@ export function JobResearchTable({
       } else {
         await downloadFile(
           getExportJobResearchUrl({
+            q: search,
             statuses: filters.statuses as unknown as ExportJobResearchStatusesItem[] | undefined,
             industryIds: filters.industryIds,
             specializationIds: filters.specializationIds,
@@ -172,13 +222,21 @@ export function JobResearchTable({
     );
   }
 
+  const newRow = useJobResearchNewRow({
+    jobTitles,
+    onCreateJobTitle: handleCreateJobTitle,
+    onCreate: handleCreateJobResearch,
+    disabled: false,
+  });
+
   return (
     <DataGrid
       columns={columns}
+      newRow={newRow}
       data={rows}
       isLoading={isLoading}
       isFetching={isFetching}
-      hideSearch
+      searchPlaceholder="Search job research…"
       emptyState="No job orders match these filters."
       getRowId={(r) => r.id}
       onSelectionChange={handleSelectionChange}

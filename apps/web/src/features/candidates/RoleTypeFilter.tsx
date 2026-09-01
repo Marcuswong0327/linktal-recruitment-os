@@ -5,7 +5,7 @@ import { Combobox } from '@base-ui/react/combobox';
 import { Check, ChevronDown } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import type { JobRoleTypeFacetEntity } from '@/lib/api/generated/types';
 
 /**
@@ -57,9 +57,7 @@ export function RoleTypeFilter({
     return [...visible, ...selected.filter((id) => !ids.has(id))];
   }, [facets, selected, searchEnabled]);
 
-  function remove(id: string) {
-    onChange(selected.filter((v) => v !== id));
-  }
+  const resolveLabel = (id: string) => byId.get(id)?.name ?? labelFor(id);
 
   return (
     <Combobox.Root
@@ -69,44 +67,37 @@ export function RoleTypeFilter({
       onValueChange={onChange}
       inputValue={inputValue}
       onInputValueChange={setInputValue}
-      itemToStringLabel={(id) => byId.get(id)?.name ?? labelFor(id)}
+      itemToStringLabel={resolveLabel}
       itemToStringValue={(id) => id}
     >
-      <Combobox.Trigger className="flex min-h-10 w-full flex-wrap items-center gap-1.5 rounded-2xl border border-input bg-input/50 px-3 py-2 text-left text-sm outline-none transition-[color,box-shadow] duration-200 hover:bg-input/70 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30">
-        {selected.length === 0 ? (
-          <span className="text-muted-foreground">Any role type…</span>
-        ) : (
-          selected.map((id) => (
-            <Badge key={id} variant="secondary" className="gap-1 rounded-md font-normal">
-              {byId.get(id)?.name ?? labelFor(id)}
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label={`Remove ${byId.get(id)?.name ?? labelFor(id)}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  remove(id);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    remove(id);
-                  }
-                }}
-                className="cursor-pointer opacity-70 hover:opacity-100"
-              >
-                ×
-              </span>
-            </Badge>
-          ))
-        )}
-        <ChevronDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
+      {/* Same dashed-pill trigger as the other filters in this bar (City,
+          Specialization, Industry) — a "N selected" summary instead of
+          inline removable chips, so this filter doesn't stand out as its
+          own distinct control. */}
+      <Combobox.Trigger
+        render={
+          <Button
+            variant="outline"
+            className={cn(
+              'w-full justify-between rounded-lg border-dashed border-foreground/40 aria-expanded:border-solid dark:bg-input/50 dark:hover:bg-input/70',
+              selected.length > 0 && 'border-solid',
+            )}
+          />
+        }
+      >
+        <span className={cn('min-w-0 flex-1 truncate text-left', selected.length === 0 && 'text-muted-foreground')}>
+          {selected.length === 0
+            ? 'Any role type…'
+            : selected.length === 1
+              ? resolveLabel(selected[0])
+              : `${selected.length} selected`}
+        </span>
+        <ChevronDown className="ml-auto shrink-0 opacity-50" />
       </Combobox.Trigger>
 
       <Combobox.Portal>
         <Combobox.Positioner align="start" sideOffset={4} className="isolate z-50">
-          <Combobox.Popup className="w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/5 duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 dark:ring-foreground/10">
+          <Combobox.Popup className="w-72 max-w-(--available-width) origin-(--transform-origin) overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/5 duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 dark:ring-foreground/10">
             <div className="p-1.5">
               <Combobox.Input
                 placeholder="Search role types…"
@@ -119,21 +110,27 @@ export function RoleTypeFilter({
             <Combobox.List className="max-h-72 overflow-y-auto p-1 pt-0">
               {(id: string) => {
                 const facet = byId.get(id);
+                const checked = selected.includes(id);
                 return (
                   <Combobox.Item
                     key={id}
                     value={id}
-                    className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   >
+                    <span
+                      className={cn(
+                        'flex size-4 shrink-0 items-center justify-center rounded-[4px] border border-input transition-colors',
+                        checked && 'border-primary bg-primary text-primary-foreground',
+                      )}
+                    >
+                      {checked ? <Check className="size-3 !text-primary-foreground" /> : null}
+                    </span>
                     <span className={cn('min-w-0 flex-1 truncate', !facet && 'text-muted-foreground')}>
                       {facet?.name ?? labelFor(id)}
                     </span>
                     {facet ? (
                       <span className="shrink-0 text-xs text-muted-foreground">{facet.count.toLocaleString()}</span>
                     ) : null}
-                    <Combobox.ItemIndicator className="shrink-0">
-                      <Check className="size-4" />
-                    </Combobox.ItemIndicator>
                   </Combobox.Item>
                 );
               }}

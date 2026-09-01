@@ -2,6 +2,8 @@
 
 import type * as React from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
+import Link from 'next/link';
+import { ArrowUpRight } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { ComboboxSelect } from '@/components/ComboboxSelect';
@@ -165,12 +167,21 @@ export function getStakeholderColumns({
         const stakeholder = row.original;
         const name = stakeholderFullName(stakeholder);
         return (
-          <div className="flex min-w-0 items-center gap-2.5">
+          <Link
+            href={`/stakeholders/${stakeholder.id}`}
+            onClick={(e) => e.stopPropagation()}
+            title={`${name || 'Unnamed contact'} — opens its own page`}
+            className="flex min-w-0 items-center gap-2.5"
+            data-no-row-drag
+          >
             <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
               {initials(name)}
             </span>
-            <span className="truncate font-medium text-foreground">{name || 'Unnamed contact'}</span>
-          </div>
+            <span className="flex min-w-0 items-center gap-1 truncate font-medium text-foreground hover:underline">
+              <span className="truncate">{name || 'Unnamed contact'}</span>
+              <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground" />
+            </span>
+          </Link>
         );
       },
     },
@@ -179,7 +190,22 @@ export function getStakeholderColumns({
       header: 'Company',
       // Free text via a joined field — not a StakeholderSortField.
       enableSorting: false,
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.companyName ?? '—'}</span>,
+      cell: ({ row }) => {
+        const { clientId, companyName } = row.original;
+        if (!companyName) return <span className="text-muted-foreground">—</span>;
+        return (
+          <Link
+            href={`/companies/${clientId}?from=stakeholders`}
+            onClick={(e) => e.stopPropagation()}
+            title={`${companyName} — opens its own page`}
+            className="flex min-w-0 items-center gap-1 truncate text-muted-foreground hover:underline"
+            data-no-row-drag
+          >
+            <span className="truncate">{companyName}</span>
+            <ArrowUpRight className="size-3.5 shrink-0" />
+          </Link>
+        );
+      },
     },
     {
       id: 'coverage',

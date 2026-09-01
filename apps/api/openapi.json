@@ -1927,6 +1927,15 @@
             }
           },
           {
+            "name": "requestId",
+            "required": false,
+            "in": "query",
+            "description": "Only entries written by this request — every change one user action made, including the rows it cascaded to. Read off any entry's own requestId.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "from",
             "required": false,
             "in": "query",
@@ -1983,6 +1992,220 @@
           }
         ],
         "summary": "List activity-log entries (admin only, paginated, filterable, sortable)",
+        "tags": [
+          "Audit"
+        ]
+      }
+    },
+    "/audit-logs/entity-types": {
+      "get": {
+        "operationId": "getAuditEntityTypes",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Record-type filter options",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEntityTypeEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Every record type the activity log can be filtered by, with display labels",
+        "tags": [
+          "Audit"
+        ]
+      }
+    },
+    "/audit-logs/action-counts": {
+      "get": {
+        "operationId": "getAuditActionCounts",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (1-based)",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "Items per page",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "description": "Column to sort by. Defaults to createdAt.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "action",
+                "entityType"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "description": "Filter by action",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CREATE",
+                "UPDATE",
+                "SOFT_DELETE",
+                "RESTORE",
+                "DEACTIVATE",
+                "HARD_DELETE",
+                "EXPORT"
+              ]
+            }
+          },
+          {
+            "name": "entityType",
+            "required": false,
+            "in": "query",
+            "description": "Filter by entity type, e.g. \"Candidate\"",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the acting consultant id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "requestId",
+            "required": false,
+            "in": "query",
+            "description": "Only entries written by this request — every change one user action made, including the rows it cascaded to. Read off any entry's own requestId.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Only entries at/after this ISO date-time",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Only entries at/before this ISO date-time",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Counts per action",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditActionCountEntity"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Per-action entry totals under the current filters (across every page, not just the loaded one)",
         "tags": [
           "Audit"
         ]
@@ -2051,6 +2274,15 @@
             "required": false,
             "in": "query",
             "description": "Filter by the acting consultant id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "requestId",
+            "required": false,
+            "in": "query",
+            "description": "Only entries written by this request — every change one user action made, including the rows it cascaded to. Read off any entry's own requestId.",
             "schema": {
               "type": "string"
             }
@@ -11263,6 +11495,11 @@
             "nullable": true,
             "description": "Which rung of the geography tree `location` sits on — a candidate known only to city level has no suburb"
           },
+          "suburbAndPostcode": {
+            "type": "string",
+            "nullable": true,
+            "description": "Free-text suburb and postcode, e.g. \"Merrylands 2160 NSW\" — not tied to the Location tree (suburb-level rows and postcodes were never loaded) and plays no part in scoping."
+          },
           "industryId": {
             "type": "string",
             "description": "Required — the industry arm of the scope resolver relies on it"
@@ -11315,6 +11552,22 @@
             },
             "nullable": true,
             "description": "[{ company, role, period }] — `period` is free text, the source never stores parseable dates"
+          },
+          "historicFiles": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "nullable": true,
+            "description": "[{ key, fileName }] — older/superseded resume or document versions"
+          },
+          "otherDocuments": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "nullable": true,
+            "description": "[{ key, fileName }] — other supporting documents attached to the candidate"
           },
           "specializations": {
             "type": "array",
@@ -11383,12 +11636,12 @@
           "currentSalary": {
             "type": "string",
             "nullable": true,
-            "description": "Free text, from the most recent CandidateContactHistory row — e.g. \"35 per hour\". Null if never contacted. Display-only, no sort/filter."
+            "description": "Free text, e.g. \"35 per hour\". A direct edit on the candidate wins if one has been made; otherwise this is the most recent CandidateContactHistory row's value. Null if never set either way. Display-only, no sort/filter."
           },
           "expectedSalary": {
             "type": "string",
             "nullable": true,
-            "description": "Free text, from the most recent CandidateContactHistory row — e.g. \"above 47\". Null if never contacted. Display-only, no sort/filter."
+            "description": "Free text, e.g. \"above 47\". Same direct-edit-wins-over-latest-contact precedence as currentSalary."
           },
           "createdAt": {
             "format": "date-time",
@@ -11409,6 +11662,7 @@
           "locationId",
           "location",
           "locationLevel",
+          "suburbAndPostcode",
           "industryId",
           "industry",
           "jobRoleTypeId",
@@ -11420,6 +11674,8 @@
           "rawResumeUrl",
           "editedResumeUrl",
           "workHistory",
+          "historicFiles",
+          "otherDocuments",
           "specializations",
           "specializationIds",
           "status",
@@ -11656,6 +11912,23 @@
           }
         }
       },
+      "DocumentFileDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Uploaded object storage key (see POST /candidates/upload)"
+          },
+          "fileName": {
+            "type": "string",
+            "description": "Original filename"
+          }
+        },
+        "required": [
+          "key",
+          "fileName"
+        ]
+      },
       "CreateCandidateDto": {
         "type": "object",
         "properties": {
@@ -11687,6 +11960,11 @@
             "type": "string",
             "description": "Industry ID (see /industries)"
           },
+          "suburbAndPostcode": {
+            "type": "string",
+            "description": "Free-text suburb and postcode, e.g. \"Merrylands 2160 NSW\" — not tied to the Location tree",
+            "example": "Merrylands 2160 NSW"
+          },
           "jobRoleTypeId": {
             "type": "string",
             "description": "Job role type ID (see /job-role-types)"
@@ -11701,6 +11979,16 @@
             "description": "Current company",
             "example": "Acme Corp"
           },
+          "currentSalary": {
+            "type": "string",
+            "description": "Free text, not a number — the source records values like \"35 per hour\"",
+            "example": "35 per hour"
+          },
+          "expectedSalary": {
+            "type": "string",
+            "description": "Free text, same reasoning as currentSalary",
+            "example": "55-60"
+          },
           "linkedinUrl": {
             "type": "string",
             "description": "LinkedIn URL",
@@ -11712,17 +12000,31 @@
           },
           "rawResumeUrl": {
             "type": "string",
-            "description": "Raw resume file URL — the original, as submitted"
+            "description": "Raw resume file — object storage key from POST /candidates/upload, not a URL"
           },
           "editedResumeUrl": {
             "type": "string",
-            "description": "Edited resume file URL — Linktal's own reformatted version"
+            "description": "Edited resume file — Linktal's own reformatted version, object storage key from POST /candidates/upload, not a URL"
           },
           "workHistory": {
             "description": "Work history entries",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/WorkHistoryItemDto"
+            }
+          },
+          "historicFiles": {
+            "description": "Older/superseded resume or document versions",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentFileDto"
+            }
+          },
+          "otherDocuments": {
+            "description": "Other supporting documents",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentFileDto"
             }
           },
           "specializationIds": {
@@ -11780,6 +12082,11 @@
             "type": "string",
             "description": "Industry ID (see /industries)"
           },
+          "suburbAndPostcode": {
+            "type": "string",
+            "description": "Free-text suburb and postcode, e.g. \"Merrylands 2160 NSW\" — not tied to the Location tree",
+            "example": "Merrylands 2160 NSW"
+          },
           "jobRoleTypeId": {
             "type": "string",
             "description": "Job role type ID (see /job-role-types)"
@@ -11794,6 +12101,16 @@
             "description": "Current company",
             "example": "Acme Corp"
           },
+          "currentSalary": {
+            "type": "string",
+            "description": "Free text, not a number — the source records values like \"35 per hour\"",
+            "example": "35 per hour"
+          },
+          "expectedSalary": {
+            "type": "string",
+            "description": "Free text, same reasoning as currentSalary",
+            "example": "55-60"
+          },
           "linkedinUrl": {
             "type": "string",
             "description": "LinkedIn URL",
@@ -11805,17 +12122,31 @@
           },
           "rawResumeUrl": {
             "type": "string",
-            "description": "Raw resume file URL — the original, as submitted"
+            "description": "Raw resume file — object storage key from POST /candidates/upload, not a URL"
           },
           "editedResumeUrl": {
             "type": "string",
-            "description": "Edited resume file URL — Linktal's own reformatted version"
+            "description": "Edited resume file — Linktal's own reformatted version, object storage key from POST /candidates/upload, not a URL"
           },
           "workHistory": {
             "description": "Work history entries",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/WorkHistoryItemDto"
+            }
+          },
+          "historicFiles": {
+            "description": "Older/superseded resume or document versions",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentFileDto"
+            }
+          },
+          "otherDocuments": {
+            "description": "Other supporting documents",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DocumentFileDto"
             }
           },
           "specializationIds": {
@@ -12059,10 +12390,12 @@
             "type": "string",
             "enum": [
               "fk",
+              "fk-list",
               "enum",
+              "date",
               "plain"
             ],
-            "description": "\"fk\" = raw was an id resolved via targetType; \"enum\" = raw was a schema enum value; \"plain\" = shown as-is"
+            "description": "\"fk\" = raw was an id resolved via targetType; \"fk-list\" = raw was an array of ids, label is the resolved names; \"enum\" = raw was a schema enum value; \"date\" = raw is an ISO instant the client must format in the reader's own timezone (label is null); \"plain\" = shown as-is"
           },
           "targetType": {
             "type": "string",
@@ -12173,6 +12506,26 @@
             "type": "number",
             "description": "How many raw fields a CREATE snapshot omitted as noise (nulls, ids, timestamps). 0 for every other action."
           },
+          "affectedRecords": {
+            "nullable": true,
+            "example": [
+              "CLI-001614 · UOB Asset Management (Malaysia)"
+            ],
+            "description": "The records this entry covers, resolved to labels and capped — a hand-picked export's selection, or the rows a bulk write touched. Null when the entry names no ids (a filtered export, or an ordinary single-record write where entityId already says which row).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "requestId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Correlation id shared by every entry written by the same request — the key behind \"part of a larger action\"."
+          },
+          "relatedCount": {
+            "type": "number",
+            "description": "How many OTHER entries came from the same request. 0 when this entry stands alone."
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -12192,6 +12545,9 @@
           "metadata",
           "resolvedChanges",
           "omittedFieldCount",
+          "affectedRecords",
+          "requestId",
+          "relatedCount",
           "createdAt"
         ]
       },
@@ -12231,6 +12587,42 @@
           "page",
           "pageSize",
           "pageCount"
+        ]
+      },
+      "AuditEntityTypeEntity": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "example": "JobOrder",
+            "description": "The raw Prisma model name — what `entityType` filters on"
+          },
+          "label": {
+            "type": "string",
+            "example": "Job Order",
+            "description": "Human name, from the same map every row label uses"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ]
+      },
+      "AuditActionCountEntity": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "example": "UPDATE"
+          },
+          "count": {
+            "type": "number",
+            "example": 142
+          }
+        },
+        "required": [
+          "action",
+          "count"
         ]
       },
       "ClientEntity": {
@@ -12929,7 +13321,8 @@
           }
         },
         "required": [
-          "clientId"
+          "clientId",
+          "firstName"
         ]
       },
       "UpdateStakeholderDto": {
@@ -13850,7 +14243,8 @@
           }
         },
         "required": [
-          "clientId"
+          "clientId",
+          "jobTitleId"
         ]
       },
       "UpdateJobOrderDto": {

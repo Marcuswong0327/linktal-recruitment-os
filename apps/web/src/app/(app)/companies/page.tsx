@@ -9,7 +9,7 @@ export default async function CompaniesPage() {
 
   return (
     <PageLayout>
-      <PageHeader title="Companies" description="Every client company — filter, sort and manage the relationship." />
+      <PageHeader title="Companies" />
       {hasPermission(session, 'client', 'read') ? (
         <CompaniesSearchGate
           canCreate={hasPermission(session, 'client', 'create')}

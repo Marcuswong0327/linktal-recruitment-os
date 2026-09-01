@@ -23,6 +23,7 @@ import { UpdateCandidateContactHistoryDto } from './dto/update-candidate-contact
 import { buildWorkbook, resolveTimeZone, splitContactDateTime, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
 import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
+import { searchTokens } from '../common/search-tokens';
 
 /** The subset of QueryCandidatesDto that `buildWhere` actually reads — shared with QueryCandidateFacetsDto, which omits pagination/sort/jobRoleTypeIds but still satisfies this structurally. */
 type CandidateFilterFields = Pick<
@@ -90,6 +91,8 @@ type CandidateWithRelations = {
   jobRoleType: { name: string } | null;
   location: { name: string; level: string; ancestorIds: string[] } | null;
   specializations: { specializationId: string; specialization: { name: string } }[];
+  currentSalary: string | null;
+  expectedSalary: string | null;
 };
 
 /**
@@ -147,10 +150,12 @@ function toEntity<T extends CandidateWithRelations>(candidate: T) {
     // exactly the field it also sorts/filters by, or a row can display "3
     // months ago" while a "3+ months" filter silently excludes it.
     lastContactDate: latest?.contactedAt ?? null,
-    // Same latest-contact row, same free-text-not-numbers reasoning as the
-    // column comment on CandidateContactHistory — display-only, no sort/filter.
-    currentSalary: latest?.currentSalary ?? null,
-    expectedSalary: latest?.expectedSalary ?? null,
+    // `rest.currentSalary`/`rest.expectedSalary` is the Candidate's own
+    // column — set only by a direct edit on the detail page (see the schema
+    // comment). Prefer it when present; otherwise fall through to the latest
+    // logged contact's value, same as before this column existed.
+    currentSalary: rest.currentSalary ?? latest?.currentSalary ?? null,
+    expectedSalary: rest.expectedSalary ?? latest?.expectedSalary ?? null,
   };
 }
 
@@ -170,11 +175,17 @@ function contains(value?: string) {
  * touch `this`, so hoisting is a zero-risk move.
  */
 export function toPrismaData<T extends CreateCandidateDto | UpdateCandidateDto>(dto: T) {
-  const { workHistory, specializationIds: _specializationIds, ...rest } = dto;
+  const { workHistory, historicFiles, otherDocuments, specializationIds: _specializationIds, ...rest } = dto;
   return {
     ...rest,
     ...(workHistory !== undefined
       ? { workHistory: workHistory as unknown as Prisma.InputJsonValue }
+      : {}),
+    ...(historicFiles !== undefined
+      ? { historicFiles: historicFiles as unknown as Prisma.InputJsonValue }
+      : {}),
+    ...(otherDocuments !== undefined
+      ? { otherDocuments: otherDocuments as unknown as Prisma.InputJsonValue }
       : {}),
   };
 }
@@ -255,21 +266,26 @@ export class CandidatesService {
     // are deliberately left out — substring matching inside a joined
     // many-to-many isn't worth the complexity for free-text search; they're
     // filter-only (specializationIds).
+    // One AND-ed clause per whitespace-separated term (see searchTokens) — a
+    // full name spans two columns, so matching the whole string against any
+    // single column finds nothing. Single-word queries are unchanged.
     if (q) {
-      and.push({
-        OR: [
-          { firstName: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { lastName: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { email: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { currentCompany: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { displayId: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { currentRole: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { location: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
-          { mobile: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { industry: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
-          { jobRoleType: { name: { contains: q, mode: Prisma.QueryMode.insensitive } } },
-        ],
-      });
+      for (const term of searchTokens(q)) {
+        and.push({
+          OR: [
+            { firstName: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { lastName: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { email: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { currentCompany: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { displayId: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { currentRole: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { location: { name: { contains: term, mode: Prisma.QueryMode.insensitive } } },
+            { mobile: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { industry: { name: { contains: term, mode: Prisma.QueryMode.insensitive } } },
+            { jobRoleType: { name: { contains: term, mode: Prisma.QueryMode.insensitive } } },
+          ],
+        });
+      }
     }
 
     return and.length > 0 ? { AND: and } : {};

@@ -11,7 +11,7 @@ export type ContactCategory = (typeof contactCategories)[number];
 
 export const contactCategoryLabels: Record<ContactCategory, string> = {
   SCREENING: 'Screening',
-  OUTREACH: 'Outreach',
+  OUTREACH: 'Outreach Campaign',
 };
 
 export const contactCategoryOptions = contactCategories.map((value) => ({

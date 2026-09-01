@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
   ChevronDown,
@@ -127,6 +127,34 @@ const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
   hour: '2-digit',
   minute: '2-digit',
 });
+
+// The "Back" button normally returns to the Companies list, but a company
+// can also be reached from another page's own link out (e.g. a Stakeholder
+// row's Company column) — in that case Back should return there instead, not
+// to a list the visitor never opened. Origin comes in as `?from=` on the
+// link that brought them here, not browser history, so a page refresh or a
+// bookmark keeps behaving the same way.
+const BACK_TARGETS: Record<string, { href: string; label: string }> = {
+  stakeholders: { href: '/stakeholders', label: 'Stakeholders' },
+  'job-orders': { href: '/job-orders', label: 'Job Orders' },
+};
+
+function useBackTarget() {
+  const searchParams = useSearchParams();
+  const from = searchParams.get('from');
+  // A specific Job Order's Company link (JobOrderDetail) carries its own id
+  // (and title, for the button label) instead of a static target — unlike
+  // the list-level `from=job-orders`, this returns to the exact detail page
+  // the visitor came from, not the list.
+  if (from === 'job-order') {
+    const jobOrderId = searchParams.get('jobOrderId');
+    const jobOrderTitle = searchParams.get('jobOrderTitle');
+    if (jobOrderId) {
+      return { href: `/job-orders/${jobOrderId}`, label: jobOrderTitle || 'Job Order' };
+    }
+  }
+  return (from && BACK_TARGETS[from]) || { href: '/companies', label: 'Companies' };
+}
 
 function initials(name: string) {
   if (!name) return '?';
@@ -321,6 +349,7 @@ export function CompanyDetail({
 }) {
   const { data, isLoading, isError, error } = useGetClient(id);
   const company = data?.status === 200 ? data.data : undefined;
+  const backTarget = useBackTarget();
 
   if (isLoading) {
     return (
@@ -341,9 +370,9 @@ export function CompanyDetail({
           </p>
         </div>
         <div>
-          <Button variant="outline" nativeButton={false} render={<Link href="/companies" />}>
+          <Button variant="outline" nativeButton={false} render={<Link href={backTarget.href} />}>
             <ArrowLeft />
-            Back to companies
+            Back to {backTarget.label.toLowerCase()}
           </Button>
         </div>
       </PageLayout>
@@ -367,6 +396,7 @@ function CompanyEditForm({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const backTarget = useBackTarget();
 
   const [companyName, setCompanyName] = React.useState(company.companyName);
   const [industryId, setIndustryId] = React.useState(company.industryId);
@@ -667,7 +697,7 @@ function CompanyEditForm({
       onCommitted: () => queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey() }),
       onUndo: () => queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey() }),
     });
-    router.push('/companies');
+    router.push(backTarget.href);
   }
 
   const currentStatus = statusOptions.find((o) => o.value === company.status)!;
@@ -680,11 +710,11 @@ function CompanyEditForm({
           variant="ghost"
           size="sm"
           nativeButton={false}
-          render={<Link href="/companies" />}
+          render={<Link href={backTarget.href} />}
           className="-ml-2 self-start text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft />
-          Back to Companies
+          Back to {backTarget.label}
         </Button>
 
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -893,7 +923,7 @@ function CompanyEditForm({
                         <TableRow key={s.id} className="divide-x divide-border">
                           <TableCell className="whitespace-normal">
                             <Link
-                              href={`/stakeholders/${s.id}`}
+                              href={`/stakeholders/${s.id}?from=company`}
                               className="text-foreground hover:underline"
                             >
                               {[s.firstName, s.lastName].filter(Boolean).join(' ') ||

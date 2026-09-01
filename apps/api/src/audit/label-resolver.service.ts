@@ -17,7 +17,7 @@ export type LabelMap = ReadonlyMap<string, ResolvedLabel>;
 type LabelDelegate = {
   findMany: (args: {
     where: { id: { in: string[] } };
-    select: Record<string, boolean>;
+    select: Record<string, unknown>;
   }) => Promise<Array<Record<string, unknown>>>;
 };
 
@@ -57,8 +57,12 @@ export class LabelResolverService {
   private async resolveModel(model: string, ids: string[]): Promise<(readonly [string, ResolvedLabel])[]> {
     const spec = LABEL_SPEC[model];
     const capped = ids.slice(0, MAX_IDS_PER_MODEL);
-    const select: Record<string, boolean> = { id: true };
+    const select: Record<string, unknown> = { id: true };
     for (const field of spec.fields) select[field] = true;
+    // Nested selects (a submission's candidate, a job order's client) come
+    // along in the same query — still one round trip per target model, not one
+    // per row.
+    if (spec.relations) Object.assign(select, spec.relations);
     if (spec.softDeletable) select.deletedAt = true;
 
     const delegateKey = model.charAt(0).toLowerCase() + model.slice(1);
@@ -71,10 +75,12 @@ export class LabelResolverService {
 
     return rows.map((row) => {
       const label =
+        spec.format?.(row) ||
         spec.fields
           .map((f) => row[f])
           .filter((v) => v != null && v !== '')
-          .join(' · ') || String(row.id);
+          .join(' · ') ||
+        String(row.id);
       const deleted = spec.softDeletable ? row.deletedAt != null : false;
       return [`${model}:${row.id as string}`, { label, deleted }] as const;
     });

@@ -55,7 +55,7 @@ export const actionCommands: ActionCommand[] = [
   {
     title: 'Add Job Order',
     description: 'Open a new position for a client',
-    href: '/job-orders/new',
+    href: '/job-orders?new=1',
     icon: ClipboardList,
     requiredPermission: { resource: 'job_order', action: 'create' },
   },

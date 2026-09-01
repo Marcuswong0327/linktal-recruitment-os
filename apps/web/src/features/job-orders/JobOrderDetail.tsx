@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Briefcase, CornerDownLeft, FileText } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Briefcase, CornerDownLeft, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -22,6 +22,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { ClientCombobox } from '@/components/ClientCombobox';
+import { CreatableCombobox } from '@/components/CreatableCombobox';
+import { FormField } from '@/components/FormField';
 import { ContactIconRow, JobOrderPipelineCard } from '@/components/JobOrderPipelineCard';
 import { FileUploadField } from '@/components/FileUploadField';
 import { PageLayout } from '@/components/app-shell/PageLayout';
@@ -29,13 +32,14 @@ import { useIsMac } from '@/hooks/use-is-mac';
 import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shortcut';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { useGetCandidates } from '@/lib/api/generated/candidates/candidates';
-import { useGetClient } from '@/lib/api/generated/clients/clients';
+import { useGetClient, useGetClients } from '@/lib/api/generated/clients/clients';
 import {
   getGetJobOrderQueryKey,
   getGetJobOrdersQueryKey,
   useGetJobOrder,
   useUpdateJobOrder,
 } from '@/lib/api/generated/job-orders/job-orders';
+import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
 import { useUploadJobOrderFile } from '@/lib/api/generated/uploads/uploads';
 import type { UpdateJobOrderDto } from '@/lib/api/generated/types';
 import { type JobOrder, jobOrderQualityLabels, jobOrderStatusLabels, qualityVariant, statusVariant } from './schema';
@@ -98,16 +102,48 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
   const { data: clientData } = useGetClient(jobOrder.clientId);
   const client = clientData?.status === 200 ? clientData.data : undefined;
 
+  const { data: clientsData } = useGetClients({ pageSize: 100 });
+  const clients = clientsData?.status === 200 ? clientsData.data.data : [];
+  // The current client can fall outside the first page (more than 100
+  // clients, sorted differently, etc.) — without this, ClientCombobox can't
+  // resolve `jobOrder.clientId` to a label and renders blank even though a
+  // client really is assigned. `client` (below) is already fetched by id for
+  // the industry-mismatch warning, so reuse it instead of a second fetch.
+  const clientOptions = React.useMemo(() => {
+    if (!client || clients.some((c) => c.id === client.id)) return clients;
+    return [...clients, client];
+  }, [clients, client]);
+
+  const { data: jobTitleData } = useGetJobTitles({ take: 200 });
+  const jobTitles = jobTitleData?.status === 200 ? jobTitleData.data : [];
+  // Same reasoning as clientOptions above, but there's no single-by-id job
+  // title endpoint to reuse — fall back to the resolved `jobOrder.jobTitle`
+  // name already on the entity to build the missing option.
+  const jobTitleOptions = React.useMemo(() => {
+    if (!jobOrder.jobTitleId || jobTitles.some((jt) => jt.id === jobOrder.jobTitleId)) return jobTitles;
+    return [...jobTitles, { id: jobOrder.jobTitleId, name: jobOrder.jobTitle ?? 'Unknown' }];
+  }, [jobTitles, jobOrder.jobTitleId, jobOrder.jobTitle]);
+  const createJobTitle = useCreateJobTitle();
+  async function handleCreateJobTitle(name: string) {
+    const res = await createJobTitle.mutateAsync({ data: { name } });
+    if (res.status !== 201) throw new Error('Failed to add job title');
+    return res.data;
+  }
+
   const [description, setDescription] = React.useState(jobOrder.description ?? '');
   const [jdFileUrl, setJdFileUrl] = React.useState(jobOrder.jdFileUrl ?? '');
   const [clientAdsUrl, setClientAdsUrl] = React.useState(jobOrder.clientAdsUrl ?? '');
   const [otherDocumentsUrl, setOtherDocumentsUrl] = React.useState(jobOrder.otherDocumentsUrl ?? '');
+  const [jobTitleId, setJobTitleId] = React.useState(jobOrder.jobTitleId ?? '');
+  const [clientId, setClientId] = React.useState(jobOrder.clientId);
 
   const isDirty =
     description !== (jobOrder.description ?? '') ||
     jdFileUrl !== (jobOrder.jdFileUrl ?? '') ||
     clientAdsUrl !== (jobOrder.clientAdsUrl ?? '') ||
-    otherDocumentsUrl !== (jobOrder.otherDocumentsUrl ?? '');
+    otherDocumentsUrl !== (jobOrder.otherDocumentsUrl ?? '') ||
+    jobTitleId !== (jobOrder.jobTitleId ?? '') ||
+    clientId !== jobOrder.clientId;
 
   const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty);
 
@@ -132,6 +168,9 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
     return res.data;
   }
 
+  // Live label for the header — reflects an in-progress edit before it's saved.
+  const selectedJobTitle = jobTitleOptions.find((jt) => jt.id === jobTitleId)?.name ?? 'Untitled role';
+
   const formRef = React.useRef<HTMLFormElement>(null);
   const isMac = useIsMac();
   useSaveShortcut(() => formRef.current?.requestSubmit(), isDirty && !updateJobOrder.isPending);
@@ -139,6 +178,8 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const data: UpdateJobOrderDto = {
+      clientId,
+      jobTitleId: jobTitleId || undefined,
       description: description || undefined,
       jdFileUrl: jdFileUrl || undefined,
       clientAdsUrl: clientAdsUrl || undefined,
@@ -168,9 +209,7 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
             </span>
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-3">
-                <h1 className="font-heading text-2xl font-semibold tracking-tight">
-                  {jobOrder.jobTitle ?? 'Untitled role'}
-                </h1>
+                <h1 className="font-heading text-2xl font-semibold tracking-tight">{selectedJobTitle}</h1>
                 <Badge variant={statusVariant[jobOrder.status]}>{jobOrderStatusLabels[jobOrder.status]}</Badge>
                 <Badge variant={qualityVariant[jobOrder.quality]}>
                   {jobOrderQualityLabels[jobOrder.quality]} quality
@@ -226,12 +265,37 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">Company</span>
-                <Link href={`/companies/${jobOrder.clientId}`} className="font-medium hover:underline">
-                  {jobOrder.clientName ?? 'Unknown company'}
-                </Link>
-              </div>
+              <FormField label="Role" htmlFor="jobTitle" orientation="horizontal">
+                <CreatableCombobox
+                  id="jobTitle"
+                  value={jobTitleId}
+                  onValueChange={setJobTitleId}
+                  options={jobTitleOptions}
+                  onCreate={handleCreateJobTitle}
+                  placeholder="e.g. Production Manager"
+                  disabled={updateJobOrder.isPending}
+                />
+              </FormField>
+              <FormField label="Company" htmlFor="clientId" required orientation="horizontal">
+                <div className="flex items-center gap-1.5">
+                  <ClientCombobox
+                    id="clientId"
+                    value={clientId}
+                    onValueChange={setClientId}
+                    clients={clientOptions}
+                    disabled={updateJobOrder.isPending}
+                    className="flex-1"
+                  />
+                  <Link
+                    href={`/companies/${jobOrder.clientId}?from=job-order&jobOrderId=${jobOrder.id}&jobOrderTitle=${encodeURIComponent(jobOrder.jobTitle ?? '')}`}
+                    aria-label="View company page"
+                    title="View company page"
+                    className="flex shrink-0 items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <ArrowUpRight className="size-4" />
+                  </Link>
+                </div>
+              </FormField>
               <div className="flex items-center justify-between gap-2">
                 <span className="text-muted-foreground">Salary</span>
                 <span className="font-medium">

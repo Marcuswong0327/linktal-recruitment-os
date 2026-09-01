@@ -10,7 +10,6 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
-import { EnumSelect } from '@/components/EnumSelect';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
 import { getGetClientsQueryKey, useGetClients } from '@/lib/api/generated/clients/clients';
@@ -223,6 +222,7 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
           <FilterField label="Industry">
             <DataGridFacetedFilter
               title="Industry"
+              placeholder="All industries"
               options={industryOptions}
               selected={industryIds}
               onChange={setIndustryIds}
@@ -238,6 +238,7 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
               title="Specialization"
               labelFor={(id) => specializationNames[id] ?? id}
               onResolve={registerSpecializationName}
+              industryIds={industryIds}
             />
           </FilterField>
           <FilterField label="City">
@@ -245,6 +246,7 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
               selected={cityIds}
               onChange={setCityIds}
               level="CITY"
+              underId={countryIds.length === 1 ? countryIds[0] : undefined}
               compact={false}
               placeholder="All cities"
               title="City"
@@ -255,6 +257,7 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
           <FilterField label="Status">
             <DataGridFacetedFilter
               title="Status"
+              placeholder="All statuses"
               options={statusOptions}
               selected={statuses}
               onChange={setStatuses}
@@ -262,12 +265,14 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
             />
           </FilterField>
           <FilterField label="Sorted By">
-            <EnumSelect
-              id="job-research-sort"
-              value={sortByValue}
-              onValueChange={(v) => setSortByValue(v as SortByValue)}
+            <DataGridFacetedFilter
+              title="Sorted By"
+              placeholder="Default order"
+              single
               options={sortByOptions}
-              placeholder="Select sorting"
+              selected={sortByValue ? [sortByValue] : []}
+              onChange={(values) => setSortByValue((values[0] as SortByValue) ?? '')}
+              triggerClassName="w-full justify-between"
             />
           </FilterField>
         </div>

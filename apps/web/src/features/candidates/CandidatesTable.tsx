@@ -27,12 +27,21 @@ import {
 } from '@/components/ui/context-menu';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { DataGrid, type DataGridQuery } from '@/components/DataGrid';
+import { useGetIndustries } from '@/lib/api/generated/industries/industries';
+import {
+  getGetJobRoleTypesQueryKey,
+  useCreateJobRoleType,
+  useGetJobRoleTypes,
+} from '@/lib/api/generated/job-role-types/job-role-types';
+import { useCandidateNewRow } from './CandidateNewRow';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
 import {
   deleteCandidate,
   getCandidates,
+  addCandidateContactHistory,
+  createCandidate as createCandidateRequest,
   getExportCandidatesByIdsUrl,
   getExportCandidatesUrl,
   getGetCandidateImportTemplateUrl,
@@ -44,7 +53,11 @@ import {
 } from '@/lib/api/generated/candidates/candidates';
 import { ImportDialog } from '@/components/ImportDialog';
 import { GetCandidatesSortBy } from '@/lib/api/generated/types/getCandidatesSortBy';
-import type { GetCandidatesSortOrder, GetCandidatesStatusesItem } from '@/lib/api/generated/types';
+import type {
+  CreateCandidateDto,
+  GetCandidatesSortOrder,
+  GetCandidatesStatusesItem,
+} from '@/lib/api/generated/types';
 import { candidateColumns } from './columns';
 import {
   candidateStatuses,
@@ -77,6 +90,10 @@ export function CandidatesTable({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
+  // The DataGrid's own free-text box — distinct from the gate's committed
+  // filters above it (search-as-you-type, no "Search" click required), same
+  // pattern as ConsultantsTable.
+  const [search, setSearch] = React.useState<string | undefined>();
   // Seeded from the gate's "Sort by" selection; a column header click can
   // still override it locally afterward (only Last Contacted At's header is
   // sortable — see candidateColumns).
@@ -85,6 +102,64 @@ export function CandidatesTable({
   const [selected, setSelected] = React.useState<Candidate[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isExporting, setIsExporting] = React.useState(false);
+
+  // Rosters for the new row's pickers.
+  const { data: industryData } = useGetIndustries();
+  const industries = industryData?.status === 200 ? industryData.data : [];
+  const { data: jobRoleTypeData } = useGetJobRoleTypes({ take: 200 });
+  const jobRoleTypes = jobRoleTypeData?.status === 200 ? jobRoleTypeData.data : [];
+  const createJobRoleType = useCreateJobRoleType();
+
+  async function handleCreateJobRoleType(name: string) {
+    try {
+      const res = await createJobRoleType.mutateAsync({ data: { name } });
+      if (res.status !== 201) throw new Error('Failed to add role type');
+      queryClient.invalidateQueries({ queryKey: getGetJobRoleTypesQueryKey() });
+      return res.data;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add role type');
+      throw err;
+    }
+  }
+
+  // Rethrows so the new row keeps the typed-in draft on failure.
+  async function handleCreateCandidate(dto: CreateCandidateDto, note?: string) {
+    try {
+      const res = await createCandidateRequest(dto);
+      if (res.status !== 201) throw new Error('Failed to create candidate');
+      // The Notes column reads the latest CandidateContactHistory row, so a
+      // note typed in the new row lands as one. SCREENING/'call' is the shape
+      // of a first contact and is what the bulk of existing history uses;
+      // both stay editable from the candidate's detail page.
+      if (note) {
+        const noted = await addCandidateContactHistory(res.data.id, {
+          contactType: 'call',
+          category: 'SCREENING',
+          screeningNotes: note,
+        });
+        // Non-fatal: the candidate is already saved, so surface the note
+        // failing rather than making it look like the whole row didn't take.
+        if (noted.status !== 201) toast.error('Candidate saved, but the note could not be added');
+      }
+      // Back to page 1 for the same reason every other table does it: a new
+      // row shifts positions across the pages useInfinitePages already holds.
+      setPage(1);
+      queryClient.invalidateQueries({ queryKey: getGetCandidatesQueryKey() });
+      toast.success('Candidate added');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create candidate');
+      throw err;
+    }
+  }
+
+  const newRow = useCandidateNewRow({
+    industries,
+    userIndustryIds: session?.user?.industryIds ?? [],
+    jobRoleTypes,
+    onCreateJobRoleType: handleCreateJobRoleType,
+    onCreate: handleCreateCandidate,
+    disabled: !canCreate,
+  });
   const importCandidates = useImportCandidates();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   // Selection is normally page-scoped (see DataGrid's onSelectionChange doc)
@@ -108,6 +183,7 @@ export function CandidatesTable({
     {
       page,
       pageSize: PAGE_SIZE,
+      q: search,
       statuses: filters.statuses as GetCandidatesStatusesItem[] | undefined,
       industryIds: filters.industryIds,
       jobRoleTypeIds: filters.jobRoleTypeIds,
@@ -150,6 +226,7 @@ export function CandidatesTable({
           getCandidates({
             page: p,
             pageSize: fetchPageSize,
+            q: search,
             statuses: filters.statuses as GetCandidatesStatusesItem[] | undefined,
             industryIds: filters.industryIds,
             jobRoleTypeIds: filters.jobRoleTypeIds,
@@ -174,16 +251,15 @@ export function CandidatesTable({
     setSelectAllMode(false);
   }
 
-  // Sorting is the only thing the grid itself still reports — search and
-  // faceted filters both live in the gate's action bar. Only Last Contacted
-  // At's column header is sortable (see candidateColumns), so this is
-  // effectively single-purpose, but stays generic like CompaniesTable's
-  // equivalent handler.
-  function handleQueryChange({ sorting }: DataGridQuery) {
+  // The grid itself reports search (its own free-text box) and sorting —
+  // faceted filters still live entirely in the gate's action bar. Only Last
+  // Contacted At's column header is sortable (see candidateColumns).
+  function handleQueryChange({ search, sorting }: DataGridQuery) {
     const sort = sorting[0];
     const sortField = sort && sort.id in GetCandidatesSortBy ? (sort.id as GetCandidatesSortBy) : undefined;
     setSortBy(sortField);
     setSortOrder(sort?.desc ? 'desc' : 'asc');
+    setSearch(search.trim() || undefined);
     setPage(1);
   }
 
@@ -231,6 +307,7 @@ export function CandidatesTable({
       } else {
         await downloadFile(
           getExportCandidatesUrl({
+            q: search,
             statuses: filters.statuses as GetCandidatesStatusesItem[] | undefined,
             industryIds: filters.industryIds,
             jobRoleTypeIds: filters.jobRoleTypeIds,
@@ -316,11 +393,12 @@ export function CandidatesTable({
       ) : null}
 
       <DataGrid
+        newRow={newRow}
         columns={candidateColumns}
         data={candidates}
         isLoading={isLoading}
         isFetching={isFetching}
-        hideSearch
+        searchPlaceholder="Search candidates…"
         getRowId={(c) => c.id}
         onRowClick={(candidate) => router.push(`/candidates/${candidate.id}`)}
         onSelectionChange={handleSelectionChange}

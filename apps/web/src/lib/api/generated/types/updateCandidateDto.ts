@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { DocumentFileDto } from './documentFileDto';
 import type { UpdateCandidateDtoStatus } from './updateCandidateDtoStatus';
 import type { WorkHistoryItemDto } from './workHistoryItemDto';
 
@@ -21,22 +22,32 @@ export interface UpdateCandidateDto {
   locationId?: string;
   /** Industry ID (see /industries) */
   industryId?: string;
+  /** Free-text suburb and postcode, e.g. "Merrylands 2160 NSW" — not tied to the Location tree */
+  suburbAndPostcode?: string;
   /** Job role type ID (see /job-role-types) */
   jobRoleTypeId?: string;
   /** Title at their current employer, in the employer's own words */
   currentRole?: string;
   /** Current company */
   currentCompany?: string;
+  /** Free text, not a number — the source records values like "35 per hour" */
+  currentSalary?: string;
+  /** Free text, same reasoning as currentSalary */
+  expectedSalary?: string;
   /** LinkedIn URL */
   linkedinUrl?: string;
   /** Seek Talent Search profile URL */
   seekTalentUrl?: string;
-  /** Raw resume file URL — the original, as submitted */
+  /** Raw resume file — object storage key from POST /candidates/upload, not a URL */
   rawResumeUrl?: string;
-  /** Edited resume file URL — Linktal's own reformatted version */
+  /** Edited resume file — Linktal's own reformatted version, object storage key from POST /candidates/upload, not a URL */
   editedResumeUrl?: string;
   /** Work history entries */
   workHistory?: WorkHistoryItemDto[];
+  /** Older/superseded resume or document versions */
+  historicFiles?: DocumentFileDto[];
+  /** Other supporting documents */
+  otherDocuments?: DocumentFileDto[];
   /** Specialization IDs (see /specializations) */
   specializationIds?: string[];
   /** Status; defaults to COLD when omitted */

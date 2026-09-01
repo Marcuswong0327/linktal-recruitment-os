@@ -35,6 +35,17 @@ export class WorkHistoryItemDto {
   period?: string;
 }
 
+/** One entry in a candidate's historic files or other documents (stored as JSONB) — an uploaded object's key plus its display filename. */
+export class DocumentFileDto {
+  @ApiProperty({ description: 'Uploaded object storage key (see POST /candidates/upload)' })
+  @IsString()
+  key!: string;
+
+  @ApiProperty({ description: 'Original filename' })
+  @IsString()
+  fileName!: string;
+}
+
 export class CreateCandidateDto {
   @ApiPropertyOptional({ description: 'First name', example: 'John' })
   @IsOptional()
@@ -72,6 +83,18 @@ export class CreateCandidateDto {
   @IsString()
   industryId!: string;
 
+  // Free text, not a structured pick like locationId — suburb-level Location
+  // rows and postcodes were never loaded, so there's nothing to search
+  // against. Purely descriptive; plays no part in scoping.
+  @ApiPropertyOptional({
+    description: 'Free-text suburb and postcode, e.g. "Merrylands 2160 NSW" — not tied to the Location tree',
+    example: 'Merrylands 2160 NSW',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  suburbAndPostcode?: string;
+
   @ApiPropertyOptional({ description: 'Job role type ID (see /job-role-types)' })
   @IsOptional()
   @IsString()
@@ -90,6 +113,25 @@ export class CreateCandidateDto {
   @IsString()
   currentCompany?: string;
 
+  // Direct edit, separate from the salary logged per-contact on
+  // CandidateContactHistory — see the column comment on
+  // Candidate.currentSalary/expectedSalary in schema.prisma for how the two
+  // interact when read back.
+  @ApiPropertyOptional({
+    description: 'Free text, not a number — the source records values like "35 per hour"',
+    example: '35 per hour',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  currentSalary?: string;
+
+  @ApiPropertyOptional({ description: 'Free text, same reasoning as currentSalary', example: '55-60' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  expectedSalary?: string;
+
   @ApiPropertyOptional({ description: 'LinkedIn URL', example: 'https://linkedin.com/in/johnsmith' })
   @IsOptional()
   @IsUrl()
@@ -100,14 +142,14 @@ export class CreateCandidateDto {
   @IsUrl()
   seekTalentUrl?: string;
 
-  @ApiPropertyOptional({ description: 'Raw resume file URL — the original, as submitted' })
+  @ApiPropertyOptional({ description: 'Raw resume file — object storage key from POST /candidates/upload, not a URL' })
   @IsOptional()
-  @IsUrl()
+  @IsString()
   rawResumeUrl?: string;
 
-  @ApiPropertyOptional({ description: "Edited resume file URL — Linktal's own reformatted version" })
+  @ApiPropertyOptional({ description: "Edited resume file — Linktal's own reformatted version, object storage key from POST /candidates/upload, not a URL" })
   @IsOptional()
-  @IsUrl()
+  @IsString()
   editedResumeUrl?: string;
 
   @ApiPropertyOptional({ description: 'Work history entries', type: WorkHistoryItemDto, isArray: true })
@@ -116,6 +158,20 @@ export class CreateCandidateDto {
   @ValidateNested({ each: true })
   @Type(() => WorkHistoryItemDto)
   workHistory?: WorkHistoryItemDto[];
+
+  @ApiPropertyOptional({ description: 'Older/superseded resume or document versions', type: DocumentFileDto, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DocumentFileDto)
+  historicFiles?: DocumentFileDto[];
+
+  @ApiPropertyOptional({ description: 'Other supporting documents', type: DocumentFileDto, isArray: true })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DocumentFileDto)
+  otherDocuments?: DocumentFileDto[];
 
   @ApiPropertyOptional({ description: 'Specialization IDs (see /specializations)', type: String, isArray: true })
   @IsOptional()

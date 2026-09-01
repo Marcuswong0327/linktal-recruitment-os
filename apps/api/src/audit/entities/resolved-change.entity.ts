@@ -8,8 +8,12 @@ export class ResolvedValue {
   @ApiProperty({ type: String, nullable: true, description: 'Human label; null when the raw value is null, or when an id could not be resolved (e.g. a hard-purged record)' })
   label!: string | null;
 
-  @ApiProperty({ enum: ['fk', 'enum', 'plain'], description: '"fk" = raw was an id resolved via targetType; "enum" = raw was a schema enum value; "plain" = shown as-is' })
-  kind!: 'fk' | 'enum' | 'plain';
+  @ApiProperty({
+    enum: ['fk', 'fk-list', 'enum', 'date', 'plain'],
+    description:
+      '"fk" = raw was an id resolved via targetType; "fk-list" = raw was an array of ids, label is the resolved names; "enum" = raw was a schema enum value; "date" = raw is an ISO instant the client must format in the reader\'s own timezone (label is null); "plain" = shown as-is',
+  })
+  kind!: 'fk' | 'fk-list' | 'enum' | 'date' | 'plain';
 
   @ApiProperty({ type: String, required: false, description: 'The model the id was resolved against (e.g. "Industry") — enables deep-linking from the UI. Only present when kind is "fk".' })
   targetType?: string;

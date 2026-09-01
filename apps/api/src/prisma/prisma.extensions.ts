@@ -34,7 +34,7 @@ const SOFT_DELETE_MODELS = new Set([
 // top-level create/delete calls (never a nested relation write), so this
 // interception layer actually sees and diffs each row — see
 // ConsultantsService.setIndustries and JobOrdersService.setConsultants.
-const AUDITED_MODELS = new Set([
+export const AUDITED_MODELS = new Set([
   ...SOFT_DELETE_MODELS,
   'Consultant',
   'Role',
@@ -210,6 +210,14 @@ function baseMetadata(extra?: AnyArgs) {
   return { source: 'app', ...(requestId ? { requestId } : {}), ...extra };
 }
 
+/**
+ * How many affected row ids a bulk audit entry records before it stops being
+ * a useful record and starts being a payload. The `count` beside them is
+ * always the true total, so a capped list is still honest — it just stops
+ * short of putting 5,000 cuids in a metadata column.
+ */
+export const BULK_ID_CAP = 100;
+
 async function writeAudit(
   base: PrismaClient,
   entry: {
@@ -258,7 +266,11 @@ async function cascadeSoftDelete(base: PrismaClient, model: string, parentIds: s
       entityType: childModel,
       entityId: '(bulk)',
       changes: { deletedAt: { from: null, to: toJson(stamp.deletedAt) } },
-      metadata: { cascadedFrom: { model, ids: parentIds }, count: childIds.length },
+      metadata: {
+        cascadedFrom: { model, ids: parentIds },
+        count: childIds.length,
+        ids: childIds.slice(0, BULK_ID_CAP),
+      },
     });
 
     await cascadeSoftDelete(base, childModel, childIds);
@@ -323,13 +335,32 @@ export function createDbExtension(base: PrismaClient) {
               where: { id: { in: targetIds } },
               data: stamp,
             });
-            await writeAudit(base, {
-              action: 'SOFT_DELETE',
-              entityType: model,
-              entityId: '(bulk)',
-              changes: { deletedAt: { from: null, to: toJson(stamp.deletedAt) } },
-              metadata: { cascade: true, count: result.count, where: toJson(a.where ?? null) },
-            });
+            // A deleteMany that matched nothing changed nothing, so there is
+            // no event to record — writing the row anyway put entries in the
+            // log reading "Archived … 0 records", which asserts something
+            // happened when it didn't. cascadeSoftDelete already skips empty
+            // batches for exactly this reason (`if (rows.length === 0)
+            // continue`); this branch was the one place that didn't.
+            if (result.count > 0) {
+              await writeAudit(base, {
+                action: 'SOFT_DELETE',
+                entityType: model,
+                entityId: '(bulk)',
+                changes: { deletedAt: { from: null, to: toJson(stamp.deletedAt) } },
+                // The ids, not just how many. Without them a bulk entry can
+                // only say "3 stakeholders were archived" and leaves *which
+                // three* to be reconstructed from whatever fingerprint the
+                // data happens to still carry — which is not something an
+                // audit trail should be relying on. They cost nothing here:
+                // updateMany needed them anyway.
+                metadata: {
+                  cascade: true,
+                  count: result.count,
+                  ids: targetIds.slice(0, BULK_ID_CAP),
+                  where: toJson(a.where ?? null),
+                },
+              });
+            }
             await cascadeSoftDelete(base, model, targetIds);
             return result;
           }

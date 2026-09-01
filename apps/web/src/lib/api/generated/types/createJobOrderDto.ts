@@ -12,7 +12,7 @@ export interface CreateJobOrderDto {
   /** Client ID this job order belongs to */
   clientId: string;
   /** Job title ID (see /job-titles) — the client's own words for the role */
-  jobTitleId?: string;
+  jobTitleId: string;
   /** Job role type ID (see /job-role-types) — the consultant's classification */
   jobRoleTypeId?: string;
   /** Consultants working this job order at creation time (see PUT /job-orders/:id/consultants to change it later). Several can work the same job order concurrently — no scope check is applied here on purpose. */

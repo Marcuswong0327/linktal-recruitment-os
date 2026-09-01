@@ -5,6 +5,8 @@ import { AuthUser } from '../auth/auth.types';
 import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
 import { ExportAuditLogsDto } from './dto/export-audit-logs.dto';
 import { collectRefs, presentRow, PresentedRow } from './audit-presenter';
+import { entityTypeLabel } from './audit-schema.map';
+import { AUDITED_MODELS } from '../prisma/prisma.extensions';
 import { LabelRequest, LabelResolverService } from './label-resolver.service';
 import { logExport } from '../common/audit-export';
 import { buildWorkbook, ExportColumn, resolveTimeZone } from '../common/xlsx-export';
@@ -47,6 +49,39 @@ function summarizeChanges(rows: ResolvedChange[] | null): string {
   return parts.join('; ') + extra;
 }
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+function requestIdOf(metadata: unknown): string | undefined {
+  if (metadata == null || typeof metadata !== 'object') return undefined;
+  const id = (metadata as Record<string, unknown>).requestId;
+  return typeof id === 'string' ? id : undefined;
+}
+
+/**
+ * Whether a requestId can be trusted to identify one action.
+ *
+ * The e2e suite writes the literal string 'e2e-test' as its requestId, so
+ * every row any test run ever produced shares one value — grouping on it would
+ * merge unrelated actions into one enormous fictitious "action".
+ */
+const NON_UNIQUE_REQUEST_IDS = new Set(['e2e-test']);
+
+export function isGroupableRequestId(id: string | undefined): id is string {
+  return typeof id === 'string' && id !== '' && !NON_UNIQUE_REQUEST_IDS.has(id);
+}
+
+/**
+ * An upper bound given as a bare calendar date means "up to the end of that
+ * day", not "up to midnight at the start of it" — `lte: new Date('2026-08-26')`
+ * is `2026-08-26T00:00:00Z`, which silently excludes every entry made on the
+ * day the user actually asked for. The web client sends a full instant (its
+ * own local end-of-day, so the boundary lands where the reader expects it);
+ * this covers any other caller that passes a plain date.
+ */
+function endOfDayIfDateOnly(value: string): Date {
+  return DATE_ONLY.test(value) ? new Date(`${value}T23:59:59.999Z`) : new Date(value);
+}
+
 /** Date + time (unlike xlsx-export's own formatExportDate, which is date-only) — an activity log routinely has several entries on the same day, so the export needs the same precision the grid shows. */
 function formatWhen(iso: string | Date, timeZone: string): string {
   return new Intl.DateTimeFormat('en-GB', {
@@ -70,20 +105,73 @@ export class AuditService {
 
   /** Shared by `findAll` and `exportAll` so the exported sheet mirrors the grid's current filters exactly. */
   private buildWhere(
-    query: Pick<QueryAuditLogsDto, 'action' | 'entityType' | 'actorId' | 'from' | 'to'>,
+    query: Pick<QueryAuditLogsDto, 'action' | 'entityType' | 'actorId' | 'requestId' | 'from' | 'to'>,
   ): Prisma.AuditLogWhereInput {
-    const { action, entityType, actorId, from, to } = query;
+    const { action, entityType, actorId, requestId, from, to } = query;
     const where: Prisma.AuditLogWhereInput = {};
     if (action) where.action = action;
     if (entityType) where.entityType = entityType;
     if (actorId) where.actorId = actorId;
+    if (requestId) where.metadata = { path: ['requestId'], equals: requestId };
     if (from || to) {
       where.createdAt = {
         ...(from ? { gte: new Date(from) } : {}),
-        ...(to ? { lte: new Date(to) } : {}),
+        ...(to ? { lte: endOfDayIfDateOnly(to) } : {}),
       };
     }
     return where;
+  }
+
+  /**
+   * Every value the "Record type" filter should offer: the models the audit
+   * extension intercepts, plus every type that has actually landed in the
+   * table. The second half matters because EXPORT rows are written by hand
+   * (`common/audit-export.ts`) for whatever entity was exported, so types like
+   * EmailTemplate appear in the log without ever being in `AUDITED_MODELS`.
+   */
+  async entityTypes(): Promise<{ value: string; label: string }[]> {
+    const seen = await this.prisma.auditLog.groupBy({ by: ['entityType'] });
+    const values = new Set<string>([...AUDITED_MODELS, ...seen.map((r) => r.entityType)]);
+    return [...values]
+      .map((value) => ({ value, label: entityTypeLabel(value) }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  /**
+   * Per-action totals under the same filters the grid is showing — one
+   * GROUP BY, deliberately sharing `buildWhere` with `findAll` so the
+   * breakdown can never describe a different result set than the rows below
+   * it.
+   */
+  async actionCounts(
+    query: Pick<QueryAuditLogsDto, 'action' | 'entityType' | 'actorId' | 'from' | 'to'>,
+  ): Promise<{ action: string; count: number }[]> {
+    // `action` is excluded from its own breakdown: with it applied, every
+    // other action would read zero and the strip would stop being a way to
+    // move between them.
+    const where = this.buildWhere({ ...query, action: undefined });
+    const grouped = await this.prisma.auditLog.groupBy({ by: ['action'], where, _count: { _all: true } });
+    return grouped.map((g) => ({ action: g.action, count: g._count._all }));
+  }
+
+  /**
+   * How many entries each of these requests wrote in total.
+   *
+   * One grouped pass rather than a query per row. Raw SQL because Prisma's
+   * `groupBy` can't group on a JSON path, and the alternative — one
+   * `metadata: { path, equals }` filter per distinct request — is a separate
+   * scan each. Worth an index on `(metadata->>'requestId')` if this table
+   * ever grows past a few tens of thousands of rows.
+   */
+  private async countByRequest(requestIds: string[]): Promise<Map<string, number>> {
+    if (requestIds.length === 0) return new Map();
+    const rows = await this.prisma.$queryRaw<{ rid: string; n: number }[]>`
+      SELECT metadata->>'requestId' AS rid, COUNT(*)::int AS n
+      FROM "AuditLog"
+      WHERE metadata->>'requestId' = ANY(${requestIds})
+      GROUP BY 1
+    `;
+    return new Map(rows.map((r) => [r.rid, r.n]));
   }
 
   /** One shared label-resolution + presentation pass — used by `findAll` and both export paths. */
@@ -118,7 +206,22 @@ export class AuditService {
       this.prisma.auditLog.count({ where }),
     ]);
 
-    const data = await this.present(rows, user.roleName === 'admin');
+    const presented = await this.present(rows, user.roleName === 'admin');
+
+    // "Part of a larger action": a placement, an outreach send or a cascading
+    // archive each write several entries from one request, and without this
+    // they read as unrelated rows that happen to share a timestamp.
+    const requestIds = [...new Set(presented.map((r) => requestIdOf(r.metadata)).filter(isGroupableRequestId))];
+    const totals = await this.countByRequest(requestIds);
+    const data = presented.map((r) => {
+      const requestId = requestIdOf(r.metadata);
+      const groupable = isGroupableRequestId(requestId);
+      return {
+        ...r,
+        requestId: groupable ? requestId : null,
+        relatedCount: groupable ? Math.max(0, (totals.get(requestId) ?? 1) - 1) : 0,
+      };
+    });
 
     return { data, total, page, pageSize, pageCount: Math.ceil(total / pageSize) };
   }

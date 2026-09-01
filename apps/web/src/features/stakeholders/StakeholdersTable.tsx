@@ -24,24 +24,17 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { ClientCombobox } from '@/components/ClientCombobox';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import { CreatableCombobox, type CreatableComboboxOption } from '@/components/CreatableCombobox';
-import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
-import { EnumSelect } from '@/components/EnumSelect';
-import { FormField } from '@/components/FormField';
 import {
-  LEVEL_LABEL,
-  LocationFilterButton,
-  LocationMultiSelect,
-  type LocationOption,
-} from '@/components/LocationMultiSelect';
+  DataGrid,
+  focusNewRowStart,
+  type DataGridFilter,
+  type DataGridQuery,
+} from '@/components/DataGrid';
+import { LEVEL_LABEL, LocationFilterButton } from '@/components/LocationMultiSelect';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
-import { useGetClients } from '@/lib/api/generated/clients/clients';
 import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
 import {
   deleteStakeholder,
@@ -62,7 +55,6 @@ import {
 } from '@/lib/api/generated/stakeholder-role-types/stakeholder-role-types';
 import { GetStakeholdersSortBy } from '@/lib/api/generated/types/getStakeholdersSortBy';
 import type {
-  ClientEntity,
   CreateStakeholderDto,
   GetStakeholdersAccuracyItem,
   GetStakeholdersSortOrder,
@@ -71,7 +63,8 @@ import type {
   StakeholderEntity,
   UpdateStakeholderDto,
 } from '@/lib/api/generated/types';
-import { accuracyOptions, getStakeholderColumns, stakeholderStatusOptions, type StakeholderStatus } from './columns';
+import { useStakeholderNewRow } from './StakeholderNewRow';
+import { getStakeholderColumns, stakeholderStatusOptions, type StakeholderStatus } from './columns';
 
 const PAGE_SIZE = 50;
 
@@ -95,37 +88,6 @@ const ROLE_TYPE_PALETTE: {
 ];
 function roleTypeStyle(index: number) {
   return ROLE_TYPE_PALETTE[index % ROLE_TYPE_PALETTE.length];
-}
-
-/** Editable fields shared by the create and edit forms. */
-interface StakeholderFormValues {
-  clientId: string;
-  firstName: string;
-  lastName: string;
-  jobTitleId: string;
-  roleTypeId: string;
-  linkedinUrl: string;
-  email: string;
-  mobile: string;
-  coverage: LocationOption[];
-  isAccurate: boolean | null;
-  inaccurateReason: string;
-}
-
-function buildStakeholderPayload(values: StakeholderFormValues): CreateStakeholderDto {
-  return {
-    clientId: values.clientId,
-    firstName: values.firstName || undefined,
-    lastName: values.lastName || undefined,
-    jobTitleId: values.jobTitleId || undefined,
-    roleTypeId: values.roleTypeId || undefined,
-    linkedinUrl: values.linkedinUrl || undefined,
-    email: values.email || undefined,
-    mobile: values.mobile || undefined,
-    coverageLocationIds: values.coverage.map((c) => c.id),
-    isAccurate: values.isAccurate ?? undefined,
-    inaccurateReason: values.inaccurateReason || undefined,
-  };
 }
 
 export function StakeholdersTable({
@@ -164,14 +126,15 @@ export function StakeholdersTable({
   const [isExporting, setIsExporting] = React.useState(false);
   const importStakeholders = useImportStakeholders();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
-  const [creating, setCreating] = React.useState(false);
 
-  // Opened via the global command palette's "Add a Stakeholder" action
-  // (`/stakeholders?new=1`) — strip the param immediately so refresh/back
-  // doesn't reopen the sheet.
+
+  // Arrived from the command palette's "Add a Stakeholder" action
+  // (`/stakeholders?new=1`). The new row is always on screen now, so there's
+  // nothing to open — just put the caret in it, then strip the param so
+  // refresh/back doesn't re-steal focus.
   React.useEffect(() => {
     if (searchParams.get('new') === '1') {
-      setCreating(true);
+      requestAnimationFrame(() => focusNewRowStart());
       router.replace('/stakeholders');
     }
   }, [searchParams, router]);
@@ -196,11 +159,6 @@ export function StakeholdersTable({
   const result = data?.status === 200 ? data.data : undefined;
   const stakeholders = useInfinitePages(result?.data, page, isFetching);
 
-  // Full roster for the Company picker — pageSize is capped at 100
-  // server-side (query-clients.dto.ts), same known limitation as the
-  // consultant lookup this pattern is borrowed from.
-  const { data: clientsData } = useGetClients({ pageSize: 100 });
-  const clients: ClientEntity[] = clientsData?.status === 200 ? clientsData.data.data : [];
 
   const { data: roleTypeData } = useGetStakeholderRoleTypes({ take: 200 });
   const roleTypeRows = roleTypeData?.status === 200 ? roleTypeData.data : [];
@@ -237,18 +195,9 @@ export function StakeholdersTable({
         })),
       },
       {
-        columnId: 'isAccurate',
-        title: 'Accuracy',
-        // Multi-select (unlike Role type) — filtering for both "Inaccurate"
-        // and "Unchecked" at once (i.e. "not confirmed accurate") is a
-        // reasonable thing to want.
-        inHeader: true,
-        options: accuracyOptions.map((o) => ({ value: o.value, label: o.label, variant: o.variant })),
-      },
-      {
         columnId: 'status',
         title: 'Status',
-        // Multi-select — same reasoning as Accuracy above.
+        // Multi-select — same reasoning as Role type above.
         inHeader: true,
         options: stakeholderStatusOptions.map((o) => ({ value: o.value, label: o.label, variant: o.variant })),
       },
@@ -305,9 +254,17 @@ export function StakeholdersTable({
   const createStakeholderMutation = useCreateStakeholder({
     mutation: {
       onSuccess: () => {
+        // Reset to page 1, not just invalidate — the new row sorts to the
+        // top (`sortOrder` defaults to 'desc'), which shifts every row's
+        // position across whatever later pages are already loaded via
+        // useInfinitePages. Invalidating alone only refetches the
+        // currently-mounted page, leaving stale, now-misaligned data in the
+        // rest — duplicate ids once flattened. Landing back on page 1 makes
+        // useInfinitePages reset its slots cleanly (see its own doc), and
+        // is also just where you'd want to see the thing you just added.
+        setPage(1);
         queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
         toast.success('Stakeholder added');
-        setCreating(false);
       },
       onError: (err) => toast.error(err.message || 'Failed to add stakeholder'),
     },
@@ -340,9 +297,21 @@ export function StakeholdersTable({
     setPage(1);
   }
 
-  function handleCreate(values: StakeholderFormValues) {
-    createStakeholderMutation.mutate({ data: buildStakeholderPayload(values) });
+  // The new-row variant: awaited and rethrowing, so `useStakeholderNewRow`
+  // knows whether to clear the row or keep what was typed. The mutation's
+  // own onSuccess/onError still handle the page reset and toasts.
+  async function handleCreateFromNewRow(dto: CreateStakeholderDto) {
+    await createStakeholderMutation.mutateAsync({ data: dto });
   }
+
+  const newRow = useStakeholderNewRow({
+    jobTitles: jobTitleOptions,
+    roleTypes: roleTypeOptions,
+    onCreateJobTitle: handleCreateJobTitle,
+    onCreateRoleType: handleCreateRoleType,
+    onCreate: handleCreateFromNewRow,
+    disabled: !canCreate,
+  });
 
   const handleRoleTypeChange = React.useCallback(
     (stakeholder: StakeholderEntity, roleTypeId: string) => {
@@ -489,6 +458,11 @@ export function StakeholdersTable({
         onSelectionChange={setSelected}
         enableRowRangeSelect
         hideSelectColumn
+        // Excel-style entry: an always-present row parked on the table's
+        // bottom edge, one editor per writable column, rows scrolling behind
+        // it. Replaces the old bottom-edge quick-add overlay (issue #131) —
+        // see `useStakeholderNewRow` for which fields it collects.
+        newRow={newRow}
         toolbar={
           <div className="flex items-center gap-2">
             {canCreate && canUpdate ? (
@@ -606,164 +580,7 @@ export function StakeholdersTable({
         onConfirm={handleBulkDelete}
       />
 
-      <Sheet open={creating} onOpenChange={setCreating}>
-        <SheetContent className="w-full sm:max-w-md">
-          {creating ? (
-            <StakeholderForm
-              title="Add stakeholder"
-              description="Add a new contact for a client company."
-              clients={clients}
-              roleTypes={roleTypeOptions}
-              onCreateRoleType={handleCreateRoleType}
-              jobTitles={jobTitleOptions}
-              onCreateJobTitle={handleCreateJobTitle}
-              isSaving={createStakeholderMutation.isPending}
-              onSave={handleCreate}
-              onCancel={() => setCreating(false)}
-            />
-          ) : null}
-        </SheetContent>
-      </Sheet>
     </>
   );
 }
 
-/** "Add stakeholder" drawer form — only the company is required, everything else is optional (mirrors CreateStakeholderDto). Editing an existing stakeholder happens on its detail page (/stakeholders/[id]), not here. */
-function StakeholderForm({
-  title,
-  description,
-  clients,
-  roleTypes,
-  onCreateRoleType,
-  jobTitles,
-  onCreateJobTitle,
-  isSaving,
-  onSave,
-  onCancel,
-}: {
-  title: string;
-  description: string;
-  clients: ClientEntity[];
-  roleTypes: CreatableComboboxOption[];
-  onCreateRoleType: (name: string) => Promise<CreatableComboboxOption>;
-  jobTitles: CreatableComboboxOption[];
-  onCreateJobTitle: (name: string) => Promise<CreatableComboboxOption>;
-  isSaving: boolean;
-  onSave: (values: StakeholderFormValues) => void;
-  onCancel: () => void;
-}) {
-  const [clientId, setClientId] = React.useState('');
-  const [firstName, setFirstName] = React.useState('');
-  const [lastName, setLastName] = React.useState('');
-  const [jobTitleId, setJobTitleId] = React.useState('');
-  const [roleTypeId, setRoleTypeId] = React.useState('');
-  const [linkedinUrl, setLinkedinUrl] = React.useState('');
-  const [email, setEmail] = React.useState('');
-  const [mobile, setMobile] = React.useState('');
-  const [coverage, setCoverage] = React.useState<LocationOption[]>([]);
-  const [isAccurate, setIsAccurate] = React.useState<boolean | null>(null);
-  const [inaccurateReason, setInaccurateReason] = React.useState('');
-
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    onSave({
-      clientId,
-      firstName,
-      lastName,
-      jobTitleId,
-      roleTypeId,
-      linkedinUrl,
-      email,
-      mobile,
-      coverage,
-      isAccurate,
-      inaccurateReason,
-    });
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="flex h-full flex-col">
-      <SheetHeader>
-        <SheetTitle>{title}</SheetTitle>
-        <SheetDescription>{description}</SheetDescription>
-      </SheetHeader>
-
-      <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
-        <FormField label="Company" htmlFor="stakeholder-company" required>
-          <ClientCombobox id="stakeholder-company" value={clientId} onValueChange={setClientId} clients={clients} />
-        </FormField>
-        <FormField label="First name" htmlFor="stakeholder-first-name">
-          <Input id="stakeholder-first-name" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-        </FormField>
-        <FormField label="Last name" htmlFor="stakeholder-last-name">
-          <Input id="stakeholder-last-name" value={lastName} onChange={(e) => setLastName(e.target.value)} />
-        </FormField>
-        <FormField label="Job title" htmlFor="stakeholder-job-title">
-          <CreatableCombobox
-            id="stakeholder-job-title"
-            value={jobTitleId}
-            onValueChange={setJobTitleId}
-            options={jobTitles}
-            onCreate={onCreateJobTitle}
-          />
-        </FormField>
-        <FormField label="Role type" htmlFor="stakeholder-role-type">
-          <CreatableCombobox
-            id="stakeholder-role-type"
-            value={roleTypeId}
-            onValueChange={setRoleTypeId}
-            options={roleTypes}
-            onCreate={onCreateRoleType}
-          />
-        </FormField>
-        <FormField label="LinkedIn URL" htmlFor="stakeholder-linkedin">
-          <Input id="stakeholder-linkedin" value={linkedinUrl} onChange={(e) => setLinkedinUrl(e.target.value)} />
-        </FormField>
-        <FormField label="Email" htmlFor="stakeholder-email">
-          <Input id="stakeholder-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </FormField>
-        <FormField label="Mobile" htmlFor="stakeholder-mobile">
-          <Input id="stakeholder-mobile" value={mobile} onChange={(e) => setMobile(e.target.value)} />
-        </FormField>
-        <FormField
-          label="Coverage"
-          htmlFor="stakeholder-coverage"
-          description="Which places this contact covers. Optional — can be set later from their detail page."
-        >
-          <LocationMultiSelect id="stakeholder-coverage" selected={coverage} onChange={setCoverage} />
-        </FormField>
-        <FormField
-          label="Details accurate"
-          htmlFor="stakeholder-accurate"
-          description="Whether these contact details have been verified."
-        >
-          <EnumSelect
-            id="stakeholder-accurate"
-            value={isAccurate === null ? 'unchecked' : String(isAccurate)}
-            onValueChange={(v) => setIsAccurate(v === 'unchecked' ? null : v === 'true')}
-            options={accuracyOptions}
-          />
-        </FormField>
-        {isAccurate === false ? (
-          <FormField label="What's wrong" htmlFor="stakeholder-inaccurate-reason">
-            <textarea
-              id="stakeholder-inaccurate-reason"
-              value={inaccurateReason}
-              onChange={(e) => setInaccurateReason(e.target.value)}
-              className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30"
-            />
-          </FormField>
-        ) : null}
-      </div>
-
-      <SheetFooter className="flex-row justify-end">
-        <Button type="button" variant="outline" size="lg" onClick={onCancel} disabled={isSaving}>
-          Cancel
-        </Button>
-        <Button type="submit" size="lg" disabled={isSaving || !clientId}>
-          {isSaving ? 'Saving…' : 'Save'}
-        </Button>
-      </SheetFooter>
-    </form>
-  );
-}

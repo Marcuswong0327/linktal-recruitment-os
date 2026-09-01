@@ -6,6 +6,8 @@
  * OpenAPI spec version: 1.0
  */
 
+export * from './auditActionCountEntity';
+export * from './auditEntityTypeEntity';
 export * from './auditLogEntity';
 export * from './auditLogEntityChanges';
 export * from './auditLogEntityMetadata';
@@ -14,8 +16,10 @@ export * from './candidateContactHistoryEntityCategory';
 export * from './candidateContactHistoryEntityOutreachChannel';
 export * from './candidateContactHistoryEntityStatus';
 export * from './candidateEntity';
+export * from './candidateEntityHistoricFilesItem';
 export * from './candidateEntityLastContactCategory';
 export * from './candidateEntityLocationLevel';
+export * from './candidateEntityOtherDocumentsItem';
 export * from './candidateEntityStatus';
 export * from './candidateEntityWorkHistoryItem';
 export * from './clientContactHistoryEntity';
@@ -60,6 +64,7 @@ export * from './createSubmissionDto';
 export * from './createSubmissionDtoStatus';
 export * from './createTobDto';
 export * from './deleteRoleParams';
+export * from './documentFileDto';
 export * from './errorResponse';
 export * from './exportAuditLogsAction';
 export * from './exportAuditLogsParams';
@@ -90,6 +95,10 @@ export * from './exportStakeholdersParams';
 export * from './exportStakeholdersSortBy';
 export * from './exportStakeholdersSortOrder';
 export * from './exportStakeholdersStatusesItem';
+export * from './getAuditActionCountsAction';
+export * from './getAuditActionCountsParams';
+export * from './getAuditActionCountsSortBy';
+export * from './getAuditActionCountsSortOrder';
 export * from './getAuditLogsAction';
 export * from './getAuditLogsParams';
 export * from './getAuditLogsSortBy';

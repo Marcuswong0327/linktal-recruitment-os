@@ -3,7 +3,9 @@
 import * as React from 'react';
 import Link from 'next/link';
 import {
+  AlertTriangle,
   ArrowLeft,
+  ArrowRight,
   Check,
   ChevronDown,
   CornerDownLeft,
@@ -18,9 +20,19 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { Collapsible } from '@base-ui/react/collapsible';
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Separator } from '@/components/ui/separator';
@@ -37,7 +49,9 @@ import { LinkedinIcon, SeekIcon } from '@/components/BrandIcons';
 import { useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { FileUploadField } from '@/components/FileUploadField';
-import { FormField } from '@/components/FormField';
+import { ChangeDot, FormField } from '@/components/FormField';
+import { MultiFileUploadField, type DocumentFile } from '@/components/MultiFileUploadField';
+import { WorkHistoryField, type WorkHistoryItem } from '@/components/WorkHistoryField';
 import { LocationCombobox, type LocationValue } from '@/components/LocationCombobox';
 import {
   LogCandidateContactRow,
@@ -46,6 +60,7 @@ import {
 import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
 import { useIsMac } from '@/hooks/use-is-mac';
 import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shortcut';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { cn } from '@/lib/utils';
 import {
   useGetCandidate,
@@ -179,6 +194,43 @@ function sameIds(a: string[], b: string[]) {
   return sortedA.every((id, i) => id === sortedB[i]);
 }
 
+/** Candidate.historicFiles/otherDocuments come back as `Prisma.JsonValue` (unknown shape at the type level) — narrow to the `{key, fileName}[]` this page actually writes. */
+function asDocumentFiles(value: unknown): DocumentFile[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (v): v is DocumentFile =>
+      !!v && typeof v === 'object' && typeof (v as DocumentFile).key === 'string' && typeof (v as DocumentFile).fileName === 'string',
+  );
+}
+
+/** True when two file lists hold the same keys in the same order. */
+function sameFiles(a: DocumentFile[], b: DocumentFile[]) {
+  if (a.length !== b.length) return false;
+  return a.every((f, i) => f.key === b[i]?.key && f.fileName === b[i]?.fileName);
+}
+
+/** Candidate.workHistory comes back as `Prisma.JsonValue` (unknown shape at the type level) — narrow to the `{role, company, period}[]` this page reads and writes. */
+function asWorkHistory(value: unknown): WorkHistoryItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((v) => {
+    const item = v as { role?: unknown; company?: unknown; period?: unknown };
+    return {
+      role: typeof item?.role === 'string' ? item.role : undefined,
+      company: typeof item?.company === 'string' ? item.company : undefined,
+      period: typeof item?.period === 'string' ? item.period : undefined,
+    };
+  });
+}
+
+/** True when two work-history lists hold the same entries in the same order. */
+function sameWorkHistory(a: WorkHistoryItem[], b: WorkHistoryItem[]) {
+  if (a.length !== b.length) return false;
+  return a.every(
+    (item, i) =>
+      item.role === b[i]?.role && item.company === b[i]?.company && item.period === b[i]?.period,
+  );
+}
+
 /** One icon per contact method (Email/Mobile/LinkedIn/Seek Talent) — click opens it. A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. Mirrors CompanyDetail's LinkIconButton for its Website field. */
 function ContactIconButton({
   icon: Icon,
@@ -269,7 +321,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
     row.category === 'SCREENING' &&
     (row.contactedById === session?.user?.consultantId || session?.user?.roleName === 'admin');
 
-  const { register, handleSubmit, formState } = useForm<UpdateCandidateDto>({
+  const { register, handleSubmit, formState, reset } = useForm<UpdateCandidateDto>({
     defaultValues: {
       firstName: candidate.firstName ?? '',
       lastName: candidate.lastName ?? '',
@@ -277,6 +329,9 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
       mobile: candidate.mobile ?? '',
       linkedinUrl: candidate.linkedinUrl ?? '',
       seekTalentUrl: candidate.seekTalentUrl ?? '',
+      currentSalary: candidate.currentSalary ?? '',
+      expectedSalary: candidate.expectedSalary ?? '',
+      suburbAndPostcode: candidate.suburbAndPostcode ?? '',
     },
   });
 
@@ -294,8 +349,24 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
   );
   const [rawResumeUrl, setRawResumeUrl] = React.useState(candidate.rawResumeUrl ?? '');
   const [editedResumeUrl, setEditedResumeUrl] = React.useState(candidate.editedResumeUrl ?? '');
+  const [historicFiles, setHistoricFiles] = React.useState<DocumentFile[]>(
+    asDocumentFiles(candidate.historicFiles),
+  );
+  const [otherDocuments, setOtherDocuments] = React.useState<DocumentFile[]>(
+    asDocumentFiles(candidate.otherDocuments),
+  );
+  const [workHistory, setWorkHistory] = React.useState<WorkHistoryItem[]>(
+    asWorkHistory(candidate.workHistory),
+  );
   // Purely a display toggle for the Contact row below — not part of isDirty.
   const [editingContact, setEditingContact] = React.useState(false);
+
+  // Field names that were part of the most recently *successful* save —
+  // drives the brief green "saved" flash on each changed field's indicator
+  // before it fades back to no-indicator. Cleared on a timer, not tied to
+  // React Query's cache state, so it reads as a confirmation of that one
+  // save rather than a live "is this in sync with the server" check.
+  const [justSavedFields, setJustSavedFields] = React.useState<Set<string>>(new Set());
 
   const { data: industryData } = useGetIndustries();
   const industries = industryData?.status === 200 ? industryData.data : [];
@@ -346,14 +417,38 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
     return res.data;
   }
 
+  // Named individually (rather than inlined straight into isDirty) so each
+  // one can also drive its own field's change indicator.
+  const industryChanged = industryId !== (candidate.industryId ?? '');
+  const roleTypeChanged = roleTypeId !== (candidate.jobRoleTypeId ?? '');
+  const specializationsChanged = !sameIds(specializationIds, candidate.specializationIds);
+  const locationChanged = (location?.id ?? '') !== (candidate.locationId ?? '');
+  const rawResumeChanged = rawResumeUrl !== (candidate.rawResumeUrl ?? '');
+  const editedResumeChanged = editedResumeUrl !== (candidate.editedResumeUrl ?? '');
+  const historicFilesChanged = !sameFiles(historicFiles, asDocumentFiles(candidate.historicFiles));
+  const otherDocumentsChanged = !sameFiles(otherDocuments, asDocumentFiles(candidate.otherDocuments));
+  const workHistoryChanged = !sameWorkHistory(workHistory, asWorkHistory(candidate.workHistory));
+
   const isDirty =
     formState.isDirty ||
-    industryId !== (candidate.industryId ?? '') ||
-    roleTypeId !== (candidate.jobRoleTypeId ?? '') ||
-    !sameIds(specializationIds, candidate.specializationIds) ||
-    (location?.id ?? '') !== (candidate.locationId ?? '') ||
-    rawResumeUrl !== (candidate.rawResumeUrl ?? '') ||
-    editedResumeUrl !== (candidate.editedResumeUrl ?? '');
+    industryChanged ||
+    roleTypeChanged ||
+    specializationsChanged ||
+    locationChanged ||
+    rawResumeChanged ||
+    editedResumeChanged ||
+    historicFilesChanged ||
+    otherDocumentsChanged ||
+    workHistoryChanged;
+
+  // 'dirty' (amber) while changed-but-unsaved, 'saved' (green) for a brief
+  // flash right after a successful save, undefined otherwise — see
+  // FormField's `changeState` prop.
+  function fieldChangeState(name: string, dirty: boolean): 'dirty' | 'saved' | undefined {
+    if (justSavedFields.has(name)) return 'saved';
+    if (dirty) return 'dirty';
+    return undefined;
+  }
 
   const uploadCandidateFile = useUploadCandidateFile();
   async function handleUploadFile(file: File) {
@@ -380,25 +475,62 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
     },
   });
 
+  const flashTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => () => {
+    if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+  }, []);
+
   const onSubmit = handleSubmit((values) => {
-    updateCandidate.mutate({
-      id: candidate.id,
-      data: {
-        ...cleanPatch(values),
-        industryId: industryId || null,
-        jobRoleTypeId: roleTypeId || null,
-        specializationIds,
-        locationId: location?.id ?? candidate.locationId,
-        rawResumeUrl: rawResumeUrl || null,
-        editedResumeUrl: editedResumeUrl || null,
-      } as UpdateCandidateDto,
-    });
+    // Snapshot which fields are actually changing in *this* submit, before
+    // the mutation resolves and dirty state starts clearing out from under
+    // us — this is the exact set that gets the green "saved" flash.
+    const changedFields = new Set<string>(Object.keys(formState.dirtyFields));
+    if (industryChanged) changedFields.add('industryId');
+    if (roleTypeChanged) changedFields.add('roleTypeId');
+    if (specializationsChanged) changedFields.add('specializationIds');
+    if (locationChanged) changedFields.add('location');
+    if (rawResumeChanged) changedFields.add('rawResumeUrl');
+    if (editedResumeChanged) changedFields.add('editedResumeUrl');
+    if (historicFilesChanged) changedFields.add('historicFiles');
+    if (otherDocumentsChanged) changedFields.add('otherDocuments');
+    if (workHistoryChanged) changedFields.add('workHistory');
+
+    updateCandidate.mutate(
+      {
+        id: candidate.id,
+        data: {
+          ...cleanPatch(values),
+          industryId: industryId || null,
+          jobRoleTypeId: roleTypeId || null,
+          specializationIds,
+          locationId: location?.id ?? candidate.locationId,
+          rawResumeUrl: rawResumeUrl || null,
+          editedResumeUrl: editedResumeUrl || null,
+          historicFiles,
+          otherDocuments,
+          workHistory,
+        } as UpdateCandidateDto,
+      },
+      {
+        onSuccess: () => {
+          // Clears RHF's own dirty tracking (it only resets via `reset`, never
+          // on its own) so a saved field's indicator can fall back to "no
+          // indicator" once the flash below ends, instead of reverting to
+          // "unsaved" the moment the flash clears.
+          reset(values);
+          if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+          setJustSavedFields(changedFields);
+          flashTimeoutRef.current = setTimeout(() => setJustSavedFields(new Set()), 2000);
+        },
+      },
+    );
     setEditingContact(false);
   });
 
   const formRef = React.useRef<HTMLFormElement>(null);
   const isMac = useIsMac();
   useSaveShortcut(() => formRef.current?.requestSubmit(), isDirty && !updateCandidate.isPending);
+  const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty);
 
   const [loggingContact, setLoggingContact] = React.useState(false);
   const contactHistoryQueryKey = getGetCandidateContactHistoryQueryKey(candidate.id);
@@ -783,18 +915,41 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
             </CardHeader>
             <CardContent>
               <div className="overflow-auto rounded-md border border-border">
-                <Table>
+                {/* table-fixed + equal-width headers so a long filename truncates
+                    inside its own column instead of stretching the table and
+                    pushing the other 3 columns out of view. */}
+                <Table className="table-fixed">
                   <TableHeader>
                     <TableRow className="divide-x divide-border">
-                      <TableHead>Raw Resume</TableHead>
-                      <TableHead>Linktal Resume</TableHead>
-                      <TableHead>Historic Files</TableHead>
-                      <TableHead>Other Documents</TableHead>
+                      <TableHead className="w-1/4">
+                        <span className="flex items-center gap-1.5">
+                          <ChangeDot state={fieldChangeState('rawResumeUrl', rawResumeChanged)} />
+                          Raw Resume
+                        </span>
+                      </TableHead>
+                      <TableHead className="w-1/4">
+                        <span className="flex items-center gap-1.5">
+                          <ChangeDot state={fieldChangeState('editedResumeUrl', editedResumeChanged)} />
+                          Linktal Resume
+                        </span>
+                      </TableHead>
+                      <TableHead className="w-1/4">
+                        <span className="flex items-center gap-1.5">
+                          <ChangeDot state={fieldChangeState('historicFiles', historicFilesChanged)} />
+                          Historic Files
+                        </span>
+                      </TableHead>
+                      <TableHead className="w-1/4">
+                        <span className="flex items-center gap-1.5">
+                          <ChangeDot state={fieldChangeState('otherDocuments', otherDocumentsChanged)} />
+                          Other Documents
+                        </span>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    <TableRow className="divide-x divide-border">
-                      <TableCell>
+                    <TableRow className="divide-x divide-border align-top">
+                      <TableCell className="whitespace-normal">
                         <FileUploadField
                           id="rawResumeUrl"
                           value={rawResumeUrl}
@@ -802,7 +957,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                           upload={handleUploadFile}
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-normal">
                         <FileUploadField
                           id="editedResumeUrl"
                           value={editedResumeUrl}
@@ -810,15 +965,21 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                           upload={handleUploadFile}
                         />
                       </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-muted-foreground" title="Not tracked yet">
-                          —
-                        </span>
+                      <TableCell className="whitespace-normal">
+                        <MultiFileUploadField
+                          id="historicFiles"
+                          value={historicFiles}
+                          onChange={setHistoricFiles}
+                          upload={handleUploadFile}
+                        />
                       </TableCell>
-                      <TableCell>
-                        <span className="text-sm text-muted-foreground" title="Not tracked yet">
-                          —
-                        </span>
+                      <TableCell className="whitespace-normal">
+                        <MultiFileUploadField
+                          id="otherDocuments"
+                          value={otherDocuments}
+                          onChange={setOtherDocuments}
+                          upload={handleUploadFile}
+                        />
                       </TableCell>
                     </TableRow>
                   </TableBody>
@@ -835,14 +996,28 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
             </CardHeader>
             <CardContent className="grid gap-4">
               <div className="grid grid-cols-2 gap-3">
-                <FormField label="First name" htmlFor="firstName">
+                <FormField
+                  label="First name"
+                  htmlFor="firstName"
+                  changeState={fieldChangeState('firstName', !!formState.dirtyFields.firstName)}
+                >
                   <Input id="firstName" {...register('firstName')} />
                 </FormField>
-                <FormField label="Last name" htmlFor="lastName">
+                <FormField
+                  label="Last name"
+                  htmlFor="lastName"
+                  changeState={fieldChangeState('lastName', !!formState.dirtyFields.lastName)}
+                >
                   <Input id="lastName" {...register('lastName')} />
                 </FormField>
               </div>
-              <FormField label="Industry" htmlFor="industry" required orientation="horizontal">
+              <FormField
+                label="Industry"
+                htmlFor="industry"
+                required
+                orientation="horizontal"
+                changeState={fieldChangeState('industryId', industryChanged)}
+              >
                 <CreatableCombobox
                   id="industry"
                   value={industryId}
@@ -852,7 +1027,12 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   placeholder="Select industry…"
                 />
               </FormField>
-              <FormField label="Role type" htmlFor="roleType" orientation="horizontal">
+              <FormField
+                label="Role type"
+                htmlFor="roleType"
+                orientation="horizontal"
+                changeState={fieldChangeState('roleTypeId', roleTypeChanged)}
+              >
                 <CreatableCombobox
                   id="roleType"
                   value={roleTypeId}
@@ -867,6 +1047,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                 htmlFor="specialization"
                 description={!industryId ? 'Pick an industry first' : undefined}
                 orientation="horizontal"
+                changeState={fieldChangeState('specializationIds', specializationsChanged)}
               >
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-wrap gap-1.5">
@@ -910,7 +1091,23 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                 className="group/contact flex flex-col gap-1.5"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">Contact</span>
+                  <span className="flex items-center gap-1.5 text-sm font-medium">
+                    <ChangeDot
+                      state={
+                        ['email', 'mobile', 'linkedinUrl', 'seekTalentUrl'].some((f) =>
+                          justSavedFields.has(f),
+                        )
+                          ? 'saved'
+                          : formState.dirtyFields.email ||
+                              formState.dirtyFields.mobile ||
+                              formState.dirtyFields.linkedinUrl ||
+                              formState.dirtyFields.seekTalentUrl
+                            ? 'dirty'
+                            : undefined
+                      }
+                    />
+                    Contact
+                  </span>
                   <div className="flex items-center gap-1">
                     {contactActionsMenu}
                     <Collapsible.Trigger
@@ -929,19 +1126,41 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   </div>
                 </div>
                 <Collapsible.Panel className="flex flex-col gap-3 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0">
-                  <FormField label="Email" htmlFor="email" orientation="horizontal">
+                  <FormField
+                    label="Email"
+                    htmlFor="email"
+                    orientation="horizontal"
+                    changeState={fieldChangeState('email', !!formState.dirtyFields.email)}
+                  >
                     <Input id="email" type="email" {...register('email')} />
                   </FormField>
-                  <FormField label="Mobile" htmlFor="mobile" orientation="horizontal">
+                  <FormField
+                    label="Mobile"
+                    htmlFor="mobile"
+                    orientation="horizontal"
+                    changeState={fieldChangeState('mobile', !!formState.dirtyFields.mobile)}
+                  >
                     <Input id="mobile" {...register('mobile')} />
                   </FormField>
-                  <FormField label="LinkedIn URL" htmlFor="linkedinUrl" orientation="horizontal">
+                  <FormField
+                    label="LinkedIn URL"
+                    htmlFor="linkedinUrl"
+                    orientation="horizontal"
+                    changeState={fieldChangeState(
+                      'linkedinUrl',
+                      !!formState.dirtyFields.linkedinUrl,
+                    )}
+                  >
                     <Input id="linkedinUrl" {...register('linkedinUrl')} />
                   </FormField>
                   <FormField
                     label="Seek Talent URL"
                     htmlFor="seekTalentUrl"
                     orientation="horizontal"
+                    changeState={fieldChangeState(
+                      'seekTalentUrl',
+                      !!formState.dirtyFields.seekTalentUrl,
+                    )}
                   >
                     <Input id="seekTalentUrl" {...register('seekTalentUrl')} />
                   </FormField>
@@ -950,71 +1169,108 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
               <Separator />
 
-              <FormField label="Suburb" htmlFor="location" orientation="horizontal">
+              <FormField
+                label="City"
+                htmlFor="location"
+                orientation="horizontal"
+                tooltip="Coarsest location the scope resolver has for this candidate — suburb-level data isn't loaded yet, see Suburb & Postcode below for the free-text version."
+                changeState={fieldChangeState('location', locationChanged)}
+              >
                 <LocationCombobox
                   id="location"
                   value={location}
                   onChange={setLocation}
-                  placeholder="Search for a suburb…"
+                  placeholder="Search for a city…"
                 />
               </FormField>
 
-              <div className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
-                <span className="text-muted-foreground">Current salary</span>
-                <span>{candidate.currentSalary ?? '—'}</span>
-                <span className="text-muted-foreground">Expected salary</span>
-                <span>{candidate.expectedSalary ?? '—'}</span>
-              </div>
+              <FormField
+                label="Suburb & Postcode"
+                htmlFor="suburbAndPostcode"
+                orientation="horizontal"
+                tooltip='Free text — not searched or scoped, e.g. "Merrylands 2160 NSW".'
+                changeState={fieldChangeState(
+                  'suburbAndPostcode',
+                  !!formState.dirtyFields.suburbAndPostcode,
+                )}
+              >
+                <Input
+                  id="suburbAndPostcode"
+                  placeholder="e.g. Merrylands 2160 NSW"
+                  {...register('suburbAndPostcode')}
+                />
+              </FormField>
+
+              <FormField
+                label="Current salary"
+                htmlFor="currentSalary"
+                orientation="horizontal"
+                changeState={fieldChangeState(
+                  'currentSalary',
+                  !!formState.dirtyFields.currentSalary,
+                )}
+              >
+                <Input
+                  id="currentSalary"
+                  placeholder="e.g. 35 per hour"
+                  {...register('currentSalary')}
+                />
+              </FormField>
+              <FormField
+                label="Expected salary"
+                htmlFor="expectedSalary"
+                orientation="horizontal"
+                changeState={fieldChangeState(
+                  'expectedSalary',
+                  !!formState.dirtyFields.expectedSalary,
+                )}
+              >
+                <Input
+                  id="expectedSalary"
+                  placeholder="e.g. 55-60"
+                  {...register('expectedSalary')}
+                />
+              </FormField>
               <p className="text-xs text-muted-foreground">
-                Salary is a snapshot from the latest logged contact — update it via "Log Contact"
-                above.
+                Direct edit for fixing incorrect values — logging a new contact still records its
+                own salary in history separately.
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="border-b">
-              <CardTitle className="flex items-center gap-2">Employment History</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <ChangeDot state={fieldChangeState('workHistory', workHistoryChanged)} />
+                Employment History
+              </CardTitle>
+              <CardDescription className="flex items-center gap-1 text-xs">
+                Scroll horizontally to reveal more
+                <ArrowRight className="size-3" />
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              {candidate.workHistory?.length ? (
-                <div className="max-h-96 overflow-auto rounded-md border border-border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="divide-x divide-border">
-                        <TableHead>Company</TableHead>
-                        <TableHead>Position</TableHead>
-                        <TableHead>Period</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {candidate.workHistory.map((raw, i) => {
-                        // JSONB in the API; the generated type is an open record.
-                        const item = raw as { company?: string; role?: string; period?: string };
-                        return (
-                          <TableRow key={i} className="divide-x divide-border">
-                            <TableCell className="whitespace-normal">
-                              {item.company ?? <span className="text-muted-foreground">—</span>}
-                            </TableCell>
-                            <TableCell className="whitespace-normal">
-                              {item.role ?? <span className="text-muted-foreground">—</span>}
-                            </TableCell>
-                            <TableCell className="whitespace-normal">
-                              {item.period ?? <span className="text-muted-foreground">—</span>}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">No employment history recorded.</p>
-              )}
+              <WorkHistoryField value={workHistory} onChange={setWorkHistory} />
             </CardContent>
           </Card>
         </div>
       </form>
+
+      <AlertDialog open={promptOpen} onOpenChange={(open) => !open && cancelLeave()}>
+        <AlertDialogContent>
+          <AlertDialogHeader icon={AlertTriangle} iconVariant="warning">
+            <AlertDialogTitle>Unsaved changes</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes to {candidateFullName(candidate) || 'this candidate'}.
+              Leaving now will discard them.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmLeave}>Leave without saving</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageLayout>
   );
 }

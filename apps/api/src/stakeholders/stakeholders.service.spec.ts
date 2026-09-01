@@ -116,7 +116,7 @@ describe('StakeholdersService.create', () => {
     const { base, jobTitleFindUnique } = makeBase('rt1', 'HR', 'Head of Talent');
     const service = new StakeholdersService(prisma, base);
 
-    await service.create({ clientId: 'cl1', jobTitleId: 'jt-1' }, makeUser());
+    await service.create({ clientId: 'cl1', firstName: 'Jane', jobTitleId: 'jt-1' }, makeUser());
 
     expect(jobTitleFindUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'jt-1' } }),
@@ -133,7 +133,7 @@ describe('StakeholdersService.create', () => {
     const { base, roleTypeUpsert, jobTitleFindUnique } = makeBase('rt-other', 'Other');
     const service = new StakeholdersService(prisma, base);
 
-    await service.create({ clientId: 'cl1' }, makeUser());
+    await service.create({ clientId: 'cl1', firstName: 'Jane' }, makeUser());
 
     expect(jobTitleFindUnique).not.toHaveBeenCalled();
     expect(roleTypeUpsert).toHaveBeenCalledWith(
@@ -148,7 +148,10 @@ describe('StakeholdersService.create', () => {
     const { base, roleTypeUpsert } = makeBase();
     const service = new StakeholdersService(prisma, base);
 
-    await service.create({ clientId: 'cl1', jobTitleId: 'jt-1', roleTypeId: 'rt-finance' }, makeUser());
+    await service.create(
+      { clientId: 'cl1', firstName: 'Jane', jobTitleId: 'jt-1', roleTypeId: 'rt-finance' },
+      makeUser(),
+    );
 
     expect(roleTypeUpsert).not.toHaveBeenCalled();
     expect(create.mock.calls[0][0].data.stakeholderRoleTypeId).toBe('rt-finance');
@@ -159,7 +162,7 @@ describe('StakeholdersService.create', () => {
     const prisma = { stakeholder: { create } } as unknown as ExtendedPrismaClient;
     const service = new StakeholdersService(prisma, makeBase().base);
 
-    await service.create({ clientId: 'cl1', coverageLocationIds: ['syd', 'mel'] }, makeUser());
+    await service.create({ clientId: 'cl1', firstName: 'Jane', coverageLocationIds: ['syd', 'mel'] }, makeUser());
 
     expect(create.mock.calls[0][0].data.coverage).toEqual({
       create: [{ locationId: 'syd' }, { locationId: 'mel' }],
@@ -176,7 +179,7 @@ describe('StakeholdersService.create', () => {
     const service = new StakeholdersService(prisma, makeBase().base);
 
     await service.create(
-      { clientId: 'cl1' },
+      { clientId: 'cl1', firstName: 'Jane' },
       makeUser({ roleName: 'consultant', industryIds: ['ind1'] }),
     );
     expect(create).toHaveBeenCalledTimes(1);
@@ -246,6 +249,27 @@ describe('StakeholdersService.findAll — scope', () => {
         },
       },
     ]);
+  });
+
+  // "Dr Joe" is stored as firstName "Dr" / lastName "Joe" — no single column
+  // contains the whole string, so an un-tokenised `contains` matched nothing.
+  it('ANDs one clause per word so a full name can span firstName and lastName', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ q: 'Dr Joe' }), makeUser({ roleName: 'manager' }));
+    const and = findMany.mock.calls[0][0].where.AND;
+    expect(and).toHaveLength(2);
+    expect(and[0].OR).toContainEqual({
+      firstName: { contains: 'Dr', mode: 'insensitive' },
+    });
+    expect(and[1].OR).toContainEqual({
+      lastName: { contains: 'Joe', mode: 'insensitive' },
+    });
+  });
+
+  it('leaves a single-word search as one clause, unchanged', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ q: 'Dr' }), makeUser({ roleName: 'manager' }));
+    expect(findMany.mock.calls[0][0].where.AND).toHaveLength(1);
   });
 
   it('does not scope non-consultant roles', async () => {

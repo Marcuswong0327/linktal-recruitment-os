@@ -1,3 +1,5 @@
+import { Suspense } from 'react';
+
 import { auth } from '@/auth';
 import { AccessDenied } from '@/components/app-shell/AccessDenied';
 import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
@@ -9,12 +11,14 @@ export default async function ActivityLogPage() {
 
   return (
     <PageLayout>
-      <PageHeader
-        title="Activity Log"
-        description="Who did what, and when — every create, update and delete across the system."
-      />
+      <PageHeader title="Activity Log" />
       {hasPermission(session, 'audit', 'read') ? (
-        <ActivityTable />
+        // Suspense boundary: ActivityTable seeds its filters from the query
+        // string via useSearchParams, which Next requires be suspended so the
+        // rest of the page can still be prerendered around it.
+        <Suspense fallback={null}>
+          <ActivityTable currentConsultantId={session?.user?.consultantId} />
+        </Suspense>
       ) : (
         <AccessDenied resource="the activity log" />
       )}

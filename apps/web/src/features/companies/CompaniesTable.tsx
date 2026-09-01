@@ -30,6 +30,7 @@ import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
 import {
+  createClient as createClientRequest,
   deleteClient,
   getExportClientsByIdsUrl,
   getExportClientsUrl,
@@ -43,7 +44,12 @@ import {
 } from '@/lib/api/generated/clients/clients';
 import { ImportDialog } from '@/components/ImportDialog';
 import { GetClientsSortBy } from '@/lib/api/generated/types/getClientsSortBy';
-import type { GetClientsSortOrder, GetClientsStatusesItem } from '@/lib/api/generated/types';
+import type {
+  CreateClientDto,
+  GetClientsSortOrder,
+  GetClientsStatusesItem,
+} from '@/lib/api/generated/types';
+import { useCompanyNewRow } from './CompanyNewRow';
 import { getCompanyColumns } from './columns';
 import { qualityOptions, statusOptions, type ClientQuality, type ClientStatus, type Company, type CompanyAppliedFilters } from './schema';
 
@@ -64,6 +70,10 @@ export function CompaniesTable({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
+  // The DataGrid's own free-text box — distinct from the gate's committed
+  // filters above it (search-as-you-type, no "Search" click required), same
+  // pattern as CandidatesTable.
+  const [search, setSearch] = React.useState<string | undefined>();
   // Seeded from the gate's "Sort by" selection; a column header click can
   // still override it locally afterward, same as any other DataGrid.
   const [sortBy, setSortBy] = React.useState<GetClientsSortBy | undefined>(filters.sortBy);
@@ -71,6 +81,27 @@ export function CompaniesTable({
   const [selected, setSelected] = React.useState<Company[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isExporting, setIsExporting] = React.useState(false);
+
+  // Rethrows so the new row keeps the typed-in draft on failure.
+  async function handleCreateClient(dto: CreateClientDto) {
+    try {
+      const res = await createClientRequest(dto);
+      if (res.status !== 201) throw new Error('Failed to create company');
+      // Back to page 1 for the same reason every other table does it: a new
+      // row shifts positions across the pages useInfinitePages already holds.
+      setPage(1);
+      queryClient.invalidateQueries({ queryKey: getGetClientsQueryKey() });
+      toast.success(`${res.data.companyName} added`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create company');
+      throw err;
+    }
+  }
+
+  const newRow = useCompanyNewRow({
+    onCreate: handleCreateClient,
+    disabled: !canCreate,
+  });
   const importClients = useImportClients();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
 
@@ -105,6 +136,7 @@ export function CompaniesTable({
     {
       page,
       pageSize: PAGE_SIZE,
+      q: search,
       statuses: filters.statuses as GetClientsStatusesItem[] | undefined,
       industryIds: filters.industryIds,
       specializationIds: filters.specializationIds,
@@ -120,13 +152,14 @@ export function CompaniesTable({
   const result = data?.status === 200 ? data.data : undefined;
   const companies = useInfinitePages(result?.data, page, isFetching);
 
-  // Sorting is the only thing the grid itself still reports — search and
-  // faceted filters both moved up into the gate's action bar.
-  function handleQueryChange({ sorting }: DataGridQuery) {
+  // The grid itself reports search (its own free-text box) and sorting —
+  // faceted filters still live entirely in the gate's action bar.
+  function handleQueryChange({ search, sorting }: DataGridQuery) {
     const sort = sorting[0];
     const sortField = sort && sort.id in GetClientsSortBy ? (sort.id as GetClientsSortBy) : undefined;
     setSortBy(sortField);
     setSortOrder(sort?.desc ? 'desc' : 'asc');
+    setSearch(search.trim() || undefined);
     setPage(1);
   }
 
@@ -237,6 +270,7 @@ export function CompaniesTable({
       } else {
         await downloadFile(
           getExportClientsUrl({
+            q: search,
             statuses: filters.statuses as GetClientsStatusesItem[] | undefined,
             industryIds: filters.industryIds,
             specializationIds: filters.specializationIds,
@@ -281,11 +315,12 @@ export function CompaniesTable({
   return (
     <>
       <DataGrid
+        newRow={newRow}
         columns={columns}
         data={companies}
         isLoading={isLoading}
         isFetching={isFetching}
-        hideSearch
+        searchPlaceholder="Search companies…"
         emptyState="No companies match these filters."
         getRowId={(c) => c.id}
         onRowClick={(c) => router.push(`/companies/${c.id}`)}

@@ -116,13 +116,13 @@ export function ComboboxSelect({
                     <Combobox.Item
                       key={v}
                       value={v}
-                      className="flex min-h-9 cursor-default items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                      className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                     >
                       <Badge className={cn('rounded-md font-normal', option?.triggerClassName)}>
                         {option?.label ?? v}
                       </Badge>
                       <Combobox.ItemIndicator className="ml-auto shrink-0">
-                        <Check className="size-4" />
+                        <Check className="size-4 !text-primary" />
                       </Combobox.ItemIndicator>
                     </Combobox.Item>
                   );

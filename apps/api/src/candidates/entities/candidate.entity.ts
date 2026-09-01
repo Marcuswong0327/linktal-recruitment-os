@@ -44,6 +44,13 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
     description: 'Which rung of the geography tree `location` sits on — a candidate known only to city level has no suburb',
   })
   locationLevel!: LocationLevel | null;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Free-text suburb and postcode, e.g. "Merrylands 2160 NSW" — not tied to the Location tree (suburb-level rows and postcodes were never loaded) and plays no part in scoping.',
+  })
+  suburbAndPostcode!: string | null;
   @ApiProperty({ description: 'Required — the industry arm of the scope resolver relies on it' })
   industryId!: string;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved industry name' })
@@ -75,6 +82,20 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
     description: '[{ company, role, period }] — `period` is free text, the source never stores parseable dates',
   })
   workHistory!: Prisma.JsonValue;
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'object' },
+    nullable: true,
+    description: '[{ key, fileName }] — older/superseded resume or document versions',
+  })
+  historicFiles!: Prisma.JsonValue;
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'object' },
+    nullable: true,
+    description: '[{ key, fileName }] — other supporting documents attached to the candidate',
+  })
+  otherDocuments!: Prisma.JsonValue;
   @ApiProperty({
     type: 'array',
     items: { type: 'string' },
@@ -123,14 +144,14 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
     type: String,
     nullable: true,
     description:
-      'Free text, from the most recent CandidateContactHistory row — e.g. "35 per hour". Null if never contacted. Display-only, no sort/filter.',
+      'Free text, e.g. "35 per hour". A direct edit on the candidate wins if one has been made; otherwise this is the most recent CandidateContactHistory row\'s value. Null if never set either way. Display-only, no sort/filter.',
   })
   currentSalary!: string | null;
   @ApiProperty({
     type: String,
     nullable: true,
     description:
-      'Free text, from the most recent CandidateContactHistory row — e.g. "above 47". Null if never contacted. Display-only, no sort/filter.',
+      'Free text, e.g. "above 47". Same direct-edit-wins-over-latest-contact precedence as currentSalary.',
   })
   expectedSalary!: string | null;
   @ApiProperty() createdAt!: Date;

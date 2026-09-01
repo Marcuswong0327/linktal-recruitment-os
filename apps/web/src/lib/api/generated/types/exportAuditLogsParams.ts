@@ -28,6 +28,10 @@ entityType?: string;
  */
 actorId?: string;
 /**
+ * Only entries written by this request — every change one user action made, including the rows it cascaded to. Read off any entry's own requestId.
+ */
+requestId?: string;
+/**
  * Only entries at/after this ISO date-time
  */
 from?: string;

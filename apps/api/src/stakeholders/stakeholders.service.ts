@@ -15,6 +15,7 @@ import { classifyJobTitle } from './role-type-classifier';
 import { buildWorkbook, resolveTimeZone, splitContactDateTime, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
 import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
+import { searchTokens } from '../common/search-tokens';
 
 /** The subset of QueryStakeholdersDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination/sort but still satisfies this structurally. */
 type StakeholderFilterFields = Pick<
@@ -223,16 +224,23 @@ export class StakeholdersService {
     // assignment would otherwise clobber instead of combining with.
     const and: Prisma.StakeholderWhereInput[] = [];
 
+    // One AND-ed clause per whitespace-separated term, each OR-ed across the
+    // searchable columns — so "Dr Joe" matches firstName "Dr" + lastName
+    // "Joe". A single `contains "Dr Joe"` can't: the two names are stored in
+    // separate columns and nothing concatenates them. Single-word queries are
+    // one term, i.e. exactly the previous behaviour.
     if (q) {
-      and.push({
-        OR: [
-          { firstName: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { lastName: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { email: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { displayId: { contains: q, mode: Prisma.QueryMode.insensitive } },
-          { mobile: { contains: q, mode: Prisma.QueryMode.insensitive } },
-        ],
-      });
+      for (const term of searchTokens(q)) {
+        and.push({
+          OR: [
+            { firstName: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { lastName: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { email: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { displayId: { contains: term, mode: Prisma.QueryMode.insensitive } },
+            { mobile: { contains: term, mode: Prisma.QueryMode.insensitive } },
+          ],
+        });
+      }
     }
 
     // Matched against the stakeholder's OWN coverage, not its client's
