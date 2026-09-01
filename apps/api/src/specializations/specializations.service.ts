@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { rankedNameSearch } from '../common/ranked-name-search';
 import { CreateSpecializationDto } from './dto/create-specialization.dto';
 import { QuerySpecializationsDto } from './dto/query-specializations.dto';
 import { UpdateSpecializationDto } from './dto/update-specialization.dto';
@@ -17,18 +17,20 @@ export class SpecializationsService {
    * capped/filtered/narrowed form explicitly.
    */
   findAll(query: QuerySpecializationsDto = {}) {
-    const where: Prisma.SpecializationWhereInput = { isActive: true };
-    if (query.q) {
-      where.name = { contains: query.q, mode: Prisma.QueryMode.insensitive };
-    }
-    if (query.industryIds?.length) {
-      where.industryId = { in: query.industryIds };
-    }
-    return this.prisma.specialization.findMany({
-      where,
-      orderBy: { name: 'asc' },
-      take: query.take,
-    });
+    // Prefix matches first (see rankedNameSearch) — "Tools" should surface
+    // "Tools Manufacturing" ahead of "Engineering Parts Hardware tools", which
+    // plain alphabetical ordering puts first purely because E precedes T.
+    return rankedNameSearch(query.q, query.take, (match, take) =>
+      this.prisma.specialization.findMany({
+        where: {
+          isActive: true,
+          ...match,
+          ...(query.industryIds?.length ? { industryId: { in: query.industryIds } } : {}),
+        },
+        orderBy: { name: 'asc' },
+        take,
+      }),
+    );
   }
 
   async findOne(id: string) {

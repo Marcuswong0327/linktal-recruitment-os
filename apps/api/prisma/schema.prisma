@@ -727,6 +727,17 @@ model Candidate {
   lastName  String?
   email     String?
   mobile    String?
+  // `mobile` with every non-digit stripped, so search matches regardless of how
+  // the number was written down. The workbook rows are wildly inconsistent —
+  // some start `+60`, some `0`, some a bare digit, and most carry spaces,
+  // dashes or brackets — which made a literal `contains` on `mobile` miss the
+  // person whenever the typed format differed from the stored one.
+  //
+  // Maintained by a DB trigger (see the migration), never by application code:
+  // a trigger also covers the workbook importer and any raw/bulk load, which an
+  // application-side assignment would silently miss. Nothing should ever write
+  // this column.
+  mobileDigits String? @map("mobile_digits")
 
   // Required, both of them — the two coarse tiers the scope resolver can't
   // work without (see the SCOPING note). Everything finer is optional.
@@ -798,6 +809,7 @@ model Candidate {
   @@index([currentRole(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_currentRole_trgm_idx")
   @@index([currentCompany(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_currentCompany_trgm_idx")
   @@index([mobile(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_mobile_trgm_idx")
+  @@index([mobileDigits(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_mobileDigits_trgm_idx")
   @@index([displayId(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_displayId_trgm_idx")
 }
 

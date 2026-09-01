@@ -59,7 +59,6 @@ type SubmissionsCardProps =
       /** Shows every candidate submitted to this job order. */
       mode: 'jobOrder';
       jobOrderId: string;
-      candidates: CandidateEntity[];
       /** This job order's client's industry — compared against the picked candidate's industry for a non-blocking mismatch warning. */
       clientIndustryId?: string;
       /** This job order's own location — compared against the picked candidate's location for the same warning. */
@@ -84,6 +83,10 @@ export function SubmissionsCard(props: SubmissionsCardProps) {
 
   const [adding, setAdding] = React.useState(false);
   const [pickerValue, setPickerValue] = React.useState('');
+  // The candidate picker searches the server and hands back the whole entity
+  // (see CandidateCombobox); the job-order picker above still works off an id.
+  const [pickedCandidate, setPickedCandidate] = React.useState<CandidateEntity | null>(null);
+  const pickedId = props.mode === 'candidate' ? pickerValue : (pickedCandidate?.id ?? '');
   const [confirmingRemove, setConfirmingRemove] = React.useState<SubmissionEntity | null>(null);
 
   function invalidateAll() {
@@ -101,6 +104,7 @@ export function SubmissionsCard(props: SubmissionsCardProps) {
       onSuccess: () => {
         invalidateAll();
         setPickerValue('');
+        setPickedCandidate(null);
         setAdding(false);
       },
       onError: (err) => toast.error(err.message || 'Failed to submit'),
@@ -127,7 +131,7 @@ export function SubmissionsCard(props: SubmissionsCardProps) {
   function mismatchedFields(pickedId: string): Array<'industry' | 'location'> {
     const fields: Array<'industry' | 'location'> = [];
     if (props.mode === 'jobOrder') {
-      const candidate = props.candidates.find((c) => c.id === pickedId);
+      const candidate = pickedCandidate;
       if (!candidate) return fields;
       if (props.clientIndustryId && candidate.industryId !== props.clientIndustryId) fields.push('industry');
       if (props.jobOrderLocationId && candidate.locationId !== props.jobOrderLocationId) fields.push('location');
@@ -151,12 +155,12 @@ export function SubmissionsCard(props: SubmissionsCardProps) {
   }
 
   function handleAdd() {
-    if (!pickerValue) return;
+    if (!pickedId) return;
     const data: CreateSubmissionDto =
       props.mode === 'candidate'
-        ? { candidateId: subjectId, jobOrderId: pickerValue }
-        : { candidateId: pickerValue, jobOrderId: subjectId };
-    const mismatches = mismatchedFields(pickerValue);
+        ? { candidateId: subjectId, jobOrderId: pickedId }
+        : { candidateId: pickedId, jobOrderId: subjectId };
+    const mismatches = mismatchedFields(pickedId);
     createSubmission.mutate(
       { data },
       {
@@ -245,13 +249,12 @@ export function SubmissionsCard(props: SubmissionsCardProps) {
             />
           ) : (
             <CandidateCombobox
-              value={pickerValue}
-              onValueChange={setPickerValue}
-              candidates={props.candidates}
+              value={pickedCandidate}
+              onChange={setPickedCandidate}
               className="flex-1"
             />
           )}
-          <Button size="sm" disabled={!pickerValue || createSubmission.isPending} onClick={handleAdd}>
+          <Button size="sm" disabled={!pickedId || createSubmission.isPending} onClick={handleAdd}>
             Submit
           </Button>
           <Button
@@ -260,6 +263,7 @@ export function SubmissionsCard(props: SubmissionsCardProps) {
             onClick={() => {
               setAdding(false);
               setPickerValue('');
+              setPickedCandidate(null);
             }}
           >
             Cancel

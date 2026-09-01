@@ -15,6 +15,8 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { cn } from '@/lib/utils';
+import { formatInterviewDateTime } from '@/lib/datetime';
+import { DateTimeField } from '@/components/DateTimeField';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -516,7 +518,7 @@ function InterviewRoundsView({
                   <div className="flex min-w-0 flex-col gap-0.5">
                     <span className="truncate text-sm font-medium">{round.roundLabel}</span>
                     <span className="text-xs text-muted-foreground">
-                      {new Date(round.interviewDate).toLocaleDateString()}
+                      {formatInterviewDateTime(round.interviewDate)}
                     </span>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
@@ -555,13 +557,14 @@ function InterviewRoundsView({
           <FormField label="Round" htmlFor="round-label">
             <Input id="round-label" value={roundLabel} onChange={(e) => setRoundLabel(e.target.value)} />
           </FormField>
-          <FormField label="Date" htmlFor="round-date">
-            <input
-              id="round-date"
-              type="date"
+          <FormField label="Date &amp; time" htmlFor="round-date">
+            <DateTimeField
+              dateId="round-date"
               value={interviewDate}
-              onChange={(e) => setInterviewDate(e.target.value)}
-              className={dateInputClass}
+              onChange={(iso) => setInterviewDate(iso ?? '')}
+              dateAriaLabel="Interview date"
+              hourAriaLabel="Interview hour"
+              minuteAriaLabel="Interview minute"
             />
           </FormField>
           <Button

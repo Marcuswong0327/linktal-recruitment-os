@@ -29,7 +29,7 @@ pageSize?: number;
 sortBy?: GetCandidatesSortBy;
 sortOrder?: GetCandidatesSortOrder;
 /**
- * Free-text search across firstName, lastName, email, displayId, mobile, currentRole, currentCompany, and location/industry/job role type name
+ * Free-text search across firstName, lastName, email, displayId, mobile, currentRole, currentCompany, and location/industry/job role type name. A query made only of digits and phone punctuation is treated as a phone number and matched on digits alone, so any formatting finds the person.
  */
 q?: string;
 /**

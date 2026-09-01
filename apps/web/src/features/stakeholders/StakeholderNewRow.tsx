@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { GridCellEnumCombobox } from '@/components/GridCellEnumCombobox';
 import { GridCellClientCombobox } from '@/components/GridCellClientCombobox';
 import { GridCellCombobox } from '@/components/GridCellCombobox';
+import { useJobTitleOptions } from '@/hooks/use-catalog-options';
 import { GridCellInput } from '@/components/GridCellInput';
 import {
   GridCellContactInput,
@@ -48,7 +49,6 @@ const emptyDraft: StakeholderDraft = {
 };
 
 interface UseStakeholderNewRowOptions {
-  jobTitles: CreatableComboboxOption[];
   roleTypes: CreatableComboboxOption[];
   onCreateJobTitle: (name: string) => Promise<CreatableComboboxOption>;
   onCreateRoleType: (name: string) => Promise<CreatableComboboxOption>;
@@ -68,13 +68,14 @@ interface UseStakeholderNewRowOptions {
  * columns in this table to sit under.
  */
 export function useStakeholderNewRow({
-  jobTitles,
   roleTypes,
   onCreateJobTitle,
   onCreateRoleType,
   onCreate,
   disabled = false,
 }: UseStakeholderNewRowOptions): DataGridNewRow {
+  // Server-searched — the Job Titles catalog is far larger than one page.
+  const jobTitleSearch = useJobTitleOptions();
   const [draft, setDraft] = React.useState(emptyDraft);
   const [isSaving, setIsSaving] = React.useState(false);
 
@@ -153,7 +154,9 @@ export function useStakeholderNewRow({
       <GridCellCombobox
         value={draft.jobTitleId}
         onValueChange={(id) => set('jobTitleId', id)}
-        options={jobTitles}
+        options={jobTitleSearch.options}
+        serverSearched
+        onQueryChange={jobTitleSearch.onQueryChange}
         onCreate={onCreateJobTitle}
         disabled={disabled || isSaving}
       />

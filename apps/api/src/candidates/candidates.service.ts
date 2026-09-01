@@ -43,6 +43,43 @@ type CandidateFilterFields = Pick<
   | 'lastContactedTo'
 >;
 
+/**
+ * The columns free-text search looks at, for one term. Scalars are backed by
+ * the trigram indexes from 20260719021500_candidate_search_trigram_indexes;
+ * location/industry/jobRoleType match on their resolved names via relation.
+ * Specializations are deliberately excluded — substring matching inside a
+ * joined many-to-many isn't worth the complexity here; they stay filter-only
+ * (specializationIds).
+ */
+function textSearchArms(term: string): Prisma.CandidateWhereInput[] {
+  const like = { contains: term, mode: Prisma.QueryMode.insensitive } as const;
+  return [
+    { firstName: like },
+    { lastName: like },
+    { email: like },
+    { currentCompany: like },
+    { displayId: like },
+    { currentRole: like },
+    { location: { name: like } },
+    { mobile: like },
+    { industry: { name: like } },
+    { jobRoleType: { name: like } },
+  ];
+}
+
+/** Below this many digits a numeric query is more likely a salary or an id fragment than a phone number. */
+const MIN_PHONE_QUERY_DIGITS = 6;
+
+/**
+ * How many trailing digits a phone query is matched on. Long enough to stay
+ * specific across the roster, short enough to be blind to the country-code
+ * prefix that makes "+61 0490 346 098" and "0490346098" differ.
+ */
+const PHONE_MATCH_DIGITS = 8;
+
+/** Digits and the punctuation people write phone numbers with — nothing else. */
+const PHONE_QUERY = /^[\d\s()+\-.]+$/;
+
 // lastContactedAt is a plain scalar column (see schema.prisma) — denormalized
 // for sorting, same reasoning as Client/Stakeholder.lastContactedAt. The rest
 // of the "latest contact" detail isn't sorted or filtered on, so it's resolved
@@ -269,22 +306,32 @@ export class CandidatesService {
     // One AND-ed clause per whitespace-separated term (see searchTokens) — a
     // full name spans two columns, so matching the whole string against any
     // single column finds nothing. Single-word queries are unchanged.
-    if (q) {
+    // A query made only of digits and phone punctuation is probably a phone
+    // number, and has to bypass tokenisation: "+60 12-345 6789" splits into
+    // fragments that AND together badly once the stored format differs (the
+    // stored value may carry the country code, or not, and its separators sit
+    // in different places). Matched instead as one unit against
+    // `mobileDigits`, the trigger-maintained digits-only mirror of `mobile`.
+    //
+    // "Probably" — the digit arm is OR-ed with the ordinary text columns
+    // rather than replacing them, because a numeric string is not always a
+    // phone number: an email like "123457.syk@gmail.com" or a displayId is
+    // just as likely, and searching only phones would silently stop finding
+    // those.
+    const phoneDigits = q ? q.replace(/\D/g, '') : '';
+    const isPhoneQuery = !!q && phoneDigits.length >= MIN_PHONE_QUERY_DIGITS && PHONE_QUERY.test(q.trim());
+
+    if (isPhoneQuery && q) {
+      // The same subscriber can be stored as "+61 0490 346 098" or
+      // "0490346098" — identical from the last 8 digits on, different before
+      // that. Matching the tail is what makes those two forms find each other;
+      // 8 digits is still specific enough not to collide across the roster.
+      const needle =
+        phoneDigits.length > PHONE_MATCH_DIGITS ? phoneDigits.slice(-PHONE_MATCH_DIGITS) : phoneDigits;
+      and.push({ OR: [{ mobileDigits: { contains: needle } }, ...textSearchArms(q)] });
+    } else if (q) {
       for (const term of searchTokens(q)) {
-        and.push({
-          OR: [
-            { firstName: { contains: term, mode: Prisma.QueryMode.insensitive } },
-            { lastName: { contains: term, mode: Prisma.QueryMode.insensitive } },
-            { email: { contains: term, mode: Prisma.QueryMode.insensitive } },
-            { currentCompany: { contains: term, mode: Prisma.QueryMode.insensitive } },
-            { displayId: { contains: term, mode: Prisma.QueryMode.insensitive } },
-            { currentRole: { contains: term, mode: Prisma.QueryMode.insensitive } },
-            { location: { name: { contains: term, mode: Prisma.QueryMode.insensitive } } },
-            { mobile: { contains: term, mode: Prisma.QueryMode.insensitive } },
-            { industry: { name: { contains: term, mode: Prisma.QueryMode.insensitive } } },
-            { jobRoleType: { name: { contains: term, mode: Prisma.QueryMode.insensitive } } },
-          ],
-        });
+        and.push({ OR: textSearchArms(term) });
       }
     }
 

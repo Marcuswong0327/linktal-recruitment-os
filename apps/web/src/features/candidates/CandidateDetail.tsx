@@ -48,6 +48,7 @@ import {
 import { LinkedinIcon, SeekIcon } from '@/components/BrandIcons';
 import { useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
+import { useJobRoleTypeOptions } from '@/hooks/use-catalog-options';
 import { FileUploadField } from '@/components/FileUploadField';
 import { ChangeDot, FormField } from '@/components/FormField';
 import { MultiFileUploadField, type DocumentFile } from '@/components/MultiFileUploadField';
@@ -81,7 +82,6 @@ import { useGetSubmissions } from '@/lib/api/generated/submissions/submissions';
 import {
   getGetJobRoleTypesQueryKey,
   useCreateJobRoleType,
-  useGetJobRoleTypes,
 } from '@/lib/api/generated/job-role-types/job-role-types';
 import {
   getGetIndustriesQueryKey,
@@ -370,8 +370,9 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
   const { data: industryData } = useGetIndustries();
   const industries = industryData?.status === 200 ? industryData.data : [];
-  const { data: roleTypeData } = useGetJobRoleTypes();
-  const roleTypes = roleTypeData?.status === 200 ? roleTypeData.data : [];
+  // Server-searched: 267 role types against a default page of 50 meant most of
+  // the catalog was unreachable here (see useJobRoleTypeOptions).
+  const roleTypeSearch = useJobRoleTypeOptions();
   const { data: specializationData } = useGetSpecializations();
   const specializations = specializationData?.status === 200 ? specializationData.data : [];
   const specializationById = React.useMemo(
@@ -1037,7 +1038,10 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                   id="roleType"
                   value={roleTypeId}
                   onValueChange={setRoleTypeId}
-                  options={roleTypes}
+                  options={roleTypeSearch.options}
+                  onQueryChange={roleTypeSearch.onQueryChange}
+                  isFetching={roleTypeSearch.isFetching}
+                  selectedLabel={candidate.jobRoleType ?? undefined}
                   onCreate={handleCreateRoleType}
                   placeholder="Select role type…"
                 />

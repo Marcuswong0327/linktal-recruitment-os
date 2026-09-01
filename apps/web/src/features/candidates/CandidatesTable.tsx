@@ -31,7 +31,6 @@ import { useGetIndustries } from '@/lib/api/generated/industries/industries';
 import {
   getGetJobRoleTypesQueryKey,
   useCreateJobRoleType,
-  useGetJobRoleTypes,
 } from '@/lib/api/generated/job-role-types/job-role-types';
 import { useCandidateNewRow } from './CandidateNewRow';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
@@ -106,8 +105,6 @@ export function CandidatesTable({
   // Rosters for the new row's pickers.
   const { data: industryData } = useGetIndustries();
   const industries = industryData?.status === 200 ? industryData.data : [];
-  const { data: jobRoleTypeData } = useGetJobRoleTypes({ take: 200 });
-  const jobRoleTypes = jobRoleTypeData?.status === 200 ? jobRoleTypeData.data : [];
   const createJobRoleType = useCreateJobRoleType();
 
   async function handleCreateJobRoleType(name: string) {
@@ -155,7 +152,6 @@ export function CandidatesTable({
   const newRow = useCandidateNewRow({
     industries,
     userIndustryIds: session?.user?.industryIds ?? [],
-    jobRoleTypes,
     onCreateJobRoleType: handleCreateJobRoleType,
     onCreate: handleCreateCandidate,
     disabled: !canCreate,

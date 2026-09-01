@@ -16,7 +16,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Kbd } from '@/components/ui/kbd';
@@ -24,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ClientCombobox } from '@/components/ClientCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
+import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { ContactIconRow, JobOrderPipelineCard } from '@/components/JobOrderPipelineCard';
 import { FileUploadField } from '@/components/FileUploadField';
@@ -31,18 +31,25 @@ import { PageLayout } from '@/components/app-shell/PageLayout';
 import { useIsMac } from '@/hooks/use-is-mac';
 import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shortcut';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
-import { useGetCandidates } from '@/lib/api/generated/candidates/candidates';
-import { useGetClient, useGetClients } from '@/lib/api/generated/clients/clients';
+import { useGetClient } from '@/lib/api/generated/clients/clients';
 import {
   getGetJobOrderQueryKey,
   getGetJobOrdersQueryKey,
   useGetJobOrder,
   useUpdateJobOrder,
 } from '@/lib/api/generated/job-orders/job-orders';
-import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
+import { useCreateJobTitle } from '@/lib/api/generated/job-titles/job-titles';
+import { useJobTitleOptions } from '@/hooks/use-catalog-options';
 import { useUploadJobOrderFile } from '@/lib/api/generated/uploads/uploads';
 import type { UpdateJobOrderDto } from '@/lib/api/generated/types';
-import { type JobOrder, jobOrderQualityLabels, jobOrderStatusLabels, qualityVariant, statusVariant } from './schema';
+import {
+  type JobOrder,
+  type JobOrderQuality,
+  type JobOrderStatus,
+  priorityOptions,
+  qualityOptions,
+  statusOptions,
+} from './schema';
 
 const textareaClass =
   'min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30';
@@ -93,8 +100,6 @@ export function JobOrderDetail({ id }: { id: string }) {
 function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
   const queryClient = useQueryClient();
 
-  const { data: candidatesData } = useGetCandidates({ pageSize: 100 });
-  const candidates = candidatesData?.status === 200 ? candidatesData.data.data : [];
 
   // Only fetched for its industryId (not otherwise on JobOrderEntity, which
   // strips it back out — see job-orders.service.ts's toEntity) — feeds the
@@ -102,27 +107,10 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
   const { data: clientData } = useGetClient(jobOrder.clientId);
   const client = clientData?.status === 200 ? clientData.data : undefined;
 
-  const { data: clientsData } = useGetClients({ pageSize: 100 });
-  const clients = clientsData?.status === 200 ? clientsData.data.data : [];
-  // The current client can fall outside the first page (more than 100
-  // clients, sorted differently, etc.) — without this, ClientCombobox can't
-  // resolve `jobOrder.clientId` to a label and renders blank even though a
-  // client really is assigned. `client` (below) is already fetched by id for
-  // the industry-mismatch warning, so reuse it instead of a second fetch.
-  const clientOptions = React.useMemo(() => {
-    if (!client || clients.some((c) => c.id === client.id)) return clients;
-    return [...clients, client];
-  }, [clients, client]);
 
-  const { data: jobTitleData } = useGetJobTitles({ take: 200 });
-  const jobTitles = jobTitleData?.status === 200 ? jobTitleData.data : [];
-  // Same reasoning as clientOptions above, but there's no single-by-id job
-  // title endpoint to reuse — fall back to the resolved `jobOrder.jobTitle`
-  // name already on the entity to build the missing option.
-  const jobTitleOptions = React.useMemo(() => {
-    if (!jobOrder.jobTitleId || jobTitles.some((jt) => jt.id === jobOrder.jobTitleId)) return jobTitles;
-    return [...jobTitles, { id: jobOrder.jobTitleId, name: jobOrder.jobTitle ?? 'Unknown' }];
-  }, [jobTitles, jobOrder.jobTitleId, jobOrder.jobTitle]);
+  // Server-searched: the catalog is far larger than one page, so a pre-fetched
+  // slice can't offer most of it (see useJobTitleOptions).
+  const jobTitleSearch = useJobTitleOptions();
   const createJobTitle = useCreateJobTitle();
   async function handleCreateJobTitle(name: string) {
     const res = await createJobTitle.mutateAsync({ data: { name } });
@@ -135,7 +123,17 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
   const [clientAdsUrl, setClientAdsUrl] = React.useState(jobOrder.clientAdsUrl ?? '');
   const [otherDocumentsUrl, setOtherDocumentsUrl] = React.useState(jobOrder.otherDocumentsUrl ?? '');
   const [jobTitleId, setJobTitleId] = React.useState(jobOrder.jobTitleId ?? '');
+
+  // The selected title usually isn't in the current result page — there's no
+  // single-by-id job title endpoint to reuse, so the resolved name already on
+  // the entity is what the trigger falls back to.
+  const selectedJobTitleLabel =
+    jobTitleSearch.options.find((jt) => jt.id === jobTitleId)?.name ??
+    (jobTitleId === jobOrder.jobTitleId ? (jobOrder.jobTitle ?? undefined) : undefined);
   const [clientId, setClientId] = React.useState(jobOrder.clientId);
+  const [status, setStatus] = React.useState<JobOrderStatus>(jobOrder.status);
+  const [quality, setQuality] = React.useState<JobOrderQuality>(jobOrder.quality);
+  const [priorityLevel, setPriorityLevel] = React.useState(jobOrder.priorityLevel?.toString() ?? '');
 
   const isDirty =
     description !== (jobOrder.description ?? '') ||
@@ -143,7 +141,10 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
     clientAdsUrl !== (jobOrder.clientAdsUrl ?? '') ||
     otherDocumentsUrl !== (jobOrder.otherDocumentsUrl ?? '') ||
     jobTitleId !== (jobOrder.jobTitleId ?? '') ||
-    clientId !== jobOrder.clientId;
+    clientId !== jobOrder.clientId ||
+    status !== jobOrder.status ||
+    quality !== jobOrder.quality ||
+    priorityLevel !== (jobOrder.priorityLevel?.toString() ?? '');
 
   const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty);
 
@@ -169,7 +170,21 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
   }
 
   // Live label for the header — reflects an in-progress edit before it's saved.
-  const selectedJobTitle = jobTitleOptions.find((jt) => jt.id === jobTitleId)?.name ?? 'Untitled role';
+  const selectedJobTitle = selectedJobTitleLabel ?? 'Untitled role';
+
+  // Quality and priority share the same Low/Medium/High words, and the two
+  // pills sit next to each other here — so each is suffixed with its field
+  // name ("Medium quality", "High priority") the way the old static quality
+  // badge already read. Values and colors still come from the shared option
+  // lists in schema.ts; only the label text differs.
+  const qualityPillOptions = React.useMemo(
+    () => qualityOptions.map((o) => ({ ...o, label: `${o.label} quality` })),
+    [],
+  );
+  const priorityPillOptions = React.useMemo(
+    () => priorityOptions.map((o) => ({ ...o, label: `${o.label} priority` })),
+    [],
+  );
 
   const formRef = React.useRef<HTMLFormElement>(null);
   const isMac = useIsMac();
@@ -184,6 +199,9 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
       jdFileUrl: jdFileUrl || undefined,
       clientAdsUrl: clientAdsUrl || undefined,
       otherDocumentsUrl: otherDocumentsUrl || undefined,
+      status,
+      quality,
+      priorityLevel: priorityLevel ? Number(priorityLevel) : undefined,
     };
     updateJobOrder.mutate({ id: jobOrder.id, data });
   }
@@ -208,14 +226,45 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
               <Briefcase className="size-6" />
             </span>
             <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-3">
-                <h1 className="font-heading text-2xl font-semibold tracking-tight">{selectedJobTitle}</h1>
-                <Badge variant={statusVariant[jobOrder.status]}>{jobOrderStatusLabels[jobOrder.status]}</Badge>
-                <Badge variant={qualityVariant[jobOrder.quality]}>
-                  {jobOrderQualityLabels[jobOrder.quality]} quality
-                </Badge>
+              <h1 className="font-heading text-2xl font-semibold tracking-tight">{selectedJobTitle}</h1>
+              {/* Click-to-edit pills, on the subheading line beside the
+                  displayId rather than crowding the title. Like
+                  `selectedJobTitle` above, they show the in-progress value and
+                  are committed by "Save changes" with everything else on the
+                  page — deliberately not save-on-select, so one page doesn't
+                  mix two save models and the unsaved-changes guard stays
+                  honest. flex-wrap: three pills plus the id overflow a narrow
+                  viewport, and this row shouldn't push the Save button off. */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-xs text-muted-foreground">{jobOrder.displayId}</span>
+                <EnumSelect
+                  value={status}
+                  onValueChange={(v) => setStatus(v as JobOrderStatus)}
+                  options={statusOptions}
+                  disabled={updateJobOrder.isPending}
+                  size="badge"
+                  className="w-fit"
+                />
+                <EnumSelect
+                  value={quality}
+                  onValueChange={(v) => setQuality(v as JobOrderQuality)}
+                  options={qualityPillOptions}
+                  disabled={updateJobOrder.isPending}
+                  size="badge"
+                  className="w-fit"
+                />
+                {/* priorityLevel is nullable — placeholder covers the unset
+                    case, which the other two pills can't hit. */}
+                <EnumSelect
+                  value={priorityLevel}
+                  onValueChange={setPriorityLevel}
+                  options={priorityPillOptions}
+                  placeholder="Set priority"
+                  disabled={updateJobOrder.isPending}
+                  size="badge"
+                  className="w-fit"
+                />
               </div>
-              <span className="font-mono text-xs text-muted-foreground">{jobOrder.displayId}</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -254,7 +303,11 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
       >
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <JobOrderPipelineCard jobOrder={jobOrder} candidates={candidates} clientIndustryId={client?.industryId} />
+            <JobOrderPipelineCard
+              jobOrder={jobOrder}
+              clientIndustryId={client?.industryId}
+              clientIndustry={client?.industry}
+            />
           </div>
 
           <Card size="sm">
@@ -270,7 +323,10 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
                   id="jobTitle"
                   value={jobTitleId}
                   onValueChange={setJobTitleId}
-                  options={jobTitleOptions}
+                  options={jobTitleSearch.options}
+                  onQueryChange={jobTitleSearch.onQueryChange}
+                  isFetching={jobTitleSearch.isFetching}
+                  selectedLabel={selectedJobTitleLabel}
                   onCreate={handleCreateJobTitle}
                   placeholder="e.g. Production Manager"
                   disabled={updateJobOrder.isPending}
@@ -282,7 +338,7 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
                     id="clientId"
                     value={clientId}
                     onValueChange={setClientId}
-                    clients={clientOptions}
+                    selectedLabel={client?.companyName}
                     disabled={updateJobOrder.isPending}
                     className="flex-1"
                   />

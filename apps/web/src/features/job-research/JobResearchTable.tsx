@@ -19,8 +19,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   getGetJobTitlesQueryKey,
   useCreateJobTitle,
-  useGetJobTitles,
-} from '@/lib/api/generated/job-titles/job-titles';
+  } from '@/lib/api/generated/job-titles/job-titles';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { downloadFile } from '@/lib/api/fetcher';
 import {
@@ -65,8 +64,6 @@ export function JobResearchTable({
   const [isExporting, setIsExporting] = React.useState(false);
   const queryClient = useQueryClient();
 
-  const { data: jobTitleData } = useGetJobTitles({ take: 200 });
-  const jobTitles = jobTitleData?.status === 200 ? jobTitleData.data : [];
   const createJobTitle = useCreateJobTitle();
 
   async function handleCreateJobTitle(name: string) {
@@ -223,7 +220,6 @@ export function JobResearchTable({
   }
 
   const newRow = useJobResearchNewRow({
-    jobTitles,
     onCreateJobTitle: handleCreateJobTitle,
     onCreate: handleCreateJobResearch,
     disabled: false,

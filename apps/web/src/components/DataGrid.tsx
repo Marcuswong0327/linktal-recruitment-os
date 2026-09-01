@@ -501,6 +501,18 @@ interface DataGridProps<TData> {
   hideSearch?: boolean;
   /** Faceted (multi-select) filters shown in the toolbar. */
   filters?: DataGridFilter[];
+  /**
+   * Filter selections the grid starts with — e.g. a list that should open
+   * already narrowed to the rows people actually want (Job Orders → ACTIVE).
+   * Only the *initial* state: "Clear" still empties it, and the user's own
+   * changes are never overwritten.
+   *
+   * In `server` mode the first render deliberately doesn't fire
+   * `onQueryChange` (the caller already holds the default state), so a
+   * caller passing this must seed its own query state to match — otherwise
+   * the chip reads ACTIVE while the first request asks for everything.
+   */
+  initialColumnFilters?: ColumnFiltersState;
   /** Rendered on the right side of the toolbar (filters, "Add" button, etc.). */
   toolbar?: React.ReactNode;
   /** Rendered in the footer, to the left of the row-count text (e.g. a primary "Add" action). */
@@ -611,6 +623,7 @@ export function DataGrid<TData>({
   searchPlaceholder = 'Search…',
   hideSearch = false,
   filters,
+  initialColumnFilters,
   toolbar,
   footerActions,
   onRowClick,
@@ -679,7 +692,9 @@ export function DataGrid<TData>({
     if (isAppend) return;
     setRowSelection((prev) => (Object.keys(prev).length === 0 ? prev : {}));
   }, [data, setRowSelection, server?.infiniteScroll, getRowId]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+    initialColumnFilters ?? [],
+  );
 
   // In server mode, report query state upward (debounced so typing in the
   // search box doesn't fire a request per keystroke). Skip the initial render:

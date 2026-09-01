@@ -118,14 +118,15 @@ export function CandidateSearchGate({
   const { data: roleTypesData } = useGetJobRoleTypes({ take: 200 });
   const roleTypes = roleTypesData?.status === 200 ? roleTypesData.data : [];
 
-  // Add-candidate lives here (not CandidatesTable) specifically so the global
-  // header's "Add Candidate" button works even before the gate's own table
-  // has ever mounted — same reasoning as CompaniesSearchGate's create sheet.
+  // Add-candidate lives here (not CandidatesTable) specifically so the
+  // command palette's "Add a Candidate" action works even before the gate's
+  // own table has ever mounted — same reasoning as CompaniesSearchGate's
+  // create sheet.
   const [creating, setCreating] = React.useState(false);
 
-  // Opened via the global header's "Add Candidate" button, or the command
-  // palette's "Add a Candidate" action (both navigate to `/candidates?new=1`)
-  // — strip the param immediately so refresh/back doesn't reopen the sheet.
+  // Opened via the command palette's "Add a Candidate" action (navigates to
+  // `/candidates?new=1`) — strip the param immediately so refresh/back
+  // doesn't reopen the sheet.
   React.useEffect(() => {
     if (searchParams.get('new') === '1') {
       setCreating(true);
@@ -386,7 +387,6 @@ export function CandidateSearchGate({
               title="Add candidate"
               description="Add a new candidate."
               industries={industries}
-              roleTypes={roleTypes}
               onCreateIndustry={handleCreateIndustry}
               onCreateRoleType={handleCreateRoleType}
               isSaving={createCandidateMutation.isPending}

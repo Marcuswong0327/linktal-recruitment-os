@@ -34,8 +34,8 @@ export type ActionCommand = {
 /**
  * Explicit, hand-picked list of "do something" commands (as opposed to plain
  * page navigation) — the GCP/AWS-style "Add a Stakeholder" entries. This is
- * also the list the header's global Add button renders, so it's the single
- * source of truth for "everything the user can create" from anywhere.
+ * the single source of truth for "everything the user can create" from
+ * anywhere.
  */
 export const actionCommands: ActionCommand[] = [
   {

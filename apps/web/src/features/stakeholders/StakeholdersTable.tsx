@@ -35,7 +35,7 @@ import { LEVEL_LABEL, LocationFilterButton } from '@/components/LocationMultiSel
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
-import { useCreateJobTitle, useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
+import { useCreateJobTitle } from '@/lib/api/generated/job-titles/job-titles';
 import {
   deleteStakeholder,
   getExportStakeholdersByIdsUrl,
@@ -172,9 +172,6 @@ export function StakeholdersTable({
     [roleTypeRows],
   );
 
-  const { data: jobTitleData } = useGetJobTitles({ take: 200 });
-  const jobTitleRows = jobTitleData?.status === 200 ? jobTitleData.data : [];
-  const jobTitleOptions = React.useMemo(() => jobTitleRows.map((j) => ({ id: j.id, name: j.name })), [jobTitleRows]);
 
   const stakeholderFilters: DataGridFilter[] = React.useMemo(
     () => [
@@ -305,7 +302,6 @@ export function StakeholdersTable({
   }
 
   const newRow = useStakeholderNewRow({
-    jobTitles: jobTitleOptions,
     roleTypes: roleTypeOptions,
     onCreateJobTitle: handleCreateJobTitle,
     onCreateRoleType: handleCreateRoleType,

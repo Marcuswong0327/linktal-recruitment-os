@@ -96,15 +96,15 @@ export function CompaniesSearchGate({
   const industries = industriesData?.status === 200 ? industriesData.data : [];
   const industryOptions = React.useMemo(() => industries.map((i) => ({ value: i.id, label: i.name })), [industries]);
 
-  // Add-company lives here (not CompaniesTable) specifically so the global
-  // header's "Add Company" button works even before the gate's own table has
-  // ever mounted — CompaniesTable only exists once a search has been run,
+  // Add-company lives here (not CompaniesTable) specifically so the command
+  // palette's "Add a Company" action works even before the gate's own table
+  // has ever mounted — CompaniesTable only exists once a search has been run,
   // but this gate is on screen from the moment the page loads.
   const [creating, setCreating] = React.useState(false);
 
-  // Opened via the global header's "Add Company" button, or the command
-  // palette's "Add a Company" action (both navigate to `/companies?new=1`)
-  // — strip the param immediately so refresh/back doesn't reopen the sheet.
+  // Opened via the command palette's "Add a Company" action (navigates to
+  // `/companies?new=1`) — strip the param immediately so refresh/back
+  // doesn't reopen the sheet.
   React.useEffect(() => {
     if (searchParams.get('new') === '1') {
       setCreating(true);
