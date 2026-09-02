@@ -49,6 +49,14 @@ import type {
   GetClientsSortOrder,
   GetClientsStatusesItem,
 } from '@/lib/api/generated/types';
+import { useGetIndustries } from '@/lib/api/generated/industries/industries';
+import { useCreateSpecialization } from '@/lib/api/generated/specializations/specializations';
+import { useSpecializationOptions } from '@/hooks/use-catalog-options';
+import {
+  NewSpecializationDialog,
+  type NewSpecializationRequest,
+} from '@/components/NewSpecializationDialog';
+import type { CreatableComboboxOption } from '@/components/CreatableCombobox';
 import { useCompanyNewRow } from './CompanyNewRow';
 import { getCompanyColumns } from './columns';
 import { qualityOptions, statusOptions, type ClientQuality, type ClientStatus, type Company, type CompanyAppliedFilters } from './schema';
@@ -60,12 +68,15 @@ export function CompaniesTable({
   canCreate = true,
   canUpdate = true,
   canDelete = true,
+  canCreateSpecialization = false,
 }: {
   /** Committed from the search gate's action bar — this table has no filter UI of its own. */
   filters: CompanyAppliedFilters;
   canCreate?: boolean;
   canUpdate?: boolean;
   canDelete?: boolean;
+  /** `specialization:create` — without it the Specialization cell is pick-only. */
+  canCreateSpecialization?: boolean;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -98,9 +109,23 @@ export function CompaniesTable({
     }
   }
 
+
+  // 4 rows — cheap, and React Query dedupes this against the gate's own copy.
+  const { data: industriesData } = useGetIndustries();
+  const industryOptions = React.useMemo(
+    () =>
+      (industriesData?.status === 200 ? industriesData.data : []).map((i) => ({
+        value: i.id,
+        label: i.name,
+      })),
+    [industriesData],
+  );
+
   const newRow = useCompanyNewRow({
     onCreate: handleCreateClient,
     disabled: !canCreate,
+    industries: industryOptions,
+    canCreateSpecialization,
   });
   const importClients = useImportClients();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
@@ -220,6 +245,98 @@ export function CompaniesTable({
     [updateCompanyMutation],
   );
 
+
+  // Specializations are fetched for whichever row's cell is open, scoped to
+  // that row's industry — 775 rows is far past what one cell can hold, and an
+  // unscoped list would offer values from the wrong industry.
+  const [specCellCompany, setSpecCellCompany] = React.useState<Company | null>(null);
+  const {
+    options: specializationOptions,
+    onQueryChange: onSpecializationQueryChange,
+    isFetching: isFetchingSpecializations,
+  } = useSpecializationOptions(specCellCompany?.industryId);
+
+  const handleIndustryChange = React.useCallback(
+    (company: Company, industryId: string) => {
+      if (industryId === company.industryId) return;
+      updateCompanyMutation.mutate(
+        // Its specialization belonged to the old industry, so it can't survive
+        // the move — same rule CompanyDetail applies when its Industry picker
+        // changes (it resets specializationId alongside).
+        { id: company.id, data: { industryId, specializationId: null } },
+        {
+          onSuccess: () =>
+            toast.success(
+              company.specializationId
+                ? 'Industry updated — specialization cleared'
+                : 'Industry updated',
+            ),
+        },
+      );
+    },
+    [updateCompanyMutation],
+  );
+
+  const handleSpecializationChange = React.useCallback(
+    (company: Company, specializationId: string) => {
+      updateCompanyMutation.mutate(
+        { id: company.id, data: { specializationId: specializationId || null } },
+        { onSuccess: () => toast.success('Specialization updated') },
+      );
+    },
+    [updateCompanyMutation],
+  );
+
+  // Creating a specialization needs a parent industry, so the cell's "Add
+  // <name>" hands off to a dialog and waits on it. The promise below is what
+  // CreatableCombobox awaits, so the cell stays in its "creating" state for
+  // exactly as long as the prompt is open.
+  const [specRequest, setSpecRequest] = React.useState<NewSpecializationRequest | null>(null);
+  const specResolver = React.useRef<((option: CreatableComboboxOption | null) => void) | null>(null);
+  const createSpecialization = useCreateSpecialization();
+
+  const handleCreateSpecialization = React.useCallback(
+    (company: Company, name: string) =>
+      new Promise<CreatableComboboxOption | null>((resolve) => {
+        specResolver.current = resolve;
+        setSpecRequest({ name, industryId: company.industryId });
+        setSpecCellCompany(company);
+      }),
+    [],
+  );
+
+  function settleSpecRequest(option: CreatableComboboxOption | null) {
+    specResolver.current?.(option);
+    specResolver.current = null;
+    setSpecRequest(null);
+  }
+
+  async function handleConfirmNewSpecialization(industryId: string) {
+    const request = specRequest;
+    const company = specCellCompany;
+    if (!request || !company) return;
+    try {
+      const res = await createSpecialization.mutateAsync({
+        data: { name: request.name, industryId },
+      });
+      if (res.status !== 201) throw new Error('Failed to add specialization');
+      // Retag the company when they picked a different industry, so it can't
+      // sit in one industry holding a specialization parented to another.
+      const data =
+        industryId === company.industryId
+          ? { specializationId: res.data.id }
+          : { industryId, specializationId: res.data.id };
+      await updateCompanyMutation.mutateAsync({ id: company.id, data });
+      toast.success(`${res.data.name} added`);
+      // The cell writes the value itself from what we resolve with, so this
+      // resolves *after* the company is saved — no half-applied row.
+      settleSpecRequest({ id: res.data.id, name: res.data.name });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to add specialization');
+      settleSpecRequest(null);
+    }
+  }
+
   function handleBulkDelete() {
     setDeleteConfirmOpen(false);
     const toDelete = selected;
@@ -298,10 +415,32 @@ export function CompaniesTable({
       getCompanyColumns({
         onStatusChange: handleStatusChange,
         onQualityChange: handleQualityChange,
+        onIndustryChange: handleIndustryChange,
+        onSpecializationChange: handleSpecializationChange,
+        onCreateSpecialization: handleCreateSpecialization,
+        industries: industryOptions,
+        specializationOptions,
+        onSpecializationQueryChange,
+        isFetchingSpecializations,
+        onSpecializationCellOpen: setSpecCellCompany,
+        canCreateSpecialization,
         pendingRowId,
         canUpdate,
       }),
-    [handleStatusChange, handleQualityChange, pendingRowId, canUpdate],
+    [
+      handleStatusChange,
+      handleQualityChange,
+      handleIndustryChange,
+      handleSpecializationChange,
+      handleCreateSpecialization,
+      industryOptions,
+      specializationOptions,
+      onSpecializationQueryChange,
+      isFetchingSpecializations,
+      canCreateSpecialization,
+      pendingRowId,
+      canUpdate,
+    ],
   );
 
   if (isError) {
@@ -475,6 +614,14 @@ export function CompaniesTable({
         title={`Delete ${selected.length} compan${selected.length === 1 ? 'y' : 'ies'}?`}
         description="You can undo this from the toast right after, or it's gone for good."
         onConfirm={handleBulkDelete}
+      />
+
+      <NewSpecializationDialog
+        request={specRequest}
+        industries={industryOptions}
+        isSaving={createSpecialization.isPending || updateCompanyMutation.isPending}
+        onCancel={() => settleSpecRequest(null)}
+        onConfirm={handleConfirmNewSpecialization}
       />
     </>
   );

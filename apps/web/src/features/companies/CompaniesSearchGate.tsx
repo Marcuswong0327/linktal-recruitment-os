@@ -51,41 +51,96 @@ function FilterField({ label, children }: { label: string; children: React.React
  * fresh commit (a new `filters` object, even if shallow-equal) — see
  * CompaniesTable's page-reset effect.
  */
+/**
+ * Everything that makes up "the view you were looking at" — the draft
+ * selections in the action bar, the committed `appliedFilters` that actually
+ * drive the table, and the id→name caches the chips render from (those names
+ * only ever arrive alongside a live search result, so without them a restored
+ * chip would show a raw id).
+ *
+ * Session-scoped and only ever read on an explicit `?restore=1` return, so
+ * arriving at /companies normally still gives the usual scope-seeded start.
+ */
+interface CompaniesGateSnapshot {
+  countryIds: string[];
+  cityIds: string[];
+  industryIds: string[];
+  specializationIds: string[];
+  statuses: string[];
+  sortByValue: SortByValue | '';
+  countryNames: Record<string, string>;
+  cityNames: Record<string, string>;
+  specializationNames: Record<string, string>;
+  appliedFilters: CompanyAppliedFilters | null;
+}
+
+const GATE_SNAPSHOT_KEY = 'companies-gate-snapshot';
+
+function readGateSnapshot(): CompaniesGateSnapshot | null {
+  try {
+    const raw = window.sessionStorage.getItem(GATE_SNAPSHOT_KEY);
+    return raw ? (JSON.parse(raw) as CompaniesGateSnapshot) : null;
+  } catch {
+    // Private mode, or a shape that no longer parses — fall back to defaults.
+    return null;
+  }
+}
+
 export function CompaniesSearchGate({
   canCreate,
   canUpdate,
   canDelete,
+  canCreateSpecialization,
 }: {
   canCreate: boolean;
   canUpdate: boolean;
   canDelete: boolean;
+  canCreateSpecialization: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
-  const [countryIds, setCountryIds] = React.useState<string[]>([]);
-  const [cityIds, setCityIds] = React.useState<string[]>([]);
-  const [industryIds, setIndustryIds] = React.useState<string[]>([]);
-  const [specializationIds, setSpecializationIds] = React.useState<string[]>([]);
-  const [statuses, setStatuses] = React.useState<string[]>([]);
-  const [sortByValue, setSortByValue] = React.useState<SortByValue | ''>('');
+  // Returning from the Enrich Stakeholders workspace (`/companies?restore=1`)
+  // puts the page back exactly as it was left, rather than dropping the user
+  // on the empty "select your preferences" gate having lost their search.
+  const restoring = searchParams.get('restore') === '1';
+  const [snapshot] = React.useState<CompaniesGateSnapshot | null>(() =>
+    restoring ? readGateSnapshot() : null,
+  );
+
+  const [countryIds, setCountryIds] = React.useState<string[]>(snapshot?.countryIds ?? []);
+  const [cityIds, setCityIds] = React.useState<string[]>(snapshot?.cityIds ?? []);
+  const [industryIds, setIndustryIds] = React.useState<string[]>(snapshot?.industryIds ?? []);
+  const [specializationIds, setSpecializationIds] = React.useState<string[]>(
+    snapshot?.specializationIds ?? [],
+  );
+  const [statuses, setStatuses] = React.useState<string[]>(snapshot?.statuses ?? []);
+  const [sortByValue, setSortByValue] = React.useState<SortByValue | ''>(
+    snapshot?.sortByValue ?? '',
+  );
 
   // Country/City/Specialization are server-searched (see LocationFilterButton
   // /SpecializationFilterButton) — the API only returns a name alongside a
   // live search result, not by id, so each is cached here as the user
   // searches, same reasoning as CandidateSearchGate's resolver maps.
-  const [countryNames, setCountryNames] = React.useState<Record<string, string>>({});
+  const [countryNames, setCountryNames] = React.useState<Record<string, string>>(
+    snapshot?.countryNames ?? {},
+  );
   const registerCountryName = React.useCallback(
     (id: string, name: string) => setCountryNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
     [],
   );
-  const [cityNames, setCityNames] = React.useState<Record<string, string>>({});
+  const [cityNames, setCityNames] = React.useState<Record<string, string>>(
+    snapshot?.cityNames ?? {},
+  );
   const registerCityName = React.useCallback(
     (id: string, name: string) => setCityNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
     [],
   );
-  const [specializationNames, setSpecializationNames] = React.useState<Record<string, string>>({});
+  const [specializationNames, setSpecializationNames] = React.useState<Record<string, string>>(
+    snapshot?.specializationNames ?? {},
+  );
   const registerSpecializationName = React.useCallback(
     (id: string, name: string) =>
       setSpecializationNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
@@ -111,6 +166,13 @@ export function CompaniesSearchGate({
       router.replace('/companies');
     }
   }, [searchParams, router]);
+
+  // Same one-shot-param treatment as `new=1` above: the snapshot has already
+  // been read into state, so drop the flag before a refresh or a back can
+  // re-trigger it.
+  React.useEffect(() => {
+    if (restoring) router.replace('/companies');
+  }, [restoring, router]);
 
   const createIndustry = useCreateIndustry({
     mutation: {
@@ -145,7 +207,46 @@ export function CompaniesSearchGate({
     createCompanyMutation.mutate({ data: buildCompanyPayload(values) });
   }
 
-  const [appliedFilters, setAppliedFilters] = React.useState<CompanyAppliedFilters | null>(null);
+  const [appliedFilters, setAppliedFilters] = React.useState<CompanyAppliedFilters | null>(
+    snapshot?.appliedFilters ?? null,
+  );
+
+  // Kept current continuously rather than written at the moment Enrich is
+  // clicked — that button lives in CompaniesTable, two components away, and
+  // this way any future exit-and-return gets the same treatment for free.
+  React.useEffect(() => {
+    try {
+      window.sessionStorage.setItem(
+        GATE_SNAPSHOT_KEY,
+        JSON.stringify({
+          countryIds,
+          cityIds,
+          industryIds,
+          specializationIds,
+          statuses,
+          sortByValue,
+          countryNames,
+          cityNames,
+          specializationNames,
+          appliedFilters,
+        } satisfies CompaniesGateSnapshot),
+      );
+    } catch {
+      // Private mode or a full quota — losing the restore is not worth
+      // breaking the page over.
+    }
+  }, [
+    countryIds,
+    cityIds,
+    industryIds,
+    specializationIds,
+    statuses,
+    sortByValue,
+    countryNames,
+    cityNames,
+    specializationNames,
+    appliedFilters,
+  ]);
 
   useSeedFiltersFromScope({
     setIndustryIds,
@@ -155,6 +256,7 @@ export function CompaniesSearchGate({
     setCityIds,
     registerCountryName,
     registerCityName,
+    skip: snapshot !== null,
   });
 
   const hasActiveFilters =
@@ -301,7 +403,13 @@ export function CompaniesSearchGate({
         )}
       >
         {appliedFilters ? (
-          <CompaniesTable filters={appliedFilters} canCreate={canCreate} canUpdate={canUpdate} canDelete={canDelete} />
+          <CompaniesTable
+            filters={appliedFilters}
+            canCreate={canCreate}
+            canUpdate={canUpdate}
+            canDelete={canDelete}
+            canCreateSpecialization={canCreateSpecialization}
+          />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card py-24 text-center">
             <span className="flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">

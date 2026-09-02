@@ -26,7 +26,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -54,7 +53,10 @@ import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shor
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { cn } from '@/lib/utils';
-import { useGetClientContactHistory } from '@/lib/api/generated/clients/clients';
+import {
+  getGetClientContactHistoryQueryKey,
+  useGetClientContactHistory,
+} from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import { useCreateJobTitle } from '@/lib/api/generated/job-titles/job-titles';
 import { useJobTitleOptions } from '@/hooks/use-catalog-options';
@@ -330,9 +332,6 @@ function StakeholderEditForm({
     queryClient.invalidateQueries({ queryKey: ['/stakeholder-role-types'] });
     return res.data;
   }
-  const currentRoleTypeIndex = roleTypeRows.findIndex(
-    (r) => r.id === stakeholder.stakeholderRoleTypeId,
-  );
 
   const { data: consultantsData } = useGetConsultants({ pageSize: 100 });
   const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
@@ -361,6 +360,13 @@ function StakeholderEditForm({
     mutation: {
       onSuccess: () => {
         invalidate();
+        // The table above is fed by the *client's* contact history, not the
+        // stakeholder's own record — so invalidate() alone leaves it showing
+        // cached rows until a manual refresh. Prefix key (no params), so it
+        // matches the CONTACT_HISTORY_LIMIT-bearing key this page subscribes with.
+        queryClient.invalidateQueries({
+          queryKey: getGetClientContactHistoryQueryKey(stakeholder.clientId),
+        });
         toast.success('Contact logged');
         setLoggingContact(false);
       },
@@ -422,7 +428,6 @@ function StakeholderEditForm({
     router.push(backTarget.href);
   }
 
-  const currentStatus = stakeholderStatusOptions.find((o) => o.value === stakeholder.status)!;
   const displayName = stakeholderFullName(stakeholder) || 'Unnamed contact';
 
   const contactActionsMenu = (
@@ -462,18 +467,31 @@ function StakeholderEditForm({
                 <h1 className="font-heading text-2xl font-semibold tracking-tight">
                   {displayName}
                 </h1>
-                <Badge className={currentStatus.triggerClassName}>{currentStatus.label}</Badge>
-                {stakeholder.roleType ? (
-                  <Badge
-                    className={
-                      currentRoleTypeIndex >= 0
-                        ? roleTypeStyle(currentRoleTypeIndex).triggerClassName
-                        : undefined
-                    }
-                  >
-                    {stakeholder.roleType}
-                  </Badge>
-                ) : null}
+                {/* Bound to the same draft state as the fields in the
+                    Information card below, so the pills track edits made in
+                    either place and save with everything else — the header
+                    isn't a second save model. Same treatment as
+                    JobOrderDetail's header. */}
+                <EnumSelect
+                  value={status}
+                  onValueChange={(v) => setStatus(v as StakeholderStatus)}
+                  options={stakeholderStatusOptions}
+                  disabled={!canEdit || updateStakeholder.isPending}
+                  size="badge"
+                  className="w-fit"
+                />
+                {/* Unlike the old badge, rendered even when unset — otherwise
+                    a stakeholder with no role type has nothing to click. */}
+                <CreatableCombobox
+                  title="Role type"
+                  variant="badge"
+                  value={roleTypeId}
+                  onValueChange={setRoleTypeId}
+                  options={roleTypeOptions}
+                  onCreate={handleCreateRoleType}
+                  disabled={!canEdit || updateStakeholder.isPending}
+                  placeholder="Uncategorized"
+                />
               </div>
               <span className="font-mono text-xs text-muted-foreground">
                 {stakeholder.displayId} · {stakeholder.companyName ?? 'No company'}

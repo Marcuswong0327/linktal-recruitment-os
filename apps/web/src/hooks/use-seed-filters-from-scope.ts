@@ -14,6 +14,8 @@ interface SeedFiltersFromScopeOptions {
   setCityIds: (ids: string[]) => void;
   registerCountryName: (id: string, name: string) => void;
   registerCityName: (id: string, name: string) => void;
+  /** Leave the filters alone — the caller is restoring a saved view. */
+  skip?: boolean;
 }
 
 /**
@@ -44,6 +46,7 @@ export function useSeedFiltersFromScope({
   setCityIds,
   registerCountryName,
   registerCityName,
+  skip = false,
 }: SeedFiltersFromScopeOptions) {
   const { data: meData } = useGetMe();
   const me = meData?.status === 200 ? meData.data : undefined;
@@ -57,6 +60,12 @@ export function useSeedFiltersFromScope({
 
   const seededRef = React.useRef(false);
   React.useEffect(() => {
+    // `skip` is for a gate restoring a previous view: the defaults would land
+    // a beat after the restore (they wait on `me`) and silently overwrite it.
+    if (skip) {
+      seededRef.current = true;
+      return;
+    }
     if (!me || seededRef.current || !locationsSettled) return;
 
     const scopeIndustryIds = me.industryIds ?? [];

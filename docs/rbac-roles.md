@@ -70,7 +70,7 @@ and speeds up data entry.
 | permission    | R    | R    | –    | –  | –   | – |
 | location      | CRUD | R    | R    | R  | R   | R |
 | industry      | CRUD | CRUD | R    | R  | R   | R |
-| specialization| CRUD | CRUD | R    | R  | R   | R |
+| specialization| CRUD | CRUD | CR⁴  | R  | R   | R |
 | job_title     | CR   | CR   | CR   | –  | CR  | – |
 | job_role_type | CR   | CR   | CR   | –  | CR  | – |
 | stakeholder_role_type | CR | CR | CR | – | CR | – |
@@ -86,6 +86,14 @@ the directory (for the owner-picker) and **create** (onboard) a consultant, but
 restricted by the general "consultant management is admin-only" guard — it has
 its own, separate escalation rule (self/peer-manager allowed, admin accounts
 never) — see §3.
+
+⁴ The one scope-bearing catalog a consultant may grow. Tagging a company
+needs the fine-grained rung (775 specializations vs 4 industries), and a new
+specialization created under an industry they already hold stays visible to
+them. `industry` and `location` stay read-only for the opposite reason: nobody
+holds a grant for a brand-new industry, so tagging a client with one hides that
+client from every consultant at once via the industry arm — see
+`docs/scope-explained.md` §3.
 
 ³ Read-only, added so `consultant`/`researcher` can pick teammates by name
 (and see their industry/location grants) when assigning a job order's

@@ -5,6 +5,7 @@ import { keepPreviousData } from '@tanstack/react-query';
 
 import { useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
 import { useGetJobRoleTypes } from '@/lib/api/generated/job-role-types/job-role-types';
+import { useGetSpecializations } from '@/lib/api/generated/specializations/specializations';
 import type { CreatableComboboxOption } from '@/components/CreatableCombobox';
 
 /** The API caps `take` at 200 per catalog request, so a page is all we can ask for. */
@@ -50,4 +51,28 @@ export function useJobTitleOptions(): CatalogOptions {
 /** Job Role Types — the consultant's classification (`JobRoleType`). ~267 rows. */
 export function useJobRoleTypeOptions(): CatalogOptions {
   return useCatalogOptions(useGetJobRoleTypes);
+}
+
+/**
+ * Specializations under one industry — the Companies grid's Specialization
+ * cell. Separate from `useCatalogOptions` because this catalog is a child rung
+ * (`Industry ▸ Specialization`) and the picker must never offer a value from
+ * another industry: `Client.industryId` is required, so a specialization
+ * parented elsewhere would leave the row internally inconsistent and confuse
+ * the scope resolver's industry arm (docs/scope-explained.md §3).
+ *
+ * Passing no `industryId` yields no options rather than the whole catalog —
+ * "not chosen yet" must not read as "anything goes".
+ */
+export function useSpecializationOptions(industryId: string | undefined): CatalogOptions {
+  const [q, setQ] = React.useState('');
+  const { data, isFetching } = useGetSpecializations(
+    { q: q || undefined, take: PAGE_SIZE, industryIds: industryId ? [industryId] : undefined },
+    { query: { enabled: Boolean(industryId), placeholderData: keepPreviousData } },
+  );
+  const options = React.useMemo(
+    () => (industryId && data?.status === 200 ? data.data.map(({ id, name }) => ({ id, name })) : []),
+    [data, industryId],
+  );
+  return { options, onQueryChange: setQ, isFetching };
 }

@@ -13,8 +13,11 @@ export interface UpdateClientDto {
   companyName?: string;
   /** Industry ID (see /industries) */
   industryId?: string;
-  /** Specialization ID (see /specializations) */
-  specializationId?: string;
+  /**
+     * Specialization ID (see /specializations) — null clears it
+     * @nullable
+     */
+  specializationId?: string | null;
   /** Location nodes this client hires from — its market, not its office address. At least one is required (country level at minimum); mixed granularity is fine. */
   locationIds?: string[];
   /** The client's own physical office address(es) — distinct from `locationIds` above */

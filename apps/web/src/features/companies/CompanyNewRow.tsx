@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 
 import { GridCellEnumCombobox } from '@/components/GridCellEnumCombobox';
@@ -11,6 +12,7 @@ import {
   type LocationChoice,
 } from '@/components/GridCellLocationCombobox';
 import { focusNewRowStart, type DataGridNewRow } from '@/components/DataGrid';
+import { useCreateSpecialization } from '@/lib/api/generated/specializations/specializations';
 import type {
   ClientEntityQuality,
   ClientEntityStatus,
@@ -41,6 +43,10 @@ interface UseCompanyNewRowOptions {
   /** Persists the record. Resolve to commit and clear the row; reject to keep what was typed. */
   onCreate: (dto: CreateClientDto) => Promise<void>;
   disabled?: boolean;
+  /** Industry catalog for the new row's own Industry cell — 4 rows. */
+  industries: { value: string; label: string }[];
+  /** `specialization:create` — without it the Specialization cell is pick-only. */
+  canCreateSpecialization?: boolean;
 }
 
 /**
@@ -48,23 +54,43 @@ interface UseCompanyNewRowOptions {
  * see `DataGridProps.newRow`.
  *
  * `CreateClientDto` requires `companyName`, `industryId` and at least one
- * location. There is no Industry column in this table to hang an editor on,
- * so the **industry comes from the chosen specialization** — every
- * `Specialization` carries its parent `industryId` (Industry ▸ Specialization,
- * see CLAUDE.md), and clients are effectively all specialization-tagged
- * anyway. That keeps the required field satisfied without adding a column
- * to the grid purely for the sake of this row.
+ * location. Industry now has its own cell (the column was restored alongside
+ * the editable Specialization cell), and it opens **pre-filled with the
+ * user's own industry** when they hold exactly one grant — the overwhelmingly
+ * common case, and the row they'd have picked by hand. Holding several, it
+ * starts blank rather than guessing: `industryId` feeds the scope resolver's
+ * industry arm, so a silently wrong default would hide the new company from
+ * the colleagues who should see it.
  *
- * Neither Specialization nor Location is creatable here: both are
- * scope-bearing catalogs whose creation is admin/manager-restricted, so an
- * "Add …" option would only produce a 403.
+ * Picking a specialization still back-fills industry when the cell hasn't been
+ * touched, so the old "specialization carries its parent" path keeps working.
+ *
+ * Neither Specialization nor Location is creatable here: there's no saved
+ * company yet to hang the "which industry?" prompt off, and Location is
+ * admin-only to grow.
  */
 export function useCompanyNewRow({
   onCreate,
   disabled = false,
+  industries,
+  canCreateSpecialization = false,
 }: UseCompanyNewRowOptions): DataGridNewRow {
+  const { data: session } = useSession();
+  // Exactly one grant is a default; several is a guess. Admins and managers
+  // carry no grants at all, so they start blank too.
+  const grantedIndustryIds = session?.user?.industryIds ?? [];
+  const defaultIndustryId = grantedIndustryIds.length === 1 ? grantedIndustryIds[0] : '';
+
   const [draft, setDraft] = React.useState(emptyDraft);
   const [isSaving, setIsSaving] = React.useState(false);
+  const createSpecialization = useCreateSpecialization();
+
+  // The session arrives after first render, so seed the empty row once it
+  // does — but never overwrite an industry the user has already chosen.
+  React.useEffect(() => {
+    if (!defaultIndustryId) return;
+    setDraft((d) => (d.industryId === '' ? { ...d, industryId: defaultIndustryId } : d));
+  }, [defaultIndustryId]);
 
   function set<K extends keyof CompanyDraft>(key: K, value: CompanyDraft[K]) {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -89,7 +115,7 @@ export function useCompanyNewRow({
         ...(draft.status ? { status: draft.status as ClientEntityStatus } : {}),
         ...(draft.quality ? { quality: draft.quality as ClientEntityQuality } : {}),
       });
-      setDraft(emptyDraft);
+      setDraft({ ...emptyDraft, industryId: defaultIndustryId });
       requestAnimationFrame(() => focusNewRowStart());
     } catch {
       // Toasted by the caller; the draft survives a failed save.
@@ -107,14 +133,48 @@ export function useCompanyNewRow({
         aria-label="Company name"
       />
     ),
+    industry: (
+      <GridCellEnumCombobox
+        value={draft.industryId}
+        onValueChange={(v) =>
+          // Changing industry drops a specialization from the old one — the
+          // same rule the saved rows follow.
+          setDraft((d) =>
+            v === d.industryId ? d : { ...d, industryId: v, specializationId: '' },
+          )
+        }
+        options={industries}
+        disabled={disabled || isSaving}
+      />
+    ),
     specialization: (
       <GridCellSpecializationCombobox
         value={draft.specializationId}
+        industryId={draft.industryId || undefined}
+        // Creatable straight from the cell: unlike a saved row, the parent
+        // industry is already sitting beside it, so there's nothing to ask.
+        // Withheld until an industry is chosen — POST /specializations
+        // requires one, and guessing it is what the Industry cell exists to
+        // avoid.
+        onCreate={
+          canCreateSpecialization && draft.industryId
+            ? async (name) => {
+                const industryIdForNew = draft.industryId;
+                const res = await createSpecialization.mutateAsync({
+                  data: { name, industryId: industryIdForNew },
+                });
+                if (res.status !== 201) throw new Error('Failed to add specialization');
+                toast.success(`${res.data.name} added`);
+                return { id: res.data.id, name: res.data.name, industryId: industryIdForNew };
+              }
+            : undefined
+        }
         onValueChange={(picked) =>
           setDraft((d) => ({
             ...d,
             specializationId: picked?.id ?? '',
-            industryId: picked?.industryId ?? '',
+            // Only back-fill: an industry already chosen in its own cell wins.
+            industryId: d.industryId || (picked?.industryId ?? ''),
           }))
         }
         disabled={disabled || isSaving}
@@ -148,14 +208,16 @@ export function useCompanyNewRow({
   return {
     editors,
     onCommit: handleCommit,
-    onReset: () => setDraft(emptyDraft),
+    onReset: () => setDraft({ ...emptyDraft, industryId: defaultIndustryId }),
     canCommit,
     isSaving,
     onInvalidCommit: () => {
       if (disabled) return;
       const missing = [
         draft.companyName.trim() ? null : 'Company name',
-        industryId ? null : 'Specialization',
+        // Industry has its own cell now — naming Specialization here was
+        // right only while industry was inferred from it.
+        industryId ? null : 'Industry',
         draft.locations.length ? null : 'Market',
       ].filter(Boolean);
       toast.error(`${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required`);
