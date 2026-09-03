@@ -2,35 +2,27 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Location, LocationLevel } from '@prisma/client';
 
 /**
- * OpenAPI response shape for a Location — one node of the geography tree.
+ * OpenAPI response shape for a Location — one node of the two-rung
+ * Country / City Coverage tree.
  *
  * `ancestorIds` is exposed deliberately: it's how the frontend can tell
- * whether one node sits under another (breadcrumbs, "is this inside my
- * patch") without walking `parentId` one request at a time. Root-last, self
- * included — Silverwater is `[silverwater, sydney, nsw, australia]`.
+ * whether one node sits under another without a second request. Root-last,
+ * self included — a City Coverage row is `[self, country]`.
  */
 export class LocationEntity implements Location {
   @ApiProperty() id!: string;
-  @ApiProperty({ example: 'Sydney' }) name!: string;
+  @ApiProperty({ example: 'Sydney NSW' }) name!: string;
   @ApiProperty({ enum: LocationLevel }) level!: LocationLevel;
   @ApiProperty({
-    type: String,
-    nullable: true,
-    description: 'Only ever set at SUBURB level',
+    description: 'Part of the approved 13-row catalog — cannot be renamed, reparented or deleted by anyone',
   })
-  postcode!: string | null;
-  @ApiProperty({
-    type: Number,
-    nullable: true,
-    description: 'GeoNames id — what makes the bulk load idempotent and re-runnable',
-  })
-  geonameId!: number | null;
+  isProtected!: boolean;
   @ApiProperty({ type: String, nullable: true, description: 'null at COUNTRY level' })
   parentId!: string | null;
   @ApiProperty({
     type: 'array',
     items: { type: 'string' },
-    description: 'Self plus every ancestor, root-last',
+    description: 'Self plus parent, root-last',
   })
   ancestorIds!: string[];
   @ApiProperty() createdAt!: Date;

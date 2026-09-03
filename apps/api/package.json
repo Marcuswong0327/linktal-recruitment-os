@@ -18,11 +18,8 @@
     "prisma:studio": "prisma studio",
     "openapi:gen": "ts-node --files scripts/generate-openapi.ts",
     "seed": "ts-node prisma/seed.ts",
-    "import:workbook": "ts-node scripts/import-workbook.ts",
     "import:industries": "ts-node scripts/import-industries.ts",
-    "import:locations": "ts-node scripts/import-locations.ts",
     "import:taxonomy": "ts-node scripts/import-taxonomy.ts",
-    "import:users": "ts-node scripts/import-users.ts",
     "backfill:ancestors": "ts-node scripts/backfill-ancestors.ts",
     "renumber:display-ids": "ts-node scripts/display-ids.ts --renumber",
     "resync:display-ids": "ts-node scripts/display-ids.ts"

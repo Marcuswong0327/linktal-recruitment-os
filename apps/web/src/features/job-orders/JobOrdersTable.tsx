@@ -92,15 +92,7 @@ export function JobOrdersTable({
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
-  // The list opens narrowed to ACTIVE — the only status most of this page's
-  // work concerns; PLACED/CLOSED rows are history and otherwise bury the
-  // live roles. Seeded here *and* as DataGrid's `initialColumnFilters` (the
-  // grid doesn't fire onQueryChange on first render), so the request and the
-  // header chip agree from the first paint. Clearing the filter still shows
-  // every status — this is a default, not a restriction.
-  const [statuses, setStatuses] = React.useState<GetJobOrdersStatusesItem[] | undefined>([
-    'ACTIVE',
-  ]);
+  const [statuses, setStatuses] = React.useState<GetJobOrdersStatusesItem[] | undefined>();
   const [priorityLevels, setPriorityLevels] = React.useState<number[] | undefined>();
   const [consultantIds, setConsultantIds] = React.useState<string[] | undefined>();
   const [sortBy, setSortBy] = React.useState<GetJobOrdersSortBy | undefined>();
@@ -376,7 +368,6 @@ export function JobOrdersTable({
         isFetching={isFetching}
         searchPlaceholder="Search job orders…"
         filters={jobOrderFilters}
-        initialColumnFilters={[{ id: 'status', value: ['ACTIVE'] }]}
         emptyState="No job orders yet. Create one against a client to get started."
         getRowId={(j) => j.id}
         enableRowRangeSelect

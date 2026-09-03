@@ -12,7 +12,6 @@ import { ExportJobOrdersDto } from './dto/export-job-orders.dto';
 import { buildWorkbook, formatExportDate, resolveTimeZone, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
 import { jobOrderQualityLabels } from '../common/export-labels';
-import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
 
 /** The subset of QueryJobOrdersDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination but still satisfies this structurally. */
 type JobOrderFilterFields = Pick<
@@ -365,19 +364,17 @@ export class JobOrdersService {
   }
 
   /**
-   * Resolves each job order's location to a full breadcrumb path — the exact
-   * format JOB_ORDER_IMPORT_COLUMNS (job-orders-import.service.ts) expects,
-   * so an exported sheet actually re-imports. Same pattern as ClientsService's
-   * `locationPaths`.
+   * Resolves each job order's location to its (now globally unique) name —
+   * the exact string JOB_ORDER_IMPORT_COLUMNS (job-orders-import.service.ts)
+   * expects, so an exported sheet actually re-imports. Same pattern as
+   * ClientsService's `locationPaths`.
    */
-  private async withLocationPath<T extends JobOrderWithRelations>(
+  private withLocationPath<T extends JobOrderWithRelations>(
     jobOrders: T[],
-  ): Promise<(T & { locationPath: string | null })[]> {
-    const allLocations = await this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true } });
-    const byId = buildLocationById(allLocations);
+  ): (T & { locationPath: string | null })[] {
     return jobOrders.map((jo) => ({
       ...jo,
-      locationPath: jo.location ? locationBreadcrumbPath(jo.location, byId) : null,
+      locationPath: jo.location?.name ?? null,
     }));
   }
 

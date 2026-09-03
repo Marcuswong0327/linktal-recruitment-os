@@ -84,34 +84,39 @@ everything under it.**
 
 ```mermaid
 flowchart LR
-    subgraph LOC["Location — 3 rungs in use"]
-        C1["COUNTRY (2)"] --> S1["STATE (24)"] --> CI1["CITY (2,023)"] --> SU1["SUBURB (0 — never loaded)"]
+    subgraph LOC["Location — Country / City Coverage"]
+        C1["COUNTRY (2)"] --> CI1["CITY_COVERAGE (11, +admin-added)"]
     end
     subgraph TAX["Taxonomy"]
         I1["Industry (4)"] --> P1["Specialization (149)"] --> P2["child Specialization (625)"]
     end
 ```
 
-Grant `Australia` → you get all 24 states and all 2,023 cities under it.
+Grant `Australia` → you get all City Coverage values under it (`Sydney NSW`,
+`Melbourne VIC`, `Brisbane GC QLD`, …).
 Grant `Food` → you get `Food Bakery`, `Food Meat`, `Food Ready Made Meals`, …
 
-Implemented with a denormalized `ancestorIds` column (self + every ancestor), so
-the test is one indexed lookup rather than expanding a grant downward. A single
-`COUNTRY:Australia` grant covers 1,502 nodes today and would grow with every
-suburb ever loaded.
+Implemented with a denormalized `ancestorIds` column (self + parent), so the
+test is one indexed lookup rather than joining through `parentId`.
 
 **Two things to know about the current data:**
 
-- **Suburbs were never loaded** (0 rows). City is the finest grant available.
+- **City Coverage is one flat rung, not a suburb-level tree.** "Brisbane GC
+  QLD" and "KL Selangor" are each a single node covering a whole desk, not a
+  literal city or suburb — see issue #157's rework of the old GeoNames-scale
+  tree.
 - **Specialization is only 2 levels deep.** There is no third rung.
 
-**Linktal's desk labels are not nodes.** They're materialised at assignment time:
+**The 13 seeded City Coverage/country values are Linktal's desks, made real.**
+They used to be materialised at assignment time from a translation layer
+(`Brisbane GC QLD` → two GeoNames CITY grants); now each one is its own row,
+`isProtected` so nobody can rename or delete it:
 
 | Desk label | Stored as |
 |---|---|
-| `Brisbane GC QLD` | two CITY grants |
-| `East Malaysia` | two STATE grants |
-| `All Malaysia` | one COUNTRY grant |
+| `Brisbane GC QLD` | one CITY_COVERAGE row |
+| `KL Selangor` | one CITY_COVERAGE row |
+| `Australia` | one COUNTRY row |
 
 ---
 

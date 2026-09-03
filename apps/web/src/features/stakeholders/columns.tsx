@@ -158,8 +158,8 @@ export function getStakeholderColumns({
       // No single "fullName" column server-side to sort by (see
       // StakeholderSortField) — firstName/lastName are separate columns.
       // strictMinSize only — avatar + name + link icon is left-aligned
-      // content, not a centered pill like Coverage/Role type. grow: absorbs
-      // leftover width on a wide screen — see DataGridColumnMeta.grow.
+      // content, not a centered pill like City Coverage/Role type. grow:
+      // absorbs leftover width on a wide screen — see DataGridColumnMeta.grow.
       meta: { strictMinSize: true, grow: true },
       enableSorting: false,
       header: 'Name',
@@ -209,10 +209,10 @@ export function getStakeholderColumns({
     },
     {
       id: 'coverage',
-      header: 'Coverage',
+      header: 'City Coverage',
       // Not a StakeholderSortField (see query-stakeholders.dto.ts) — exposed
       // as the 'coverage' header filter instead (StakeholdersTable), same as
-      // Company's analogous Market column/filter.
+      // Company's analogous City Coverage column/filter.
       enableSorting: false,
       meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => <LocationBadgeList locations={row.original.coverage} />,

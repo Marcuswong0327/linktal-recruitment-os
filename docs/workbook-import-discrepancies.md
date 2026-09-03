@@ -159,32 +159,36 @@ surface; the importer is the bootstrap path, and nothing else can populate these
 
 ## 3. Fields with nowhere to land
 
-### 🟡 3.1 Suburbs
+### 🟡 3.1 Suburbs — historical; the location model these decisions were made under is gone
+
+> **Superseded by issue #157.** `scripts/import-locations.ts` (the GeoNames
+> loader this section describes) and `import-workbook.ts` (the one-time bulk
+> loader this whole document is about) are both retired. The Location tree is
+> now two rungs — Country / City Coverage, 13 seeded rows — not a
+> GeoNames-scale tree with a missing SUBURB rung. Left below as a historical
+> record of what the original import did, not as current behaviour.
 
 The Location tree has **0 SUBURB nodes** — `scripts/import-locations.ts` loads
 GeoNames `cities5000` and stops there by design; suburbs need the AU/MY postal
 dumps, and Malaysian coverage there is thin.
 
-Settled approach: map suburb columns **up to their CITY** and keep the suburb as
-free text where a field exists.
+Settled approach (at the time): map suburb columns **up to their CITY** and keep
+the suburb as free text where a field exists.
 
-| Sheet column | Fate |
+| Sheet column | Fate (at the time) |
 |---|---|
-| `Candidate (Contact History)` → Suburb | ✅ survives as `CandidateContactHistory.suburb` |
-| `Client(Company)` → Suburb & Postcode (es) | ✅ survives as `Client.suburbsAndPostcodes` |
-| `Candidate (Info)` → Suburb & Postcode | ❌ **dropped** — `Candidate` has no suburb field |
-| `Clients(Marketplc Job Research)` → Suburbs | ❌ **dropped** — `ClientJobResearch` has `locationId` only |
+| `Candidate (Contact History)` → Suburb | ✅ survives as `CandidateContactHistory.suburb` (still live) |
+| `Client(Company)` → Suburb & Postcode (es) | survived as `Client.suburbsAndPostcodes` — **column dropped by issue #157** (0/1652 rows were ever filled) |
+| `Candidate (Info)` → Suburb & Postcode | ❌ dropped at the time; a later `Candidate.suburbAndPostcode` column was added, then **also dropped by issue #157** (1/3964 rows were ever filled) |
+| `Clients(Marketplc Job Research)` → Suburbs | ❌ dropped — `ClientJobResearch` has `locationId` only |
 
-**Decision needed:** accept the two drops, or add free-text suburb fields to
-`Candidate` and `ClientJobResearch`.
+### 🟡 3.2 Candidate city is only 78% filled — resolved by issue #157
 
-### 🟡 3.2 Candidate city is only 78% filled
-
-The 889 Malaysian candidates carry a country but no city. `Candidate.locationId`
-is required and single-valued.
-
-**Importer behaviour:** falls back to the most specific node available — the
-COUNTRY node for those rows. They are scoped to "Malaysia", not to a city.
+The 891 Malaysian candidates carry a country but no city coverage. This is now
+the *expected* shape, not a gap: `Candidate.locationId` may point at a country
+when the city isn't known — see `docs/scope-explained.md` and CLAUDE.md's "The
+two hierarchies". They're scoped to "Malaysia", not to a city, until someone
+tags them with a specific City Coverage value.
 
 ---
 

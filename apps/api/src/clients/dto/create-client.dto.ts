@@ -57,15 +57,6 @@ export class CreateClientDto {
   @IsString({ each: true })
   addresses?: string[];
 
-  @ApiPropertyOptional({
-    description: "The client's own office suburb/postcode(s) — same distinction as `addresses`",
-    type: [String],
-  })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  suburbsAndPostcodes?: string[];
-
   @ApiPropertyOptional({ description: 'Website URL', example: 'https://acme.com' })
   @IsOptional()
   @IsUrl()

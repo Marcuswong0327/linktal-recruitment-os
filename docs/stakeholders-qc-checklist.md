@@ -1,5 +1,12 @@
 # Stakeholders — QC Checklist
 
+> **Historical.** Written when Coverage was first added, against the old
+> GeoNames-scale Location tree (COUNTRY ▸ STATE ▸ CITY ▸ SUBURB). Issue #157
+> replaced that with a two-rung Country / City Coverage catalog — level
+> references below (STATE/CITY/SUBURB, "Coverage" as a bare label) describe
+> that earlier shape, not current behaviour. Kept as a record of what was
+> tested, not a checklist to re-run as written.
+
 Scope: `apps/web/src/features/stakeholders/**` + new `apps/web/src/components/LocationMultiSelect.tsx`,
 tested against `apps/api/src/stakeholders/**`.
 

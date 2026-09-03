@@ -404,9 +404,6 @@ function CompanyEditForm({
     company.locationIds.map((locId, i) => ({ id: locId, name: company.locations[i] ?? locId })),
   );
   const [addresses, setAddresses] = React.useState((company.addresses ?? []).join('\n'));
-  const [suburbsAndPostcodes, setSuburbsAndPostcodes] = React.useState(
-    (company.suburbsAndPostcodes ?? []).join('\n'),
-  );
   const [website, setWebsite] = React.useState(company.website ?? '');
   const [seekJobMarketUrl, setSeekJobMarketUrl] = React.useState(company.seekJobMarketUrl ?? '');
   const [linkedinJobMarketUrl, setLinkedinJobMarketUrl] = React.useState(
@@ -422,7 +419,6 @@ function CompanyEditForm({
   const locationIdsKey = (ids: string[]) => [...ids].sort().join(',');
   const initialLocationIdsKey = locationIdsKey(company.locationIds);
   const initialAddresses = (company.addresses ?? []).join('\n');
-  const initialSuburbs = (company.suburbsAndPostcodes ?? []).join('\n');
 
   const isDirty =
     companyName !== company.companyName ||
@@ -430,7 +426,6 @@ function CompanyEditForm({
     specializationId !== (company.specializationId ?? '') ||
     locationIdsKey(locations.map((l) => l.id)) !== initialLocationIdsKey ||
     addresses !== initialAddresses ||
-    suburbsAndPostcodes !== initialSuburbs ||
     website !== (company.website ?? '') ||
     seekJobMarketUrl !== (company.seekJobMarketUrl ?? '') ||
     linkedinJobMarketUrl !== (company.linkedinJobMarketUrl ?? '') ||
@@ -651,12 +646,6 @@ function CompanyEditForm({
       locationIds: locations.map((l) => l.id),
       addresses: addresses
         ? addresses
-            .split('\n')
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : [],
-      suburbsAndPostcodes: suburbsAndPostcodes
-        ? suburbsAndPostcodes
             .split('\n')
             .map((s) => s.trim())
             .filter(Boolean)
@@ -995,7 +984,7 @@ function CompanyEditForm({
                         <TableHead>Position</TableHead>
                         <TableHead>Role Type</TableHead>
                         <TableHead>Posted Date</TableHead>
-                        <TableHead>Location</TableHead>
+                        <TableHead>City Coverage</TableHead>
                         <TableHead>Links</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1319,7 +1308,7 @@ function CompanyEditForm({
 
           <Card>
             <CardHeader className="border-b">
-              <CardTitle className="flex items-center gap-2">Market</CardTitle>
+              <CardTitle className="flex items-center gap-2">City Coverage</CardTitle>
             </CardHeader>
             <CardContent>
               <LocationMultiSelect
@@ -1342,20 +1331,6 @@ function CompanyEditForm({
                   id="addresses"
                   value={addresses}
                   onChange={(e) => setAddresses(e.target.value)}
-                  disabled={!canEdit}
-                  className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
-                />
-              </FormField>
-              <FormField
-                label="Suburbs / postcodes"
-                htmlFor="suburbsAndPostcodes"
-                description="One per line."
-                orientation="horizontal"
-              >
-                <textarea
-                  id="suburbsAndPostcodes"
-                  value={suburbsAndPostcodes}
-                  onChange={(e) => setSuburbsAndPostcodes(e.target.value)}
                   disabled={!canEdit}
                   className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
                 />

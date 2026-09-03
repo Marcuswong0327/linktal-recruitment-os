@@ -11,7 +11,5 @@ export type GetLocationsLevel = typeof GetLocationsLevel[keyof typeof GetLocatio
 
 export const GetLocationsLevel = {
   COUNTRY: 'COUNTRY',
-  STATE: 'STATE',
-  CITY: 'CITY',
-  SUBURB: 'SUBURB',
+  CITY_COVERAGE: 'CITY_COVERAGE',
 } as const;

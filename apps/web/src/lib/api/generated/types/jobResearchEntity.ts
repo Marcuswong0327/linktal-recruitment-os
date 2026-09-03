@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { JobResearchEntityLocationLevel } from './jobResearchEntityLocationLevel';
 import type { JobResearchEntityStatus } from './jobResearchEntityStatus';
 
 export interface JobResearchEntity {
@@ -36,10 +37,10 @@ export interface JobResearchEntity {
      */
   location: string | null;
   /**
-     * Rung of the location node (COUNTRY/STATE/CITY/SUBURB)
+     * Rung of the location node
      * @nullable
      */
-  locationLevel: string | null;
+  locationLevel: JobResearchEntityLocationLevel;
   /** @nullable */
   jobTitleId: string | null;
   /**

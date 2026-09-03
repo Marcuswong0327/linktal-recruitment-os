@@ -1,38 +1,38 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { LocationLevel } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { rankedNameSearch } from '../common/ranked-name-search';
 import { CreateLocationDto } from './dto/create-location.dto';
+import { UpdateLocationDto } from './dto/update-location.dto';
 import { QueryLocationsDto } from './dto/query-locations.dto';
 
 /** Which rung each level must sit under. COUNTRY is the root and has no parent. */
 const PARENT_LEVEL: Record<LocationLevel, LocationLevel | null> = {
   COUNTRY: null,
-  STATE: 'COUNTRY',
-  CITY: 'STATE',
-  SUBURB: 'CITY',
+  CITY_COVERAGE: 'COUNTRY',
 };
+
+/** The six relations that can point at a Location row — checked before any delete. */
+const REFERENCE_CHECKS: { label: string; count: (prisma: PrismaService, id: string) => Promise<number> }[] = [
+  { label: 'candidates', count: (p, id) => p.candidate.count({ where: { locationId: id } }) },
+  { label: 'job orders', count: (p, id) => p.jobOrder.count({ where: { locationId: id } }) },
+  { label: 'job research entries', count: (p, id) => p.clientJobResearch.count({ where: { locationId: id } }) },
+  { label: 'clients', count: (p, id) => p.clientLocation.count({ where: { locationId: id } }) },
+  { label: 'stakeholders', count: (p, id) => p.stakeholderLocation.count({ where: { locationId: id } }) },
+  { label: 'consultants', count: (p, id) => p.consultantLocation.count({ where: { locationId: id } }) },
+];
 
 @Injectable()
 export class LocationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Search/browse the tree. Every read is capped: the tree is ~2k nodes today
-   * and grows with each dump loaded, so nothing here returns "all locations".
-   *
-   * The two hierarchy filters answer different questions and both earn their
-   * keep — `parentId` is one step down (a cascading picker listing a country's
-   * states), `underId` is the whole subtree at any depth (resolved through the
-   * denormalized ancestor path, so one country id matches all 1,500 nodes
-   * beneath it without a recursive query).
+   * Search/browse the tree. Two rungs only (Country, City Coverage) since
+   * issue #157 — the tree is 13 rows plus whatever admin has added since, so
+   * unlike the old GeoNames-scale tree this can reasonably be browsed in
+   * full rather than requiring a type-ahead query.
    */
   findAll(query: QueryLocationsDto) {
-    // Prefix matches first (see rankedNameSearch), then the existing
-    // level-before-name ordering within each group — so a mixed-level result
-    // still reads top-down (countries, then states, then cities) instead of
-    // interleaving rungs alphabetically, but a name that actually starts with
-    // what was typed is no longer buried under mid-word matches.
     return rankedNameSearch(query.q, query.take, (match, take) =>
       this.prisma.location.findMany({
         where: {
@@ -57,8 +57,8 @@ export class LocationsService {
 
   /**
    * Admin-only (see the controller). Maintains `ancestorIds` itself — the
-   * column the scope resolver reads — because a node written without it would
-   * be invisible to every location grant, silently.
+   * column the scope resolver reads — because a node written without it
+   * would be invisible to every location grant, silently.
    */
   async create(dto: CreateLocationDto) {
     const expectedParentLevel = PARENT_LEVEL[dto.level];
@@ -89,8 +89,9 @@ export class LocationsService {
           message: `Unknown parent location ${dto.parentId}.`,
         });
       }
-      // The tree's rungs are fixed, so a CITY under a COUNTRY is a data bug,
-      // not a shortcut — it would break the ancestor walk both ways.
+      // The tree is fixed at two rungs, so a CITY_COVERAGE under another
+      // CITY_COVERAGE is a data bug, not a shortcut — it would break the
+      // ancestor walk both ways.
       if (parent.level !== expectedParentLevel) {
         throw new BadRequestException({
           code: 'INVALID_PARENT_LEVEL',
@@ -100,10 +101,17 @@ export class LocationsService {
       ancestorIds = parent.ancestorIds;
     }
 
-    if (dto.postcode && dto.level !== 'SUBURB') {
-      throw new BadRequestException({
-        code: 'POSTCODE_NOT_ALLOWED',
-        message: 'postcode is only meaningful at SUBURB level.',
+    // Name is globally unique (schema.prisma), not just per-parent — that's
+    // what lets every import/export column and picker key off a bare name
+    // instead of a breadcrumb path. Checked here for a clear message; the DB
+    // constraint is the real backstop against a race.
+    const duplicate = await this.prisma.location.findFirst({
+      where: { name: { equals: dto.name.trim(), mode: 'insensitive' } },
+    });
+    if (duplicate) {
+      throw new ConflictException({
+        code: 'DUPLICATE_NAME',
+        message: `A location named "${dto.name.trim()}" already exists.`,
       });
     }
 
@@ -114,14 +122,136 @@ export class LocationsService {
         name: dto.name.trim(),
         level: dto.level,
         parentId: dto.parentId ?? null,
-        postcode: dto.postcode ?? null,
-        geonameId: dto.geonameId ?? null,
         ancestorIds: [],
       },
     });
     return this.prisma.location.update({
       where: { id: created.id },
       data: { ancestorIds: [created.id, ...ancestorIds] },
+    });
+  }
+
+  /**
+   * Admin-only (see the controller). The 13 seeded rows are `isProtected`
+   * and cannot be renamed or reparented by anyone — that's the approved
+   * catalog issue #157 asks for. Anything admin created afterwards can be
+   * freely edited, subject to the same shape rules `create` enforces.
+   */
+  async update(id: string, dto: UpdateLocationDto) {
+    const location = await this.findOne(id);
+    if (location.isProtected) {
+      throw new ConflictException({
+        code: 'LOCATION_PROTECTED',
+        message: `"${location.name}" is part of the approved City Coverage catalog and cannot be edited.`,
+      });
+    }
+
+    if (dto.name) {
+      const duplicate = await this.prisma.location.findFirst({
+        where: { name: { equals: dto.name.trim(), mode: 'insensitive' }, id: { not: id } },
+      });
+      if (duplicate) {
+        throw new ConflictException({
+          code: 'DUPLICATE_NAME',
+          message: `A location named "${dto.name.trim()}" already exists.`,
+        });
+      }
+    }
+
+    const nextParentId = dto.parentId !== undefined ? dto.parentId : location.parentId;
+    const expectedParentLevel = PARENT_LEVEL[location.level];
+
+    if (expectedParentLevel === null) {
+      if (nextParentId) {
+        throw new BadRequestException({
+          code: 'INVALID_PARENT',
+          message: 'A COUNTRY sits at the root and cannot have a parent.',
+        });
+      }
+      return this.prisma.location.update({
+        where: { id },
+        data: { ...(dto.name ? { name: dto.name.trim() } : {}) },
+      });
+    }
+
+    if (!nextParentId) {
+      throw new BadRequestException({
+        code: 'PARENT_REQUIRED',
+        message: `A ${location.level} must sit under a ${expectedParentLevel}.`,
+      });
+    }
+
+    const parent = await this.prisma.location.findUnique({
+      where: { id: nextParentId },
+      select: { id: true, level: true, ancestorIds: true },
+    });
+    if (!parent) {
+      throw new BadRequestException({
+        code: 'INVALID_PARENT',
+        message: `Unknown parent location ${nextParentId}.`,
+      });
+    }
+    if (parent.level !== expectedParentLevel) {
+      throw new BadRequestException({
+        code: 'INVALID_PARENT_LEVEL',
+        message: `A ${location.level} must sit under a ${expectedParentLevel}, but ${nextParentId} is a ${parent.level}.`,
+      });
+    }
+
+    return this.prisma.location.update({
+      where: { id },
+      data: {
+        ...(dto.name ? { name: dto.name.trim() } : {}),
+        parentId: nextParentId,
+        ancestorIds: [id, ...parent.ancestorIds],
+      },
+    });
+  }
+
+  /**
+   * Admin-only (see the controller). Refuses to touch a protected row, and
+   * refuses to delete a row still referenced by any record or grant — a
+   * clear message naming the counts, never the raw FK-constraint error the
+   * database would otherwise throw (see all-exceptions.filter.ts's P2003
+   * mapping for the backstop if this guard is ever bypassed, e.g. a direct
+   * Prisma call or a future bulk-delete endpoint).
+   */
+  async remove(id: string) {
+    const location = await this.findOne(id);
+    if (location.isProtected) {
+      throw new ConflictException({
+        code: 'LOCATION_PROTECTED',
+        message: `"${location.name}" is part of the approved City Coverage catalog and cannot be deleted.`,
+      });
+    }
+
+    // Counting the references and deleting inside one transaction closes the
+    // gap between "we checked, nothing points at it" and the delete itself —
+    // without it, a client save landing in that window could have its
+    // ClientLocation row cascade-deleted a moment later with no trace.
+    return this.prisma.$transaction(async (tx) => {
+      const childCount = await tx.location.count({ where: { parentId: id } });
+      if (childCount > 0) {
+        throw new ConflictException({
+          code: 'LOCATION_HAS_CHILDREN',
+          message: `"${location.name}" has ${childCount} City Coverage ${childCount === 1 ? 'value' : 'values'} under it. Reassign or delete those first.`,
+        });
+      }
+
+      const counts = await Promise.all(REFERENCE_CHECKS.map((check) => check.count(tx as PrismaService, id)));
+      const references = REFERENCE_CHECKS.map((check, i) => ({ label: check.label, count: counts[i] })).filter(
+        (r) => r.count > 0,
+      );
+      if (references.length > 0) {
+        const summary = references.map((r) => `${r.count} ${r.label}`).join(', ');
+        throw new ConflictException({
+          code: 'LOCATION_IN_USE',
+          message: `"${location.name}" is used by ${summary}. Reassign them before deleting it.`,
+        });
+      }
+
+      await tx.location.delete({ where: { id } });
+      return { id };
     });
   }
 }

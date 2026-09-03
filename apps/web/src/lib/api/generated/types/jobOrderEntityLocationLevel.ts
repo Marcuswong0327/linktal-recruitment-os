@@ -15,7 +15,5 @@ export type JobOrderEntityLocationLevel = typeof JobOrderEntityLocationLevel[key
 
 export const JobOrderEntityLocationLevel = {
   COUNTRY: 'COUNTRY',
-  STATE: 'STATE',
-  CITY: 'CITY',
-  SUBURB: 'SUBURB',
+  CITY_COVERAGE: 'CITY_COVERAGE',
 } as const;

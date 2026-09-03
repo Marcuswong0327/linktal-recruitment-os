@@ -285,41 +285,20 @@ export function buildNameIndex(rows: { id: string; name: string }[]): Map<string
 }
 
 /**
- * A Location's own `name` isn't globally unique (a suburb can repeat under
- * different states), so location-valued columns use a breadcrumb path
- * ("Australia > New South Wales > Sydney") built from each row's own
- * `ancestorIds` (root-last, per schema.prisma) reversed to root-first, joined
- * with the row's own name last. Keys are lowercased for exact-but-case-
- * insensitive matching, same as buildNameIndex.
+ * A Location's own `name` is now globally unique (schema.prisma) — the
+ * Country / City Coverage catalog has 13 seeded rows and admin-added ones are
+ * checked for a name collision on write (LocationsService), so a bare name
+ * ("Sydney NSW") is unambiguous. Location-valued columns used to need a
+ * breadcrumb path when the tree was thousands of GeoNames rows with repeated
+ * names at different rungs; that's no longer true. Kept as `buildNameIndex`
+ * would be, except lowercased the same way for exact-but-case-insensitive
+ * matching, so buildLocationPathIndex (the matcher) and
+ * buildLocationReferenceSheet (what a user copies from) can't drift apart.
  */
 type LocationRow = { id: string; name: string; ancestorIds: string[] };
 
-/**
- * The breadcrumb path for one location — factored out so
- * buildLocationPathIndex (the matcher), buildLocationReferenceSheet (what a
- * user copies from), and every entity's export sheet (what a re-uploaded
- * file's Location column must already look like, for the round trip to
- * actually resolve) all draw from the exact same logic, so they can never
- * silently drift apart. `loc` only needs `name`/`ancestorIds` — an export
- * row's already-resolved location doesn't carry its own `id`.
- */
-export function locationBreadcrumbPath(loc: { name: string; ancestorIds: string[] }, byId: Map<string, LocationRow>): string {
-  const ancestorNames = [...loc.ancestorIds].reverse().map((id) => byId.get(id)?.name ?? '?');
-  return [...ancestorNames.slice(0, -1), loc.name].join(' > ');
-}
-
-/** `id -> full row` lookup for `locationBreadcrumbPath`'s `byId` argument — one place building this map, instead of every export service re-deriving the same one-liner. */
-export function buildLocationById(locations: LocationRow[]): Map<string, LocationRow> {
-  return new Map(locations.map((l) => [l.id, l]));
-}
-
 export function buildLocationPathIndex(locations: LocationRow[]): Map<string, string> {
-  const byId = buildLocationById(locations);
-  const index = new Map<string, string>();
-  for (const loc of locations) {
-    index.set(locationBreadcrumbPath(loc, byId).toLowerCase(), loc.id);
-  }
-  return index;
+  return new Map(locations.map((l) => [l.name.toLowerCase(), l.id]));
 }
 
 /** Flat single-column "Name" reference sheet — Industry, Job Title, Job Role Type, and Stakeholder Role Type all share this shape (schema.prisma has no other column on any of them worth surfacing). */
@@ -349,23 +328,27 @@ export function buildSpecializationReferenceSheet(
 }
 
 /**
- * Every location's exact breadcrumb path — the literal string a Location-
- * type Data column expects, so it's directly copy-pasteable — plus its level
- * so the sheet's own autoFilter can narrow a ~2k-row list down. Every level
- * is included (not just leaves): the live in-app Location picker
- * (LocationMultiSelect) lets a user pick a bare country or state just as
- * validly as a suburb, so filtering those out here would hide legitimate
- * values.
+ * Every Country and City Coverage value — name (the literal string a
+ * Location-type Data column expects, directly copy-pasteable), its country
+ * (blank for a country row itself), and its level, so the sheet's own
+ * autoFilter can narrow a 13-plus-row list down as admin adds to it.
  */
-export function buildLocationReferenceSheet(locations: (LocationRow & { level: string })[]): TemplateReferenceSheet {
+export function buildLocationReferenceSheet(
+  locations: (LocationRow & { level: string; parentId: string | null })[],
+): TemplateReferenceSheet {
   const byId = new Map(locations.map((l) => [l.id, l]));
   const rows = locations
-    .map((l) => ({ path: locationBreadcrumbPath(l, byId), level: l.level }))
-    .sort((a, b) => a.path.localeCompare(b.path));
+    .map((l) => ({
+      name: l.name,
+      country: l.parentId ? (byId.get(l.parentId)?.name ?? '') : '',
+      level: l.level,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
   return {
     title: 'Locations',
     columns: [
-      { header: 'Location Path', key: 'path' },
+      { header: 'Location', key: 'name' },
+      { header: 'Country', key: 'country' },
       { header: 'Level', key: 'level' },
     ],
     rows,

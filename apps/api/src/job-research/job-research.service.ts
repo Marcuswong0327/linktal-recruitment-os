@@ -13,7 +13,6 @@ import { ExportJobResearchDto } from './dto/export-job-research.dto';
 import { buildWorkbook, formatExportDate, resolveTimeZone, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
 import { clientStatusLabels } from '../common/export-labels';
-import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
 
 /** The subset of QueryJobResearchDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination but still satisfies this structurally. */
 type JobResearchFilterFields = Pick<
@@ -255,22 +254,20 @@ export class JobResearchService {
   }
 
   /**
-   * Resolves each row's consultant to their displayId and location to a full
-   * breadcrumb path — the exact format JOB_RESEARCH_IMPORT_COLUMNS
+   * Resolves each row's consultant to their displayId and location to its
+   * (now globally unique) name — the exact format JOB_RESEARCH_IMPORT_COLUMNS
    * (job-research-import.service.ts) expects for Consultant Display ID /
    * Location, so an exported sheet actually re-imports. Neither survives
    * `toEntity` in that shape — same pattern as ClientsService's
    * `locationPaths`/StakeholdersService's `withExportExtras`.
    */
-  private async withExportExtras<T extends JobResearchWithRelations>(
+  private withExportExtras<T extends JobResearchWithRelations>(
     research: T[],
-  ): Promise<(T & { consultantDisplayId: string | null; locationPath: string | null })[]> {
-    const allLocations = await this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true } });
-    const byId = buildLocationById(allLocations);
+  ): (T & { consultantDisplayId: string | null; locationPath: string | null })[] {
     return research.map((r) => ({
       ...r,
       consultantDisplayId: r.consultant?.displayId ?? null,
-      locationPath: r.location ? locationBreadcrumbPath(r.location, byId) : null,
+      locationPath: r.location?.name ?? null,
     }));
   }
 

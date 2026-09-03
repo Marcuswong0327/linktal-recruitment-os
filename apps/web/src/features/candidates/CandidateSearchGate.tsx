@@ -12,6 +12,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
+import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@/lib/api/generated/industries/industries';
 import {
   getGetJobRoleTypesQueryKey,
@@ -24,7 +25,6 @@ import {
   useGetCandidateJobRoleTypeFacets,
 } from '@/lib/api/generated/candidates/candidates';
 import type { GetCandidatesParams } from '@/lib/api/generated/types';
-import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { RoleTypeFilter } from './RoleTypeFilter';
 import { buildCandidatePayload, CandidateForm, type CandidateFormValues } from './CandidateForm';
 import { CandidatesTable } from './CandidatesTable';
@@ -297,15 +297,15 @@ export function CandidateSearchGate({
               industryIds={industryIds}
             />
           </FilterField>
-          <FilterField label="City">
+          <FilterField label="City Coverage">
             <LocationFilterButton
               selected={cityIds}
               onChange={setCityIds}
-              level="CITY"
+              level="CITY_COVERAGE"
               underId={countryIds.length === 1 ? countryIds[0] : undefined}
               compact={false}
-              placeholder="All cities"
-              title="City"
+              placeholder="All City Coverage"
+              title="City Coverage"
               labelFor={(id) => cityNames[id] ?? id}
               onResolve={registerCityName}
             />

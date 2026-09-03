@@ -224,11 +224,23 @@ function DataGridNewRowCells<TData>({
   onEditorBlur: (columnId: string) => void;
 }) {
   const columns = table.getVisibleLeafColumns();
+  // Tracked locally (not lifted to DataGrid) purely to show/hide the "Press
+  // Enter to add" hint below — true the moment any cell in this row gets
+  // focus, false once focus leaves the row entirely (not just one cell to
+  // its neighbour, hence the `contains(relatedTarget)` check, same pattern
+  // as each cell's own onBlur below).
+  const [isActive, setIsActive] = React.useState(false);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === 'Escape') {
       e.preventDefault();
       newRow.onReset();
+      // Clearing the draft alone leaves focus (and whatever it triggered —
+      // a widened column, the "Press Enter to add" hint) sitting in the row
+      // exactly as before, so a second Escape has nothing left to do. Blur
+      // the focused editor too, so Escape genuinely returns the row to its
+      // at-rest state, not just an empty one.
+      (e.target as HTMLElement | null)?.blur();
       return;
     }
     if (e.key !== 'Enter') return;
@@ -266,6 +278,7 @@ function DataGridNewRowCells<TData>({
   const firstEditorColumnId = columns.find((c) => newRow.editors[c.id])?.id;
 
   return (
+    <>
     <TableRow
       // No hover tint and no fill of its own — an empty row, not a form.
       className="hover:bg-transparent"
@@ -281,6 +294,12 @@ function DataGridNewRowCells<TData>({
       // selected while the user is typing in here.
       data-no-row-drag
       onContextMenu={(e) => e.stopPropagation()}
+      onFocus={() => setIsActive(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+          setIsActive(false);
+        }
+      }}
     >
       {columns.map((column) => {
         const editor = newRow.editors[column.id];
@@ -353,6 +372,23 @@ function DataGridNewRowCells<TData>({
         );
       })}
     </TableRow>
+    {isActive ? (
+      // Purely a discoverability hint — the row itself has no visible chrome
+      // at rest (see above), so without this the Enter/Shift+Enter/Escape
+      // gestures that actually commit or cancel it are undiscoverable.
+      // aria-hidden: screen readers already get "New row" from the row's own
+      // aria-label plus each editor's own label; this is a sighted-only cue.
+      <TableRow className="hover:bg-transparent" style={isVirtual ? { display: 'flex', width: '100%' } : undefined} aria-hidden>
+        <TableCell
+          colSpan={columns.length}
+          className="py-0.5 text-center text-[11px] text-muted-foreground"
+          style={isVirtual ? { display: 'flex', width: '100%', justifyContent: 'center' } : undefined}
+        >
+          Press Enter to add · Esc to cancel
+        </TableCell>
+      </TableRow>
+    ) : null}
+    </>
   );
 }
 

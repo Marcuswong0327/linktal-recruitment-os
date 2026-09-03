@@ -11,22 +11,14 @@ export interface LocationEntity {
   id: string;
   name: string;
   level: LocationEntityLevel;
-  /**
-     * Only ever set at SUBURB level
-     * @nullable
-     */
-  postcode: string | null;
-  /**
-     * GeoNames id — what makes the bulk load idempotent and re-runnable
-     * @nullable
-     */
-  geonameId: number | null;
+  /** Part of the approved 13-row catalog — cannot be renamed, reparented or deleted by anyone */
+  isProtected: boolean;
   /**
      * null at COUNTRY level
      * @nullable
      */
   parentId: string | null;
-  /** Self plus every ancestor, root-last */
+  /** Self plus parent, root-last */
   ancestorIds: string[];
   createdAt: string;
   updatedAt: string;

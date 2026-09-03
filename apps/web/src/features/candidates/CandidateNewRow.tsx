@@ -169,6 +169,7 @@ export function useCandidateNewRow({
         onQueryChange={roleTypeSearch.onQueryChange}
         onCreate={onCreateJobRoleType}
         disabled={disabled || isSaving}
+        placeholder="Role type"
       />
     ),
     // The Specialization column hosts Industry for this row: industry is what
@@ -183,11 +184,12 @@ export function useCandidateNewRow({
         placeholder="Industry"
       />
     ),
-    suburbAndPostcode: (
+    cityCoverage: (
       <GridCellLocationCombobox
         value={draft.locationId}
         onValueChange={(id) => set('locationId', id)}
         disabled={disabled || isSaving}
+        placeholder="City Coverage"
       />
     ),
     firstName: (
@@ -196,6 +198,7 @@ export function useCandidateNewRow({
         onChange={(e) => set('firstName', e.target.value)}
         disabled={disabled || isSaving}
         aria-label="First name"
+        placeholder="First name"
       />
     ),
     lastName: (
@@ -204,6 +207,7 @@ export function useCandidateNewRow({
         onChange={(e) => set('lastName', e.target.value)}
         disabled={disabled || isSaving}
         aria-label="Last name"
+        placeholder="Last name"
       />
     ),
     contact: (
@@ -222,6 +226,7 @@ export function useCandidateNewRow({
         onChange={(e) => set('notes', e.target.value)}
         disabled={disabled || isSaving}
         aria-label="Notes"
+        placeholder="Notes"
       />
     ),
     currentSalary: (
@@ -230,6 +235,7 @@ export function useCandidateNewRow({
         onChange={(e) => set('currentSalary', e.target.value)}
         disabled={disabled || isSaving}
         aria-label="Current salary"
+        placeholder="Current salary"
       />
     ),
     expectedSalary: (
@@ -238,6 +244,7 @@ export function useCandidateNewRow({
         onChange={(e) => set('expectedSalary', e.target.value)}
         disabled={disabled || isSaving}
         aria-label="Expected salary"
+        placeholder="Expected salary"
       />
     ),
   };

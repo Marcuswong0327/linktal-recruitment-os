@@ -289,7 +289,7 @@ export function ConsultantsTable() {
         ? [
             {
               columnId: 'locations',
-              title: 'Locations',
+              title: 'City Coverage',
               inHeader: true,
               render: ({
                 selected,
@@ -373,7 +373,7 @@ export function ConsultantsTable() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetConsultantsQueryKey() });
-        toast.success('Locations updated');
+        toast.success('City Coverage updated');
       },
       onError: (err) => toast.error(err.message || 'Failed to update locations'),
     },

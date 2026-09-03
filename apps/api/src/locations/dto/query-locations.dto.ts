@@ -37,7 +37,7 @@ export class QueryLocationsDto {
   underId?: string;
 
   @ApiPropertyOptional({
-    description: 'Maximum rows to return. The tree is ~2k nodes today and grows, so reads are always capped.',
+    description: 'Maximum rows to return.',
     minimum: 1,
     maximum: 200,
     default: 50,

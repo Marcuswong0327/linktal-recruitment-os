@@ -28,7 +28,8 @@ import type {
   CreateLocationDto,
   ErrorResponse,
   GetLocationsParams,
-  LocationEntity
+  LocationEntity,
+  UpdateLocationDto
 } from '../types';
 
 import { customFetch } from '../../fetcher';
@@ -93,7 +94,7 @@ export const getGetLocationsUrl = (params?: GetLocationsParams,) => {
 }
 
 /**
- * @summary Search or browse the geography tree (capped; filterable by name, level, parent or subtree)
+ * @summary Search or browse the Country / City Coverage tree
  */
 export const getLocations = async (params?: GetLocationsParams, options?: RequestInit): Promise<getLocationsResponse> => {
 
@@ -164,7 +165,7 @@ export function useGetLocations<TData = Awaited<ReturnType<typeof getLocations>>
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
- * @summary Search or browse the geography tree (capped; filterable by name, level, parent or subtree)
+ * @summary Search or browse the Country / City Coverage tree
  */
 
 export function useGetLocations<TData = Awaited<ReturnType<typeof getLocations>>, TError = ErrorResponse>(
@@ -217,7 +218,7 @@ export const getCreateLocationUrl = () => {
 }
 
 /**
- * @summary Add a location node (admin only — the tree is normally bulk-loaded from GeoNames)
+ * @summary Add a country or City Coverage value (admin only)
  */
 export const createLocation = async (createLocationDto: CreateLocationDto, options?: RequestInit): Promise<createLocationResponse> => {
 
@@ -266,7 +267,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type CreateLocationMutationError = ErrorResponse
 
     /**
- * @summary Add a location node (admin only — the tree is normally bulk-loaded from GeoNames)
+ * @summary Add a country or City Coverage value (admin only)
  */
 export const useCreateLocation = <TError = ErrorResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createLocation>>, TError,{data: CreateLocationDto}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -407,3 +408,202 @@ export function useGetLocation<TData = Awaited<ReturnType<typeof getLocation>>, 
 
 
 
+export type updateLocationResponse200 = {
+  data: LocationEntity
+  status: 200
+}
+
+export type updateLocationResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type updateLocationResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type updateLocationResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type updateLocationResponseSuccess = (updateLocationResponse200) & {
+  headers: Headers;
+};
+export type updateLocationResponseError = (updateLocationResponse400 | updateLocationResponse404 | updateLocationResponse500) & {
+  headers: Headers;
+};
+
+export type updateLocationResponse = (updateLocationResponseSuccess | updateLocationResponseError)
+
+export const getUpdateLocationUrl = (id: string,) => {
+
+
+
+
+  return `/locations/${id}`
+}
+
+/**
+ * @summary Rename or reparent a location (admin only; the 13 seeded rows are protected)
+ */
+export const updateLocation = async (id: string,
+    updateLocationDto: UpdateLocationDto, options?: RequestInit): Promise<updateLocationResponse> => {
+
+  return customFetch<updateLocationResponse>(getUpdateLocationUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateLocationDto)
+  }
+);}
+
+
+
+
+
+export const getUpdateLocationMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLocation>>, TError,{id: string;data: UpdateLocationDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateLocation>>, TError,{id: string;data: UpdateLocationDto}, TContext> => {
+
+const mutationKey = ['updateLocation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateLocation>>, {id: string;data: UpdateLocationDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateLocation(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateLocationMutationResult = NonNullable<Awaited<ReturnType<typeof updateLocation>>>
+    export type UpdateLocationMutationBody = UpdateLocationDto
+    export type UpdateLocationMutationError = ErrorResponse
+
+    /**
+ * @summary Rename or reparent a location (admin only; the 13 seeded rows are protected)
+ */
+export const useUpdateLocation = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateLocation>>, TError,{id: string;data: UpdateLocationDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateLocation>>,
+        TError,
+        {id: string;data: UpdateLocationDto},
+        TContext
+      > => {
+      return useMutation(getUpdateLocationMutationOptions(options), queryClient);
+    }
+    export type deleteLocationResponse200 = {
+  data: void
+  status: 200
+}
+
+export type deleteLocationResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type deleteLocationResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type deleteLocationResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type deleteLocationResponseSuccess = (deleteLocationResponse200) & {
+  headers: Headers;
+};
+export type deleteLocationResponseError = (deleteLocationResponse400 | deleteLocationResponse404 | deleteLocationResponse500) & {
+  headers: Headers;
+};
+
+export type deleteLocationResponse = (deleteLocationResponseSuccess | deleteLocationResponseError)
+
+export const getDeleteLocationUrl = (id: string,) => {
+
+
+
+
+  return `/locations/${id}`
+}
+
+/**
+ * @summary Delete a location (admin only; blocked if protected, has children, or is still in use)
+ */
+export const deleteLocation = async (id: string, options?: RequestInit): Promise<deleteLocationResponse> => {
+
+  return customFetch<deleteLocationResponse>(getDeleteLocationUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteLocationMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLocation>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteLocation>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['deleteLocation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteLocation>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteLocation(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteLocationMutationResult = NonNullable<Awaited<ReturnType<typeof deleteLocation>>>
+
+    export type DeleteLocationMutationError = ErrorResponse
+
+    /**
+ * @summary Delete a location (admin only; blocked if protected, has children, or is still in use)
+ */
+export const useDeleteLocation = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteLocation>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteLocation>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getDeleteLocationMutationOptions(options), queryClient);
+    }

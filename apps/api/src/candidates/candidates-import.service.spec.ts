@@ -5,13 +5,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 
 const INDUSTRY = { id: 'ind1', name: 'Manufacturing' };
-const LOCATION = { id: 'loc-syd', name: 'Sydney', ancestorIds: ['loc-syd', 'loc-nsw', 'loc-au'] };
+const LOCATION = { id: 'loc-syd', name: 'Sydney NSW', ancestorIds: ['loc-syd', 'loc-au'] };
 const LOCATION_ANCESTORS = [
   { id: 'loc-au', name: 'Australia', ancestorIds: ['loc-au'] },
-  { id: 'loc-nsw', name: 'New South Wales', ancestorIds: ['loc-nsw', 'loc-au'] },
   LOCATION,
 ];
-const LOCATION_PATH = 'Australia > New South Wales > Sydney';
+const LOCATION_PATH = 'Sydney NSW';
 const EXISTING_CANDIDATE = { id: 'cand1', displayId: 'CDD-000001' };
 
 async function makeCandidateWorkbook(rows: Record<string, string>[]): Promise<Buffer> {

@@ -50,9 +50,9 @@ export const CLIENT_IMPORT_COLUMNS: ImportColumn[] = [
 
 const CLIENT_IMPORT_INSTRUCTIONS = [
   'Industry and Specialization must exactly match an existing name in this system (case-insensitive). An unmatched value is rejected, never guessed or auto-created.',
-  'Locations: semicolon-separated breadcrumb paths, e.g. "Australia > New South Wales > Sydney; Australia > Victoria > Melbourne". At least one is required.',
+  'Locations: semicolon-separated Country and/or City Coverage values from the Locations sheet, e.g. "Australia; Sydney NSW". At least one is required.',
   'Status: COLD, WARM, or TRADED. Quality: LOW, MEDIUM, or HIGH.',
-  'Not included in this template — edit these from the Company page instead: Addresses, Suburbs & Postcodes.',
+  'Not included in this template — edit these from the Company page instead: Addresses.',
 ];
 
 type ClientRowPlan =
@@ -101,7 +101,7 @@ export class ClientsImportService {
         where: { isActive: true },
         select: { name: true, industry: { select: { name: true } } },
       }),
-      this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true, level: true } }),
+      this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true, level: true, parentId: true } }),
     ]);
     return buildTemplateWorkbook('Companies', CLIENT_IMPORT_COLUMNS, CLIENT_IMPORT_INSTRUCTIONS, [
       buildNameReferenceSheet('Industries', industries),

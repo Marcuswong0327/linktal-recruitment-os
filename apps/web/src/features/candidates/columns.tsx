@@ -41,33 +41,21 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     cell: ({ row }) => <LocationBadgeList locations={row.original.specializations} />,
   },
   {
-    id: 'suburbAndPostcode',
-    header: 'Suburb & Postcode',
+    id: 'cityCoverage',
+    header: 'City Coverage',
     enableSorting: false,
     size: 150,
-    // Prefers the free-text suburbAndPostcode (e.g. "Merrylands 2160 NSW")
-    // once a candidate has one directly edited in; falls back to the
-    // resolved City-level `location` (the structured, required locationId)
-    // for the majority that don't yet — same precedence as currentSalary/
-    // expectedSalary's direct-edit-wins-over-derived pattern.
     cell: ({ row }) => {
-      const { suburbAndPostcode, location, locationLevel } = row.original;
-      if (suburbAndPostcode) {
-        return (
-          <span className="truncate text-muted-foreground" title={suburbAndPostcode}>
-            {suburbAndPostcode}
-          </span>
-        );
-      }
+      const { location, locationLevel } = row.original;
       if (!location) return <span className="text-muted-foreground">—</span>;
-      // A country/state-level record isn't wrong, just coarser than the norm
-      // (most of this dataset is known to CITY level) — flagged so it doesn't
-      // read as more precise than "Suburb & Postcode" implies.
-      const coarse = locationLevel === 'COUNTRY' || locationLevel === 'STATE';
+      // Most candidates are known to City Coverage level; a COUNTRY-level
+      // record means the city isn't known yet, not that it's wrong — flagged
+      // so it doesn't read as more precise than it is.
+      const coarse = locationLevel === 'COUNTRY';
       return (
         <span className="flex min-w-0 items-center gap-1 text-muted-foreground" title={location}>
           <span className="truncate">{location}</span>
-          {coarse ? <span className="shrink-0 text-[10px] uppercase opacity-70">{locationLevel}</span> : null}
+          {coarse ? <span className="shrink-0 text-[10px] uppercase opacity-70">Country only</span> : null}
         </span>
       );
     },

@@ -54,13 +54,6 @@ export class ClientEntity implements Omit<Client, 'deletedAt' | 'deletedById'> {
     description: "The client's own physical office address(es) — distinct from `locations`",
   })
   addresses!: Prisma.JsonValue;
-  @ApiProperty({
-    type: 'array',
-    items: { type: 'string' },
-    nullable: true,
-    description: "The client's own office suburb/postcode(s)",
-  })
-  suburbsAndPostcodes!: Prisma.JsonValue;
   @ApiProperty({ type: String, nullable: true }) website!: string | null;
   @ApiProperty({ type: String, nullable: true }) seekJobMarketUrl!: string | null;
   @ApiProperty({ type: String, nullable: true }) linkedinJobMarketUrl!: string | null;

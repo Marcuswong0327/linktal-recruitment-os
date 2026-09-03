@@ -125,6 +125,7 @@ export function useStakeholderNewRow({
         onChange={(e) => set('fullName', e.target.value)}
         disabled={disabled || isSaving}
         aria-label="Name"
+        placeholder="Name"
       />
     ),
     companyName: (
@@ -132,6 +133,7 @@ export function useStakeholderNewRow({
         value={draft.clientId}
         onValueChange={(id) => set('clientId', id)}
         disabled={disabled || isSaving}
+        placeholder="Company"
       />
     ),
     coverage: (
@@ -139,6 +141,7 @@ export function useStakeholderNewRow({
         selected={draft.coverage}
         onChange={(next) => set('coverage', next)}
         disabled={disabled || isSaving}
+        placeholder="City Coverage"
       />
     ),
     roleType: (
@@ -148,6 +151,7 @@ export function useStakeholderNewRow({
         options={roleTypes}
         onCreate={onCreateRoleType}
         disabled={disabled || isSaving}
+        placeholder="Role type"
       />
     ),
     jobTitle: (
@@ -159,6 +163,7 @@ export function useStakeholderNewRow({
         onQueryChange={jobTitleSearch.onQueryChange}
         onCreate={onCreateJobTitle}
         disabled={disabled || isSaving}
+        placeholder="Job title"
       />
     ),
     contact: (
@@ -174,6 +179,7 @@ export function useStakeholderNewRow({
         onValueChange={(v) => set('status', v)}
         options={stakeholderStatusOptions}
         disabled={disabled || isSaving}
+        placeholder="Status"
       />
     ),
   };

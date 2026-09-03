@@ -32,7 +32,7 @@ export const CANDIDATE_IMPORT_COLUMNS: ImportColumn[] = [
     header: 'Location',
     key: 'location',
     required: true,
-    dropdown: { kind: 'reference', sheetTitle: 'Locations', columnKey: 'path' },
+    dropdown: { kind: 'reference', sheetTitle: 'Locations', columnKey: 'name' },
   },
   {
     header: 'Industry',
@@ -59,7 +59,7 @@ export const CANDIDATE_IMPORT_COLUMNS: ImportColumn[] = [
 
 const CANDIDATE_IMPORT_INSTRUCTIONS = [
   'Location and Industry must exactly match an existing name in this system (case-insensitive) — an unmatched value is rejected, never guessed or auto-created.',
-  'Location: a single breadcrumb path, e.g. "Australia > New South Wales > Sydney".',
+  'Location: a single Country or City Coverage value from the Locations sheet, e.g. "Sydney NSW" or "Malaysia".',
   'Specializations: semicolon-separated, must exist under the row\'s own Industry — an unmatched value is rejected.',
   'Job Role Type is grown freely (same as typing a new one into the combobox in the app) — an unmatched value creates it rather than being rejected.',
   'Status: COLD, WARM, PLACED, or UNS.',
@@ -110,7 +110,7 @@ export class CandidatesImportService {
 
   async buildTemplate(): Promise<Buffer> {
     const [locations, industries, specializations, jobRoleTypes] = await Promise.all([
-      this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true, level: true } }),
+      this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true, level: true, parentId: true } }),
       this.base.industry.findMany({ where: { isActive: true }, select: { name: true } }),
       this.base.specialization.findMany({
         where: { isActive: true },

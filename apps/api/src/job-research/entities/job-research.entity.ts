@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ClientJobResearch, ClientStatus } from '@prisma/client';
+import { ClientJobResearch, ClientStatus, LocationLevel } from '@prisma/client';
 
 /**
  * OpenAPI response shape for a row of market research.
@@ -32,12 +32,8 @@ export class JobResearchEntity implements Omit<ClientJobResearch, 'deletedAt' | 
   @ApiProperty({ type: String, nullable: true }) locationId!: string | null;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved Location node name' })
   location!: string | null;
-  @ApiProperty({
-    type: String,
-    nullable: true,
-    description: 'Rung of the location node (COUNTRY/STATE/CITY/SUBURB)',
-  })
-  locationLevel!: string | null;
+  @ApiProperty({ enum: LocationLevel, nullable: true, description: 'Rung of the location node' })
+  locationLevel!: LocationLevel | null;
   @ApiProperty({ type: String, nullable: true }) jobTitleId!: string | null;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved job title — the advertiser’s own words' })
   jobTitle!: string | null;

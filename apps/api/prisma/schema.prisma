@@ -125,15 +125,13 @@ enum InterviewOutcome {
   CANCELLED
 }
 
-// Four rungs, all sourced from GeoNames (see the Location model) — no rung is
-// hand-invented. Linktal's own desk labels ("Brisbane GC QLD", "Klang Valley",
-// "East Malaysia") are NOT levels here: they're *groupings* of real nodes,
-// expressed as several rows in the relevant join table.
+// Two rungs: a country, and the broad market ("City Coverage") a consultant
+// is assigned within it — not a literal city/suburb, a business-defined patch
+// (e.g. "Brisbane GC QLD" covers both Brisbane and the Gold Coast). See the
+// Location model below for the full picture.
 enum LocationLevel {
   COUNTRY
-  STATE
-  CITY
-  SUBURB
+  CITY_COVERAGE
 }
 
 // ============================================================================
@@ -243,12 +241,13 @@ model Consultant {
 // granted node *plus every descendant*:
 //
 //   Industry ▸ Specialization ▸ (sub-specialization)      <- ConsultantIndustry / ConsultantSpecialization
-//   Country  ▸ State ▸ City ▸ Suburb                      <- ConsultantLocation
+//   Country  ▸ City Coverage                              <- ConsultantLocation
 //
 // Wildcard rule, applied per parent: if a consultant lists specific children
 // under a parent they hold, the grant narrows to those children; if they list
-// none, the whole parent is granted. So "Australia / [Sydney]" grants CITY
-// Sydney, while "Australia / []" grants COUNTRY Australia. Wildcards are
+// none, the whole parent is granted. So "Australia / [Sydney NSW]" grants the
+// Sydney NSW city coverage, while "Australia / []" grants the whole country.
+// Wildcards are
 // materialised into concrete grant rows at assignment/import time rather than
 // stored as an "unrestricted" flag, so every grant stays auditable — and so
 // that zero rows unambiguously means "not configured", never "sees everything".
@@ -301,11 +300,9 @@ model ConsultantSpecialization {
   @@index([specializationId])
 }
 
-// Many-to-many: which Location nodes a consultant is scoped to — at ANY level
-// (country, state, city, or suburb), same pattern as StakeholderLocation and
-// ClientLocation. This is where a Linktal desk label is expanded into real
-// nodes: "Brisbane GC QLD" becomes two CITY rows (Brisbane, Gold Coast),
-// "East Malaysia" becomes two STATE rows (Sabah, Sarawak).
+// Many-to-many: which Location nodes a consultant is scoped to — a country,
+// a city coverage under it, or both — same pattern as StakeholderLocation and
+// ClientLocation.
 model ConsultantLocation {
   consultantId String
   consultant   Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
@@ -320,38 +317,41 @@ model ConsultantLocation {
 // SHARED REFERENCE TABLES (Location, JobTitle, role types)
 // ============================================================================
 
-// A single hierarchical geography tree, bulk-loaded from GeoNames — countries,
-// admin1 (states/regions), cities5000, and postal places for suburbs. Nothing
-// in this table is hand-typed: `location:create` is admin-only (unlike
-// Industry/JobTitle, which are combobox-growable), because the scope resolver
-// reads this tree and a drifted node silently changes who can see what.
+// Geography, two rungs: a Country, and the "City Coverage" values under it —
+// broad, business-defined markets ("Brisbane GC QLD", "KL Selangor"), not
+// literal cities or suburbs. Referred to as "City Coverage" everywhere in the
+// UI; the table/column names stay as `Location`/`locationId` for the sake of
+// the six relations already built on them.
 //
-// Australia -> New South Wales -> Sydney -> Silverwater 2128 is a 4-node chain
-// (parentId self-relation); `level` says which rung a row sits on and
-// `postcode` is only ever set at SUBURB level.
+// The 13 seeded rows (2 countries + 11 city coverages) are the approved
+// catalog from the business and are marked `isProtected` — nobody, including
+// admin, can rename or delete them (enforced in LocationsService and by the
+// Prisma extension, so bulk operations and direct writes can't bypass it
+// either). Admin can add further countries or city coverages beyond the 13,
+// and can edit/delete the ones they added.
 //
-// Candidate/JobOrder/ClientJobResearch each point at their single most-specific
-// known node — a candidate known only to city level points at the CITY row, one
-// with a suburb points at the SUBURB row, whose parent chain still resolves back
-// up to city, state and country. Client, Stakeholder and Consultant instead
-// carry *sets* of nodes at mixed granularity (ClientLocation /
-// StakeholderLocation / ConsultantLocation), so "covers all of Malaysia" is one
-// COUNTRY row rather than every city underneath it. Matching one side against
-// the other is then just walking the specific node up its parent chain and
-// checking for a hit, whichever level either side happened to specify.
+// Candidate/JobOrder/ClientJobResearch each point at their single most
+// specific known node (a country if the city isn't known, otherwise the city
+// coverage). Client, Stakeholder and Consultant instead carry *sets* of nodes
+// (ClientLocation / StakeholderLocation / ConsultantLocation) which may mix
+// countries and city coverages, and may span both Australia and Malaysia on
+// one record — "covers all of Malaysia, with a focus on KL Selangor" is a
+// country row plus a city-coverage row, not a contradiction.
 model Location {
   id          String        @id @default(cuid())
-  name        String // "Australia" / "New South Wales" / "Sydney" / "Silverwater"
+  // Globally unique, not just per-parent — this is what lets every import/
+  // export column and the in-app pickers key off a bare name ("Sydney NSW")
+  // instead of a breadcrumb path. Matters once admin can add a second
+  // country: without this, two countries could each mint a same-named city
+  // coverage and bare-name matching would go ambiguous.
+  name        String        @unique // "Australia" / "Sydney NSW"
   level       LocationLevel
-  postcode    String? // only meaningful at SUBURB level
-  geonameId   Int?          @unique // GeoNames id — makes the bulk load idempotent and re-runnable
+  isProtected Boolean       @default(false) // seeded catalog row — immutable, see above
   parentId    String?
-  // Self plus every ancestor, root-last: Silverwater -> [silverwater, sydney,
-  // nsw, australia]. Denormalized so "is this record inside a granted node"
-  // is one indexed `hasSome` against the consultant's grant list, rather than
-  // a recursive CTE per query or a 1,500-element IN clause from expanding a
-  // COUNTRY grant downward. Maintained by the loader (this tree is
-  // bulk-written and admin-only, so it changes rarely).
+  // Self plus parent, root-last: Sydney NSW -> [sydneyNsw, australia]. A
+  // country's own ancestorIds is just itself. Denormalized so "is this record
+  // inside a granted node" is one indexed `hasSome` against the consultant's
+  // grant list, rather than joining through parentId per query.
   ancestorIds String[]
   parent      Location?     @relation("LocationTree", fields: [parentId], references: [id], onDelete: Restrict)
   children    Location[]    @relation("LocationTree")
@@ -365,7 +365,6 @@ model Location {
   stakeholders      StakeholderLocation[]
   consultants       ConsultantLocation[]
 
-  @@unique([parentId, name])
   @@index([level])
   @@index([parentId])
   @@index([ancestorIds], type: Gin)
@@ -501,7 +500,6 @@ model Client {
   locations ClientLocation[]
 
   addresses            Json? // "Address(es)" — the client's own physical office address(es), distinct from `locations` above. Array of strings.
-  suburbsAndPostcodes  Json? // "Suburb & Postcode (es)" — the client's own office suburb/postcode(s), same distinction as addresses. Array of strings.
   website              String?
   seekJobMarketUrl     String? // "Seek/Job Street Job Market URL"
   linkedinJobMarketUrl String? // "Linkedin Job Market URL"
@@ -745,14 +743,6 @@ model Candidate {
   location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
   industryId String
   industry   Industry @relation(fields: [industryId], references: [id], onDelete: Restrict)
-
-  // Free-text "Suburb & Postcode" (e.g. "Merrylands 2160 NSW") — deliberately
-  // separate from locationId above, not a replacement for it. Suburb-level
-  // Location rows (and postcodes) were never loaded from GeoNames — City is
-  // the finest grant the scope resolver actually has (see
-  // docs/scope-explained.md) — so this can't be a structured pick like
-  // locationId is. Purely descriptive; plays no part in scoping.
-  suburbAndPostcode String?
 
   specializations CandidateSpecialization[]
 
