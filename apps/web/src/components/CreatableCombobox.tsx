@@ -23,8 +23,13 @@ interface CreatableComboboxProps {
   onValueChange: (id: string) => void;
   /** Existing rows to search/pick from. */
   options: CreatableComboboxOption[];
-  /** Called for "Add <name>" — must persist it and return the created (or already-existing) row. */
-  onCreate: (name: string) => Promise<CreatableComboboxOption>;
+  /**
+   * Called for "Add <name>" — must persist it and return the created (or
+   * already-existing) row. Omit for a pick-only field, which hides the
+   * "Add <name>" affordance entirely (same contract as `GridCellCombobox`) —
+   * for a catalog the current user may search but not grow.
+   */
+  onCreate?: (name: string) => Promise<CreatableComboboxOption>;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -158,7 +163,7 @@ export function CreatableCombobox({
   // which is the duplicate-fragmenting this picker exists to prevent.
   const searchSettled = !serverSearched || (!isFetching && reportedQuery === trimmed);
   const items =
-    trimmed && !hasExactMatch && searchSettled
+    onCreate && trimmed && !hasExactMatch && searchSettled
       ? [...filtered.map((o) => o.id), CREATE_SENTINEL]
       : filtered.map((o) => o.id);
 
@@ -166,7 +171,7 @@ export function CreatableCombobox({
     if (itemId === null) return;
     if (itemId === CREATE_SENTINEL) {
       const name = trimmed;
-      if (!name) return;
+      if (!name || !onCreate) return;
       setCreating(true);
       try {
         const created = await onCreate(name);

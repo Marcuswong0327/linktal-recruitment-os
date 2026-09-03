@@ -12,6 +12,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
+import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { getGetClientsQueryKey } from '@/lib/api/generated/clients/clients';
 import { useGetIndustries } from '@/lib/api/generated/industries/industries';
 import {
@@ -140,6 +141,16 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
   }
 
   const [appliedFilters, setAppliedFilters] = React.useState<JobResearchAppliedFilters | null>(null);
+
+  useSeedFiltersFromScope({
+    setIndustryIds,
+    setSpecializationIds,
+    registerSpecializationName,
+    setCountryIds,
+    setCityIds,
+    registerCountryName,
+    registerCityName,
+  });
 
   const hasActiveFilters =
     countryIds.length > 0 ||

@@ -15,7 +15,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <TooltipProvider>
-      <CommandPaletteProvider permissions={permissions} isAdmin={isAdmin}>
+      <CommandPaletteProvider>
         <SidebarProvider>
           <AppSidebar
             user={{

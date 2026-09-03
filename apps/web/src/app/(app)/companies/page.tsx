@@ -15,6 +15,9 @@ export default async function CompaniesPage() {
           canCreate={hasPermission(session, 'client', 'create')}
           canUpdate={hasPermission(session, 'client', 'update')}
           canDelete={hasPermission(session, 'client', 'delete')}
+          // Gates the Specialization cell's "+ Create" — admin/manager always,
+          // and consultants once granted (docs/rbac-roles.md §"specialization").
+          canCreateSpecialization={hasPermission(session, 'specialization', 'create')}
         />
       ) : (
         <AccessDenied resource="companies" />

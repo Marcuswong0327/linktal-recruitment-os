@@ -21,17 +21,20 @@ import {
   ArrowDown,
   ArrowUp,
   ChevronLeft,
+  Info,
   ChevronRight,
   ChevronsUpDown,
   Loader2,
   Search,
   X,
 } from 'lucide-react';
+import { VscArrowRight } from 'react-icons/vsc';
 
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -270,6 +273,10 @@ function DataGridNewRowCells<TData>({
     commit();
   }
 
+  // The first column carrying an editor — not simply the first column, which
+  // is the selection checkbox on most grids and has nothing to enter.
+  const firstEditorColumnId = columns.find((c) => newRow.editors[c.id])?.id;
+
   return (
     <>
     <TableRow
@@ -296,6 +303,11 @@ function DataGridNewRowCells<TData>({
     >
       {columns.map((column) => {
         const editor = newRow.editors[column.id];
+        // An empty row reads as a gap in the table, not as "type here". The
+        // arrow sits directly against the first field you can actually type
+        // in — the checkbox gutter to its left is too detached from the input
+        // to point at anything.
+        const showEntryHint = column.id === firstEditorColumnId;
         return (
           <TableCell
             key={column.id}
@@ -321,7 +333,41 @@ function DataGridNewRowCells<TData>({
               }
             }}
           >
-            {editor ?? null}
+            {showEntryHint ? (
+              <div className="flex items-center gap-1.5">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button
+                        type="button"
+                        // Out of the tab order deliberately: Tab walks across
+                        // this row's cells, and a stop on a hint button would
+                        // interrupt the entry flow it exists to explain.
+                        tabIndex={-1}
+                        // Keeps the caret in whichever editor the user is in —
+                        // clicking the hint shouldn't end their typing.
+                        onMouseDown={(e) => e.preventDefault()}
+                        aria-label="How to save this row"
+                        className="text-muted-foreground/40 hover:text-muted-foreground"
+                      >
+                        <Info className="size-3.5" />
+                      </button>
+                    }
+                  />
+                  <TooltipContent>
+                    Press Enter to save this row. If a dropdown is open, Enter picks from it —
+                    use Shift+Enter to save from anywhere. Escape clears the row.
+                  </TooltipContent>
+                </Tooltip>
+                <VscArrowRight
+                  aria-hidden
+                  className="size-4 shrink-0 text-muted-foreground/50"
+                />
+                <div className="min-w-0 flex-1">{editor}</div>
+              </div>
+            ) : (
+              (editor ?? null)
+            )}
           </TableCell>
         );
       })}

@@ -12,6 +12,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
+import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@/lib/api/generated/industries/industries';
 import {
   getGetJobRoleTypesQueryKey,
@@ -197,6 +198,16 @@ export function CandidateSearchGate({
     (id: string) => jobRoleTypeFacets.find((f) => f.id === id)?.name ?? roleTypes.find((r) => r.id === id)?.name ?? id,
     [jobRoleTypeFacets, roleTypes],
   );
+
+  useSeedFiltersFromScope({
+    setIndustryIds,
+    setSpecializationIds,
+    registerSpecializationName,
+    setCountryIds,
+    setCityIds,
+    registerCountryName,
+    registerCityName,
+  });
 
   const hasActiveFilters =
     countryIds.length > 0 ||

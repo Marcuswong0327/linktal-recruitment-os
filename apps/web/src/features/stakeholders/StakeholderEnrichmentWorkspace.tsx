@@ -13,6 +13,7 @@ import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
 import { downloadFile } from '@/lib/api/fetcher';
 import {
   getExportStakeholdersByIdsUrl,
+  getGetStakeholdersForEnrichmentQueryKey,
   getGetStakeholdersQueryKey,
   useGetStakeholdersForEnrichment,
   useUpdateStakeholder,
@@ -82,7 +83,15 @@ export function StakeholderEnrichmentWorkspace({
 
   const updateStakeholderMutation = useUpdateStakeholder({
     mutation: {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() }),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
+        // The grid renders /stakeholders/enrichment, a different key that
+        // `/stakeholders` does not prefix-match — without this the edited cell
+        // keeps its old value (behind a success toast) until a manual refresh.
+        queryClient.invalidateQueries({
+          queryKey: getGetStakeholdersForEnrichmentQueryKey(),
+        });
+      },
       onError: (err) => toast.error(err.message || 'Failed to update stakeholder'),
     },
   });
@@ -159,7 +168,7 @@ export function StakeholderEnrichmentWorkspace({
           variant="ghost"
           size="sm"
           nativeButton={false}
-          render={<Link href="/companies" />}
+          render={<Link href="/companies?restore=1" />}
           className="-ml-2 self-start text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft />
