@@ -13,7 +13,6 @@ import { ExportClientsDto } from './dto/export-clients.dto';
 import { buildWorkbook, formatExportDate, resolveTimeZone, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
 import { clientStatusLabels, clientQualityLabels } from '../common/export-labels';
-import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
 
 /** The subset of QueryClientsDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination/sort but still satisfies this structurally. */
 type ClientFilterFields = Pick<
@@ -101,13 +100,10 @@ type ClientWithRelations = {
  * this — it doesn't touch `this`, so hoisting is a pure, zero-risk move.
  */
 export function toPrismaData<T extends CreateClientDto | UpdateClientDto>(dto: T) {
-  const { locationIds: _locationIds, addresses, suburbsAndPostcodes, ...rest } = dto;
+  const { locationIds: _locationIds, addresses, ...rest } = dto;
   return {
     ...rest,
     ...(addresses !== undefined ? { addresses: addresses as Prisma.InputJsonValue } : {}),
-    ...(suburbsAndPostcodes !== undefined
-      ? { suburbsAndPostcodes: suburbsAndPostcodes as Prisma.InputJsonValue }
-      : {}),
   };
 }
 
@@ -327,21 +323,17 @@ export class ClientsService {
   }
 
   /**
-   * Resolves each client's locations to full breadcrumb paths ("Australia >
-   * New South Wales > Sydney") — the exact format the Locations import
-   * column expects (see xlsx-import.ts's `locationBreadcrumbPath`), so a
-   * client exported and re-uploaded actually round-trips instead of failing
-   * to resolve every location beneath the country level. `toEntity` strips
+   * Resolves each client's locations to their (now globally unique) names —
+   * the exact strings the Locations import column expects, so a client
+   * exported and re-uploaded actually round-trips. `toEntity` strips
    * `ancestorIds` before returning (it's scope-check-only, never part of the
    * API response), so this has to run on the raw Prisma rows first and be
    * merged in as a field `toEntity`'s return type doesn't otherwise carry.
    */
-  private async withLocationPaths<T extends ClientWithRelations>(clients: T[]): Promise<(T & { locationPaths: string[] })[]> {
-    const allLocations = await this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true } });
-    const byId = buildLocationById(allLocations);
+  private withLocationPaths<T extends ClientWithRelations>(clients: T[]): (T & { locationPaths: string[] })[] {
     return clients.map((c) => ({
       ...c,
-      locationPaths: c.locations.map((l) => locationBreadcrumbPath(l.location, byId)),
+      locationPaths: c.locations.map((l) => l.location.name),
     }));
   }
 

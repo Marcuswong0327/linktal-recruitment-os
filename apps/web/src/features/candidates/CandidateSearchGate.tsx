@@ -24,7 +24,6 @@ import {
   useGetCandidateJobRoleTypeFacets,
 } from '@/lib/api/generated/candidates/candidates';
 import type { GetCandidatesParams } from '@/lib/api/generated/types';
-import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { RoleTypeFilter } from './RoleTypeFilter';
 import { buildCandidatePayload, CandidateForm, type CandidateFormValues } from './CandidateForm';
 import { CandidatesTable } from './CandidatesTable';
@@ -199,16 +198,6 @@ export function CandidateSearchGate({
     [jobRoleTypeFacets, roleTypes],
   );
 
-  useSeedFiltersFromScope({
-    setIndustryIds,
-    setSpecializationIds,
-    registerSpecializationName,
-    setCountryIds,
-    setCityIds,
-    registerCountryName,
-    registerCityName,
-  });
-
   const hasActiveFilters =
     countryIds.length > 0 ||
     cityIds.length > 0 ||
@@ -297,15 +286,15 @@ export function CandidateSearchGate({
               industryIds={industryIds}
             />
           </FilterField>
-          <FilterField label="City">
+          <FilterField label="City Coverage">
             <LocationFilterButton
               selected={cityIds}
               onChange={setCityIds}
-              level="CITY"
+              level="CITY_COVERAGE"
               underId={countryIds.length === 1 ? countryIds[0] : undefined}
               compact={false}
-              placeholder="All cities"
-              title="City"
+              placeholder="All City Coverage"
+              title="City Coverage"
               labelFor={(id) => cityNames[id] ?? id}
               onResolve={registerCityName}
             />

@@ -43,7 +43,7 @@ export function ProfileSummaryCard({
         <Separator orientation="vertical" />
         <ProfileField icon={Tag} label="Specialization" value={joinScopeNames(consultant?.specializations)} />
         <Separator orientation="vertical" />
-        <ProfileField icon={MapPin} label="Locations" value={joinScopeNames(consultant?.locations)} />
+        <ProfileField icon={MapPin} label="City Coverage" value={joinScopeNames(consultant?.locations)} />
       </CardContent>
     </Card>
   );

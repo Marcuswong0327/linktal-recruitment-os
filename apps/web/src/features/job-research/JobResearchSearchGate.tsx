@@ -19,7 +19,6 @@ import {
   useCreateJobResearch,
 } from '@/lib/api/generated/job-research/job-research';
 import { getGetJobTitlesQueryKey, useCreateJobTitle } from '@/lib/api/generated/job-titles/job-titles';
-import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { buildJobResearchPayload, JobResearchForm, type JobResearchFormValues } from './JobResearchForm';
 import { JobResearchTable } from './JobResearchTable';
 import {
@@ -142,16 +141,6 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
 
   const [appliedFilters, setAppliedFilters] = React.useState<JobResearchAppliedFilters | null>(null);
 
-  useSeedFiltersFromScope({
-    setIndustryIds,
-    setSpecializationIds,
-    registerSpecializationName,
-    setCountryIds,
-    setCityIds,
-    registerCountryName,
-    registerCityName,
-  });
-
   const hasActiveFilters =
     countryIds.length > 0 ||
     cityIds.length > 0 ||
@@ -235,15 +224,15 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
               industryIds={industryIds}
             />
           </FilterField>
-          <FilterField label="City">
+          <FilterField label="City Coverage">
             <LocationFilterButton
               selected={cityIds}
               onChange={setCityIds}
-              level="CITY"
+              level="CITY_COVERAGE"
               underId={countryIds.length === 1 ? countryIds[0] : undefined}
               compact={false}
-              placeholder="All cities"
-              title="City"
+              placeholder="All City Coverage"
+              title="City Coverage"
               labelFor={(id) => cityNames[id] ?? id}
               onResolve={registerCityName}
             />

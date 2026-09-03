@@ -116,6 +116,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
           message: 'Record not found',
           details: null,
         };
+      case 'P2003': // foreign key constraint violation — e.g. deleting a still-referenced row
+        return {
+          status: HttpStatus.CONFLICT,
+          code: 'CONFLICT',
+          message: 'This record is still referenced by other data and cannot be deleted',
+          details: null,
+        };
       default:
         return {
           status: HttpStatus.INTERNAL_SERVER_ERROR,

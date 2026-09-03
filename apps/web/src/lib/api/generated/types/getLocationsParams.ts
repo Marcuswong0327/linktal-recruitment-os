@@ -25,7 +25,7 @@ parentId?: string;
  */
 underId?: string;
 /**
- * Maximum rows to return. The tree is ~2k nodes today and grows, so reads are always capped.
+ * Maximum rows to return.
  * @minimum 1
  * @maximum 200
  */

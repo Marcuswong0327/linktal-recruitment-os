@@ -83,18 +83,6 @@ export class CreateCandidateDto {
   @IsString()
   industryId!: string;
 
-  // Free text, not a structured pick like locationId — suburb-level Location
-  // rows and postcodes were never loaded, so there's nothing to search
-  // against. Purely descriptive; plays no part in scoping.
-  @ApiPropertyOptional({
-    description: 'Free-text suburb and postcode, e.g. "Merrylands 2160 NSW" — not tied to the Location tree',
-    example: 'Merrylands 2160 NSW',
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  suburbAndPostcode?: string;
-
   @ApiPropertyOptional({ description: 'Job role type ID (see /job-role-types)' })
   @IsOptional()
   @IsString()

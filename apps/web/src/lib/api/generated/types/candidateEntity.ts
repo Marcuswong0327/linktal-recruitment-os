@@ -35,11 +35,6 @@ export interface CandidateEntity {
      * @nullable
      */
   locationLevel: CandidateEntityLocationLevel;
-  /**
-     * Free-text suburb and postcode, e.g. "Merrylands 2160 NSW" — not tied to the Location tree (suburb-level rows and postcodes were never loaded) and plays no part in scoping.
-     * @nullable
-     */
-  suburbAndPostcode: string | null;
   /** Required — the industry arm of the scope resolver relies on it */
   industryId: string;
   /**

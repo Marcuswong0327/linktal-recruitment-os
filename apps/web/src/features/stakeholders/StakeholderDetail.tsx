@@ -744,9 +744,9 @@ function StakeholderEditForm({
                 />
               </FormField>
               <FormField
-                label="Coverage"
+                label="City Coverage"
                 htmlFor="coverage"
-                description="Which places this contact covers. A broader pick (a whole state or country) automatically covers everywhere inside it."
+                description="Which places this contact covers. A country pick automatically covers every City Coverage value inside it."
                 orientation="horizontal"
               >
                 <LocationMultiSelect

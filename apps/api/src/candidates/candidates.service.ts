@@ -22,7 +22,6 @@ import { ExportCandidatesDto } from './dto/export-candidates.dto';
 import { UpdateCandidateContactHistoryDto } from './dto/update-candidate-contact-history.dto';
 import { buildWorkbook, resolveTimeZone, splitContactDateTime, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
-import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
 import { searchTokens } from '../common/search-tokens';
 
 /** The subset of QueryCandidatesDto that `buildWhere` actually reads — shared with QueryCandidateFacetsDto, which omits pagination/sort/jobRoleTypeIds but still satisfies this structurally. */
@@ -418,20 +417,18 @@ export class CandidatesService {
   }
 
   /**
-   * Resolves each candidate's location to a full breadcrumb path — the exact
-   * format CANDIDATE_IMPORT_COLUMNS (candidates-import.service.ts) expects
-   * for its required Location column, so an exported sheet actually
+   * Resolves each candidate's location to its (now globally unique) name —
+   * the exact string CANDIDATE_IMPORT_COLUMNS (candidates-import.service.ts)
+   * expects for its required Location column, so an exported sheet actually
    * re-imports. Not something `toEntity` produces (it strips `ancestorIds`
    * before returning) — same pattern as ClientsService's `locationPaths`.
    */
-  private async withLocationPath<T extends CandidateWithRelations>(
+  private withLocationPath<T extends CandidateWithRelations>(
     candidates: T[],
-  ): Promise<(T & { locationPath: string | null })[]> {
-    const allLocations = await this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true } });
-    const byId = buildLocationById(allLocations);
+  ): (T & { locationPath: string | null })[] {
     return candidates.map((c) => ({
       ...c,
-      locationPath: c.location ? locationBreadcrumbPath(c.location, byId) : null,
+      locationPath: c.location?.name ?? null,
     }));
   }
 

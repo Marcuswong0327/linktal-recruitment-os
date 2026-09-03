@@ -5,21 +5,15 @@ import { Globe } from 'lucide-react';
 import Link from 'next/link';
 
 import { SeekIcon } from '@/components/BrandIcons';
-import { cityLabel, formatDate, suburbLabel, type JobResearch } from './schema';
+import { cityCoverageLabel, formatDate, type JobResearch } from './schema';
 
 export function getJobResearchColumns(): ColumnDef<JobResearch>[] {
   return [
     {
-      id: 'city',
+      id: 'cityCoverage',
       enableSorting: false,
-      header: 'City',
-      cell: ({ row }) => <span>{cityLabel(row.original)}</span>,
-    },
-    {
-      id: 'suburb',
-      enableSorting: false,
-      header: 'Suburb',
-      cell: ({ row }) => <span>{suburbLabel(row.original)}</span>,
+      header: 'City Coverage',
+      cell: ({ row }) => <span>{cityCoverageLabel(row.original)}</span>,
     },
     {
       accessorKey: 'jobTitle',

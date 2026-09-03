@@ -64,7 +64,7 @@ export function getCompanyColumns({
     },
     {
       id: 'locations',
-      header: 'Market',
+      header: 'City Coverage',
       enableSorting: false,
       cell: ({ row }) => <LocationBadgeList locations={row.original.locations} />,
     },

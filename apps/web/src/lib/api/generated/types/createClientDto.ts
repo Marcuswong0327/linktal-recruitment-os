@@ -19,8 +19,6 @@ export interface CreateClientDto {
   locationIds: string[];
   /** The client's own physical office address(es) — distinct from `locationIds` above */
   addresses?: string[];
-  /** The client's own office suburb/postcode(s) — same distinction as `addresses` */
-  suburbsAndPostcodes?: string[];
   /** Website URL */
   website?: string;
   /** Seek / Job Street job market URL */

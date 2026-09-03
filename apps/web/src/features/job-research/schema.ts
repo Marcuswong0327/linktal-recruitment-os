@@ -44,18 +44,9 @@ export function formatDate(iso: string | null): string {
   return iso ? dateFormatter.format(new Date(iso)) : '—';
 }
 
-/**
- * A research row carries one resolved Location node (whichever rung is
- * known — see the entity's own doc), not separate city/suburb columns. Only
- * a CITY or SUBURB node maps onto one of these two table columns; a
- * STATE/COUNTRY-level node (or none at all) shows as "—" in both, same as a
- * SUBURB node's own city would (the ad's ancestor chain isn't resolved here).
- */
-export function cityLabel(row: Pick<JobResearch, 'location' | 'locationLevel'>): string {
-  return row.locationLevel === 'CITY' ? (row.location ?? '—') : '—';
-}
-export function suburbLabel(row: Pick<JobResearch, 'location' | 'locationLevel'>): string {
-  return row.locationLevel === 'SUBURB' ? (row.location ?? '—') : '—';
+/** A research row carries one resolved Location node — a Country or City Coverage value, or none. */
+export function cityCoverageLabel(row: Pick<JobResearch, 'location'>): string {
+  return row.location ?? '—';
 }
 
 /** Filters committed from the search gate's action bar — the table has no filter UI of its own; this is its entire query beyond pagination. */

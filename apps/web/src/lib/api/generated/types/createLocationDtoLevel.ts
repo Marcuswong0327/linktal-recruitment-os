@@ -7,14 +7,12 @@
  */
 
 /**
- * Which rung this node sits on
+ * COUNTRY, or CITY_COVERAGE under an existing country
  */
 export type CreateLocationDtoLevel = typeof CreateLocationDtoLevel[keyof typeof CreateLocationDtoLevel];
 
 
 export const CreateLocationDtoLevel = {
   COUNTRY: 'COUNTRY',
-  STATE: 'STATE',
-  CITY: 'CITY',
-  SUBURB: 'SUBURB',
+  CITY_COVERAGE: 'CITY_COVERAGE',
 } as const;

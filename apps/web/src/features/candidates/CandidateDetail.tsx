@@ -331,7 +331,6 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
       seekTalentUrl: candidate.seekTalentUrl ?? '',
       currentSalary: candidate.currentSalary ?? '',
       expectedSalary: candidate.expectedSalary ?? '',
-      suburbAndPostcode: candidate.suburbAndPostcode ?? '',
     },
   });
 
@@ -1174,34 +1173,17 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
               <Separator />
 
               <FormField
-                label="City"
+                label="City Coverage"
                 htmlFor="location"
                 orientation="horizontal"
-                tooltip="Coarsest location the scope resolver has for this candidate — suburb-level data isn't loaded yet, see Suburb & Postcode below for the free-text version."
+                tooltip="The candidate's country or, when known, a specific City Coverage value — what the scope resolver reads for this candidate."
                 changeState={fieldChangeState('location', locationChanged)}
               >
                 <LocationCombobox
                   id="location"
                   value={location}
                   onChange={setLocation}
-                  placeholder="Search for a city…"
-                />
-              </FormField>
-
-              <FormField
-                label="Suburb & Postcode"
-                htmlFor="suburbAndPostcode"
-                orientation="horizontal"
-                tooltip='Free text — not searched or scoped, e.g. "Merrylands 2160 NSW".'
-                changeState={fieldChangeState(
-                  'suburbAndPostcode',
-                  !!formState.dirtyFields.suburbAndPostcode,
-                )}
-              >
-                <Input
-                  id="suburbAndPostcode"
-                  placeholder="e.g. Merrylands 2160 NSW"
-                  {...register('suburbAndPostcode')}
+                  placeholder="Search for a country or City Coverage…"
                 />
               </FormField>
 

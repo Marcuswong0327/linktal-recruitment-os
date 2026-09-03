@@ -103,6 +103,7 @@ export function useJobOrderNewRow({
         onValueChange={(v) => set('status', v)}
         options={statusOptions}
         disabled={disabled || isSaving}
+        placeholder="Status"
       />
     ),
     quality: (
@@ -111,6 +112,7 @@ export function useJobOrderNewRow({
         onValueChange={(v) => set('quality', v)}
         options={qualityOptions}
         disabled={disabled || isSaving}
+        placeholder="Quality"
       />
     ),
     priorityLevel: (
@@ -119,6 +121,7 @@ export function useJobOrderNewRow({
         onValueChange={(v) => set('priorityLevel', v)}
         options={priorityOptions}
         disabled={disabled || isSaving}
+        placeholder="Priority"
       />
     ),
     clientId: (
@@ -126,6 +129,7 @@ export function useJobOrderNewRow({
         value={draft.clientId}
         onValueChange={(id) => set('clientId', id)}
         disabled={disabled || isSaving}
+        placeholder="Client"
       />
     ),
     jobTitle: (
@@ -137,6 +141,7 @@ export function useJobOrderNewRow({
         onQueryChange={jobTitleSearch.onQueryChange}
         onCreate={onCreateJobTitle}
         disabled={disabled || isSaving}
+        placeholder="Role"
       />
     ),
     consultants: (
@@ -145,6 +150,7 @@ export function useJobOrderNewRow({
         onChange={(ids) => set('consultantIds', ids)}
         consultants={consultants}
         disabled={disabled || isSaving}
+        placeholder="Consultants"
       />
     ),
   };

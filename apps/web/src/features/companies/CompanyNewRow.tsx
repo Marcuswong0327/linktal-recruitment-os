@@ -105,6 +105,7 @@ export function useCompanyNewRow({
         onChange={(e) => set('companyName', e.target.value)}
         disabled={disabled || isSaving}
         aria-label="Company name"
+        placeholder="Company name"
       />
     ),
     specialization: (
@@ -118,6 +119,7 @@ export function useCompanyNewRow({
           }))
         }
         disabled={disabled || isSaving}
+        placeholder="Specialization"
       />
     ),
     locations: (
@@ -125,6 +127,7 @@ export function useCompanyNewRow({
         selected={draft.locations}
         onChange={(next) => set('locations', next)}
         disabled={disabled || isSaving}
+        placeholder="City Coverage"
       />
     ),
     status: (
@@ -133,6 +136,7 @@ export function useCompanyNewRow({
         onValueChange={(v) => set('status', v)}
         options={statusOptions}
         disabled={disabled || isSaving}
+        placeholder="Status"
       />
     ),
     quality: (
@@ -141,6 +145,7 @@ export function useCompanyNewRow({
         onValueChange={(v) => set('quality', v)}
         options={qualityOptions}
         disabled={disabled || isSaving}
+        placeholder="Quality"
       />
     ),
   };
@@ -156,7 +161,7 @@ export function useCompanyNewRow({
       const missing = [
         draft.companyName.trim() ? null : 'Company name',
         industryId ? null : 'Specialization',
-        draft.locations.length ? null : 'Market',
+        draft.locations.length ? null : 'City Coverage',
       ].filter(Boolean);
       toast.error(`${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required`);
     },

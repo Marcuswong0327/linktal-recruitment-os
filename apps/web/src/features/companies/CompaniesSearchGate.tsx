@@ -18,7 +18,6 @@ import {
   getGetSpecializationsQueryKey,
   useCreateSpecialization,
 } from '@/lib/api/generated/specializations/specializations';
-import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { buildCompanyPayload, CompanyForm, type CompanyFormValues } from './CompanyForm';
 import { CompaniesTable } from './CompaniesTable';
 import {
@@ -147,16 +146,6 @@ export function CompaniesSearchGate({
 
   const [appliedFilters, setAppliedFilters] = React.useState<CompanyAppliedFilters | null>(null);
 
-  useSeedFiltersFromScope({
-    setIndustryIds,
-    setSpecializationIds,
-    registerSpecializationName,
-    setCountryIds,
-    setCityIds,
-    registerCountryName,
-    registerCityName,
-  });
-
   const hasActiveFilters =
     countryIds.length > 0 ||
     cityIds.length > 0 ||
@@ -240,15 +229,15 @@ export function CompaniesSearchGate({
               industryIds={industryIds}
             />
           </FilterField>
-          <FilterField label="City">
+          <FilterField label="City Coverage">
             <LocationFilterButton
               selected={cityIds}
               onChange={setCityIds}
-              level="CITY"
+              level="CITY_COVERAGE"
               underId={countryIds.length === 1 ? countryIds[0] : undefined}
               compact={false}
-              placeholder="All cities"
-              title="City"
+              placeholder="All City Coverage"
+              title="City Coverage"
               labelFor={(id) => cityNames[id] ?? id}
               onResolve={registerCityName}
             />

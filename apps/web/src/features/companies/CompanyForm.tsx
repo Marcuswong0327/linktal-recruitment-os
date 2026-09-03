@@ -20,7 +20,6 @@ export interface CompanyFormValues {
   specializationId: string;
   locations: LocationOption[];
   addresses: string;
-  suburbsAndPostcodes: string;
   website: string;
   seekJobMarketUrl: string;
   linkedinJobMarketUrl: string;
@@ -43,7 +42,6 @@ export function buildCompanyPayload(values: CompanyFormValues): CreateClientDto 
     specializationId: values.specializationId || undefined,
     locationIds: values.locations.map((l) => l.id),
     addresses: values.addresses ? splitLines(values.addresses) : undefined,
-    suburbsAndPostcodes: values.suburbsAndPostcodes ? splitLines(values.suburbsAndPostcodes) : undefined,
     website: values.website || undefined,
     seekJobMarketUrl: values.seekJobMarketUrl || undefined,
     linkedinJobMarketUrl: values.linkedinJobMarketUrl || undefined,
@@ -78,7 +76,6 @@ export function CompanyForm({
   const [specializationId, setSpecializationId] = React.useState('');
   const [locations, setLocations] = React.useState<LocationOption[]>([]);
   const [addresses, setAddresses] = React.useState('');
-  const [suburbsAndPostcodes, setSuburbsAndPostcodes] = React.useState('');
   const [website, setWebsite] = React.useState('');
   const [seekJobMarketUrl, setSeekJobMarketUrl] = React.useState('');
   const [linkedinJobMarketUrl, setLinkedinJobMarketUrl] = React.useState('');
@@ -94,7 +91,6 @@ export function CompanyForm({
       specializationId,
       locations,
       addresses,
-      suburbsAndPostcodes,
       website,
       seekJobMarketUrl,
       linkedinJobMarketUrl,
@@ -143,10 +139,10 @@ export function CompanyForm({
           />
         </FormField>
         <FormField
-          label="Market"
+          label="City Coverage"
           htmlFor="company-market"
           required
-          description="Which places this client hires from — its market, not its office address."
+          description="Which places this client hires from, not its office address."
         >
           <LocationMultiSelect
             id="company-market"
@@ -168,19 +164,11 @@ export function CompanyForm({
         <FormField label="Quality" htmlFor="company-quality" description="A subjective read on how good a prospect this is.">
           <EnumSelect id="company-quality" value={quality} onValueChange={(v) => setQuality(v as ClientQuality)} options={qualityOptions} />
         </FormField>
-        <FormField label="Office address(es)" htmlFor="company-addresses" description="One per line — distinct from Market above.">
+        <FormField label="Office address(es)" htmlFor="company-addresses" description="One per line — distinct from City Coverage above.">
           <textarea
             id="company-addresses"
             value={addresses}
             onChange={(e) => setAddresses(e.target.value)}
-            className="min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30"
-          />
-        </FormField>
-        <FormField label="Suburbs / postcodes" htmlFor="company-suburbs" description="One per line.">
-          <textarea
-            id="company-suburbs"
-            value={suburbsAndPostcodes}
-            onChange={(e) => setSuburbsAndPostcodes(e.target.value)}
             className="min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30"
           />
         </FormField>

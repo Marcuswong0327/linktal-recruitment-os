@@ -364,7 +364,7 @@ export function getConsultantColumns({
       ? [
           {
             id: 'locations',
-            header: 'Locations',
+            header: 'City Coverage',
             size: 220,
             enableSorting: false,
             // Not flagged as cramped like Industries/Specializations, but

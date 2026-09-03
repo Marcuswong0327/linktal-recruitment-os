@@ -4,9 +4,6 @@
  *
  *   pnpm --filter @linktal/api import:taxonomy
  *
- * Must run before `import:users` (consultant grants reference these rows) and
- * before the main workbook import (clients and candidates tag them).
- *
  * Idempotent: everything is upserted by name.
  */
 import 'dotenv/config';

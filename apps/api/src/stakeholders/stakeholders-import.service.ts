@@ -50,7 +50,7 @@ export const STAKEHOLDER_IMPORT_COLUMNS: ImportColumn[] = [
 const STAKEHOLDER_IMPORT_INSTRUCTIONS = [
   'Client Display ID must exactly match an existing company\'s Display ID — required on every row, including new ones (a stakeholder always belongs to a company). We can\'t match by company name instead: names aren\'t guaranteed unique in this system.',
   'Job Title and Role Type are grown freely (same as typing a new one into either combobox in the app) — an unmatched value creates it rather than being rejected. Leave Role Type blank to auto-classify it from Job Title, the same way the app does when you don\'t set one explicitly.',
-  'Coverage Locations: semicolon-separated breadcrumb paths, e.g. "Australia > New South Wales > Sydney". Optional — independent of the company\'s own location.',
+  'Coverage Locations: semicolon-separated Country and/or City Coverage values from the Locations sheet, e.g. "Sydney NSW; Melbourne VIC". Optional — independent of the company\'s own location.',
   'Details Accurate: Yes, No, or blank (not yet checked).',
 ];
 
@@ -116,7 +116,7 @@ export class StakeholdersImportService {
       }),
       this.base.jobTitle.findMany({ where: { isActive: true }, select: { name: true } }),
       this.base.stakeholderRoleType.findMany({ where: { isActive: true }, select: { name: true } }),
-      this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true, level: true } }),
+      this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true, level: true, parentId: true } }),
     ]);
     return buildTemplateWorkbook('Stakeholders', STAKEHOLDER_IMPORT_COLUMNS, STAKEHOLDER_IMPORT_INSTRUCTIONS, [
       {

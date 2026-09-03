@@ -46,8 +46,9 @@ are **read+update only** — see §4.)
 `location`, `industry` and `specialization` are the three **scope-bearing**
 catalogs: the scope resolver reads them, so a drifted or near-duplicate row
 silently changes who can see what. Creation is therefore restricted — admin
-only for `location` (it's bulk-loaded from GeoNames and shouldn't be typed at
-all), admin+manager for `industry` and `specialization`. The remaining catalogs
+only for `location` (13 seeded City Coverage/country rows are `isProtected`
+and can't be edited or deleted by anyone; admin can add further ones),
+admin+manager for `industry` and `specialization`. The remaining catalogs
 (`job_title`, `job_role_type`, `stakeholder_role_type`) carry no scoping weight
 and stay combobox-growable by anyone, because free creation there costs nothing
 and speeds up data entry.
@@ -292,8 +293,7 @@ escalation rule, so managers can use them:
   deliberate carve-out from the general escalation guard elsewhere.
 - Every id in the request must exist and be active (`400 INVALID_*` /
   `400 INACTIVE_*`). `location` is the exception on the second half: the
-  geography tree is bulk-loaded from GeoNames and has no `isActive` column, so
-  only existence is checked.
+  geography tree has no `isActive` column, so only existence is checked.
 - Full-set-replace: one `PUT` replaces the whole assignment, not separate
   add/remove endpoints. Diffed down to the minimum add/remove set (an id already
   granted isn't churned) and written as individual join-row create/delete calls,
@@ -304,9 +304,9 @@ escalation rule, so managers can use them:
   (not just empty), same convention as every other permission-gated field here.
   The three permissions are independent, so a caller can see one arm and not
   another.
-- **`/locations` takes already-materialised node ids**, at any level. Expanding a
-  wildcard or a desk label into concrete nodes is the caller's job — `All
-  Malaysia` arrives as one COUNTRY id, `Brisbane GC QLD` as two CITY ids. That's
+- **`/locations` takes already-materialised node ids**, at either rung. A
+  wildcard means "the whole country" — `Malaysia` arrives as one COUNTRY id;
+  `Brisbane GC QLD` is a single CITY_COVERAGE id, no expansion needed. That's
   what keeps every grant individually auditable and zero rows unambiguous.
 - **Industry and location both cascade; specialization doesn't.** Narrowing
   either grant arm runs the auto-clear above, since either can strand a record
@@ -380,13 +380,13 @@ runs on the base client with batch transactions).
 - **`permission`** is the fixed catalog of `resource:action` pairs. You attach
   existing ones to roles; you never create them at runtime — hence `read` only.
 - **`audit`** is the append-only activity log — `read` only, admin-only.
-- **`location`** is the geography tree, bulk-loaded from GeoNames (countries,
-  states, cities, and postal places for suburbs). **Admin-only to create** — it
-  is deliberately *not* a combobox catalog. The scope resolver walks this tree,
-  so a hand-typed near-duplicate node would silently change who can see what,
-  and the desk labels the business actually uses (`Brisbane GC QLD`,
-  `Klang Valley`, `East Malaysia`) are *groupings* of real nodes rather than
-  nodes themselves.
+- **`location`** is the two-rung Country / City Coverage geography tree.
+  **Admin-only to create/update/delete** — it is deliberately *not* a
+  combobox catalog. The scope resolver walks this tree, so a hand-typed
+  near-duplicate node would silently change who can see what. The 13 seeded
+  rows (Linktal's desks made real — `Brisbane GC QLD`, `KL Selangor`, …) are
+  `isProtected`: not even admin can rename or delete them, only add to the
+  catalog around them.
 - **`industry`** / **`specialization`** are the taxonomy tree — full CRUD for
   admin and manager, **read-only for everyone else**. Also scope-bearing: a
   consultant inventing a near-duplicate specialization instead of picking the
@@ -463,7 +463,7 @@ runs on the base client with batch transactions).
 | `GET/POST /job-role-types` | `job_role_type:read` / `:create` | admin, manager, consultant, researcher |
 | `GET/POST /job-titles` | `job_title:read` / `:create` | admin, manager, consultant, researcher |
 | `GET /locations` | `location:read` | everyone |
-| `POST/PATCH/DELETE /locations` | `location:*` | admin only — the tree is GeoNames-loaded, not hand-typed |
+| `POST/PATCH/DELETE /locations` | `location:*` | admin only — PATCH/DELETE additionally refuse any of the 13 seeded, `isProtected` rows |
 | `GET/POST/PATCH/DELETE /tobs` | `tob:*` | admin, manager, consultant; finance read-only |
 | `GET/POST/PATCH/DELETE /job-research` | `job_research:*` | per matrix — scoped for `consultant` via parent Client (see §3) |
 | `GET/POST/PATCH/DELETE /job-orders` | `job_order:*` | per matrix — industry (via parent Client) / location / job-order-membership-scoped for `consultant` (see §3) |

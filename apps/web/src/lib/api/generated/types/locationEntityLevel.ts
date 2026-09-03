@@ -11,7 +11,5 @@ export type LocationEntityLevel = typeof LocationEntityLevel[keyof typeof Locati
 
 export const LocationEntityLevel = {
   COUNTRY: 'COUNTRY',
-  STATE: 'STATE',
-  CITY: 'CITY',
-  SUBURB: 'SUBURB',
+  CITY_COVERAGE: 'CITY_COVERAGE',
 } as const;
