@@ -171,7 +171,6 @@ type JobOrderExportRow = {
   locationPath: string | null;
   status: JobOrderStatus;
   quality: JobOrderQuality;
-  priorityLevel: number | null;
   salaryMin: number | null;
   salaryMax: number | null;
   salaryCurrency: string | null;
@@ -403,8 +402,7 @@ export class JobOrdersService {
     const tz = resolveTimeZone(timezone);
     // Header text and value format (Location: full breadcrumb path; Status:
     // the raw enum text, not a humanized label — "On Hold" wouldn't match
-    // the "ON_HOLD" import expects; Priority Level: the raw 1/2/3, not the
-    // High/Medium/Low label, same reasoning) are deliberately identical to
+    // the "ON_HOLD" import expects) are deliberately identical to
     // JOB_ORDER_IMPORT_COLUMNS (job-orders-import.service.ts), for the same
     // "Export to Excel → edit → re-upload" round trip ImportDialog's own
     // instructions promise.
@@ -417,7 +415,6 @@ export class JobOrdersService {
       { header: 'Location', key: 'location' },
       { header: 'Status', key: 'status', required: true },
       { header: 'Quality', key: 'quality', required: true },
-      { header: 'Priority Level', key: 'priorityLevel' },
       { header: 'Salary Min', key: 'salaryMin' },
       { header: 'Salary Max', key: 'salaryMax' },
       { header: 'Salary Currency', key: 'salaryCurrency' },
@@ -440,7 +437,6 @@ export class JobOrdersService {
       location: jo.locationPath ?? '',
       status: jo.status,
       quality: jobOrderQualityLabels[jo.quality],
-      priorityLevel: jo.priorityLevel ?? '',
       salaryMin: jo.salaryMin ?? '',
       salaryMax: jo.salaryMax ?? '',
       salaryCurrency: jo.salaryCurrency ?? '',

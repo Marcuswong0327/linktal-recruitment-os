@@ -178,7 +178,6 @@ describe('export -> import column parity', () => {
       location: null,
       status: 'ACTIVE',
       quality: 'MEDIUM',
-      priorityLevel: null,
       salaryMin: null,
       salaryMax: null,
       salaryCurrency: null,

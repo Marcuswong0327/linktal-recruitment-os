@@ -407,7 +407,9 @@ export function CompaniesTable({
   }
 
   function handleEnrichStakeholders() {
-    router.push(`/stakeholders/enrich?clientIds=${encodeURIComponent(selectionOrderRef.current.join(','))}`);
+    router.push(
+      `/stakeholders/enrich?clientIds=${encodeURIComponent(selectionOrderRef.current.join(','))}&from=companies`,
+    );
   }
 
   const columns = React.useMemo(

@@ -107,15 +107,6 @@ import {
   type CandidateStatus,
 } from './schema';
 
-const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
-  day: '2-digit',
-  month: 'short',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  timeZoneName: 'short',
-});
-
 const shortDateFormatter = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
   month: 'short',
@@ -844,7 +835,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                           )}
                         </TableCell>
                         <TableCell className="whitespace-normal">
-                          {contactDateFormatter.format(new Date(row.contactedAt))}
+                          {shortDateFormatter.format(new Date(row.contactedAt))}
                         </TableCell>
                         <TableCell className="whitespace-normal">
                           {row.contactedById ? consultantLabelFor(row.contactedById) : 'Imported'}

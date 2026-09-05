@@ -10,8 +10,6 @@ import type { JobOrder } from './schema';
 import {
   jobOrderQualityLabels,
   jobOrderStatusLabels,
-  priorityLabels,
-  priorityVariant,
   qualityVariant,
   statusVariant,
 } from './schema';
@@ -56,23 +54,6 @@ export function getJobOrderColumns(): ColumnDef<JobOrderRow>[] {
           {jobOrderQualityLabels[row.original.quality]}
         </Badge>
       ),
-    },
-    {
-      // 'priorityLevel' — must exist so JobOrdersTable's header filter for
-      // this columnId (see jobOrderFilters) has a real column to attach to;
-      // without it, TanStack logs "Column with id 'priorityLevel' does not
-      // exist" the moment any filter is applied. Not a GetJobOrdersSortBy
-      // field, so unsortable, same as Status/Quality above.
-      accessorKey: 'priorityLevel',
-      header: 'Priority',
-      enableSorting: false,
-      size: 100,
-      meta: { align: 'center' },
-      cell: ({ row }) => {
-        const { priorityLevel } = row.original;
-        if (priorityLevel == null) return <span className="text-muted-foreground">—</span>;
-        return <Badge variant={priorityVariant[priorityLevel]}>{priorityLabels[priorityLevel]}</Badge>;
-      },
     },
     {
       accessorKey: 'clientId',

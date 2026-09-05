@@ -36,12 +36,19 @@ import { getStakeholderColumns, roleTypeStyle, type StakeholderStatus } from './
 export function StakeholderEnrichmentWorkspace({
   clientIds,
   canUpdate,
+  from,
 }: {
   clientIds: string[];
   canUpdate: boolean;
+  /** Which list opened this workspace — see `backHref`. */
+  from?: string;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  // Both lists that open this workspace restore their own gate on
+  // `?restore=1` (see useGateSnapshot). Companies stays the fallback so an
+  // older link, or one typed by hand, behaves as it always did.
+  const backHref = from === 'job-opening-search' ? '/job-opening-search?restore=1' : '/companies?restore=1';
   const [selected, setSelected] = React.useState<StakeholderEntity[]>([]);
   const [isExporting, setIsExporting] = React.useState(false);
 
@@ -168,11 +175,11 @@ export function StakeholderEnrichmentWorkspace({
           variant="ghost"
           size="sm"
           nativeButton={false}
-          render={<Link href="/companies?restore=1" />}
+          render={<Link href={backHref} />}
           className="-ml-2 self-start text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft />
-          Back
+          {from === 'job-opening-search' ? 'Back to Job Opening Search' : 'Back to Companies'}
         </Button>
         <PageHeader
           title="Stakeholder Enrichment Workspace"

@@ -46,7 +46,6 @@ import {
   type JobOrder,
   type JobOrderQuality,
   type JobOrderStatus,
-  priorityOptions,
   qualityOptions,
   statusOptions,
 } from './schema';
@@ -133,7 +132,6 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
   const [clientId, setClientId] = React.useState(jobOrder.clientId);
   const [status, setStatus] = React.useState<JobOrderStatus>(jobOrder.status);
   const [quality, setQuality] = React.useState<JobOrderQuality>(jobOrder.quality);
-  const [priorityLevel, setPriorityLevel] = React.useState(jobOrder.priorityLevel?.toString() ?? '');
 
   const isDirty =
     description !== (jobOrder.description ?? '') ||
@@ -143,8 +141,7 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
     jobTitleId !== (jobOrder.jobTitleId ?? '') ||
     clientId !== jobOrder.clientId ||
     status !== jobOrder.status ||
-    quality !== jobOrder.quality ||
-    priorityLevel !== (jobOrder.priorityLevel?.toString() ?? '');
+    quality !== jobOrder.quality;
 
   const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty);
 
@@ -172,17 +169,11 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
   // Live label for the header — reflects an in-progress edit before it's saved.
   const selectedJobTitle = selectedJobTitleLabel ?? 'Untitled role';
 
-  // Quality and priority share the same Low/Medium/High words, and the two
-  // pills sit next to each other here — so each is suffixed with its field
-  // name ("Medium quality", "High priority") the way the old static quality
-  // badge already read. Values and colors still come from the shared option
-  // lists in schema.ts; only the label text differs.
+  // Suffixed with the field name ("Medium quality") the way the old static
+  // quality badge already read. Values and colors still come from the shared
+  // option list in schema.ts; only the label text differs.
   const qualityPillOptions = React.useMemo(
     () => qualityOptions.map((o) => ({ ...o, label: `${o.label} quality` })),
-    [],
-  );
-  const priorityPillOptions = React.useMemo(
-    () => priorityOptions.map((o) => ({ ...o, label: `${o.label} priority` })),
     [],
   );
 
@@ -201,7 +192,6 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
       otherDocumentsUrl: otherDocumentsUrl || undefined,
       status,
       quality,
-      priorityLevel: priorityLevel ? Number(priorityLevel) : undefined,
     };
     updateJobOrder.mutate({ id: jobOrder.id, data });
   }
@@ -249,17 +239,6 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
                   value={quality}
                   onValueChange={(v) => setQuality(v as JobOrderQuality)}
                   options={qualityPillOptions}
-                  disabled={updateJobOrder.isPending}
-                  size="badge"
-                  className="w-fit"
-                />
-                {/* priorityLevel is nullable — placeholder covers the unset
-                    case, which the other two pills can't hit. */}
-                <EnumSelect
-                  value={priorityLevel}
-                  onValueChange={setPriorityLevel}
-                  options={priorityPillOptions}
-                  placeholder="Set priority"
                   disabled={updateJobOrder.isPending}
                   size="badge"
                   className="w-fit"

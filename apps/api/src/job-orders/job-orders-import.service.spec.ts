@@ -24,6 +24,20 @@ async function makeJobOrderWorkbook(rows: Record<string, string>[]): Promise<Buf
   return Buffer.from(buffer);
 }
 
+/** A workbook carrying one header the importer no longer knows about, to prove it's skipped rather than rejected. */
+async function makeWorkbookWithExtraColumn(
+  extraHeader: string,
+  extraValue: string,
+  row: Record<string, string>,
+): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Job Orders');
+  sheet.addRow([...JOB_ORDER_IMPORT_COLUMNS.map((c) => c.header), extraHeader]);
+  sheet.addRow([...JOB_ORDER_IMPORT_COLUMNS.map((c) => row[c.key] ?? ''), extraValue]);
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
 function validRow(overrides: Record<string, string> = {}): Record<string, string> {
   return {
     clientDisplayId: CLIENT.displayId,
@@ -147,23 +161,21 @@ describe('JobOrdersImportService.validate', () => {
     expect(errors).toEqual([expect.objectContaining({ row: 2, column: 'Openings' })]);
   });
 
-  it('rejects a Priority Level outside 1-3', async () => {
+  // Priority Level was dropped from the template; workbooks produced by the
+  // older export still carry the column, and re-uploading one has to keep
+  // working. parseWorkbook only errors on *missing* expected headers, so an
+  // unrecognised one is skipped — this pins that, including for a value that
+  // the old validator would have rejected outright.
+  it('ignores a legacy Priority Level column instead of validating it', async () => {
     const { service } = makeServices();
-    const buffer = await makeJobOrderWorkbook([validRow({ priorityLevel: '9' })]);
+    const buffer = await makeWorkbookWithExtraColumn('Priority Level', '9', validRow());
 
     const { errors, plans } = await service.validate(buffer);
 
-    expect(plans).toEqual([]);
-    expect(errors).toEqual([expect.objectContaining({ row: 2, column: 'Priority Level' })]);
-  });
-
-  it('clears Priority Level to null when blank on an update row (it is nullable, not required)', async () => {
-    const { service } = makeServices();
-    const buffer = await makeJobOrderWorkbook([validRow({ displayId: EXISTING_JOB_ORDER.displayId, priorityLevel: '' })]);
-
-    const { plans } = await service.validate(buffer);
-
-    expect(plans[0]).toMatchObject({ kind: 'update', data: { priorityLevel: null } });
+    expect(errors).toEqual([]);
+    expect(plans).toHaveLength(1);
+    expect(plans[0].kind).toBe('insert');
+    expect(plans[0]).not.toHaveProperty('data.priorityLevel');
   });
 
   it('rejects a non-numeric Salary Min', async () => {

@@ -68,9 +68,6 @@ import {
   jobOrderQualityLabels,
   jobOrderStatusLabels,
   jobOrderStatuses,
-  priorityLabels,
-  priorityOptions,
-  priorityVariant,
   qualityVariant,
   statusOptions,
   statusVariant,
@@ -93,7 +90,6 @@ export function JobOrdersTable({
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
   const [statuses, setStatuses] = React.useState<GetJobOrdersStatusesItem[] | undefined>();
-  const [priorityLevels, setPriorityLevels] = React.useState<number[] | undefined>();
   const [consultantIds, setConsultantIds] = React.useState<string[] | undefined>();
   const [sortBy, setSortBy] = React.useState<GetJobOrdersSortBy | undefined>();
   const [sortOrder, setSortOrder] = React.useState<GetJobOrdersSortOrder | undefined>();
@@ -117,7 +113,7 @@ export function JobOrdersTable({
   }, [searchParams, router]);
 
   const { data, isLoading, isFetching, isError, error } = useGetJobOrders(
-    { page, pageSize: PAGE_SIZE, q: search, statuses, priorityLevels, consultantIds, sortBy, sortOrder },
+    { page, pageSize: PAGE_SIZE, q: search, statuses, consultantIds, sortBy, sortOrder },
     { query: { placeholderData: keepPreviousData } },
   );
 
@@ -188,7 +184,6 @@ export function JobOrdersTable({
   const jobOrderFilters: DataGridFilter[] = React.useMemo(
     () => [
       { columnId: 'status', title: 'Status', options: statusOptions, inHeader: true },
-      { columnId: 'priorityLevel', title: 'Priority', options: priorityOptions, inHeader: true },
       {
         columnId: 'consultants',
         title: 'Consultant',
@@ -241,14 +236,11 @@ export function JobOrdersTable({
   function handleQueryChange({ search, columnFilters, sorting }: DataGridQuery) {
     const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as
       string[] | undefined;
-    const priorityFilter = columnFilters.find((f) => f.id === 'priorityLevel')?.value as
-      string[] | undefined;
     const consultantFilter = columnFilters.find((f) => f.id === 'consultants')?.value as
       string[] | undefined;
     const sort = sorting[0];
     setSearch(search.trim() || undefined);
     setStatuses(statusFilter?.length ? (statusFilter as GetJobOrdersStatusesItem[]) : undefined);
-    setPriorityLevels(priorityFilter?.length ? priorityFilter.map(Number) : undefined);
     setConsultantIds(consultantFilter?.length ? consultantFilter : undefined);
     setSortBy(sort ? (sort.id as GetJobOrdersSortBy) : undefined);
     setSortOrder(sort ? (sort.desc ? 'desc' : 'asc') : undefined);
@@ -313,7 +305,7 @@ export function JobOrdersTable({
           body: JSON.stringify({ ids: selectedJobOrders.map((j) => j.id), timezone }),
         });
       } else {
-        await downloadFile(getExportJobOrdersUrl({ q: search, statuses, priorityLevels, consultantIds, timezone }));
+        await downloadFile(getExportJobOrdersUrl({ q: search, statuses, consultantIds, timezone }));
       }
       toast.success('Export ready', { id: 'export-job-orders' });
     } catch (err) {
@@ -455,24 +447,6 @@ export function JobOrdersTable({
                             }
                           >
                             <Badge variant={qualityVariant[q]}>{jobOrderQualityLabels[q]}</Badge>
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger>Set priority</DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent>
-                        {Object.entries(priorityLabels).map(([value, label]) => (
-                          <DropdownMenuItem
-                            key={value}
-                            onClick={() =>
-                              handleBulkUpdate(
-                                { priorityLevel: Number(value) },
-                                `Set to ${label} priority`,
-                              )
-                            }
-                          >
-                            <Badge variant={priorityVariant[Number(value)]}>{label}</Badge>
                           </DropdownMenuItem>
                         ))}
                       </DropdownMenuSubContent>

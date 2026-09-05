@@ -12,6 +12,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
+import { useGateSnapshot, usePersistGateSnapshot } from '@/hooks/use-gate-snapshot';
 import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { getGetClientsQueryKey, useCreateClient } from '@/lib/api/generated/clients/clients';
 import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@/lib/api/generated/industries/industries';
@@ -51,16 +52,7 @@ function FilterField({ label, children }: { label: string; children: React.React
  * fresh commit (a new `filters` object, even if shallow-equal) — see
  * CompaniesTable's page-reset effect.
  */
-/**
- * Everything that makes up "the view you were looking at" — the draft
- * selections in the action bar, the committed `appliedFilters` that actually
- * drive the table, and the id→name caches the chips render from (those names
- * only ever arrive alongside a live search result, so without them a restored
- * chip would show a raw id).
- *
- * Session-scoped and only ever read on an explicit `?restore=1` return, so
- * arriving at /companies normally still gives the usual scope-seeded start.
- */
+/** What `useGateSnapshot` persists for this page — see its doc. */
 interface CompaniesGateSnapshot {
   countryIds: string[];
   cityIds: string[];
@@ -75,16 +67,6 @@ interface CompaniesGateSnapshot {
 }
 
 const GATE_SNAPSHOT_KEY = 'companies-gate-snapshot';
-
-function readGateSnapshot(): CompaniesGateSnapshot | null {
-  try {
-    const raw = window.sessionStorage.getItem(GATE_SNAPSHOT_KEY);
-    return raw ? (JSON.parse(raw) as CompaniesGateSnapshot) : null;
-  } catch {
-    // Private mode, or a shape that no longer parses — fall back to defaults.
-    return null;
-  }
-}
 
 export function CompaniesSearchGate({
   canCreate,
@@ -105,9 +87,7 @@ export function CompaniesSearchGate({
   // puts the page back exactly as it was left, rather than dropping the user
   // on the empty "select your preferences" gate having lost their search.
   const restoring = searchParams.get('restore') === '1';
-  const [snapshot] = React.useState<CompaniesGateSnapshot | null>(() =>
-    restoring ? readGateSnapshot() : null,
-  );
+  const snapshot = useGateSnapshot<CompaniesGateSnapshot>(GATE_SNAPSHOT_KEY, restoring);
 
   const [countryIds, setCountryIds] = React.useState<string[]>(snapshot?.countryIds ?? []);
   const [cityIds, setCityIds] = React.useState<string[]>(snapshot?.cityIds ?? []);
@@ -211,31 +191,7 @@ export function CompaniesSearchGate({
     snapshot?.appliedFilters ?? null,
   );
 
-  // Kept current continuously rather than written at the moment Enrich is
-  // clicked — that button lives in CompaniesTable, two components away, and
-  // this way any future exit-and-return gets the same treatment for free.
-  React.useEffect(() => {
-    try {
-      window.sessionStorage.setItem(
-        GATE_SNAPSHOT_KEY,
-        JSON.stringify({
-          countryIds,
-          cityIds,
-          industryIds,
-          specializationIds,
-          statuses,
-          sortByValue,
-          countryNames,
-          cityNames,
-          specializationNames,
-          appliedFilters,
-        } satisfies CompaniesGateSnapshot),
-      );
-    } catch {
-      // Private mode or a full quota — losing the restore is not worth
-      // breaking the page over.
-    }
-  }, [
+  usePersistGateSnapshot(GATE_SNAPSHOT_KEY, {
     countryIds,
     cityIds,
     industryIds,
@@ -246,7 +202,7 @@ export function CompaniesSearchGate({
     cityNames,
     specializationNames,
     appliedFilters,
-  ]);
+  } satisfies CompaniesGateSnapshot);
 
   useSeedFiltersFromScope({
     setIndustryIds,
