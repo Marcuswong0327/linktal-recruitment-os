@@ -18,17 +18,20 @@ Almost every scoping and filtering decision in this system resolves through one
 of two trees, and both work identically: **a node covers itself plus every
 descendant.**
 
-**Geography** — `Location`, four rungs, bulk-loaded from GeoNames:
+**Geography** — `Location`, two rungs, called "City Coverage" in the UI:
 
 ```
-Australia (COUNTRY) → New South Wales (STATE) → Sydney (CITY) → Silverwater 2128 (SUBURB)
+Australia (COUNTRY) → Sydney NSW (CITY_COVERAGE)
 ```
 
-Nothing in this table is hand-typed. `location:create` is admin-only, because
-the scope resolver reads this tree and a drifted node silently changes who can
-see what. Linktal's own desk labels are *not* nodes — `Brisbane GC QLD` is two
-CITY grants (Brisbane, Gold Coast), `East Malaysia` is two STATE grants (Sabah,
-Sarawak), `All Malaysia` is one COUNTRY grant.
+13 rows are seeded (2 countries, 11 city coverages — the business's approved
+catalog, e.g. `Brisbane GC QLD`, `KL Selangor`) and marked `isProtected`:
+nobody, including admin, can rename or delete them. Admin can add further
+countries/city coverages beyond the 13, and can edit/delete the ones they
+added — `location:create`/`update`/`delete` are all admin-only, because the
+scope resolver reads this tree and a drifted node silently changes who can see
+what. A record or grant may sit on a country, a city coverage under it, or
+both — a client can be tagged `Australia` + `Sydney NSW` at once.
 
 **Taxonomy** — `Industry` → `Specialization` → child `Specialization`:
 
@@ -164,7 +167,7 @@ erDiagram
 ### Reference catalogs
 | Table | Created by | Scope-bearing |
 |---|---|---|
-| `Location` | admin only (GeoNames) | yes |
+| `Location` | admin only (13 seeded rows protected, admin can add more) | yes |
 | `Industry` · `Specialization` | admin + manager | yes |
 | `JobTitle` · `JobRoleType` · `StakeholderRoleType` | anyone (combobox) | no |
 
@@ -241,7 +244,7 @@ collides with one already imported (`P2002`, a generic 500).
 |---|---|
 | `Candidate.workHistory` | `[{company, role, period}]` — `period` is free text ("2020 – 2021 (1 year)"); the source never stores parseable dates |
 | `Candidate.notes` | `[{id, content, timestamp, by, editedAt, editedBy}]` — edit/delete restricted to the note's author or an admin |
-| `Client.addresses` · `Client.suburbsAndPostcodes` | arrays of strings — the client's own offices, distinct from its hiring market |
+| `Client.addresses` | array of strings — the client's own office address(es), distinct from `Client.locations` (its hiring market) |
 
 `Client` has no notes timeline; client-side notes live in
 `StakeholderContactHistory`.
@@ -274,7 +277,7 @@ from the top-1 history row — it's display-only and never sorted or filtered on
 | `PlacementStatus` | ACTIVE · COMPLETED · FAILED |
 | `PlacementFeeType` | PERCENTAGE · FLAT |
 | `ClientQuality` · `JobOrderQuality` | LOW · MEDIUM · HIGH |
-| `LocationLevel` | COUNTRY · STATE · CITY · SUBURB |
+| `LocationLevel` | COUNTRY · CITY_COVERAGE |
 
 **Declaration order is sort order.** Postgres native enums sort by ordinal, not
 alphabetically, so `ORDER BY quality` yields LOW < MEDIUM < HIGH and

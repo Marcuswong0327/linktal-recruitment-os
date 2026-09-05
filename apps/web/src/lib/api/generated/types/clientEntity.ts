@@ -35,11 +35,6 @@ export interface ClientEntity {
      * @nullable
      */
   addresses: string[] | null;
-  /**
-     * The client's own office suburb/postcode(s)
-     * @nullable
-     */
-  suburbsAndPostcodes: string[] | null;
   /** @nullable */
   website: string | null;
   /** @nullable */

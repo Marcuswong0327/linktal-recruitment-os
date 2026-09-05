@@ -45,6 +45,7 @@ const SYNTHETIC_FK_LISTS: Record<string, string> = {
   'Candidate.specializationIds': 'Specialization',
   'JobOrder.consultantIds': 'Consultant',
   'Stakeholder.coverageLocationIds': 'Location',
+  'Client.locationIds': 'Location',
 };
 
 /**
@@ -244,6 +245,7 @@ const ENTITY_TYPE_LABEL_OVERRIDES: Record<string, string> = {
   CandidateSubmission: 'Submission',
   ClientJobResearch: 'Job Research',
   ConsultantIndustry: 'Industry Assignment',
+  ConsultantLocation: 'City Coverage Assignment',
   JobOrderConsultant: 'Consultant Assignment',
   Tob: 'Terms of Business',
 };
@@ -317,7 +319,7 @@ const FIELD_LABEL_OVERRIDES: Record<string, string> = {
   submissionId: 'Submission',
   industryId: 'Industry',
   specializationId: 'Specialization',
-  locationId: 'Location',
+  locationId: 'City Coverage',
   jobTitleId: 'Job title',
   jobRoleTypeId: 'Job role type',
   stakeholderRoleTypeId: 'Stakeholder role type',
@@ -328,7 +330,8 @@ const FIELD_LABEL_OVERRIDES: Record<string, string> = {
   permissionIds: 'Permissions',
   specializationIds: 'Specializations',
   consultantIds: 'Consultants',
-  coverageLocationIds: 'Coverage',
+  coverageLocationIds: 'City Coverage',
+  locationIds: 'City Coverage',
   isActive: 'Status',
   // The generic path below strips a trailing "Id", which would leave this one
   // as the bare word "Display".

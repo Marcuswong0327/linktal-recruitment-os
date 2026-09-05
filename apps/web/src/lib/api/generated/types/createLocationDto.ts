@@ -10,12 +10,8 @@ import type { CreateLocationDtoLevel } from './createLocationDtoLevel';
 export interface CreateLocationDto {
   /** Node name */
   name: string;
-  /** Which rung this node sits on */
+  /** COUNTRY, or CITY_COVERAGE under an existing country */
   level: CreateLocationDtoLevel;
-  /** Parent node. Required for everything except COUNTRY, which sits at the root. */
+  /** Parent country. Required for CITY_COVERAGE; must be omitted for COUNTRY, which sits at the root. */
   parentId?: string;
-  /** Only meaningful at SUBURB level */
-  postcode?: string;
-  /** GeoNames id, if this node has one — keeps a later bulk load from duplicating it */
-  geonameId?: number;
 }

@@ -33,7 +33,7 @@ export const JOB_ORDER_IMPORT_COLUMNS: ImportColumn[] = [
     key: 'jobRoleType',
     dropdown: { kind: 'reference', sheetTitle: 'Job Role Types', columnKey: 'name' },
   },
-  { header: 'Location', key: 'location', dropdown: { kind: 'reference', sheetTitle: 'Locations', columnKey: 'path' } },
+  { header: 'Location', key: 'location', dropdown: { kind: 'reference', sheetTitle: 'Locations', columnKey: 'name' } },
   { header: 'Salary Min', key: 'salaryMin' },
   { header: 'Salary Max', key: 'salaryMax' },
   { header: 'Salary Currency', key: 'salaryCurrency' },
@@ -44,14 +44,13 @@ export const JOB_ORDER_IMPORT_COLUMNS: ImportColumn[] = [
   { header: 'Notes', key: 'notes' },
   { header: 'Status', key: 'status', required: true, dropdown: { kind: 'inline', values: ['ACTIVE', 'PLACED', 'CLOSED', 'ON_HOLD'] } },
   { header: 'Quality', key: 'quality', required: true, dropdown: { kind: 'inline', values: ['LOW', 'MEDIUM', 'HIGH'] } },
-  { header: 'Priority Level', key: 'priorityLevel' },
 ];
 
 const JOB_ORDER_IMPORT_INSTRUCTIONS = [
   'Client Display ID must exactly match an existing company\'s Display ID — required on every row, including new ones (a job order always belongs to a company). We can\'t match by company name instead: names aren\'t guaranteed unique in this system.',
   'Job Title and Role Type are grown freely (same as typing a new one into either combobox in the app) — an unmatched value creates it rather than being rejected.',
-  'Location: a single breadcrumb path, e.g. "Australia > New South Wales > Sydney". Optional.',
-  'Openings: a whole number, 1 or more. Priority Level: 1 (High), 2 (Medium), or 3 (Low).',
+  'Location: a single Country or City Coverage value from the Locations sheet, e.g. "Brisbane GC QLD". Optional.',
+  'Openings: a whole number, 1 or more.',
   'Status: ACTIVE, PLACED, CLOSED, or ON_HOLD. Quality: LOW, MEDIUM, or HIGH.',
   'Not included in this template: Consultants (assign these from the Job Order\'s own page after import — it has its own dedicated multi-assignee control), and the derived Filled/Received/Closed fields.',
 ];
@@ -117,7 +116,7 @@ export class JobOrdersImportService {
       }),
       this.base.jobTitle.findMany({ where: { isActive: true }, select: { name: true } }),
       this.base.jobRoleType.findMany({ where: { isActive: true }, select: { name: true } }),
-      this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true, level: true } }),
+      this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true, level: true, parentId: true } }),
     ]);
     return buildTemplateWorkbook('Job Orders', JOB_ORDER_IMPORT_COLUMNS, JOB_ORDER_IMPORT_INSTRUCTIONS, [
       {
@@ -237,18 +236,6 @@ export class JobOrdersImportService {
         }
       }
 
-      let priorityLevel: number | null | undefined;
-      if (c.priorityLevel) {
-        const p = parseWholeNumber(c.priorityLevel);
-        if (p === undefined || p < 1 || p > 3) {
-          rowErrors.push({ row: row.rowNumber, column: 'Priority Level', message: `"${c.priorityLevel}" must be 1, 2, or 3.` });
-        } else {
-          priorityLevel = p;
-        }
-      } else if (isUpdate) {
-        priorityLevel = null;
-      }
-
       const status = c.status ? matchEnum(Object.values(JobOrderStatus), c.status) : undefined;
       if (c.status && !status) {
         rowErrors.push({ row: row.rowNumber, column: 'Status', message: `"${c.status}" isn't a valid status (ACTIVE, PLACED, CLOSED, ON_HOLD).` });
@@ -280,7 +267,6 @@ export class JobOrdersImportService {
           notes: c.notes || null,
           status: status!,
           quality: quality!,
-          priorityLevel,
         };
         plans.push({ kind: 'update', existingId: existingId!, data, jobTitle, jobRoleType });
       } else {
@@ -297,7 +283,6 @@ export class JobOrdersImportService {
           ...(c.description ? { description: c.description } : {}),
           ...(c.requirements ? { requirements: c.requirements } : {}),
           ...(c.notes ? { notes: c.notes } : {}),
-          ...(priorityLevel != null ? { priorityLevel } : {}),
         };
         plans.push({ kind: 'insert', data, jobTitle, jobRoleType });
       }

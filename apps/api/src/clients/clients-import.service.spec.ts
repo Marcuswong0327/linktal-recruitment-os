@@ -7,13 +7,12 @@ import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 const INDUSTRY = { id: 'ind1', name: 'Manufacturing' };
 // ancestorIds is self plus every ancestor, root-LAST (see schema.prisma's
 // Location.ancestorIds doc) — self-first here, not root-first.
-const LOCATION = { id: 'loc-syd', name: 'Sydney', ancestorIds: ['loc-syd', 'loc-nsw', 'loc-au'] };
+const LOCATION = { id: 'loc-syd', name: 'Sydney NSW', ancestorIds: ['loc-syd', 'loc-au'] };
 const LOCATION_ANCESTORS = [
   { id: 'loc-au', name: 'Australia', ancestorIds: ['loc-au'] },
-  { id: 'loc-nsw', name: 'New South Wales', ancestorIds: ['loc-nsw', 'loc-au'] },
   LOCATION,
 ];
-const LOCATION_PATH = 'Australia > New South Wales > Sydney';
+const LOCATION_PATH = 'Sydney NSW';
 const EXISTING_CLIENT = { id: 'client1', displayId: 'CLI-000001' };
 
 /** Builds an .xlsx buffer with CLIENT_IMPORT_COLUMNS headers — missing keys default to ''. */

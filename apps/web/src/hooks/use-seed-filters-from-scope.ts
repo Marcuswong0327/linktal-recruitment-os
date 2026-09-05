@@ -14,6 +14,8 @@ interface SeedFiltersFromScopeOptions {
   setCityIds: (ids: string[]) => void;
   registerCountryName: (id: string, name: string) => void;
   registerCityName: (id: string, name: string) => void;
+  /** Leave the filters alone — the caller is restoring a saved view. */
+  skip?: boolean;
 }
 
 /**
@@ -33,8 +35,8 @@ interface SeedFiltersFromScopeOptions {
  * `Promise.all(getLocation(id).catch(() => null))` gave up for good on the
  * first failed lookup, which is what caused the bar to intermittently show
  * "All countries" instead of the consultant's real scope on page load.
- * STATE/SUBURB grants aren't representable in this two-dropdown bar and are
- * left out of the default seed (still pickable by hand).
+ * Every grant is representable in this two-dropdown bar now that the tree
+ * has exactly two rungs (Country / City Coverage).
  */
 export function useSeedFiltersFromScope({
   setIndustryIds,
@@ -44,6 +46,7 @@ export function useSeedFiltersFromScope({
   setCityIds,
   registerCountryName,
   registerCityName,
+  skip = false,
 }: SeedFiltersFromScopeOptions) {
   const { data: meData } = useGetMe();
   const me = meData?.status === 200 ? meData.data : undefined;
@@ -57,6 +60,12 @@ export function useSeedFiltersFromScope({
 
   const seededRef = React.useRef(false);
   React.useEffect(() => {
+    // `skip` is for a gate restoring a previous view: the defaults would land
+    // a beat after the restore (they wait on `me`) and silently overwrite it.
+    if (skip) {
+      seededRef.current = true;
+      return;
+    }
     if (!me || seededRef.current || !locationsSettled) return;
 
     const scopeIndustryIds = me.industryIds ?? [];
@@ -84,7 +93,7 @@ export function useSeedFiltersFromScope({
       if (location?.level === 'COUNTRY') {
         nextCountryIds.push(id);
         if (name) registerCountryName(id, name);
-      } else if (location?.level === 'CITY') {
+      } else if (location?.level === 'CITY_COVERAGE') {
         nextCityIds.push(id);
         if (name) registerCityName(id, name);
       }

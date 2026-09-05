@@ -9,7 +9,7 @@ import { StakeholderEnrichmentWorkspace } from '@/features/stakeholders/Stakehol
 export default async function StakeholderEnrichmentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ clientIds?: string }>;
+  searchParams: Promise<{ clientIds?: string; from?: string }>;
 }) {
   const session = await auth();
   if (!hasPermission(session, 'stakeholder', 'read')) {
@@ -20,7 +20,7 @@ export default async function StakeholderEnrichmentPage({
     );
   }
 
-  const { clientIds: clientIdsParam } = await searchParams;
+  const { clientIds: clientIdsParam, from } = await searchParams;
   const clientIds = (clientIdsParam ?? '').split(',').filter(Boolean);
 
   if (clientIds.length === 0) {
@@ -32,8 +32,13 @@ export default async function StakeholderEnrichmentPage({
             Select one or more companies (or Job Research rows) and choose &quot;Enrich Stakeholders&quot; to open
             this workspace.
           </p>
-          <Button size="lg" nativeButton={false} render={<Link href="/companies" />} className="self-start">
-            Back to Companies
+          <Button
+            size="lg"
+            nativeButton={false}
+            render={<Link href={from === 'job-opening-search' ? '/job-opening-search' : '/companies'} />}
+            className="self-start"
+          >
+            {from === 'job-opening-search' ? 'Back to Job Opening Search' : 'Back to Companies'}
           </Button>
         </div>
       </PageLayout>
@@ -44,6 +49,7 @@ export default async function StakeholderEnrichmentPage({
     <StakeholderEnrichmentWorkspace
       clientIds={clientIds}
       canUpdate={hasPermission(session, 'stakeholder', 'update')}
+      from={from}
     />
   );
 }

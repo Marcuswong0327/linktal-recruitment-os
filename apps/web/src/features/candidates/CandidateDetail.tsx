@@ -98,22 +98,14 @@ import type {
   SubmissionEntity,
   UpdateCandidateDto,
 } from '@/lib/api/generated/types';
+import { EnumSelect } from '@/components/EnumSelect';
 import { contactCategoryLabels, outreachChannelLabels } from '@/lib/candidate-contact-category';
 import {
   candidateFullName,
   type Candidate,
-  candidateStatusLabels,
-  candidateStatusVariants,
+  candidateStatusOptions,
+  type CandidateStatus,
 } from './schema';
-
-const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
-  day: '2-digit',
-  month: 'short',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  timeZoneName: 'short',
-});
 
 const shortDateFormatter = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
@@ -331,7 +323,6 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
       seekTalentUrl: candidate.seekTalentUrl ?? '',
       currentSalary: candidate.currentSalary ?? '',
       expectedSalary: candidate.expectedSalary ?? '',
-      suburbAndPostcode: candidate.suburbAndPostcode ?? '',
     },
   });
 
@@ -339,6 +330,9 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
   // or uploads, not plain registered inputs — tracked as their own state
   // (like CompanyDetail's industryId/specializationId) and merged into the
   // patch on submit, since RHF's dirty-tracking doesn't see them.
+  // Status is a pill in the header rather than a registered input, so like the
+  // pickers below it lives in its own state and is merged in on submit.
+  const [status, setStatus] = React.useState<CandidateStatus>(candidate.status);
   const [industryId, setIndustryId] = React.useState(candidate.industryId ?? '');
   const [roleTypeId, setRoleTypeId] = React.useState(candidate.jobRoleTypeId ?? '');
   const [specializationIds, setSpecializationIds] = React.useState(candidate.specializationIds);
@@ -420,6 +414,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
   // Named individually (rather than inlined straight into isDirty) so each
   // one can also drive its own field's change indicator.
+  const statusChanged = status !== candidate.status;
   const industryChanged = industryId !== (candidate.industryId ?? '');
   const roleTypeChanged = roleTypeId !== (candidate.jobRoleTypeId ?? '');
   const specializationsChanged = !sameIds(specializationIds, candidate.specializationIds);
@@ -432,6 +427,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
   const isDirty =
     formState.isDirty ||
+    statusChanged ||
     industryChanged ||
     roleTypeChanged ||
     specializationsChanged ||
@@ -486,6 +482,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
     // the mutation resolves and dirty state starts clearing out from under
     // us — this is the exact set that gets the green "saved" flash.
     const changedFields = new Set<string>(Object.keys(formState.dirtyFields));
+    if (statusChanged) changedFields.add('status');
     if (industryChanged) changedFields.add('industryId');
     if (roleTypeChanged) changedFields.add('roleTypeId');
     if (specializationsChanged) changedFields.add('specializationIds');
@@ -501,6 +498,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
         id: candidate.id,
         data: {
           ...cleanPatch(values),
+          status,
           industryId: industryId || null,
           jobRoleTypeId: roleTypeId || null,
           specializationIds,
@@ -693,9 +691,14 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                 <h1 className="font-heading text-2xl font-semibold tracking-tight">
                   {candidateFullName(candidate) || 'Unnamed candidate'}
                 </h1>
-                <Badge variant={candidateStatusVariants[candidate.status]}>
-                  {candidateStatusLabels[candidate.status]}
-                </Badge>
+                <EnumSelect
+                  value={status}
+                  onValueChange={(v) => setStatus(v as CandidateStatus)}
+                  options={candidateStatusOptions}
+                  disabled={updateCandidate.isPending}
+                  size="badge"
+                  className="w-fit"
+                />
               </div>
               <span className="font-mono text-xs text-muted-foreground">{candidate.displayId}</span>
             </div>
@@ -832,7 +835,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
                           )}
                         </TableCell>
                         <TableCell className="whitespace-normal">
-                          {contactDateFormatter.format(new Date(row.contactedAt))}
+                          {shortDateFormatter.format(new Date(row.contactedAt))}
                         </TableCell>
                         <TableCell className="whitespace-normal">
                           {row.contactedById ? consultantLabelFor(row.contactedById) : 'Imported'}
@@ -1174,34 +1177,17 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
               <Separator />
 
               <FormField
-                label="City"
+                label="City Coverage"
                 htmlFor="location"
                 orientation="horizontal"
-                tooltip="Coarsest location the scope resolver has for this candidate — suburb-level data isn't loaded yet, see Suburb & Postcode below for the free-text version."
+                tooltip="The candidate's country or, when known, a specific City Coverage value — what the scope resolver reads for this candidate."
                 changeState={fieldChangeState('location', locationChanged)}
               >
                 <LocationCombobox
                   id="location"
                   value={location}
                   onChange={setLocation}
-                  placeholder="Search for a city…"
-                />
-              </FormField>
-
-              <FormField
-                label="Suburb & Postcode"
-                htmlFor="suburbAndPostcode"
-                orientation="horizontal"
-                tooltip='Free text — not searched or scoped, e.g. "Merrylands 2160 NSW".'
-                changeState={fieldChangeState(
-                  'suburbAndPostcode',
-                  !!formState.dirtyFields.suburbAndPostcode,
-                )}
-              >
-                <Input
-                  id="suburbAndPostcode"
-                  placeholder="e.g. Merrylands 2160 NSW"
-                  {...register('suburbAndPostcode')}
+                  placeholder="Search for a country or City Coverage…"
                 />
               </FormField>
 

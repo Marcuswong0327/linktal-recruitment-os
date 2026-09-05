@@ -68,6 +68,11 @@ export const qualityOptions = jobOrderQualities.map((value) => ({
   triggerClassName: qualityTriggerClassName[value],
 }));
 
+// Job order priority is hidden from the UI — no table column, filter, bulk
+// action, detail pill or new-row select renders it, and the xlsx import and
+// export no longer carry a "Priority Level" column. `JobOrder.priorityLevel`
+// still exists in the database and on the API entity, so these maps are kept
+// (unused) to make re-exposing the field a matter of restoring call sites.
 export const priorityLabels: Record<number, string> = {
   1: 'High',
   2: 'Medium',

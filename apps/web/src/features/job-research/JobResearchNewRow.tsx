@@ -61,11 +61,8 @@ interface UseJobResearchNewRowOptions {
  * the day the ad is found — and stays editable for an older ad. `researchedAt`
  * isn't collected here at all: it already defaults to `now()` in the schema.
  *
- * The table's City and
- * Suburb columns are both projections of one `locationId` (see `cityLabel` /
- * `suburbLabel` in ./columns), so the single location picker sits in City and
- * Suburb stays blank rather than offering a second, contradictory editor for
- * the same field.
+ * The table's City Coverage column is a projection of one `locationId` (see
+ * `cityCoverageLabel` in ./schema).
  */
 export function useJobResearchNewRow({
   onCreateJobTitle,
@@ -118,11 +115,12 @@ export function useJobResearchNewRow({
   }
 
   const editors: Record<string, React.ReactNode> = {
-    city: (
+    cityCoverage: (
       <GridCellLocationCombobox
         value={draft.locationId}
         onValueChange={(id) => set('locationId', id)}
         disabled={disabled || isSaving}
+        placeholder="City Coverage"
       />
     ),
     jobTitle: (
@@ -134,6 +132,7 @@ export function useJobResearchNewRow({
         onQueryChange={jobTitleSearch.onQueryChange}
         onCreate={onCreateJobTitle}
         disabled={disabled || isSaving}
+        placeholder="Job title"
       />
     ),
     companyName: (
@@ -141,6 +140,7 @@ export function useJobResearchNewRow({
         value={draft.clientId}
         onValueChange={(id) => set('clientId', id)}
         disabled={disabled || isSaving}
+        placeholder="Company"
       />
     ),
     salaryRange: (
@@ -149,6 +149,7 @@ export function useJobResearchNewRow({
         onChange={(e) => set('salaryRange', e.target.value)}
         disabled={disabled || isSaving}
         aria-label="Salary range"
+        placeholder="Salary range"
       />
     ),
     postedDate: (

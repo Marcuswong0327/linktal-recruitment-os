@@ -138,13 +138,12 @@ describe('buildNameIndex', () => {
 });
 
 describe('buildLocationPathIndex', () => {
-  it('builds a root-first breadcrumb path from root-last ancestorIds', () => {
+  it('keys by lowercased bare name — Location.name is globally unique', () => {
     const index = buildLocationPathIndex([
       { id: 'au', name: 'Australia', ancestorIds: ['au'] },
-      { id: 'nsw', name: 'New South Wales', ancestorIds: ['nsw', 'au'] },
-      { id: 'syd', name: 'Sydney', ancestorIds: ['syd', 'nsw', 'au'] },
+      { id: 'syd', name: 'Sydney NSW', ancestorIds: ['syd', 'au'] },
     ]);
-    expect(index.get('australia > new south wales > sydney')).toBe('syd');
+    expect(index.get('sydney nsw')).toBe('syd');
     expect(index.get('australia')).toBe('au');
   });
 });
@@ -179,36 +178,35 @@ describe('buildSpecializationReferenceSheet', () => {
 
 describe('buildLocationReferenceSheet', () => {
   const FIXTURE = [
-    { id: 'au', name: 'Australia', ancestorIds: ['au'], level: 'COUNTRY' },
-    { id: 'nsw', name: 'New South Wales', ancestorIds: ['nsw', 'au'], level: 'STATE' },
-    { id: 'syd', name: 'Sydney', ancestorIds: ['syd', 'nsw', 'au'], level: 'CITY' },
+    { id: 'au', name: 'Australia', ancestorIds: ['au'], level: 'COUNTRY', parentId: null },
+    { id: 'syd', name: 'Sydney NSW', ancestorIds: ['syd', 'au'], level: 'CITY_COVERAGE', parentId: 'au' },
   ];
 
-  it('includes every level (not just leaves) with its breadcrumb path', () => {
+  it('includes every row with its own name and country', () => {
     const sheet = buildLocationReferenceSheet(FIXTURE);
     expect(sheet.columns).toEqual([
-      { header: 'Location Path', key: 'path' },
+      { header: 'Location', key: 'name' },
+      { header: 'Country', key: 'country' },
       { header: 'Level', key: 'level' },
     ]);
     expect(sheet.rows).toEqual(
       expect.arrayContaining([
-        { path: 'Australia', level: 'COUNTRY' },
-        { path: 'Australia > New South Wales', level: 'STATE' },
-        { path: 'Australia > New South Wales > Sydney', level: 'CITY' },
+        { name: 'Australia', country: '', level: 'COUNTRY' },
+        { name: 'Sydney NSW', country: 'Australia', level: 'CITY_COVERAGE' },
       ]),
     );
-    expect(sheet.rows).toHaveLength(3);
+    expect(sheet.rows).toHaveLength(2);
   });
 
   // The regression guard the design explicitly called for: the string a user
   // would copy from this sheet must be byte-identical (case aside) to what
   // buildLocationPathIndex keys its matcher on for the same row — otherwise
   // a copy-paste from the reference sheet could fail to validate.
-  it('produces paths identical (case aside) to what buildLocationPathIndex matches on', () => {
+  it('produces names identical (case aside) to what buildLocationPathIndex matches on', () => {
     const sheet = buildLocationReferenceSheet(FIXTURE);
     const index = buildLocationPathIndex(FIXTURE);
-    for (const row of sheet.rows as { path: string }[]) {
-      expect(index.get(row.path.toLowerCase())).toBeDefined();
+    for (const row of sheet.rows as { name: string }[]) {
+      expect(index.get(row.name.toLowerCase())).toBeDefined();
     }
   });
 });

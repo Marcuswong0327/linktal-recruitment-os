@@ -4,8 +4,6 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, Clock, Search, UserRound, Users } from 'lucide-react';
 import { keepPreviousData } from '@tanstack/react-query';
-import { hasPermission } from '@/config/nav';
-import { pageCommands, actionCommands } from '@/config/commands';
 import { useIsMac } from '@/hooks/use-is-mac';
 import {
   Command,
@@ -43,17 +41,12 @@ export function useCommandPalette() {
 }
 
 export function CommandPaletteProvider({
-  permissions,
-  isAdmin,
   children,
 }: {
-  permissions: string[];
-  isAdmin: boolean;
   children: React.ReactNode;
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
-  const auth = { permissions };
   const isMac = useIsMac();
 
   React.useEffect(() => {
@@ -103,34 +96,10 @@ export function CommandPaletteProvider({
   const stakeholderHits =
     searchEnabled && stakeholderData?.status === 200 ? stakeholderData.data.data : [];
 
-  // cmdk's own filtering is off (see `shouldFilter` below) because it would
-  // re-filter server results against the raw query and drop valid hits — a
-  // candidate matched on email doesn't contain the query in its title. Pages
-  // and Actions therefore have to be filtered here instead.
-  const matchesQuery = React.useCallback(
-    (...fields: (string | undefined)[]) => {
-      if (!query.trim()) return true;
-      const needle = query.trim().toLowerCase();
-      return fields.some((f) => f?.toLowerCase().includes(needle));
-    },
-    [query],
-  );
-
   function openRecord(entry: RecentSearch) {
     remember(entry);
     go(entry.href);
   }
-
-  const visiblePages = pageCommands.filter(
-        (item) =>
-      !item.hidden &&
-      !(item.adminOnly && !isAdmin) &&
-      hasPermission(auth, item.requiredPermission) &&
-      matchesQuery(item.title),
-  );
-  const visibleActions = actionCommands.filter(
-    (item) => hasPermission(auth, item.requiredPermission) && matchesQuery(item.title, item.description),
-  );
 
   function go(href: string) {
     setOpen(false);
@@ -144,14 +113,14 @@ export function CommandPaletteProvider({
     <CommandPaletteContext.Provider value={{ openPalette: () => setOpen(true) }}>
       {children}
 
-      <CommandDialog open={open} onOpenChange={setOpen} title="Command Palette" description="Search pages and actions">
+      <CommandDialog open={open} onOpenChange={setOpen} title="Command Palette" description="Search records and pages">
         {/* shouldFilter off: record results are already narrowed server-side,
             and cmdk's substring match against the item title would drop the
             ones matched on a field the title doesn't contain (an email, a
-            phone number). Pages/Actions are filtered in this component. */}
+            phone number). Pages are filtered in this component. */}
         <Command shouldFilter={false}>
           <CommandInput
-            placeholder="Search people, companies, pages…"
+            placeholder="Search anything — candidate info, client info, phone number"
             value={query}
             onValueChange={setQuery}
           />
@@ -280,41 +249,6 @@ export function CommandPaletteProvider({
                   );
                 })}
               </CommandGroup>
-            )}
-            {visibleActions.length > 0 && (
-              <CommandGroup heading="Actions">
-                {visibleActions.map((action) => (
-                  <CommandItem key={action.href} value={action.title} onSelect={() => go(action.href)}>
-                    <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <action.icon className="size-4" />
-                    </span>
-                    <span className="flex-1 truncate">{action.title}</span>
-                    <span className="text-xs text-muted-foreground group-data-selected/command-item:text-primary/70">
-                      {action.description}
-                    </span>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-            {visiblePages.length > 0 && (
-            <CommandGroup heading="Pages">
-              {visiblePages.map((page) => (
-                <CommandItem
-                  key={page.href}
-                  value={page.title}
-                  disabled={page.disabled}
-                  onSelect={() => go(page.href)}
-                >
-                  <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground group-data-selected/command-item:bg-primary/15 group-data-selected/command-item:text-primary">
-                    {page.icon && <page.icon className="size-4" />}
-                  </span>
-                  <span className="flex-1 truncate">{page.title}</span>
-                  <span className="text-xs text-muted-foreground group-data-selected/command-item:text-primary/70">
-                    {page.disabled ? 'Coming soon' : 'Page'}
-                  </span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
             )}
           </CommandList>
           <div className="-mx-1 -mb-1 mt-1 flex items-center justify-between border-t border-border/50 px-3 py-2 text-xs text-muted-foreground">

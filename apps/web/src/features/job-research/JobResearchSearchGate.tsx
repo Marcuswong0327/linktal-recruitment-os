@@ -12,6 +12,8 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
+import { useGateSnapshot, usePersistGateSnapshot } from '@/hooks/use-gate-snapshot';
+import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { getGetClientsQueryKey } from '@/lib/api/generated/clients/clients';
 import { useGetIndustries } from '@/lib/api/generated/industries/industries';
 import {
@@ -19,7 +21,6 @@ import {
   useCreateJobResearch,
 } from '@/lib/api/generated/job-research/job-research';
 import { getGetJobTitlesQueryKey, useCreateJobTitle } from '@/lib/api/generated/job-titles/job-titles';
-import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { buildJobResearchPayload, JobResearchForm, type JobResearchFormValues } from './JobResearchForm';
 import { JobResearchTable } from './JobResearchTable';
 import {
@@ -58,33 +59,64 @@ function FilterField({ label, children }: { label: string; children: React.React
  * CompaniesSearchGate, labeled "View" rather than "Search" since this list is
  * market research (job ads found online), not a name-searchable roster.
  */
+/** What `useGateSnapshot` persists for this page — see its doc. */
+interface JobResearchGateSnapshot {
+  countryIds: string[];
+  cityIds: string[];
+  industryIds: string[];
+  specializationIds: string[];
+  statuses: string[];
+  sortByValue: SortByValue | '';
+  countryNames: Record<string, string>;
+  cityNames: Record<string, string>;
+  specializationNames: Record<string, string>;
+  appliedFilters: JobResearchAppliedFilters | null;
+}
+
+const GATE_SNAPSHOT_KEY = 'job-research-gate-snapshot';
+
 export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
 
-  const [countryIds, setCountryIds] = React.useState<string[]>([]);
-  const [cityIds, setCityIds] = React.useState<string[]>([]);
-  const [industryIds, setIndustryIds] = React.useState<string[]>([]);
-  const [specializationIds, setSpecializationIds] = React.useState<string[]>([]);
-  const [statuses, setStatuses] = React.useState<string[]>([]);
-  const [sortByValue, setSortByValue] = React.useState<SortByValue | ''>('');
+  // Returning from the Enrich Stakeholders workspace
+  // (`/job-opening-search?restore=1`) puts the page back exactly as it was
+  // left, rather than dropping the user on the empty "select your
+  // preferences" gate having lost their search.
+  const restoring = searchParams.get('restore') === '1';
+  const snapshot = useGateSnapshot<JobResearchGateSnapshot>(GATE_SNAPSHOT_KEY, restoring);
+
+  const [countryIds, setCountryIds] = React.useState<string[]>(snapshot?.countryIds ?? []);
+  const [cityIds, setCityIds] = React.useState<string[]>(snapshot?.cityIds ?? []);
+  const [industryIds, setIndustryIds] = React.useState<string[]>(snapshot?.industryIds ?? []);
+  const [specializationIds, setSpecializationIds] = React.useState<string[]>(
+    snapshot?.specializationIds ?? [],
+  );
+  const [statuses, setStatuses] = React.useState<string[]>(snapshot?.statuses ?? []);
+  const [sortByValue, setSortByValue] = React.useState<SortByValue | ''>(snapshot?.sortByValue ?? '');
 
   // Country/City/Specialization are server-searched (see LocationFilterButton
   // /SpecializationFilterButton) — the API only returns a name alongside a
   // live search result, not by id, so each is cached here as the user
   // searches, same reasoning as CompaniesSearchGate's resolver maps.
-  const [countryNames, setCountryNames] = React.useState<Record<string, string>>({});
+  const [countryNames, setCountryNames] = React.useState<Record<string, string>>(
+    snapshot?.countryNames ?? {},
+  );
   const registerCountryName = React.useCallback(
     (id: string, name: string) => setCountryNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
     [],
   );
-  const [cityNames, setCityNames] = React.useState<Record<string, string>>({});
+  const [cityNames, setCityNames] = React.useState<Record<string, string>>(
+    snapshot?.cityNames ?? {},
+  );
   const registerCityName = React.useCallback(
     (id: string, name: string) => setCityNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
     [],
   );
-  const [specializationNames, setSpecializationNames] = React.useState<Record<string, string>>({});
+  const [specializationNames, setSpecializationNames] = React.useState<Record<string, string>>(
+    snapshot?.specializationNames ?? {},
+  );
   const registerSpecializationName = React.useCallback(
     (id: string, name: string) =>
       setSpecializationNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
@@ -140,7 +172,22 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
     createJobResearchMutation.mutate({ data: buildJobResearchPayload(values) });
   }
 
-  const [appliedFilters, setAppliedFilters] = React.useState<JobResearchAppliedFilters | null>(null);
+  const [appliedFilters, setAppliedFilters] = React.useState<JobResearchAppliedFilters | null>(
+    snapshot?.appliedFilters ?? null,
+  );
+
+  usePersistGateSnapshot(GATE_SNAPSHOT_KEY, {
+    countryIds,
+    cityIds,
+    industryIds,
+    specializationIds,
+    statuses,
+    sortByValue,
+    countryNames,
+    cityNames,
+    specializationNames,
+    appliedFilters,
+  } satisfies JobResearchGateSnapshot);
 
   useSeedFiltersFromScope({
     setIndustryIds,
@@ -150,6 +197,7 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
     setCityIds,
     registerCountryName,
     registerCityName,
+    skip: snapshot !== null,
   });
 
   const hasActiveFilters =
@@ -235,15 +283,15 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
               industryIds={industryIds}
             />
           </FilterField>
-          <FilterField label="City">
+          <FilterField label="City Coverage">
             <LocationFilterButton
               selected={cityIds}
               onChange={setCityIds}
-              level="CITY"
+              level="CITY_COVERAGE"
               underId={countryIds.length === 1 ? countryIds[0] : undefined}
               compact={false}
-              placeholder="All cities"
-              title="City"
+              placeholder="All City Coverage"
+              title="City Coverage"
               labelFor={(id) => cityNames[id] ?? id}
               onResolve={registerCityName}
             />

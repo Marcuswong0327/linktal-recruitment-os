@@ -13,6 +13,7 @@ import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
 import { downloadFile } from '@/lib/api/fetcher';
 import {
   getExportStakeholdersByIdsUrl,
+  getGetStakeholdersForEnrichmentQueryKey,
   getGetStakeholdersQueryKey,
   useGetStakeholdersForEnrichment,
   useUpdateStakeholder,
@@ -35,12 +36,19 @@ import { getStakeholderColumns, roleTypeStyle, type StakeholderStatus } from './
 export function StakeholderEnrichmentWorkspace({
   clientIds,
   canUpdate,
+  from,
 }: {
   clientIds: string[];
   canUpdate: boolean;
+  /** Which list opened this workspace — see `backHref`. */
+  from?: string;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  // Both lists that open this workspace restore their own gate on
+  // `?restore=1` (see useGateSnapshot). Companies stays the fallback so an
+  // older link, or one typed by hand, behaves as it always did.
+  const backHref = from === 'job-opening-search' ? '/job-opening-search?restore=1' : '/companies?restore=1';
   const [selected, setSelected] = React.useState<StakeholderEntity[]>([]);
   const [isExporting, setIsExporting] = React.useState(false);
 
@@ -82,7 +90,15 @@ export function StakeholderEnrichmentWorkspace({
 
   const updateStakeholderMutation = useUpdateStakeholder({
     mutation: {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() }),
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetStakeholdersQueryKey() });
+        // The grid renders /stakeholders/enrichment, a different key that
+        // `/stakeholders` does not prefix-match — without this the edited cell
+        // keeps its old value (behind a success toast) until a manual refresh.
+        queryClient.invalidateQueries({
+          queryKey: getGetStakeholdersForEnrichmentQueryKey(),
+        });
+      },
       onError: (err) => toast.error(err.message || 'Failed to update stakeholder'),
     },
   });
@@ -159,11 +175,11 @@ export function StakeholderEnrichmentWorkspace({
           variant="ghost"
           size="sm"
           nativeButton={false}
-          render={<Link href="/companies" />}
+          render={<Link href={backHref} />}
           className="-ml-2 self-start text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft />
-          Back
+          {from === 'job-opening-search' ? 'Back to Job Opening Search' : 'Back to Companies'}
         </Button>
         <PageHeader
           title="Stakeholder Enrichment Workspace"

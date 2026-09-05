@@ -12,7 +12,6 @@ import { ExportJobOrdersDto } from './dto/export-job-orders.dto';
 import { buildWorkbook, formatExportDate, resolveTimeZone, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
 import { jobOrderQualityLabels } from '../common/export-labels';
-import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
 
 /** The subset of QueryJobOrdersDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination but still satisfies this structurally. */
 type JobOrderFilterFields = Pick<
@@ -172,7 +171,6 @@ type JobOrderExportRow = {
   locationPath: string | null;
   status: JobOrderStatus;
   quality: JobOrderQuality;
-  priorityLevel: number | null;
   salaryMin: number | null;
   salaryMax: number | null;
   salaryCurrency: string | null;
@@ -365,19 +363,17 @@ export class JobOrdersService {
   }
 
   /**
-   * Resolves each job order's location to a full breadcrumb path — the exact
-   * format JOB_ORDER_IMPORT_COLUMNS (job-orders-import.service.ts) expects,
-   * so an exported sheet actually re-imports. Same pattern as ClientsService's
-   * `locationPaths`.
+   * Resolves each job order's location to its (now globally unique) name —
+   * the exact string JOB_ORDER_IMPORT_COLUMNS (job-orders-import.service.ts)
+   * expects, so an exported sheet actually re-imports. Same pattern as
+   * ClientsService's `locationPaths`.
    */
-  private async withLocationPath<T extends JobOrderWithRelations>(
+  private withLocationPath<T extends JobOrderWithRelations>(
     jobOrders: T[],
-  ): Promise<(T & { locationPath: string | null })[]> {
-    const allLocations = await this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true } });
-    const byId = buildLocationById(allLocations);
+  ): (T & { locationPath: string | null })[] {
     return jobOrders.map((jo) => ({
       ...jo,
-      locationPath: jo.location ? locationBreadcrumbPath(jo.location, byId) : null,
+      locationPath: jo.location?.name ?? null,
     }));
   }
 
@@ -406,8 +402,7 @@ export class JobOrdersService {
     const tz = resolveTimeZone(timezone);
     // Header text and value format (Location: full breadcrumb path; Status:
     // the raw enum text, not a humanized label — "On Hold" wouldn't match
-    // the "ON_HOLD" import expects; Priority Level: the raw 1/2/3, not the
-    // High/Medium/Low label, same reasoning) are deliberately identical to
+    // the "ON_HOLD" import expects) are deliberately identical to
     // JOB_ORDER_IMPORT_COLUMNS (job-orders-import.service.ts), for the same
     // "Export to Excel → edit → re-upload" round trip ImportDialog's own
     // instructions promise.
@@ -420,7 +415,6 @@ export class JobOrdersService {
       { header: 'Location', key: 'location' },
       { header: 'Status', key: 'status', required: true },
       { header: 'Quality', key: 'quality', required: true },
-      { header: 'Priority Level', key: 'priorityLevel' },
       { header: 'Salary Min', key: 'salaryMin' },
       { header: 'Salary Max', key: 'salaryMax' },
       { header: 'Salary Currency', key: 'salaryCurrency' },
@@ -443,7 +437,6 @@ export class JobOrdersService {
       location: jo.locationPath ?? '',
       status: jo.status,
       quality: jobOrderQualityLabels[jo.quality],
-      priorityLevel: jo.priorityLevel ?? '',
       salaryMin: jo.salaryMin ?? '',
       salaryMax: jo.salaryMax ?? '',
       salaryCurrency: jo.salaryCurrency ?? '',

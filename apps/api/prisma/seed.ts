@@ -134,6 +134,13 @@ const ROLE_PERMISSIONS: Record<string, { resources: string[]; actions: string[] 
     // Read-only on the scope-bearing catalogs: a consultant picks from
     // location/industry/specialization but must not grow them.
     { resources: [...SCOPE_BEARING_CATALOGS], actions: ["read"] },
+    // ...with one deliberate exception. Specialization is the fine-grained
+    // rung consultants actually need while tagging a company (775 rows vs 4
+    // industries), so they may grow it. Industry and location stay read-only:
+    // a brand-new industry is held by nobody, so tagging a client with one
+    // hides that client from every consultant at once via the industry arm
+    // (see docs/scope-explained.md §3).
+    { resources: ["specialization"], actions: ["create"] },
     // Read-only roster + grants: needed to pick teammates by name (and see
     // their industry/location) when assigning multiple consultants to a job
     // order (PUT /job-orders/:id/consultants) — see docs/scope-explained.md.

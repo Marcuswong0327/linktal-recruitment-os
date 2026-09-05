@@ -9475,9 +9475,7 @@
               "type": "string",
               "enum": [
                 "COUNTRY",
-                "STATE",
-                "CITY",
-                "SUBURB"
+                "CITY_COVERAGE"
               ]
             }
           },
@@ -9503,7 +9501,7 @@
             "name": "take",
             "required": false,
             "in": "query",
-            "description": "Maximum rows to return. The tree is ~2k nodes today and grows, so reads are always capped.",
+            "description": "Maximum rows to return.",
             "schema": {
               "minimum": 1,
               "maximum": 200,
@@ -9552,7 +9550,7 @@
             "bearer": []
           }
         ],
-        "summary": "Search or browse the geography tree (capped; filterable by name, level, parent or subtree)",
+        "summary": "Search or browse the Country / City Coverage tree",
         "tags": [
           "Locations"
         ]
@@ -9607,7 +9605,7 @@
             "bearer": []
           }
         ],
-        "summary": "Add a location node (admin only — the tree is normally bulk-loaded from GeoNames)",
+        "summary": "Add a country or City Coverage value (admin only)",
         "tags": [
           "Locations"
         ]
@@ -9674,6 +9672,137 @@
           }
         ],
         "summary": "Get one location node by ID",
+        "tags": [
+          "Locations"
+        ]
+      },
+      "patch": {
+        "operationId": "updateLocation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLocationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Location updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Rename or reparent a location (admin only; the 13 seeded rows are protected)",
+        "tags": [
+          "Locations"
+        ]
+      },
+      "delete": {
+        "operationId": "deleteLocation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Location deleted"
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a location (admin only; blocked if protected, has children, or is still in use)",
         "tags": [
           "Locations"
         ]
@@ -11488,17 +11617,10 @@
             "type": "string",
             "enum": [
               "COUNTRY",
-              "STATE",
-              "CITY",
-              "SUBURB"
+              "CITY_COVERAGE"
             ],
             "nullable": true,
             "description": "Which rung of the geography tree `location` sits on — a candidate known only to city level has no suburb"
-          },
-          "suburbAndPostcode": {
-            "type": "string",
-            "nullable": true,
-            "description": "Free-text suburb and postcode, e.g. \"Merrylands 2160 NSW\" — not tied to the Location tree (suburb-level rows and postcodes were never loaded) and plays no part in scoping."
           },
           "industryId": {
             "type": "string",
@@ -11662,7 +11784,6 @@
           "locationId",
           "location",
           "locationLevel",
-          "suburbAndPostcode",
           "industryId",
           "industry",
           "jobRoleTypeId",
@@ -11960,11 +12081,6 @@
             "type": "string",
             "description": "Industry ID (see /industries)"
           },
-          "suburbAndPostcode": {
-            "type": "string",
-            "description": "Free-text suburb and postcode, e.g. \"Merrylands 2160 NSW\" — not tied to the Location tree",
-            "example": "Merrylands 2160 NSW"
-          },
           "jobRoleTypeId": {
             "type": "string",
             "description": "Job role type ID (see /job-role-types)"
@@ -12081,11 +12197,6 @@
           "industryId": {
             "type": "string",
             "description": "Industry ID (see /industries)"
-          },
-          "suburbAndPostcode": {
-            "type": "string",
-            "description": "Free-text suburb and postcode, e.g. \"Merrylands 2160 NSW\" — not tied to the Location tree",
-            "example": "Merrylands 2160 NSW"
           },
           "jobRoleTypeId": {
             "type": "string",
@@ -12679,14 +12790,6 @@
             "nullable": true,
             "description": "The client's own physical office address(es) — distinct from `locations`"
           },
-          "suburbsAndPostcodes": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "nullable": true,
-            "description": "The client's own office suburb/postcode(s)"
-          },
           "website": {
             "type": "string",
             "nullable": true
@@ -12771,7 +12874,6 @@
           "locations",
           "locationIds",
           "addresses",
-          "suburbsAndPostcodes",
           "website",
           "seekJobMarketUrl",
           "linkedinJobMarketUrl",
@@ -12840,7 +12942,8 @@
           },
           "specializationId": {
             "type": "string",
-            "description": "Specialization ID (see /specializations)"
+            "description": "Specialization ID (see /specializations) — null clears it",
+            "nullable": true
           },
           "locationIds": {
             "description": "Location nodes this client hires from — its market, not its office address. At least one is required (country level at minimum); mixed granularity is fine.",
@@ -12851,13 +12954,6 @@
           },
           "addresses": {
             "description": "The client's own physical office address(es) — distinct from `locationIds` above",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "suburbsAndPostcodes": {
-            "description": "The client's own office suburb/postcode(s) — same distinction as `addresses`",
             "type": "array",
             "items": {
               "type": "string"
@@ -12922,7 +13018,8 @@
           },
           "specializationId": {
             "type": "string",
-            "description": "Specialization ID (see /specializations)"
+            "description": "Specialization ID (see /specializations) — null clears it",
+            "nullable": true
           },
           "locationIds": {
             "description": "Location nodes this client hires from — its market, not its office address. At least one is required (country level at minimum); mixed granularity is fine.",
@@ -12933,13 +13030,6 @@
           },
           "addresses": {
             "description": "The client's own physical office address(es) — distinct from `locationIds` above",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "suburbsAndPostcodes": {
-            "description": "The client's own office suburb/postcode(s) — same distinction as `addresses`",
             "type": "array",
             "items": {
               "type": "string"
@@ -13907,9 +13997,7 @@
             "type": "string",
             "enum": [
               "COUNTRY",
-              "STATE",
-              "CITY",
-              "SUBURB"
+              "CITY_COVERAGE"
             ],
             "nullable": true,
             "description": "Which rung of the geography tree `location` sits on"
@@ -14408,8 +14496,12 @@
           },
           "locationLevel": {
             "type": "string",
+            "enum": [
+              "COUNTRY",
+              "CITY_COVERAGE"
+            ],
             "nullable": true,
-            "description": "Rung of the location node (COUNTRY/STATE/CITY/SUBURB)"
+            "description": "Rung of the location node"
           },
           "jobTitleId": {
             "type": "string",
@@ -15462,26 +15554,18 @@
           },
           "name": {
             "type": "string",
-            "example": "Sydney"
+            "example": "Sydney NSW"
           },
           "level": {
             "type": "string",
             "enum": [
               "COUNTRY",
-              "STATE",
-              "CITY",
-              "SUBURB"
+              "CITY_COVERAGE"
             ]
           },
-          "postcode": {
-            "type": "string",
-            "nullable": true,
-            "description": "Only ever set at SUBURB level"
-          },
-          "geonameId": {
-            "type": "number",
-            "nullable": true,
-            "description": "GeoNames id — what makes the bulk load idempotent and re-runnable"
+          "isProtected": {
+            "type": "boolean",
+            "description": "Part of the approved 13-row catalog — cannot be renamed, reparented or deleted by anyone"
           },
           "parentId": {
             "type": "string",
@@ -15493,7 +15577,7 @@
             "items": {
               "type": "string"
             },
-            "description": "Self plus every ancestor, root-last"
+            "description": "Self plus parent, root-last"
           },
           "createdAt": {
             "format": "date-time",
@@ -15508,8 +15592,7 @@
           "id",
           "name",
           "level",
-          "postcode",
-          "geonameId",
+          "isProtected",
           "parentId",
           "ancestorIds",
           "createdAt",
@@ -15522,36 +15605,38 @@
           "name": {
             "type": "string",
             "description": "Node name",
-            "example": "Silverwater"
+            "example": "Adelaide SA"
           },
           "level": {
             "type": "string",
             "enum": [
               "COUNTRY",
-              "STATE",
-              "CITY",
-              "SUBURB"
+              "CITY_COVERAGE"
             ],
-            "description": "Which rung this node sits on"
+            "description": "COUNTRY, or CITY_COVERAGE under an existing country"
           },
           "parentId": {
             "type": "string",
-            "description": "Parent node. Required for everything except COUNTRY, which sits at the root."
-          },
-          "postcode": {
-            "type": "string",
-            "description": "Only meaningful at SUBURB level",
-            "example": "2128"
-          },
-          "geonameId": {
-            "type": "number",
-            "description": "GeoNames id, if this node has one — keeps a later bulk load from duplicating it"
+            "description": "Parent country. Required for CITY_COVERAGE; must be omitted for COUNTRY, which sits at the root."
           }
         },
         "required": [
           "name",
           "level"
         ]
+      },
+      "UpdateLocationDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "New name"
+          },
+          "parentId": {
+            "type": "string",
+            "description": "New parent country (CITY_COVERAGE only). Omit to leave the current parent unchanged."
+          }
+        }
       },
       "JobTitleEntity": {
         "type": "object",

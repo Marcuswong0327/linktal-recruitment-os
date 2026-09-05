@@ -155,6 +155,7 @@ export function GridCellContactInput({
         }}
         disabled={disabled}
         aria-label="Email, phone or LinkedIn"
+        placeholder="Email, phone or LinkedIn"
       />
     </div>
   );

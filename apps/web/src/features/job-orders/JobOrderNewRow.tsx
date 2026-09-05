@@ -16,14 +16,13 @@ import type {
   JobOrderEntityQuality,
   JobOrderEntityStatus,
 } from '@/lib/api/generated/types';
-import { priorityOptions, qualityOptions, statusOptions } from './schema';
+import { qualityOptions, statusOptions } from './schema';
 
 interface JobOrderDraft {
   clientId: string;
   jobTitleId: string;
   status: string;
   quality: string;
-  priorityLevel: string;
   consultantIds: string[];
 }
 
@@ -32,7 +31,6 @@ const emptyDraft: JobOrderDraft = {
   jobTitleId: '',
   status: '',
   quality: '',
-  priorityLevel: '',
   consultantIds: [],
 };
 
@@ -49,9 +47,9 @@ interface UseJobOrderNewRowOptions {
  * table's last row, parked on its bottom edge (see `DataGridProps.newRow`).
  *
  * Client and Role are the only fields `CreateJobOrderDto` requires; Status,
- * Quality, Priority and Consultant are all offered here too but left unsent
- * when untouched, so the server's own defaults (ACTIVE / MEDIUM / 2) still
- * apply rather than this row hardcoding a second copy of them. The remaining
+ * Quality and Consultant are all offered here too but left unsent when
+ * untouched, so the server's own defaults (ACTIVE / MEDIUM) still apply
+ * rather than this row hardcoding a second copy of them. The remaining
  * columns are computed (submission counts, timestamps) and render blank.
  */
 export function useJobOrderNewRow({
@@ -80,7 +78,6 @@ export function useJobOrderNewRow({
         jobTitleId: draft.jobTitleId,
         ...(draft.status ? { status: draft.status as JobOrderEntityStatus } : {}),
         ...(draft.quality ? { quality: draft.quality as JobOrderEntityQuality } : {}),
-        ...(draft.priorityLevel ? { priorityLevel: Number(draft.priorityLevel) } : {}),
         ...(draft.consultantIds.length ? { consultantIds: draft.consultantIds } : {}),
       });
       setDraft(emptyDraft);
@@ -103,6 +100,7 @@ export function useJobOrderNewRow({
         onValueChange={(v) => set('status', v)}
         options={statusOptions}
         disabled={disabled || isSaving}
+        placeholder="Status"
       />
     ),
     quality: (
@@ -111,14 +109,7 @@ export function useJobOrderNewRow({
         onValueChange={(v) => set('quality', v)}
         options={qualityOptions}
         disabled={disabled || isSaving}
-      />
-    ),
-    priorityLevel: (
-      <GridCellEnumCombobox
-        value={draft.priorityLevel}
-        onValueChange={(v) => set('priorityLevel', v)}
-        options={priorityOptions}
-        disabled={disabled || isSaving}
+        placeholder="Quality"
       />
     ),
     clientId: (
@@ -126,6 +117,7 @@ export function useJobOrderNewRow({
         value={draft.clientId}
         onValueChange={(id) => set('clientId', id)}
         disabled={disabled || isSaving}
+        placeholder="Client"
       />
     ),
     jobTitle: (
@@ -137,6 +129,7 @@ export function useJobOrderNewRow({
         onQueryChange={jobTitleSearch.onQueryChange}
         onCreate={onCreateJobTitle}
         disabled={disabled || isSaving}
+        placeholder="Role"
       />
     ),
     consultants: (
@@ -145,6 +138,7 @@ export function useJobOrderNewRow({
         onChange={(ids) => set('consultantIds', ids)}
         consultants={consultants}
         disabled={disabled || isSaving}
+        placeholder="Consultants"
       />
     ),
   };

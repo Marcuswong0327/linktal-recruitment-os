@@ -14,7 +14,6 @@ import { EnrichmentStakeholdersDto } from './dto/enrichment-stakeholders.dto';
 import { classifyJobTitle } from './role-type-classifier';
 import { buildWorkbook, resolveTimeZone, splitContactDateTime, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
-import { buildLocationById, locationBreadcrumbPath } from '../common/xlsx-import';
 import { searchTokens } from '../common/search-tokens';
 
 /** The subset of QueryStakeholdersDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination/sort but still satisfies this structurally. */
@@ -326,24 +325,22 @@ export class StakeholdersService {
 
   /**
    * Resolves each stakeholder's client displayId and coverage locations to
-   * full breadcrumb paths — the exact format STAKEHOLDER_IMPORT_COLUMNS
-   * (stakeholders-import.service.ts) expects for Client Display ID/Coverage
-   * Locations, so an exported sheet actually re-imports. Neither field
-   * survives `toEntity` in that shape (it resolves `client` down to just
-   * `companyName`, and strips `coverage`'s `ancestorIds`), so this computes
-   * them from the raw Prisma rows and merges them in as extra fields
-   * `toEntity`'s return type doesn't otherwise carry — same pattern as
-   * ClientsService's `withLocationPaths`.
+   * their (now globally unique) names — the exact format
+   * STAKEHOLDER_IMPORT_COLUMNS (stakeholders-import.service.ts) expects for
+   * Client Display ID/Coverage Locations, so an exported sheet actually
+   * re-imports. Neither field survives `toEntity` in that shape (it resolves
+   * `client` down to just `companyName`, and strips `coverage`'s
+   * `ancestorIds`), so this computes them from the raw Prisma rows and merges
+   * them in as extra fields `toEntity`'s return type doesn't otherwise carry
+   * — same pattern as ClientsService's `withLocationPaths`.
    */
-  private async withExportExtras<T extends StakeholderWithRelations>(
+  private withExportExtras<T extends StakeholderWithRelations>(
     stakeholders: T[],
-  ): Promise<(T & { clientDisplayId: string | null; coveragePaths: string[] })[]> {
-    const allLocations = await this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true } });
-    const byId = buildLocationById(allLocations);
+  ): (T & { clientDisplayId: string | null; coveragePaths: string[] })[] {
     return stakeholders.map((s) => ({
       ...s,
       clientDisplayId: s.client?.displayId ?? null,
-      coveragePaths: s.coverage.map((c) => locationBreadcrumbPath(c.location, byId)),
+      coveragePaths: s.coverage.map((c) => c.location.name),
     }));
   }
 

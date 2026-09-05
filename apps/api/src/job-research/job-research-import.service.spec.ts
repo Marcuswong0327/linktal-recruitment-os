@@ -6,13 +6,12 @@ import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 
 const CLIENT = { id: 'client1', displayId: 'CLI-000001' };
 const CONSULTANT = { id: 'cst1', displayId: 'CST-000001' };
-const LOCATION = { id: 'loc-syd', name: 'Sydney', ancestorIds: ['loc-syd', 'loc-nsw', 'loc-au'] };
+const LOCATION = { id: 'loc-syd', name: 'Sydney NSW', ancestorIds: ['loc-syd', 'loc-au'] };
 const LOCATION_ANCESTORS = [
   { id: 'loc-au', name: 'Australia', ancestorIds: ['loc-au'] },
-  { id: 'loc-nsw', name: 'New South Wales', ancestorIds: ['loc-nsw', 'loc-au'] },
   LOCATION,
 ];
-const LOCATION_PATH = 'Australia > New South Wales > Sydney';
+const LOCATION_PATH = 'Sydney NSW';
 const EXISTING_RESEARCH = { id: 'jr1', displayId: 'JR-000001' };
 
 async function makeJobResearchWorkbook(rows: Record<string, string>[]): Promise<Buffer> {
@@ -340,7 +339,7 @@ describe('JobResearchImportService.buildTemplate', () => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer as any);
 
-    const definedName = workbook.definedNames.model.find((d) => d.name.includes('Locations') && d.name.includes('path'));
+    const definedName = workbook.definedNames.model.find((d) => d.name.includes('Locations') && d.name.includes('name'));
     expect(definedName).toBeDefined();
 
     const dataSheet = workbook.getWorksheet('Job Research')!;

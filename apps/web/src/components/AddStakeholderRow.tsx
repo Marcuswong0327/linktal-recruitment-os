@@ -214,7 +214,7 @@ export function AddStakeholderRow({
         </FormField>
       </div>
       <FormField
-        label="Coverage"
+        label="City Coverage"
         htmlFor="stakeholder-coverage"
         description="Which places this contact covers. Optional — can be set later from their detail page."
       >

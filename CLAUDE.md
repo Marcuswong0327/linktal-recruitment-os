@@ -47,10 +47,14 @@ the short version.
 Most scoping and filtering resolves through one of two trees, and both behave
 identically — **a node covers itself plus every descendant**:
 
-- **Geography** — `Location`, four rungs (`COUNTRY ▸ STATE ▸ CITY ▸ SUBURB`),
-  bulk-loaded from GeoNames. Nothing is hand-typed; `location:create` is
-  admin-only. Linktal's desk labels are *not* nodes: `Brisbane GC QLD` is two
-  CITY grants, `East Malaysia` two STATE grants, `All Malaysia` one COUNTRY grant.
+- **Geography** — `Location`, two rungs (`COUNTRY ▸ CITY_COVERAGE`), called
+  "City Coverage" everywhere in the UI. 13 seeded rows (2 countries, 11 city
+  coverages — e.g. `Brisbane GC QLD`, `KL Selangor`) are the approved catalog
+  and `isProtected`: nobody, including admin, can rename or delete them.
+  Admin can add further countries/city coverages beyond the 13, and can
+  edit/delete the ones they added (`location:create`/`update`/`delete` are
+  admin-only). A record or grant may sit on a country, a city coverage under
+  it, or both at once (a client can be tagged `Australia` + `Sydney NSW`).
 - **Taxonomy** — `Industry ▸ Specialization ▸ child Specialization`. Consultants
   grant coarse categories (`Food`); records tag specific leaves (`Food Bakery`).
   Admin + manager create only.
@@ -110,7 +114,7 @@ least one `ClientLocation`.
 |---|---|
 | `Candidate.workHistory` | `[{company, role, period}]` — `period` is free text |
 | `Candidate.notes` | `[{id, content, timestamp, by, editedAt, editedBy}]` |
-| `Client.addresses` · `Client.suburbsAndPostcodes` | arrays of strings |
+| `Client.addresses` | array of strings |
 
 `Client` has no notes timeline — client-side notes live in
 `StakeholderContactHistory`.
@@ -139,7 +143,7 @@ with an already-imported one.
 - **Interview**: SCHEDULED · PENDING · PASSED · FAILED · CANCELLED
 - **Placement**: ACTIVE · COMPLETED · FAILED · fee type PERCENTAGE | FLAT
 - **Quality**: LOW · MEDIUM · HIGH
-- **LocationLevel**: COUNTRY · STATE · CITY · SUBURB
+- **LocationLevel**: COUNTRY · CITY_COVERAGE
 
 Declaration order is sort order (Postgres enums sort by ordinal), so
 `ORDER BY status`/`quality` is already meaningful without a CASE expression.

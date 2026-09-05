@@ -27,9 +27,7 @@ export interface LocationOption {
 
 export const LEVEL_LABEL: Record<LocationEntity['level'], string> = {
   [LocationEntityLevel.COUNTRY]: 'Country',
-  [LocationEntityLevel.STATE]: 'State',
-  [LocationEntityLevel.CITY]: 'City',
-  [LocationEntityLevel.SUBURB]: 'Suburb',
+  [LocationEntityLevel.CITY_COVERAGE]: 'City Coverage',
 };
 
 const MIN_QUERY_LENGTH = 2;
@@ -56,13 +54,14 @@ interface LocationMultiSelectProps {
 }
 
 /**
- * Search-as-you-type multi-select over the Location catalog (COUNTRY ▸
- * STATE ▸ CITY ▸ SUBURB, bulk-loaded from GeoNames — ~2k nodes and growing).
- * Unlike `TagMultiSelect` (a small in-memory catalog filtered client-side),
- * this queries `GET /locations?q=` per keystroke (debounced) since the tree
- * is too large to fetch in full — same reasoning as `ClientCombobox`, but
- * server-searched rather than server-fetched-once. No "browse" affordance
- * and no inline create (Location is admin-only, never hand-typed — see
+ * Multi-select over the City Coverage catalog (Country ▸ City Coverage — 13
+ * seeded rows, plus whatever admin has added since). Small enough to browse
+ * in full: the dropdown loads the top matches with an empty query, same as
+ * `LocationFilterButton` below, rather than gating on a typed prefix the way
+ * the old GeoNames-scale tree needed to. Still server-searched via
+ * `GET /locations?q=` (not fetched-and-filtered client-side like
+ * `TagMultiSelect`) so it stays correct as admin grows the catalog. No
+ * inline create (Location is admin-only, never hand-typed — see
  * `locations.controller.ts`).
  */
 export function LocationMultiSelect({
@@ -87,12 +86,14 @@ export function LocationMultiSelect({
     return () => clearTimeout(timer);
   }, [inputValue]);
 
-  const searchEnabled = debouncedQuery.length >= MIN_QUERY_LENGTH;
+  // Always enabled, unlike the old GeoNames-scale search — with a 13-plus-row
+  // catalog, an empty query just lists everything (see LocationFilterButton's
+  // `browsable` for the same behavior).
   const { data, isFetching } = useGetLocations(
-    { q: debouncedQuery, take: 20 },
-    { query: { enabled: searchEnabled, placeholderData: keepPreviousData } },
+    { q: debouncedQuery || undefined, take: 50 },
+    { query: { placeholderData: keepPreviousData } },
   );
-  const results: LocationEntity[] = searchEnabled && data?.status === 200 ? data.data : [];
+  const results: LocationEntity[] = data?.status === 200 ? data.data : [];
   const resultsById = React.useMemo(() => new Map(results.map((r) => [r.id, r])), [results]);
   const selectedIds = React.useMemo(() => selected.map((s) => s.id), [selected]);
   const items = React.useMemo(() => results.map((r) => r.id), [results]);
@@ -250,7 +251,7 @@ export function LocationMultiSelect({
               {isFetching ? <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" /> : null}
             </div>
             <Combobox.Empty className="px-3 pb-3 text-center text-sm text-muted-foreground empty:hidden">
-              {!searchEnabled ? 'Type at least 2 characters to search.' : 'No locations found.'}
+              No locations found.
             </Combobox.Empty>
             <Combobox.List className="max-h-64 overflow-y-auto p-1">
               {(valueId: string) => {
@@ -292,8 +293,9 @@ export interface LocationFilterButtonProps {
   level?: LocationEntity['level'];
   /**
    * Loads a default list (`level` + empty query) instead of requiring
-   * `MIN_QUERY_LENGTH` characters first — sane for a small, browsable rung
-   * like Country; leave off for a huge one like City, which must be typed.
+   * `MIN_QUERY_LENGTH` characters first. Defaults to true — both rungs are
+   * small (13 seeded rows total) now that the catalog isn't GeoNames-scale
+   * — pass `false` only if a future rung genuinely needs type-ahead again.
    */
   browsable?: boolean;
   /** Icon-only trigger (default) for a `DataGridFilter` header slot, vs a full dashed-pill dropdown field for an action-bar filter row. */
@@ -318,7 +320,7 @@ export function LocationFilterButton({
   onResolve,
   title = 'Location',
   level,
-  browsable = false,
+  browsable = true,
   compact = true,
   placeholder,
   labelFor,

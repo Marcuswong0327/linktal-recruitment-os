@@ -46,6 +46,19 @@ export const candidateStatusTriggerClassName: Record<(typeof candidateStatuses)[
   UNS: 'border-transparent bg-muted text-muted-foreground',
 };
 
+/**
+ * Options for an `EnumSelect` over candidate status — the pill form, used by
+ * CandidateForm and the detail header. Distinct from CandidateSearchGate's
+ * own list, which carries `variant` for a filter chip rather than
+ * `triggerClassName` for a select trigger.
+ */
+export const candidateStatusOptions = candidateStatuses.map((value) => ({
+  value,
+  label: candidateStatusLabels[value],
+  triggerClassName: candidateStatusTriggerClassName[value],
+}));
+
+
 /** "3mo ago" / "Never" — for `lastContactDate` (resolved live from the latest contact history row; see CandidateEntity.lastContactDate). */
 export function formatRelativeContact(iso: string | null): string {
   if (!iso) return 'Never';

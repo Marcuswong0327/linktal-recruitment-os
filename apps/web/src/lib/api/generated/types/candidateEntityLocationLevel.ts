@@ -15,7 +15,5 @@ export type CandidateEntityLocationLevel = typeof CandidateEntityLocationLevel[k
 
 export const CandidateEntityLocationLevel = {
   COUNTRY: 'COUNTRY',
-  STATE: 'STATE',
-  CITY: 'CITY',
-  SUBURB: 'SUBURB',
+  CITY_COVERAGE: 'CITY_COVERAGE',
 } as const;

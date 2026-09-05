@@ -33,7 +33,7 @@ export const JOB_RESEARCH_IMPORT_COLUMNS: ImportColumn[] = [
     key: 'consultantDisplayId',
     dropdown: { kind: 'reference', sheetTitle: 'Consultants', columnKey: 'displayId' },
   },
-  { header: 'Location', key: 'location', dropdown: { kind: 'reference', sheetTitle: 'Locations', columnKey: 'path' } },
+  { header: 'Location', key: 'location', dropdown: { kind: 'reference', sheetTitle: 'Locations', columnKey: 'name' } },
   { header: 'Job Title', key: 'jobTitle', dropdown: { kind: 'reference', sheetTitle: 'Job Titles', columnKey: 'name' } },
   {
     header: 'Job Role Type',
@@ -54,7 +54,7 @@ const JOB_RESEARCH_IMPORT_INSTRUCTIONS = [
   'Client Display ID must exactly match an existing company\'s Display ID — required on every row, including new ones (research always belongs to a company). We can\'t match by company name instead: names aren\'t guaranteed unique in this system.',
   'Consultant Display ID (who conducted the research) is optional, but if provided must exactly match an existing consultant\'s Display ID — leave it blank rather than guessing.',
   'Job Title and Job Role Type are grown freely (same as typing a new one into either combobox in the app) — an unmatched value creates it rather than being rejected.',
-  'Location: a single breadcrumb path, e.g. "Australia > New South Wales > Sydney". Optional.',
+  'Location: a single Country or City Coverage value from the Locations sheet, e.g. "Melbourne VIC". Optional.',
   'Status is a snapshot of the company\'s status when the ad was logged (COLD, WARM, or TRADED) — not a live reference to the company\'s current status. Optional; blank clears it.',
   'Is Contacted: Yes or No, required on every row so a bulk import can never silently reset it. Posted Date: an ISO date (e.g. 2026-08-01).',
   'Not included in this template: Researched At (defaults to the moment of import for new rows, and is left unchanged when updating — a log timestamp, not editable data), and Last Contacted At/By plus the linked Job Order, both of which are set only through their own dedicated actions in the app.',
@@ -132,7 +132,7 @@ export class JobResearchImportService {
       }),
       this.base.jobTitle.findMany({ where: { isActive: true }, select: { name: true } }),
       this.base.jobRoleType.findMany({ where: { isActive: true }, select: { name: true } }),
-      this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true, level: true } }),
+      this.base.location.findMany({ select: { id: true, name: true, ancestorIds: true, level: true, parentId: true } }),
     ]);
     return buildTemplateWorkbook('Job Research', JOB_RESEARCH_IMPORT_COLUMNS, JOB_RESEARCH_IMPORT_INSTRUCTIONS, [
       {

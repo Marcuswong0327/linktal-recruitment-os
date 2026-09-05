@@ -200,14 +200,14 @@ export function StakeholdersTable({
       },
       {
         columnId: 'coverage',
-        title: 'Coverage',
+        title: 'City Coverage',
         inHeader: true,
         render: ({ selected, onChange }: { selected: string[]; onChange: (values: string[]) => void }) => (
           <LocationFilterButton
             selected={selected}
             onChange={onChange}
             onResolve={resolveCoverageInfo}
-            title="Coverage"
+            title="City Coverage"
           />
         ),
         labelFor: (id: string) => coverageInfoById.get(id)?.name ?? id,

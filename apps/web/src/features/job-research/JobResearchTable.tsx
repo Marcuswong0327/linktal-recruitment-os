@@ -206,7 +206,9 @@ export function JobResearchTable({
       const clientId = clientIdByRowId.get(rowId);
       if (clientId && !clientIds.includes(clientId)) clientIds.push(clientId);
     }
-    router.push(`/stakeholders/enrich?clientIds=${encodeURIComponent(clientIds.join(','))}`);
+    router.push(
+      `/stakeholders/enrich?clientIds=${encodeURIComponent(clientIds.join(','))}&from=job-opening-search`,
+    );
   }
 
   const columns = React.useMemo(() => getJobResearchColumns(), []);

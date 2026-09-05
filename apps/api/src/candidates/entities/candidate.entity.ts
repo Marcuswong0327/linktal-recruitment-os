@@ -48,13 +48,6 @@ export class CandidateEntity implements Omit<Candidate, 'deletedAt' | 'deletedBy
     description: 'Which rung of the geography tree `location` sits on — a candidate known only to city level has no suburb',
   })
   locationLevel!: LocationLevel | null;
-  @ApiProperty({
-    type: String,
-    nullable: true,
-    description:
-      'Free-text suburb and postcode, e.g. "Merrylands 2160 NSW" — not tied to the Location tree (suburb-level rows and postcodes were never loaded) and plays no part in scoping.',
-  })
-  suburbAndPostcode!: string | null;
   @ApiProperty({ description: 'Required — the industry arm of the scope resolver relies on it' })
   industryId!: string;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved industry name' })
