@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 
 interface DateRangeFilterProps {
   title: string;
@@ -47,6 +48,7 @@ export function DateRangeFilter({ title, from, to, onChange }: DateRangeFilterPr
               type="date"
               value={from ?? ''}
               onChange={(e) => onChange({ from: e.target.value || undefined, to })}
+              {...noBrowserAutofill}
               className={dateInputClass}
             />
           </label>
@@ -56,6 +58,7 @@ export function DateRangeFilter({ title, from, to, onChange }: DateRangeFilterPr
               type="date"
               value={to ?? ''}
               onChange={(e) => onChange({ from, to: e.target.value || undefined })}
+              {...noBrowserAutofill}
               className={dateInputClass}
             />
           </label>

@@ -73,11 +73,13 @@ export function CompaniesSearchGate({
   canUpdate,
   canDelete,
   canCreateSpecialization,
+  canCreateIndustry,
 }: {
   canCreate: boolean;
   canUpdate: boolean;
   canDelete: boolean;
   canCreateSpecialization: boolean;
+  canCreateIndustry: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -365,6 +367,7 @@ export function CompaniesSearchGate({
             canUpdate={canUpdate}
             canDelete={canDelete}
             canCreateSpecialization={canCreateSpecialization}
+            canCreateIndustry={canCreateIndustry}
           />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card py-24 text-center">

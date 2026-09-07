@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
 
+import { GRID_CELL_MIN_QUERY_LENGTH } from '@/components/GridCellCombobox';
 import { useGetJobTitles } from '@/lib/api/generated/job-titles/job-titles';
 import { useGetJobRoleTypes } from '@/lib/api/generated/job-role-types/job-role-types';
 import { useGetSpecializations } from '@/lib/api/generated/specializations/specializations';
@@ -27,20 +28,28 @@ export interface CatalogOptions {
  * offer "Add <name>" for titles that already existed, quietly fragmenting the
  * catalog into duplicates. Searching server-side is what makes the whole
  * catalog reachable; it also inherits the endpoint's prefix-first ranking.
+ *
+ * Fetches only after `GRID_CELL_MIN_QUERY_LENGTH` characters — same floor as
+ * City Coverage, so a focused empty cell never pulls (or dumps) a first page.
  */
 function useCatalogOptions(
   useQuery: typeof useGetJobTitles | typeof useGetJobRoleTypes,
 ): CatalogOptions {
   const [q, setQ] = React.useState('');
+  const trimmed = q.trim();
+  const searchEnabled = trimmed.length >= GRID_CELL_MIN_QUERY_LENGTH;
   const { data, isFetching } = useQuery(
-    { q: q || undefined, take: PAGE_SIZE },
-    { query: { placeholderData: keepPreviousData } },
+    { q: trimmed, take: PAGE_SIZE },
+    { query: { enabled: searchEnabled, placeholderData: keepPreviousData } },
   );
   const options = React.useMemo(
-    () => (data?.status === 200 ? data.data.map(({ id, name }) => ({ id, name })) : []),
-    [data],
+    () =>
+      searchEnabled && data?.status === 200
+        ? data.data.map(({ id, name }) => ({ id, name }))
+        : [],
+    [data, searchEnabled],
   );
-  return { options, onQueryChange: setQ, isFetching };
+  return { options, onQueryChange: setQ, isFetching: searchEnabled && isFetching };
 }
 
 /** Job Titles — the company's own words for a role (`JobTitle`). ~2,350 rows. */
@@ -66,13 +75,18 @@ export function useJobRoleTypeOptions(): CatalogOptions {
  */
 export function useSpecializationOptions(industryId: string | undefined): CatalogOptions {
   const [q, setQ] = React.useState('');
+  const trimmed = q.trim();
+  const searchEnabled = Boolean(industryId) && trimmed.length >= GRID_CELL_MIN_QUERY_LENGTH;
   const { data, isFetching } = useGetSpecializations(
-    { q: q || undefined, take: PAGE_SIZE, industryIds: industryId ? [industryId] : undefined },
-    { query: { enabled: Boolean(industryId), placeholderData: keepPreviousData } },
+    { q: trimmed, take: PAGE_SIZE, industryIds: industryId ? [industryId] : undefined },
+    { query: { enabled: searchEnabled, placeholderData: keepPreviousData } },
   );
   const options = React.useMemo(
-    () => (industryId && data?.status === 200 ? data.data.map(({ id, name }) => ({ id, name })) : []),
-    [data, industryId],
+    () =>
+      searchEnabled && data?.status === 200
+        ? data.data.map(({ id, name }) => ({ id, name }))
+        : [],
+    [data, searchEnabled],
   );
-  return { options, onQueryChange: setQ, isFetching };
+  return { options, onQueryChange: setQ, isFetching: searchEnabled && isFetching };
 }

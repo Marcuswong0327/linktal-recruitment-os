@@ -5,6 +5,7 @@ import { Combobox } from '@base-ui/react/combobox';
 import { Check, ChevronDown, Loader2, Plus, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 import { Badge } from '@/components/ui/badge';
 
 const CREATE_SENTINEL = '__create__';
@@ -303,6 +304,7 @@ export function CreatableCombobox({
             <div className="flex items-center gap-1.5 p-1.5">
               <Combobox.Input
                 placeholder="Search or add new…"
+                {...noBrowserAutofill}
                 className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
               />
               {isFetching ? (

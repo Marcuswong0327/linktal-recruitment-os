@@ -3,6 +3,7 @@
 import * as React from 'react';
 
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 import {
   Select,
   SelectContent,
@@ -77,6 +78,7 @@ export function DateTimeField({
         value={date}
         onChange={(e) => emit(e.target.value, hour || DEFAULT_HOUR, minute || '00')}
         disabled={disabled}
+        {...noBrowserAutofill}
         className={cn(dateInputClass, isSm && dateInputSmClass, dateClassName)}
       />
       <div className="flex items-center gap-0.5">

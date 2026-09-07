@@ -5,6 +5,7 @@ import { Combobox } from '@base-ui/react/combobox';
 import { Check, ChevronDown } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 import type { JobOrderEntity } from '@/lib/api/generated/types';
 
 /** Shared lookup + display helpers for any Combobox picking a job order. */
@@ -68,6 +69,7 @@ export function JobOrderCombobox({ id, value, onValueChange, jobOrders, disabled
             <div className="p-1.5">
               <Combobox.Input
                 placeholder="Search job orders…"
+                {...noBrowserAutofill}
                 className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
               />
             </div>

@@ -18,6 +18,7 @@ export default async function CompaniesPage() {
           // Gates the Specialization cell's "+ Create" — admin/manager always,
           // and consultants once granted (docs/rbac-roles.md §"specialization").
           canCreateSpecialization={hasPermission(session, 'specialization', 'create')}
+          canCreateIndustry={hasPermission(session, 'industry', 'create')}
         />
       ) : (
         <AccessDenied resource="companies" />

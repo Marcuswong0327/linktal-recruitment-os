@@ -2,8 +2,9 @@ import * as React from 'react';
 import { Input as InputPrimitive } from '@base-ui/react/input';
 
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 
-function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
+function Input({ className, type, autoComplete, ...props }: React.ComponentProps<'input'>) {
   return (
     <InputPrimitive
       type={type}
@@ -13,6 +14,9 @@ function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
         className,
       )}
       {...props}
+      {...noBrowserAutofill}
+      // Callers can still opt into a real autocomplete token (e.g. login).
+      autoComplete={autoComplete ?? noBrowserAutofill.autoComplete}
     />
   );
 }

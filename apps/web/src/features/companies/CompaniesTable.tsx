@@ -69,12 +69,15 @@ export function CompaniesTable({
   canUpdate = true,
   canDelete = true,
   canCreateSpecialization = false,
+  canCreateIndustry = false,
 }: {
   /** Committed from the search gate's action bar — this table has no filter UI of its own. */
   filters: CompanyAppliedFilters;
   canCreate?: boolean;
   canUpdate?: boolean;
   canDelete?: boolean;
+  /** `industry:create` — without it the Industry new-row cell is pick-only. */
+  canCreateIndustry?: boolean;
   /** `specialization:create` — without it the Specialization cell is pick-only. */
   canCreateSpecialization?: boolean;
 }) {
@@ -125,6 +128,7 @@ export function CompaniesTable({
     onCreate: handleCreateClient,
     disabled: !canCreate,
     industries: industryOptions,
+    canCreateIndustry,
     canCreateSpecialization,
   });
   const importClients = useImportClients();

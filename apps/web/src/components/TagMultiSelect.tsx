@@ -5,6 +5,7 @@ import { Combobox } from '@base-ui/react/combobox';
 import { Check, ListFilter, Pencil, Plus, Trash2, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 
@@ -306,6 +307,7 @@ export function TagMultiSelect({
             <div className="p-1.5">
               <Combobox.Input
                 placeholder="Search for an option…"
+                {...noBrowserAutofill}
                 className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
               />
             </div>
@@ -487,6 +489,7 @@ export function TagFilterButton({
             <div className="p-1.5">
               <Combobox.Input
                 placeholder={`Search ${title.toLowerCase()}…`}
+                {...noBrowserAutofill}
                 className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
               />
             </div>

@@ -5,6 +5,7 @@ import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 
 interface TextFilterProps {
   title: string;
@@ -53,6 +54,7 @@ export function TextFilter({ title, value, onChange, placeholder }: TextFilterPr
             if (e.key === 'Enter') commit();
           }}
           placeholder={placeholder}
+          {...noBrowserAutofill}
           className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
         />
       </DropdownMenuContent>

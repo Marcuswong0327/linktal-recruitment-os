@@ -2,9 +2,11 @@
 
 import * as React from 'react';
 import { useSession } from 'next-auth/react';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
 import { GridCellEnumCombobox } from '@/components/GridCellEnumCombobox';
+import { GridCellCombobox } from '@/components/GridCellCombobox';
 import { GridCellInput } from '@/components/GridCellInput';
 import { GridCellSpecializationCombobox } from '@/components/GridCellSpecializationCombobox';
 import {
@@ -12,6 +14,10 @@ import {
   type LocationChoice,
 } from '@/components/GridCellLocationCombobox';
 import { focusNewRowStart, type DataGridNewRow } from '@/components/DataGrid';
+import {
+  getGetIndustriesQueryKey,
+  useCreateIndustry,
+} from '@/lib/api/generated/industries/industries';
 import { useCreateSpecialization } from '@/lib/api/generated/specializations/specializations';
 import type {
   ClientEntityQuality,
@@ -43,8 +49,10 @@ interface UseCompanyNewRowOptions {
   /** Persists the record. Resolve to commit and clear the row; reject to keep what was typed. */
   onCreate: (dto: CreateClientDto) => Promise<void>;
   disabled?: boolean;
-  /** Industry catalog for the new row's own Industry cell — 4 rows. */
+  /** Industry catalog for the new row's own Industry cell — small fixed set. */
   industries: { value: string; label: string }[];
+  /** `industry:create` — without it the Industry cell is pick-only. */
+  canCreateIndustry?: boolean;
   /** `specialization:create` — without it the Specialization cell is pick-only. */
   canCreateSpecialization?: boolean;
 }
@@ -65,14 +73,15 @@ interface UseCompanyNewRowOptions {
  * Picking a specialization still back-fills industry when the cell hasn't been
  * touched, so the old "specialization carries its parent" path keeps working.
  *
- * Neither Specialization nor Location is creatable here: there's no saved
- * company yet to hang the "which industry?" prompt off, and Location is
- * admin-only to grow.
+ * Location is not creatable here (`location:create` is admin-only). Industry
+ * and Specialization grow from the cell when the caller holds the matching
+ * create permission.
  */
 export function useCompanyNewRow({
   onCreate,
   disabled = false,
   industries,
+  canCreateIndustry = false,
   canCreateSpecialization = false,
 }: UseCompanyNewRowOptions): DataGridNewRow {
   const { data: session } = useSession();
@@ -83,6 +92,12 @@ export function useCompanyNewRow({
 
   const [draft, setDraft] = React.useState(emptyDraft);
   const [isSaving, setIsSaving] = React.useState(false);
+  const queryClient = useQueryClient();
+  const createIndustry = useCreateIndustry({
+    mutation: {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetIndustriesQueryKey() }),
+    },
+  });
   const createSpecialization = useCreateSpecialization();
 
   // The session arrives after first render, so seed the empty row once it
@@ -124,6 +139,11 @@ export function useCompanyNewRow({
     }
   }
 
+  const industryOptions = React.useMemo(
+    () => industries.map((i) => ({ id: i.value, name: i.label })),
+    [industries],
+  );
+
   const editors: Record<string, React.ReactNode> = {
     companyName: (
       <GridCellInput
@@ -135,7 +155,7 @@ export function useCompanyNewRow({
       />
     ),
     industry: (
-      <GridCellEnumCombobox
+      <GridCellCombobox
         value={draft.industryId}
         onValueChange={(v) =>
           // Changing industry drops a specialization from the old one — the
@@ -144,8 +164,19 @@ export function useCompanyNewRow({
             v === d.industryId ? d : { ...d, industryId: v, specializationId: '' },
           )
         }
-        options={industries}
+        options={industryOptions}
+        onCreate={
+          canCreateIndustry
+            ? async (name) => {
+                const res = await createIndustry.mutateAsync({ data: { name } });
+                if (res.status !== 201) throw new Error('Failed to add industry');
+                toast.success(`${res.data.name} added`);
+                return { id: res.data.id, name: res.data.name };
+              }
+            : undefined
+        }
         disabled={disabled || isSaving}
+        placeholder="Industry"
       />
     ),
     specialization: (

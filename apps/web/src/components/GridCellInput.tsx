@@ -3,6 +3,7 @@
 import * as React from 'react';
 
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 
 type GridCellInputProps = Omit<React.ComponentProps<'input'>, 'className'> & {
   className?: string;
@@ -20,12 +21,12 @@ export function GridCellInput({ className, ...props }: GridCellInputProps) {
   return (
     <input
       type="text"
-      autoComplete="off"
       className={cn(
         'h-7 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 text-sm outline-none transition-colors placeholder:text-muted-foreground hover:border-input focus:border-ring focus:bg-background disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}
       {...props}
+      {...noBrowserAutofill}
     />
   );
 }

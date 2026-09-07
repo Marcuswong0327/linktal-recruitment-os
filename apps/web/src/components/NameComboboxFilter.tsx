@@ -5,6 +5,7 @@ import { Combobox } from '@base-ui/react/combobox';
 import { Check, ChevronDown } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -59,6 +60,7 @@ export function NameComboboxFilter({ title, value, onValueChange, options }: Nam
             <div className="p-1.5">
               <Combobox.Input
                 placeholder={`Search ${title.toLowerCase()}…`}
+                {...noBrowserAutofill}
                 className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
               />
             </div>

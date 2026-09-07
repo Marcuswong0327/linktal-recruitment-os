@@ -1,6 +1,7 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+import { noBrowserAutofill } from "@/lib/no-browser-autofill"
 
 function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
   return (
@@ -11,6 +12,7 @@ function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
         className
       )}
       {...props}
+      {...noBrowserAutofill}
     />
   )
 }
