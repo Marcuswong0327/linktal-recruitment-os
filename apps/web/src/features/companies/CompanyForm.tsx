@@ -6,12 +6,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
+import { CompanyNameField } from '@/components/CompanyNameField';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
 import { SpecializationCombobox, type SpecializationOption } from '@/components/SpecializationPicker';
 import type { CreateClientDto } from '@/lib/api/generated/types';
 import { qualityOptions, statusOptions, type ClientQuality, type ClientStatus } from './schema';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 
 /** Editable fields shared by the create sheet. Editing an existing company happens on its detail page. */
 export interface CompanyFormValues {
@@ -71,6 +74,7 @@ export function CompanyForm({
   onSave: (values: CompanyFormValues) => void;
   onCancel: () => void;
 }) {
+  const router = useRouter();
   const [companyName, setCompanyName] = React.useState('');
   const [industryId, setIndustryId] = React.useState('');
   const [specializationId, setSpecializationId] = React.useState('');
@@ -109,7 +113,17 @@ export function CompanyForm({
 
       <div className="flex flex-1 flex-col gap-4 overflow-auto px-6">
         <FormField label="Company name" htmlFor="company-name" required>
-          <Input id="company-name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
+          <CompanyNameField
+            id="company-name"
+            value={companyName}
+            onValueChange={setCompanyName}
+            onSelectExisting={(match) => {
+              toast.message(`Opening existing company "${match.name}"`);
+              onCancel();
+              router.push(`/companies/${match.id}`);
+            }}
+            disabled={isSaving}
+          />
         </FormField>
         <FormField label="Industry" htmlFor="company-industry" required>
           <CreatableCombobox

@@ -7,13 +7,14 @@ import { toast } from 'sonner';
 
 import { GridCellEnumCombobox } from '@/components/GridCellEnumCombobox';
 import { GridCellCombobox } from '@/components/GridCellCombobox';
-import { GridCellInput } from '@/components/GridCellInput';
+import { GridCellCompanyNameCombobox } from '@/components/GridCellCompanyNameCombobox';
 import { GridCellSpecializationCombobox } from '@/components/GridCellSpecializationCombobox';
 import {
   GridCellLocationMultiSelect,
   type LocationChoice,
 } from '@/components/GridCellLocationCombobox';
 import { focusNewRowStart, type DataGridNewRow } from '@/components/DataGrid';
+import { useRouter } from 'next/navigation';
 import {
   getGetIndustriesQueryKey,
   useCreateIndustry,
@@ -84,6 +85,7 @@ export function useCompanyNewRow({
   canCreateIndustry = false,
   canCreateSpecialization = false,
 }: UseCompanyNewRowOptions): DataGridNewRow {
+  const router = useRouter();
   const { data: session } = useSession();
   // Exactly one grant is a default; several is a guess. Admins and managers
   // carry no grants at all, so they start blank too.
@@ -146,11 +148,15 @@ export function useCompanyNewRow({
 
   const editors: Record<string, React.ReactNode> = {
     companyName: (
-      <GridCellInput
+      <GridCellCompanyNameCombobox
         value={draft.companyName}
-        onChange={(e) => set('companyName', e.target.value)}
+        onValueChange={(name) => set('companyName', name)}
+        onSelectExisting={(match) => {
+          toast.message(`Opening existing company "${match.name}"`);
+          set('companyName', '');
+          router.push(`/companies/${match.id}`);
+        }}
         disabled={disabled || isSaving}
-        aria-label="Company name"
         placeholder="Company name"
       />
     ),
