@@ -134,6 +134,7 @@ export function getCompanyColumns({
             <CreatableCombobox
               title="Specialization"
               variant="badge"
+              fullCellHitArea
               value={company.specializationId ?? ''}
               selectedLabel={company.specialization ?? undefined}
               onValueChange={(id) => onSpecializationChange(company, id)}
