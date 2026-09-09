@@ -82,12 +82,16 @@ export function contactRecencyClassName(iso: string | null): string {
 
 /** Filters committed from the search gate's action bar — CandidatesTable has no filter UI of its own beyond this and its own free-text search box. */
 export interface CandidateAppliedFilters {
+  /** Free-text name search — maps to API `q` (firstName / lastName / email / …). */
+  q?: string;
   statuses?: CandidateStatus[];
   industryIds?: string[];
   jobRoleTypeIds?: string[];
   specializationIds?: string[];
   /** Country + City selections merged — the API resolves any level through the location tree's ancestor path. */
   locationIds?: string[];
+  lastContactedFrom?: string;
+  lastContactedTo?: string;
   sortBy?: GetCandidatesSortBy;
   sortOrder?: GetCandidatesSortOrder;
 }

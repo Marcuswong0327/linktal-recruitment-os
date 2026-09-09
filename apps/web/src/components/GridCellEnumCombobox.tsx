@@ -53,6 +53,11 @@ export function GridCellEnumCombobox({
       options={asOptions}
       disabled={disabled}
       placeholder={placeholder}
+      // Fixed tiny catalogs (Status/Quality) — click opens the full list
+      // like a Select, without the 2-char typeahead gate used for large
+      // catalogs. Keyboard typing still filters within the open popup.
+      minQueryLength={0}
+      openOnFocus
     />
   );
 }

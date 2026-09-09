@@ -47,9 +47,17 @@ interface GridCellComboboxProps {
   clearOnSelect?: boolean;
   /**
    * Characters required before the popup opens and options / "Add …" appear.
-   * Matches City Coverage (2). Focus alone never opens the list.
+   * Matches City Coverage (2). Focus alone never opens the list unless
+   * `openOnFocus` is set (small fixed enums).
    */
   minQueryLength?: number;
+  /**
+   * Open the full option list on focus/click with no typing required —
+   * for small fixed sets (Status, Quality) where a catalog dump is fine
+   * and a Select-style popout is what users expect. Implies treating an
+   * empty query as "show everything" when `minQueryLength` is 0.
+   */
+  openOnFocus?: boolean;
 }
 
 /**
@@ -86,6 +94,7 @@ export function GridCellCombobox({
   emptyMessage = 'No matches.',
   clearOnSelect = false,
   minQueryLength = GRID_CELL_MIN_QUERY_LENGTH,
+  openOnFocus = false,
 }: GridCellComboboxProps) {
   const byId = React.useMemo(() => new Map(options.map((o) => [o.id, o])), [options]);
   const selectedName = byId.get(value)?.name ?? '';
@@ -118,11 +127,12 @@ export function GridCellCombobox({
   const searchReady = query.length >= minQueryLength;
   const lowered = query.toLowerCase();
 
-  const filtered = !searchReady
-    ? []
-    : query && !serverSearched
-      ? options.filter((o) => o.name.toLowerCase().includes(lowered))
-      : options;
+  const filtered =
+    !searchReady && !openOnFocus
+      ? []
+      : query && !serverSearched
+        ? options.filter((o) => o.name.toLowerCase().includes(lowered))
+        : options;
 
   const hasExactMatch = searchReady && options.some((o) => o.name.toLowerCase() === lowered);
   const items =
@@ -195,9 +205,10 @@ export function GridCellCombobox({
       }}
       open={open}
       onOpenChange={(next) => {
-        // Never let focus / click alone dump the catalog — only typing past
-        // the floor (handled in onInputValueChange) opens the list.
-        if (next && !searchReady) {
+        // Catalog fields stay closed until the query clears the floor —
+        // focus alone must not dump thousands of rows. Small enums pass
+        // `openOnFocus` so click/tab opens the full list immediately.
+        if (next && !searchReady && !openOnFocus) {
           setOpen(false);
           return;
         }
@@ -225,6 +236,9 @@ export function GridCellCombobox({
         id={id}
         placeholder={placeholder}
         {...noBrowserAutofill}
+        onFocus={() => {
+          if (openOnFocus && !disabled) setOpen(true);
+        }}
         className={cn(
           'h-7 w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 text-sm outline-none transition-colors placeholder:text-muted-foreground hover:border-input focus:border-ring focus:bg-background disabled:cursor-not-allowed disabled:opacity-50',
           className,

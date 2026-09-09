@@ -179,6 +179,23 @@ describe('JobOrdersService.findAll — filters', () => {
       some: { consultantId: { in: ['c1', 'c2'] } },
     });
   });
+
+  it('filters by qualities enum list', async () => {
+    const { findMany, service } = setup();
+    await service.findAll({ ...baseQuery, qualities: ['HIGH', 'MEDIUM'] } as never, makeUser());
+
+    expect(findMany.mock.calls[0][0].where.quality).toEqual({ in: ['HIGH', 'MEDIUM'] });
+  });
+
+  it('filters by clientIds any-of, preferring the array over a lone clientId', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(
+      { ...baseQuery, clientIds: ['cl1', 'cl2'], clientId: 'ignored' } as never,
+      makeUser(),
+    );
+
+    expect(findMany.mock.calls[0][0].where.clientId).toEqual({ in: ['cl1', 'cl2'] });
+  });
 });
 
 // visible = (industry via parent Client) OR own location OR direct

@@ -46,6 +46,7 @@ import { ImportDialog } from '@/components/ImportDialog';
 import { GetClientsSortBy } from '@/lib/api/generated/types/getClientsSortBy';
 import type {
   CreateClientDto,
+  GetClientsQualitiesItem,
   GetClientsSortOrder,
   GetClientsStatusesItem,
 } from '@/lib/api/generated/types';
@@ -165,8 +166,10 @@ export function CompaniesTable({
     {
       page,
       pageSize: PAGE_SIZE,
-      q: search,
+      // Table free-text overrides the gate's committed Company `q` when set.
+      q: search ?? filters.q,
       statuses: filters.statuses as GetClientsStatusesItem[] | undefined,
+      qualities: filters.qualities as GetClientsQualitiesItem[] | undefined,
       industryIds: filters.industryIds,
       specializationIds: filters.specializationIds,
       locationIds: filters.locationIds,
@@ -391,8 +394,9 @@ export function CompaniesTable({
       } else {
         await downloadFile(
           getExportClientsUrl({
-            q: search,
+            q: search ?? filters.q,
             statuses: filters.statuses as GetClientsStatusesItem[] | undefined,
+            qualities: filters.qualities as GetClientsQualitiesItem[] | undefined,
             industryIds: filters.industryIds,
             specializationIds: filters.specializationIds,
             locationIds: filters.locationIds,

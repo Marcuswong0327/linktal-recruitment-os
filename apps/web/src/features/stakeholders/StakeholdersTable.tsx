@@ -31,7 +31,10 @@ import {
   type DataGridFilter,
   type DataGridQuery,
 } from '@/components/DataGrid';
+import { ClientFilterButton } from '@/components/ClientFilterButton';
+import { JobTitleFilterButton } from '@/components/JobTitleFilterButton';
 import { LEVEL_LABEL, LocationFilterButton } from '@/components/LocationMultiSelect';
+import { TextFilter } from '@/components/TextFilter';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
@@ -108,6 +111,8 @@ export function StakeholdersTable({
   const [accuracy, setAccuracy] = React.useState<GetStakeholdersAccuracyItem[] | undefined>();
   const [statuses, setStatuses] = React.useState<GetStakeholdersStatusesItem[] | undefined>();
   const [locationIds, setLocationIds] = React.useState<string[] | undefined>();
+  const [clientIds, setClientIds] = React.useState<string[] | undefined>();
+  const [jobTitleIds, setJobTitleIds] = React.useState<string[] | undefined>();
   // Name/level for the Coverage filter's currently selected location ids —
   // the API only returns these alongside a live search result, not by id, so
   // this is seeded as the user searches (see LocationFilterButton's
@@ -119,7 +124,19 @@ export function StakeholdersTable({
   const resolveCoverageInfo = React.useCallback((id: string, name: string, level: LocationEntity['level']) => {
     setCoverageInfoById((prev) => (prev.get(id)?.name === name ? prev : new Map(prev).set(id, { name, level })));
   }, []);
-  const [sortBy, setSortBy] = React.useState<GetStakeholdersSortBy | undefined>();
+  // id → companyName / job title name for filter chips once a search resolves them.
+  const [clientNames, setClientNames] = React.useState<Record<string, string>>({});
+  const registerClientName = React.useCallback(
+    (id: string, name: string) =>
+      setClientNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
+    [],
+  );
+  const [jobTitleNames, setJobTitleNames] = React.useState<Record<string, string>>({});
+  const registerJobTitleName = React.useCallback(
+    (id: string, name: string) =>
+      setJobTitleNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
+    [],
+  );  const [sortBy, setSortBy] = React.useState<GetStakeholdersSortBy | undefined>();
   const [sortOrder, setSortOrder] = React.useState<GetStakeholdersSortOrder>('desc');
   const [selected, setSelected] = React.useState<StakeholderEntity[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
@@ -148,6 +165,8 @@ export function StakeholdersTable({
       accuracy,
       statuses,
       locationIds,
+      clientIds,
+      jobTitleIds,
       sortBy,
       sortOrder,
     },
@@ -175,6 +194,56 @@ export function StakeholdersTable({
 
   const stakeholderFilters: DataGridFilter[] = React.useMemo(
     () => [
+      {
+        columnId: 'fullName',
+        title: 'Name',
+        options: [],
+        inHeader: true,
+        // TextFilter value is a single string; columnFilters store string[] —
+        // pack/unpack as a one-element array (empty = no filter).
+        render: ({ selected, onChange }: { selected: string[]; onChange: (values: string[]) => void }) => (
+          <TextFilter
+            title="Name"
+            compact
+            value={selected[0]}
+            onChange={(v) => onChange(v ? [v] : [])}
+            placeholder="Search name…"
+          />
+        ),
+        labelFor: (v: string) => v,
+      },
+      {
+        columnId: 'companyName',
+        title: 'Company',
+        options: [],
+        inHeader: true,
+        render: ({ selected, onChange }: { selected: string[]; onChange: (values: string[]) => void }) => (
+          <ClientFilterButton
+            selected={selected}
+            onChange={onChange}
+            onResolve={registerClientName}
+            labelFor={(id) => clientNames[id] ?? id}
+            title="Company"
+          />
+        ),
+        labelFor: (id: string) => clientNames[id] ?? id,
+      },
+      {
+        columnId: 'jobTitle',
+        title: 'Job Title',
+        options: [],
+        inHeader: true,
+        render: ({ selected, onChange }: { selected: string[]; onChange: (values: string[]) => void }) => (
+          <JobTitleFilterButton
+            selected={selected}
+            onChange={onChange}
+            onResolve={registerJobTitleName}
+            labelFor={(id) => jobTitleNames[id] ?? id}
+            title="Job Title"
+          />
+        ),
+        labelFor: (id: string) => jobTitleNames[id] ?? id,
+      },
       {
         columnId: 'roleType',
         title: 'Role type',
@@ -225,7 +294,15 @@ export function StakeholdersTable({
         },
       },
     ],
-    [roleTypeRows, coverageInfoById, resolveCoverageInfo],
+    [
+      roleTypeRows,
+      coverageInfoById,
+      resolveCoverageInfo,
+      clientNames,
+      jobTitleNames,
+      registerClientName,
+      registerJobTitleName,
+    ],
   );
 
   const createRoleType = useCreateStakeholderRoleType({
@@ -278,13 +355,21 @@ export function StakeholdersTable({
   const pendingRowId = updateStakeholderMutation.isPending ? (updateStakeholderMutation.variables?.id ?? null) : null;
 
   function handleQueryChange({ search, sorting, columnFilters }: DataGridQuery) {
+    const nameFilter = columnFilters.find((f) => f.id === 'fullName')?.value as string[] | undefined;
+    const clientFilter = columnFilters.find((f) => f.id === 'companyName')?.value as string[] | undefined;
+    const jobTitleFilter = columnFilters.find((f) => f.id === 'jobTitle')?.value as string[] | undefined;
     const roleTypeFilter = columnFilters.find((f) => f.id === 'roleType')?.value as string[] | undefined;
     const accuracyFilter = columnFilters.find((f) => f.id === 'isAccurate')?.value as string[] | undefined;
     const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as string[] | undefined;
     const coverageFilter = columnFilters.find((f) => f.id === 'coverage')?.value as string[] | undefined;
     const sort = sorting[0];
     const sortField = sort && sort.id in GetStakeholdersSortBy ? (sort.id as GetStakeholdersSortBy) : undefined;
-    setSearch(search.trim() || undefined);
+    // Name header TextFilter wins over the toolbar free-text box when set —
+    // both map to API `q`, and a column filter is the more specific intent.
+    const nameQ = nameFilter?.[0]?.trim() || undefined;
+    setSearch(nameQ ?? (search.trim() || undefined));
+    setClientIds(clientFilter?.length ? clientFilter : undefined);
+    setJobTitleIds(jobTitleFilter?.length ? jobTitleFilter : undefined);
     setRoleTypeIds(roleTypeFilter);
     setAccuracy(accuracyFilter?.length ? (accuracyFilter as GetStakeholdersAccuracyItem[]) : undefined);
     setStatuses(statusFilter?.length ? (statusFilter as GetStakeholdersStatusesItem[]) : undefined);
@@ -404,6 +489,8 @@ export function StakeholdersTable({
             accuracy,
             statuses,
             locationIds,
+            clientIds,
+            jobTitleIds,
             sortBy,
             sortOrder,
             timezone,

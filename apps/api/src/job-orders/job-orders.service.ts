@@ -18,7 +18,9 @@ type JobOrderFilterFields = Pick<
   QueryJobOrdersDto,
   | 'q'
   | 'statuses'
+  | 'qualities'
   | 'clientId'
+  | 'clientIds'
   | 'consultantIds'
   | 'jobTitleIds'
   | 'jobRoleTypeIds'
@@ -248,7 +250,13 @@ export class JobOrdersService {
       where.status = { in: query.statuses };
     }
 
-    if (query.clientId) {
+    if (query.qualities?.length) {
+      where.quality = { in: query.qualities };
+    }
+
+    if (query.clientIds?.length) {
+      where.clientId = { in: query.clientIds };
+    } else if (query.clientId) {
       where.clientId = query.clientId;
     }
 

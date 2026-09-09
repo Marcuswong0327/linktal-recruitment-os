@@ -87,7 +87,10 @@ export function formatDate(iso: string | null): string {
 
 /** Filters committed from the search gate's action bar — the table has no filter UI of its own anymore; this is its entire query beyond pagination. */
 export interface CompanyAppliedFilters {
+  /** Free-text company search — maps to API `q` (companyName / displayId / website). */
+  q?: string;
   statuses?: ClientStatus[];
+  qualities?: ClientQuality[];
   industryIds?: string[];
   specializationIds?: string[];
   /** Country + City selections merged — the API resolves any level through the location tree's ancestor path. */

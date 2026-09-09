@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
+import { ClientFilterButton } from '@/components/ClientFilterButton';
+import { JobTitleFilterButton } from '@/components/JobTitleFilterButton';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
 import { useGateSnapshot, usePersistGateSnapshot } from '@/hooks/use-gate-snapshot';
@@ -66,10 +68,14 @@ interface JobResearchGateSnapshot {
   industryIds: string[];
   specializationIds: string[];
   statuses: string[];
+  clientIds: string[];
+  jobTitleIds: string[];
   sortByValue: SortByValue | '';
   countryNames: Record<string, string>;
   cityNames: Record<string, string>;
   specializationNames: Record<string, string>;
+  clientNames: Record<string, string>;
+  jobTitleNames: Record<string, string>;
   appliedFilters: JobResearchAppliedFilters | null;
 }
 
@@ -94,6 +100,8 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
     snapshot?.specializationIds ?? [],
   );
   const [statuses, setStatuses] = React.useState<string[]>(snapshot?.statuses ?? []);
+  const [clientIds, setClientIds] = React.useState<string[]>(snapshot?.clientIds ?? []);
+  const [jobTitleIds, setJobTitleIds] = React.useState<string[]>(snapshot?.jobTitleIds ?? []);
   const [sortByValue, setSortByValue] = React.useState<SortByValue | ''>(snapshot?.sortByValue ?? '');
 
   // Country/City/Specialization are server-searched (see LocationFilterButton
@@ -120,6 +128,21 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
   const registerSpecializationName = React.useCallback(
     (id: string, name: string) =>
       setSpecializationNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
+    [],
+  );
+  const [clientNames, setClientNames] = React.useState<Record<string, string>>(
+    snapshot?.clientNames ?? {},
+  );
+  const registerClientName = React.useCallback(
+    (id: string, name: string) => setClientNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
+    [],
+  );
+  const [jobTitleNames, setJobTitleNames] = React.useState<Record<string, string>>(
+    snapshot?.jobTitleNames ?? {},
+  );
+  const registerJobTitleName = React.useCallback(
+    (id: string, name: string) =>
+      setJobTitleNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
     [],
   );
 
@@ -182,10 +205,14 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
     industryIds,
     specializationIds,
     statuses,
+    clientIds,
+    jobTitleIds,
     sortByValue,
     countryNames,
     cityNames,
     specializationNames,
+    clientNames,
+    jobTitleNames,
     appliedFilters,
   } satisfies JobResearchGateSnapshot);
 
@@ -206,6 +233,8 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
     industryIds.length > 0 ||
     specializationIds.length > 0 ||
     statuses.length > 0 ||
+    clientIds.length > 0 ||
+    jobTitleIds.length > 0 ||
     sortByValue !== '';
 
   function handleView() {
@@ -216,6 +245,8 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
       industryIds: industryIds.length ? industryIds : undefined,
       specializationIds: specializationIds.length ? specializationIds : undefined,
       locationIds: locationIds.length ? locationIds : undefined,
+      clientIds: clientIds.length ? clientIds : undefined,
+      jobTitleIds: jobTitleIds.length ? jobTitleIds : undefined,
       sortBy: sort?.sortBy,
       sortOrder: sort?.sortOrder,
     });
@@ -238,6 +269,8 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
       setIndustryIds([]);
       setSpecializationIds([]);
       setStatuses([]);
+      setClientIds([]);
+      setJobTitleIds([]);
       setSortByValue('');
       setAppliedFilters(null);
       setIsResetting(false);
@@ -247,7 +280,29 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+          <FilterField label="Job Title">
+            <JobTitleFilterButton
+              selected={jobTitleIds}
+              onChange={setJobTitleIds}
+              compact={false}
+              placeholder="All job titles"
+              title="Job Title"
+              labelFor={(id) => jobTitleNames[id] ?? id}
+              onResolve={registerJobTitleName}
+            />
+          </FilterField>
+          <FilterField label="Company">
+            <ClientFilterButton
+              selected={clientIds}
+              onChange={setClientIds}
+              compact={false}
+              placeholder="All companies"
+              title="Company"
+              labelFor={(id) => clientNames[id] ?? id}
+              onResolve={registerClientName}
+            />
+          </FilterField>
           <FilterField label="Country">
             <LocationFilterButton
               selected={countryIds}

@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { IsArray, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
-import { JobOrderStatus } from '@prisma/client';
+import { JobOrderQuality, JobOrderStatus } from '@prisma/client';
 
 /**
  * Columns the list may be sorted by. Mostly ID, numeric counts, salary bounds,
@@ -82,10 +82,31 @@ export class QueryJobOrdersDto {
   @IsEnum(JobOrderStatus, { each: true })
   statuses?: JobOrderStatus[];
 
+  @ApiPropertyOptional({
+    description: 'Filter by quality (one or more). Omit for all qualities.',
+    enum: JobOrderQuality,
+    isArray: true,
+  })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsEnum(JobOrderQuality, { each: true })
+  qualities?: JobOrderQuality[];
+
   @ApiPropertyOptional({ description: 'Filter by client ID (exact match)' })
   @IsOptional()
   @IsString()
   clientId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by client ID(s) — matches a job order for any of these clients.',
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  clientIds?: string[];
 
   @ApiPropertyOptional({ description: 'Filter by assigned consultant ID(s) — matches a job order any of these consultants are working.', type: [String] })
   @IsOptional()
