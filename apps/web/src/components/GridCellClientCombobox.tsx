@@ -3,7 +3,10 @@
 import * as React from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
 
-import { GridCellCombobox } from '@/components/GridCellCombobox';
+import {
+  GridCellCombobox,
+  GRID_CELL_MIN_QUERY_LENGTH,
+} from '@/components/GridCellCombobox';
 import { useGetClients } from '@/lib/api/generated/clients/clients';
 
 const DEBOUNCE_MS = 250;
@@ -48,11 +51,12 @@ export function GridCellClientCombobox({
     return () => clearTimeout(timer);
   }, [query]);
 
+  const searchEnabled = debouncedQuery.length >= GRID_CELL_MIN_QUERY_LENGTH;
   const { data } = useGetClients(
-    { q: debouncedQuery || undefined, pageSize: PAGE_SIZE },
-    { query: { placeholderData: keepPreviousData } },
+    { q: debouncedQuery, pageSize: PAGE_SIZE },
+    { query: { enabled: searchEnabled, placeholderData: keepPreviousData } },
   );
-  const results = data?.status === 200 ? data.data.data : [];
+  const results = searchEnabled && data?.status === 200 ? data.data.data : [];
 
   // Keeps the chosen client nameable once the search that produced it has
   // been replaced — see the same pattern in GridCellLocationCombobox.
@@ -73,7 +77,9 @@ export function GridCellClientCombobox({
       options={options}
       serverSearched
       onQueryChange={setQuery}
-      emptyMessage="No companies found."
+      emptyMessage={
+        searchEnabled ? 'No companies found.' : 'Type at least 2 characters to search.'
+      }
       placeholder={placeholder}
       disabled={disabled}
     />

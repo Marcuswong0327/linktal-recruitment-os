@@ -179,12 +179,15 @@ export function CandidatesTable({
     {
       page,
       pageSize: PAGE_SIZE,
-      q: search,
+      // Table free-text overrides the gate's committed Name `q` when set.
+      q: search ?? filters.q,
       statuses: filters.statuses as GetCandidatesStatusesItem[] | undefined,
       industryIds: filters.industryIds,
       jobRoleTypeIds: filters.jobRoleTypeIds,
       specializationIds: filters.specializationIds,
       locationIds: filters.locationIds,
+      lastContactedFrom: filters.lastContactedFrom,
+      lastContactedTo: filters.lastContactedTo,
       sortBy,
       sortOrder,
     },
@@ -222,12 +225,14 @@ export function CandidatesTable({
           getCandidates({
             page: p,
             pageSize: fetchPageSize,
-            q: search,
+            q: search ?? filters.q,
             statuses: filters.statuses as GetCandidatesStatusesItem[] | undefined,
             industryIds: filters.industryIds,
             jobRoleTypeIds: filters.jobRoleTypeIds,
             specializationIds: filters.specializationIds,
             locationIds: filters.locationIds,
+            lastContactedFrom: filters.lastContactedFrom,
+            lastContactedTo: filters.lastContactedTo,
             sortBy,
             sortOrder,
           }),
@@ -303,12 +308,14 @@ export function CandidatesTable({
       } else {
         await downloadFile(
           getExportCandidatesUrl({
-            q: search,
+            q: search ?? filters.q,
             statuses: filters.statuses as GetCandidatesStatusesItem[] | undefined,
             industryIds: filters.industryIds,
             jobRoleTypeIds: filters.jobRoleTypeIds,
             specializationIds: filters.specializationIds,
             locationIds: filters.locationIds,
+            lastContactedFrom: filters.lastContactedFrom,
+            lastContactedTo: filters.lastContactedTo,
             sortBy,
             sortOrder,
             timezone,

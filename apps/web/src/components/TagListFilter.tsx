@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 
 interface TagListFilterProps {
   title: string;
@@ -90,6 +91,7 @@ export function TagListFilter({ title, values, onChange, placeholder }: TagListF
               }
             }}
             placeholder={placeholder ?? 'Type and press Enter…'}
+            {...noBrowserAutofill}
             className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
           />
           {values.length > 0 ? (

@@ -5,6 +5,7 @@ import * as React from 'react';
 import { InlineAddRow } from '@/components/InlineAddRow';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 import type { ContactType } from '@/lib/contact-types';
 
 export interface LogContactValues {
@@ -120,6 +121,7 @@ export function LogContactRow({
             type="date"
             value={contactedAt}
             onChange={(e) => setContactedAt(e.target.value)}
+            {...noBrowserAutofill}
             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/30"
           />
         </FormField>
@@ -129,6 +131,7 @@ export function LogContactRow({
           id="contact-notes"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
+          {...noBrowserAutofill}
           className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30"
         />
       </FormField>

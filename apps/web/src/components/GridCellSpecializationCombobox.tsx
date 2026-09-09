@@ -3,7 +3,10 @@
 import * as React from 'react';
 import { keepPreviousData } from '@tanstack/react-query';
 
-import { GridCellCombobox } from '@/components/GridCellCombobox';
+import {
+  GridCellCombobox,
+  GRID_CELL_MIN_QUERY_LENGTH,
+} from '@/components/GridCellCombobox';
 import { useGetSpecializations } from '@/lib/api/generated/specializations/specializations';
 import type { SpecializationEntity } from '@/lib/api/generated/types';
 
@@ -76,18 +79,24 @@ export function GridCellSpecializationCombobox({
     return () => clearTimeout(timer);
   }, [query]);
 
-  // Unlike locations, an empty query is still worth asking for — the catalog
-  // is small enough that the first page is a useful "here's what exists"
-  // list before anything is typed.
+  // Same floor as City Coverage / GridCellCombobox — no first-page dump
+  // before the consultant has typed.
+  const searchEnabled = debouncedQuery.length >= GRID_CELL_MIN_QUERY_LENGTH;
   const { data } = useGetSpecializations(
     {
-      q: debouncedQuery || undefined,
+      q: debouncedQuery,
       take: TAKE,
       ...(industryId ? { industryIds: [industryId] } : {}),
     },
-    { query: { placeholderData: keepPreviousData } },
+    {
+      query: {
+        enabled: searchEnabled && Boolean(industryId),
+        placeholderData: keepPreviousData,
+      },
+    },
   );
-  const results: SpecializationEntity[] = data?.status === 200 ? data.data : [];
+  const results: SpecializationEntity[] =
+    searchEnabled && data?.status === 200 ? data.data : [];
 
   // Keeps the chosen row nameable after the search that produced it has been
   // replaced — see the same pattern in GridCellLocationCombobox.
@@ -126,7 +135,13 @@ export function GridCellSpecializationCombobox({
       }
       serverSearched
       onQueryChange={setQuery}
-      emptyMessage="No specializations found."
+      emptyMessage={
+        !industryId
+          ? 'Pick an industry first.'
+          : searchEnabled
+            ? 'No specializations found.'
+            : 'Type at least 2 characters to search.'
+      }
       placeholder={placeholder}
       disabled={disabled}
     />

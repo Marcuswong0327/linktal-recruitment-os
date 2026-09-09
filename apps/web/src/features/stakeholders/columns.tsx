@@ -239,6 +239,7 @@ export function getStakeholderColumns({
             <CreatableCombobox
               title="Role type"
               variant="badge"
+              fullCellHitArea
               value={stakeholder.stakeholderRoleTypeId ?? ''}
               onValueChange={(id) => onRoleTypeChange(stakeholder, id)}
               options={roleTypes}

@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { ExportJobOrdersQualitiesItem } from './exportJobOrdersQualitiesItem';
 import type { ExportJobOrdersSortBy } from './exportJobOrdersSortBy';
 import type { ExportJobOrdersSortOrder } from './exportJobOrdersSortOrder';
 import type { ExportJobOrdersStatusesItem } from './exportJobOrdersStatusesItem';
@@ -24,9 +25,17 @@ q?: string;
  */
 statuses?: ExportJobOrdersStatusesItem[];
 /**
+ * Filter by quality (one or more). Omit for all qualities.
+ */
+qualities?: ExportJobOrdersQualitiesItem[];
+/**
  * Filter by client ID (exact match)
  */
 clientId?: string;
+/**
+ * Filter by client ID(s) — matches a job order for any of these clients.
+ */
+clientIds?: string[];
 /**
  * Filter by assigned consultant ID(s) — matches a job order any of these consultants are working.
  */

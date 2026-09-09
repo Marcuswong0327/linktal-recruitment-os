@@ -23,6 +23,7 @@ import { ConfirmSubmitCandidateDialog } from '@/components/ConfirmSubmitCandidat
 import { LinkedinIcon } from '@/components/BrandIcons';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 import { snapToQuarterHour, toDateOnly } from '@/lib/datetime';
 import { DateTimeField } from '@/components/DateTimeField';
 import { getGetCandidatesQueryKey } from '@/lib/api/generated/candidates/candidates';
@@ -379,6 +380,7 @@ function PipelineRow({
                 onStartDateChange(date);
               }}
               disabled={saving}
+              {...noBrowserAutofill}
               className={dateInputClass}
             />
           ) : null}

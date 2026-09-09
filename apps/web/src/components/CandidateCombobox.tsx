@@ -6,6 +6,7 @@ import { keepPreviousData } from '@tanstack/react-query';
 import { ChevronDown, Loader2 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 import { useGetCandidates } from '@/lib/api/generated/candidates/candidates';
 import type { CandidateEntity } from '@/lib/api/generated/types';
 import { candidateFullName } from '@/features/candidates/schema';
@@ -126,6 +127,7 @@ export function CandidateCombobox({
             <div className="flex items-center gap-1.5 p-1.5">
               <Combobox.Input
                 placeholder="Search name, email or phone…"
+                {...noBrowserAutofill}
                 className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
               />
               {isFetching ? <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" /> : null}

@@ -5304,12 +5304,41 @@
             }
           },
           {
+            "name": "qualities",
+            "required": false,
+            "in": "query",
+            "description": "Filter by quality (one or more). Omit for all qualities.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "LOW",
+                  "MEDIUM",
+                  "HIGH"
+                ]
+              }
+            }
+          },
+          {
             "name": "clientId",
             "required": false,
             "in": "query",
             "description": "Filter by client ID (exact match)",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "clientIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by client ID(s) — matches a job order for any of these clients.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -5633,12 +5662,41 @@
             }
           },
           {
+            "name": "qualities",
+            "required": false,
+            "in": "query",
+            "description": "Filter by quality (one or more). Omit for all qualities.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "LOW",
+                  "MEDIUM",
+                  "HIGH"
+                ]
+              }
+            }
+          },
+          {
             "name": "clientId",
             "required": false,
             "in": "query",
             "description": "Filter by client ID (exact match)",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "clientIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by client ID(s) — matches a job order for any of these clients.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {

@@ -31,6 +31,8 @@ import {
   ConsultantFilterButton,
   useConsultantLookup,
 } from '@/components/ConsultantCombobox';
+import { ClientFilterButton } from '@/components/ClientFilterButton';
+import { JobTitleFilterButton } from '@/components/JobTitleFilterButton';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { downloadFile } from '@/lib/api/fetcher';
@@ -55,6 +57,7 @@ import {
 import type {
   ConsultantEntity,
   CreateJobOrderDto,
+  GetJobOrdersQualitiesItem,
   GetJobOrdersSortBy,
   GetJobOrdersSortOrder,
   GetJobOrdersStatusesItem,
@@ -68,6 +71,7 @@ import {
   jobOrderQualityLabels,
   jobOrderStatusLabels,
   jobOrderStatuses,
+  qualityOptions,
   qualityVariant,
   statusOptions,
   statusVariant,
@@ -90,6 +94,9 @@ export function JobOrdersTable({
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
   const [statuses, setStatuses] = React.useState<GetJobOrdersStatusesItem[] | undefined>();
+  const [qualities, setQualities] = React.useState<GetJobOrdersQualitiesItem[] | undefined>();
+  const [filterClientIds, setFilterClientIds] = React.useState<string[] | undefined>();
+  const [jobTitleIds, setJobTitleIds] = React.useState<string[] | undefined>();
   const [consultantIds, setConsultantIds] = React.useState<string[] | undefined>();
   const [sortBy, setSortBy] = React.useState<GetJobOrdersSortBy | undefined>();
   const [sortOrder, setSortOrder] = React.useState<GetJobOrdersSortOrder | undefined>();
@@ -100,6 +107,19 @@ export function JobOrdersTable({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
   const [consultantPickerOpen, setConsultantPickerOpen] = React.useState(false);
   const bulkActionsTriggerRef = React.useRef<HTMLButtonElement>(null);
+  // id → companyName / job title name for filter chips once a search resolves them.
+  const [clientNames, setClientNames] = React.useState<Record<string, string>>({});
+  const registerClientName = React.useCallback(
+    (id: string, name: string) =>
+      setClientNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
+    [],
+  );
+  const [jobTitleNames, setJobTitleNames] = React.useState<Record<string, string>>({});
+  const registerJobTitleName = React.useCallback(
+    (id: string, name: string) =>
+      setJobTitleNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
+    [],
+  );
   // Arrived from the command palette's "Add Job Order" action (navigates to
   // `/job-orders?new=1`).
   // The new-row is always on screen now, so there's nothing to open — just
@@ -113,7 +133,18 @@ export function JobOrdersTable({
   }, [searchParams, router]);
 
   const { data, isLoading, isFetching, isError, error } = useGetJobOrders(
-    { page, pageSize: PAGE_SIZE, q: search, statuses, consultantIds, sortBy, sortOrder },
+    {
+      page,
+      pageSize: PAGE_SIZE,
+      q: search,
+      statuses,
+      qualities,
+      clientIds: filterClientIds,
+      jobTitleIds,
+      consultantIds,
+      sortBy,
+      sortOrder,
+    },
     { query: { placeholderData: keepPreviousData } },
   );
 
@@ -184,6 +215,39 @@ export function JobOrdersTable({
   const jobOrderFilters: DataGridFilter[] = React.useMemo(
     () => [
       { columnId: 'status', title: 'Status', options: statusOptions, inHeader: true },
+      { columnId: 'quality', title: 'Quality', options: qualityOptions, inHeader: true },
+      {
+        columnId: 'clientId',
+        title: 'Client',
+        options: [],
+        inHeader: true,
+        render: ({ selected, onChange }) => (
+          <ClientFilterButton
+            selected={selected}
+            onChange={onChange}
+            onResolve={registerClientName}
+            labelFor={(id) => clientNames[id] ?? id}
+            title="Client"
+          />
+        ),
+        labelFor: (id) => clientNames[id] ?? id,
+      },
+      {
+        columnId: 'jobTitle',
+        title: 'Role',
+        options: [],
+        inHeader: true,
+        render: ({ selected, onChange }) => (
+          <JobTitleFilterButton
+            selected={selected}
+            onChange={onChange}
+            onResolve={registerJobTitleName}
+            labelFor={(id) => jobTitleNames[id] ?? id}
+            title="Role"
+          />
+        ),
+        labelFor: (id) => jobTitleNames[id] ?? id,
+      },
       {
         columnId: 'consultants',
         title: 'Consultant',
@@ -199,7 +263,14 @@ export function JobOrdersTable({
         ),
       },
     ],
-    [consultantFilterOptions, consultants],
+    [
+      consultantFilterOptions,
+      consultants,
+      clientNames,
+      jobTitleNames,
+      registerClientName,
+      registerJobTitleName,
+    ],
   );
 
   const result = data?.status === 200 ? data.data : undefined;
@@ -213,8 +284,8 @@ export function JobOrdersTable({
   // clientIds individually instead, same as JobOrderDetail's own
   // useGetClient(jobOrder.clientId), mirroring useSeedFiltersFromScope's
   // per-id useQueries pattern.
-  const clientIds = React.useMemo(() => [...new Set(jobOrders.map((j) => j.clientId))], [jobOrders]);
-  const clientQueries = useQueries({ queries: clientIds.map((id) => getGetClientQueryOptions(id)) });
+  const pageClientIds = React.useMemo(() => [...new Set(jobOrders.map((j) => j.clientId))], [jobOrders]);
+  const clientQueries = useQueries({ queries: pageClientIds.map((id) => getGetClientQueryOptions(id)) });
 
   // Baked onto each row (not left as a separate resolver fn) — DataGrid's
   // row component is memoized keyed off `row`/`data` identity (see
@@ -226,21 +297,30 @@ export function JobOrdersTable({
   const jobOrdersWithClientName = React.useMemo<JobOrderRow[]>(
     () =>
       jobOrders.map((j) => {
-        const query = clientQueries[clientIds.indexOf(j.clientId)];
+        const query = clientQueries[pageClientIds.indexOf(j.clientId)];
         const res = query?.data;
         return { ...j, clientName: res?.status === 200 ? res.data.companyName : 'Unknown client' };
       }),
-    [jobOrders, clientQueries, clientIds],
+    [jobOrders, clientQueries, pageClientIds],
   );
 
   function handleQueryChange({ search, columnFilters, sorting }: DataGridQuery) {
     const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as
+      string[] | undefined;
+    const qualityFilter = columnFilters.find((f) => f.id === 'quality')?.value as
+      string[] | undefined;
+    const clientFilter = columnFilters.find((f) => f.id === 'clientId')?.value as
+      string[] | undefined;
+    const jobTitleFilter = columnFilters.find((f) => f.id === 'jobTitle')?.value as
       string[] | undefined;
     const consultantFilter = columnFilters.find((f) => f.id === 'consultants')?.value as
       string[] | undefined;
     const sort = sorting[0];
     setSearch(search.trim() || undefined);
     setStatuses(statusFilter?.length ? (statusFilter as GetJobOrdersStatusesItem[]) : undefined);
+    setQualities(qualityFilter?.length ? (qualityFilter as GetJobOrdersQualitiesItem[]) : undefined);
+    setFilterClientIds(clientFilter?.length ? clientFilter : undefined);
+    setJobTitleIds(jobTitleFilter?.length ? jobTitleFilter : undefined);
     setConsultantIds(consultantFilter?.length ? consultantFilter : undefined);
     setSortBy(sort ? (sort.id as GetJobOrdersSortBy) : undefined);
     setSortOrder(sort ? (sort.desc ? 'desc' : 'asc') : undefined);

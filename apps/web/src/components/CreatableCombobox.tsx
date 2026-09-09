@@ -5,6 +5,7 @@ import { Combobox } from '@base-ui/react/combobox';
 import { Check, ChevronDown, Loader2, Plus, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 import { Badge } from '@/components/ui/badge';
 
 const CREATE_SENTINEL = '__create__';
@@ -36,10 +37,19 @@ interface CreatableComboboxProps {
   /**
    * 'input' (default): the plain form-field look — a bordered box, used in
    * sheets/forms. 'badge': the same trigger design as `ComboboxSelect`'s
-   * table-cell pills (Consultants' Role/Status columns) — a full-cell click
-   * overlay behind a centered, colored Badge — for use as a DataGrid cell.
+   * table-cell pills (Consultants' Role/Status columns) — a centered,
+   * colored Badge. Pair with `fullCellHitArea` when rendering inside a
+   * DataGrid `TableCell`.
    */
   variant?: 'input' | 'badge';
+  /**
+   * When `variant="badge"`, render an `absolute inset-0` click catcher so the
+   * whole `TableCell` (which is `relative`) opens the popup. Must stay off
+   * outside a cell — without a tight positioned ancestor the catcher expands
+   * to a large layout box, paints a grey wash when open (`bg-accent/50`), and
+   * steals clicks from nearby controls (e.g. "Back to …" on a detail header).
+   */
+  fullCellHitArea?: boolean;
   /** Accessible label for the trigger — required (and only used) when `variant="badge"`, same as `ComboboxSelect`'s `title`. */
   title?: string;
   /**
@@ -91,6 +101,7 @@ export function CreatableCombobox({
   disabled,
   className,
   variant = 'input',
+  fullCellHitArea = false,
   title,
   clearable = false,
   onQueryChange,
@@ -207,18 +218,20 @@ export function CreatableCombobox({
         <>
           {/* Full-cell click target — same pattern as ComboboxSelect/TagMultiSelect,
               which need it absolute against the TableCell rather than sized via the
-              trigger's own (much smaller) box. */}
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-hidden
-            disabled={disabled}
-            onClick={() => setOpen(true)}
-            className={cn(
-              'absolute inset-0 rounded-md outline-none transition-colors hover:bg-accent/50 disabled:pointer-events-none',
-              open && 'bg-accent/50',
-            )}
-          />
+              trigger's own (much smaller) box. Only when `fullCellHitArea` — see prop. */}
+          {fullCellHitArea ? (
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-hidden
+              disabled={disabled}
+              onClick={() => setOpen(true)}
+              className={cn(
+                'absolute inset-0 rounded-md outline-none transition-colors hover:bg-accent/50 disabled:pointer-events-none',
+                open && 'bg-accent/50',
+              )}
+            />
+          ) : null}
           <Combobox.Trigger
             id={id}
             aria-label={title ? `Change ${title.toLowerCase()}` : undefined}
@@ -303,6 +316,7 @@ export function CreatableCombobox({
             <div className="flex items-center gap-1.5 p-1.5">
               <Combobox.Input
                 placeholder="Search or add new…"
+                {...noBrowserAutofill}
                 className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
               />
               {isFetching ? (

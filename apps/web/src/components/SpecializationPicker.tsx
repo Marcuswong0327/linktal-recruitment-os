@@ -6,6 +6,7 @@ import { keepPreviousData } from '@tanstack/react-query';
 import { Check, ChevronDown, ListFilter, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { noBrowserAutofill } from '@/lib/no-browser-autofill';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { colorFor } from '@/components/TagMultiSelect';
@@ -231,6 +232,7 @@ export function SpecializationMultiSelect({
             <div className="flex items-center gap-1.5 p-1.5">
               <Combobox.Input
                 placeholder="Search specializations…"
+                {...noBrowserAutofill}
                 className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
               />
               {isFetching ? <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" /> : null}
@@ -431,6 +433,7 @@ export function SpecializationFilterButton({
             <div className="flex items-center gap-1.5 p-1.5">
               <Combobox.Input
                 placeholder="Search specializations…"
+                {...noBrowserAutofill}
                 className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
               />
               {isFetching ? <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" /> : null}
@@ -618,6 +621,7 @@ export function SpecializationCombobox({
             <div className="flex items-center gap-1.5 p-1.5">
               <Combobox.Input
                 placeholder="Search or add new…"
+                {...noBrowserAutofill}
                 className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
               />
               {isFetching ? <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" /> : null}

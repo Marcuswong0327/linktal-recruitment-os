@@ -56,6 +56,8 @@ export interface JobResearchAppliedFilters {
   specializationIds?: string[];
   /** Country + City selections merged — the API resolves any level through the location tree's ancestor path. */
   locationIds?: string[];
+  clientIds?: string[];
+  jobTitleIds?: string[];
   sortBy?: GetJobResearchSortBy;
   sortOrder?: GetJobResearchSortOrder;
 }
