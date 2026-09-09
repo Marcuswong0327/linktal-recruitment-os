@@ -7,9 +7,8 @@ import { toast } from 'sonner';
 import { ConsultantAvatar } from '@/components/ConsultantCombobox';
 import type { CreatableComboboxOption } from '@/components/CreatableCombobox';
 import { GridCellClientCombobox } from '@/components/GridCellClientCombobox';
-import { GridCellCombobox } from '@/components/GridCellCombobox';
-import { useJobTitleOptions } from '@/hooks/use-catalog-options';
 import { GridCellEnumCombobox } from '@/components/GridCellEnumCombobox';
+import { GridCellInput } from '@/components/GridCellInput';
 import { focusNewRowStart, type DataGridNewRow } from '@/components/DataGrid';
 import type {
   CreateJobOrderDto,
@@ -20,14 +19,15 @@ import { qualityOptions, statusOptions } from './schema';
 
 interface JobOrderDraft {
   clientId: string;
-  jobTitleId: string;
+  /** Free-text Role — resolved to a JobTitle id via upsert on commit. */
+  roleText: string;
   status: string;
   quality: string;
 }
 
 const emptyDraft: JobOrderDraft = {
   clientId: '',
-  jobTitleId: '',
+  roleText: '',
   status: '',
   quality: '',
 };
@@ -45,21 +45,20 @@ interface UseJobOrderNewRowOptions {
  *
  * Client and Role are the only fields `CreateJobOrderDto` requires; Status
  * and Quality are offered here but left unsent when untouched, so the
- * server's defaults (ACTIVE / MEDIUM) still apply. Consultant is fixed to
- * the signed-in user — no picker in the new row (bulk/detail still manage
- * additional assignees). The remaining columns are computed and render blank.
+ * server's defaults (ACTIVE / MEDIUM) still apply. Role is plain free text
+ * (no typeahead) — on commit the typed string is upserted into JobTitle and
+ * the returned id is sent as `jobTitleId`. Consultant is fixed to the
+ * signed-in user. The remaining columns are computed and render blank.
  */
 export function useJobOrderNewRow({
   onCreateJobTitle,
   onCreate,
   disabled = false,
 }: UseJobOrderNewRowOptions): DataGridNewRow {
-  const {data: session} = useSession();
+  const { data: session } = useSession();
   const consultantId = session?.user?.consultantId;
   const consultantName = session?.user?.name ?? session?.user?.email ?? 'You';
 
-  // Server-searched — see useJobTitleOptions.
-  const jobTitleSearch = useJobTitleOptions();
   const [draft, setDraft] = React.useState(emptyDraft);
   const [isSaving, setIsSaving] = React.useState(false);
 
@@ -67,15 +66,19 @@ export function useJobOrderNewRow({
     setDraft((d) => ({ ...d, [key]: value }));
   }
 
-  const canCommit = draft.clientId !== '' && draft.jobTitleId !== '' && !disabled;
+  const roleText = draft.roleText.trim();
+  const canCommit = draft.clientId !== '' && roleText !== '' && !disabled;
 
   async function handleCommit() {
     if (!canCommit || isSaving) return;
     setIsSaving(true);
     try {
+      // Upsert into the shared JobTitle catalog so CreateJobOrderDto still
+      // receives a jobTitleId — no schema change, no suggestion UI while typing.
+      const created = await onCreateJobTitle(roleText);
       await onCreate({
         clientId: draft.clientId,
-        jobTitleId: draft.jobTitleId,
+        jobTitleId: created.id,
         ...(draft.status ? { status: draft.status as JobOrderEntityStatus } : {}),
         ...(draft.quality ? { quality: draft.quality as JobOrderEntityQuality } : {}),
         ...(consultantId ? { consultantIds: [consultantId] } : {}),
@@ -121,13 +124,9 @@ export function useJobOrderNewRow({
       />
     ),
     jobTitle: (
-      <GridCellCombobox
-        value={draft.jobTitleId}
-        onValueChange={(id) => set('jobTitleId', id)}
-        options={jobTitleSearch.options}
-        serverSearched
-        onQueryChange={jobTitleSearch.onQueryChange}
-        onCreate={onCreateJobTitle}
+      <GridCellInput
+        value={draft.roleText}
+        onChange={(e) => set('roleText', e.target.value)}
         disabled={disabled || isSaving}
         placeholder="Role"
       />
@@ -157,7 +156,7 @@ export function useJobOrderNewRow({
       if (disabled) return;
       const missing = [
         draft.clientId ? null : 'Client',
-        draft.jobTitleId ? null : 'Role',
+        roleText ? null : 'Role',
       ].filter(Boolean);
       toast.error(`${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} required`);
     },
