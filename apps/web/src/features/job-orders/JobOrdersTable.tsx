@@ -93,7 +93,10 @@ export function JobOrdersTable({
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
-  const [statuses, setStatuses] = React.useState<GetJobOrdersStatusesItem[] | undefined>();
+  // Default the list to Active job orders — matches the Status header filter's
+  // initial selection (see `initialColumnFilters` on DataGrid below). Clearing
+  // the filter still widens to every status.
+  const [statuses, setStatuses] = React.useState<GetJobOrdersStatusesItem[] | undefined>(['ACTIVE']);
   const [qualities, setQualities] = React.useState<GetJobOrdersQualitiesItem[] | undefined>();
   const [filterClientIds, setFilterClientIds] = React.useState<string[] | undefined>();
   const [jobTitleIds, setJobTitleIds] = React.useState<string[] | undefined>();
@@ -197,7 +200,6 @@ export function JobOrdersTable({
   }
 
   const newRow = useJobOrderNewRow({
-    consultants,
     onCreateJobTitle: handleCreateJobTitle,
     onCreate: handleCreateJobOrder,
     disabled: !canCreate,
@@ -440,6 +442,7 @@ export function JobOrdersTable({
         isFetching={isFetching}
         searchPlaceholder="Search job orders…"
         filters={jobOrderFilters}
+        initialColumnFilters={[{ id: 'status', value: ['ACTIVE'] }]}
         emptyState="No job orders yet. Create one against a client to get started."
         getRowId={(j) => j.id}
         enableRowRangeSelect

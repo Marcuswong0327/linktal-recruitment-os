@@ -488,8 +488,13 @@ export class JobOrdersService {
     return toEntity(jobOrder);
   }
 
-  async create(dto: CreateJobOrderDto, _user: AuthUser) {
+  async create(dto: CreateJobOrderDto, user: AuthUser) {
     const { consultantIds, ...rest } = dto;
+    // When the client omits assignees (new-row UI always sends the signed-in
+    // user, but API/import callers may not), default to the actor so a fresh
+    // job order isn't orphaned with an empty consultant list.
+    const assigneeIds =
+      consultantIds && consultantIds.length > 0 ? consultantIds : [user.consultantId];
     // displayId is assigned by the DB (JobOrder_displayId_seq default). A
     // brand-new job order has no submissions yet, but still runs through
     // toEntity so the response shape (pipelineSubmissions: []) matches every
@@ -497,9 +502,7 @@ export class JobOrdersService {
     const jobOrder = await this.prisma.jobOrder.create({
       data: {
         ...rest,
-        ...(consultantIds && consultantIds.length > 0
-          ? { consultants: { create: consultantIds.map((consultantId) => ({ consultantId })) } }
-          : {}),
+        consultants: { create: assigneeIds.map((consultantId) => ({ consultantId })) },
       },
       include: JOB_ORDER_INCLUDE,
     });
