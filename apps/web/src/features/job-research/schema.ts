@@ -49,7 +49,7 @@ export function cityCoverageLabel(row: Pick<JobResearch, 'location'>): string {
   return row.location ?? '—';
 }
 
-/** Filters committed from the search gate's action bar — the table has no filter UI of its own; this is its entire query beyond pagination. */
+/** Filters from the search gate; table column filters merge on top at query time. */
 export interface JobResearchAppliedFilters {
   statuses?: JobResearchStatus[];
   industryIds?: string[];
@@ -69,9 +69,8 @@ interface SortOption {
   sortOrder: GetJobResearchSortOrder;
 }
 
-// jobTitle/location/status aren't GetJobResearchSortBy fields (see the DTO's
-// own doc — categorical/free-text columns are filters, not sorts), so unlike
-// Companies' "Alphabetical" preset, every option here is date-based.
+// Gate "Sorted By" presets — date-based shortcuts. Column headers can still
+// sort by jobTitle / client / location / salaryRange via GetJobResearchSortBy.
 export const sortByOptions = [
   {
     value: 'mostRecentlyPosted',

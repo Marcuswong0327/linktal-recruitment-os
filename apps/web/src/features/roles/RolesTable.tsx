@@ -104,6 +104,7 @@ export function RolesTable() {
         data={roles}
         isLoading={isLoading}
         searchPlaceholder="Search roles…"
+        columnSizingKey="roles"
         onRowClick={setEditing}
         emptyState="No roles yet."
         toolbar={

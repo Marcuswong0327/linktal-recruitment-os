@@ -15,4 +15,9 @@ export const ExportCandidatesSortBy = {
   lastName: 'lastName',
   lastContactedAt: 'lastContactedAt',
   status: 'status',
+  jobRoleType: 'jobRoleType',
+  location: 'location',
+  currentSalary: 'currentSalary',
+  expectedSalary: 'expectedSalary',
+  lastContactedBy: 'lastContactedBy',
 } as const;

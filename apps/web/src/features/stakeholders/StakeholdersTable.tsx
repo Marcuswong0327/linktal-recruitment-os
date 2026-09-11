@@ -535,6 +535,7 @@ export function StakeholdersTable({
         isFetching={isFetching}
         searchPlaceholder="Search stakeholders…"
         filters={stakeholderFilters}
+        columnSizingKey="stakeholders"
         emptyState="No stakeholders yet. Add your first contact to get started."
         getRowId={(s) => s.id}
         onRowClick={(s) => router.push(`/stakeholders/${s.id}`)}

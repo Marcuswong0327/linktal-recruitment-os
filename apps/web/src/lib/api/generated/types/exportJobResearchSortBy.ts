@@ -15,4 +15,8 @@ export const ExportJobResearchSortBy = {
   postedDate: 'postedDate',
   lastContactedAt: 'lastContactedAt',
   createdAt: 'createdAt',
+  jobTitle: 'jobTitle',
+  client: 'client',
+  location: 'location',
+  salaryRange: 'salaryRange',
 } as const;

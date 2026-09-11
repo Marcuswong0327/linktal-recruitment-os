@@ -184,7 +184,7 @@ export function useCandidateNewRow({
         placeholder="Industry"
       />
     ),
-    cityCoverage: (
+    location: (
       <GridCellLocationCombobox
         value={draft.locationId}
         onValueChange={(id) => set('locationId', id)}

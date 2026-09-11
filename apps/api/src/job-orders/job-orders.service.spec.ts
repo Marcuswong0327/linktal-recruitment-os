@@ -86,14 +86,16 @@ describe('JobOrdersService.create', () => {
     expect(create.mock.calls[0][0].data).not.toHaveProperty('consultantIds');
   });
 
-  it('omits the consultants relation write entirely when none are given', async () => {
+  it('defaults consultants to the creating actor when none are given', async () => {
     const create = jest.fn().mockResolvedValue(withRelations({ id: 'j1' }));
     const prisma = { jobOrder: { create } } as unknown as ExtendedPrismaClient;
     const service = new JobOrdersService(prisma, base);
 
-    await service.create({ clientId: 'cl1', jobTitleId: 'jt-1' }, makeUser());
+    await service.create({ clientId: 'cl1', jobTitleId: 'jt-1' }, makeUser({ consultantId: 'actor-1' }));
 
-    expect(create.mock.calls[0][0].data).not.toHaveProperty('consultants');
+    expect(create.mock.calls[0][0].data.consultants).toEqual({
+      create: [{ consultantId: 'actor-1' }],
+    });
   });
 });
 
@@ -195,6 +197,38 @@ describe('JobOrdersService.findAll — filters', () => {
     );
 
     expect(findMany.mock.calls[0][0].where.clientId).toEqual({ in: ['cl1', 'cl2'] });
+  });
+});
+
+describe('JobOrdersService.findAll — sort', () => {
+  function setup() {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = { jobOrder: { findMany, count } } as unknown as ExtendedPrismaClient;
+    return { findMany, service: new JobOrdersService(prisma, base) };
+  }
+
+  const baseQuery = { page: 1, pageSize: 20, sortOrder: 'asc' } as unknown as Record<string, unknown>;
+
+  it('defaults to status asc then receivedAt desc when sortBy is omitted', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery as never, makeUser());
+
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([{ status: 'asc' }, { receivedAt: 'desc' }]);
+  });
+
+  it('orders by quality enum when sortBy is quality', async () => {
+    const { findMany, service } = setup();
+    await service.findAll({ ...baseQuery, sortBy: 'quality', sortOrder: 'desc' } as never, makeUser());
+
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([{ quality: 'desc' }]);
+  });
+
+  it('orders by client companyName when sortBy is client', async () => {
+    const { findMany, service } = setup();
+    await service.findAll({ ...baseQuery, sortBy: 'client', sortOrder: 'asc' } as never, makeUser());
+
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([{ client: { companyName: 'asc' } }]);
   });
 });
 

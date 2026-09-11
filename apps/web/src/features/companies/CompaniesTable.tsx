@@ -470,6 +470,7 @@ export function CompaniesTable({
         isLoading={isLoading}
         isFetching={isFetching}
         searchPlaceholder="Search companies…"
+        columnSizingKey="companies"
         emptyState="No companies match these filters."
         getRowId={(c) => c.id}
         onRowClick={(c) => router.push(`/companies/${c.id}`)}

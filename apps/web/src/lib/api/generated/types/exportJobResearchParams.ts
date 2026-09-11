@@ -68,6 +68,26 @@ isContacted?: boolean;
  */
 hasJobOrder?: boolean;
 /**
+ * Filter salaryRange by substring (case-insensitive contains)
+ */
+salaryRange?: string;
+/**
+ * Only rows with postedDate on/after this date (ISO 8601)
+ */
+postedDateFrom?: string;
+/**
+ * Only rows with postedDate on/before this date (ISO 8601)
+ */
+postedDateTo?: string;
+/**
+ * Only rows last contacted on/after this date (ISO 8601)
+ */
+lastContactedFrom?: string;
+/**
+ * Only rows last contacted on/before this date (ISO 8601)
+ */
+lastContactedTo?: string;
+/**
  * IANA timezone (e.g. 'Australia/Brisbane') the caller's browser resolved via Intl.DateTimeFormat — date/time export columns are formatted in this zone. Falls back to UTC when omitted or invalid.
  */
 timezone?: string;

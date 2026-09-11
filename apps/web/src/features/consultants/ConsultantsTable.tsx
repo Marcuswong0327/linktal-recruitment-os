@@ -677,6 +677,7 @@ export function ConsultantsTable() {
         isFetching={isFetching}
         searchPlaceholder="Search consultants…"
         filters={userFilters}
+        columnSizingKey="consultants"
         emptyState="No consultants yet."
         getRowId={(user) => user.id}
         canSelectRow={(user) => user.id !== currentConsultantId}

@@ -10,8 +10,6 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
-import { ClientFilterButton } from '@/components/ClientFilterButton';
-import { JobTitleFilterButton } from '@/components/JobTitleFilterButton';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
 import { useGateSnapshot, usePersistGateSnapshot } from '@/hooks/use-gate-snapshot';
@@ -60,6 +58,7 @@ function FilterField({ label, children }: { label: string; children: React.React
  * action bar's selections with "View" — same reasoning as
  * CompaniesSearchGate, labeled "View" rather than "Search" since this list is
  * market research (job ads found online), not a name-searchable roster.
+ * Job Title / Company filters live on the table columns, not this gate.
  */
 /** What `useGateSnapshot` persists for this page — see its doc. */
 interface JobResearchGateSnapshot {
@@ -68,14 +67,10 @@ interface JobResearchGateSnapshot {
   industryIds: string[];
   specializationIds: string[];
   statuses: string[];
-  clientIds: string[];
-  jobTitleIds: string[];
   sortByValue: SortByValue | '';
   countryNames: Record<string, string>;
   cityNames: Record<string, string>;
   specializationNames: Record<string, string>;
-  clientNames: Record<string, string>;
-  jobTitleNames: Record<string, string>;
   appliedFilters: JobResearchAppliedFilters | null;
 }
 
@@ -100,8 +95,6 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
     snapshot?.specializationIds ?? [],
   );
   const [statuses, setStatuses] = React.useState<string[]>(snapshot?.statuses ?? []);
-  const [clientIds, setClientIds] = React.useState<string[]>(snapshot?.clientIds ?? []);
-  const [jobTitleIds, setJobTitleIds] = React.useState<string[]>(snapshot?.jobTitleIds ?? []);
   const [sortByValue, setSortByValue] = React.useState<SortByValue | ''>(snapshot?.sortByValue ?? '');
 
   // Country/City/Specialization are server-searched (see LocationFilterButton
@@ -130,27 +123,10 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
       setSpecializationNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
     [],
   );
-  const [clientNames, setClientNames] = React.useState<Record<string, string>>(
-    snapshot?.clientNames ?? {},
-  );
-  const registerClientName = React.useCallback(
-    (id: string, name: string) => setClientNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
-    [],
-  );
-  const [jobTitleNames, setJobTitleNames] = React.useState<Record<string, string>>(
-    snapshot?.jobTitleNames ?? {},
-  );
-  const registerJobTitleName = React.useCallback(
-    (id: string, name: string) =>
-      setJobTitleNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
-    [],
-  );
 
   const { data: industriesData } = useGetIndustries();
   const industries = industriesData?.status === 200 ? industriesData.data : [];
   const industryOptions = React.useMemo(() => industries.map((i) => ({ value: i.id, label: i.name })), [industries]);
-
-
 
   // Add-job-order lives here (not JobResearchTable) specifically so the
   // command palette's "Add a Job Order" action works even before the gate's
@@ -205,14 +181,10 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
     industryIds,
     specializationIds,
     statuses,
-    clientIds,
-    jobTitleIds,
     sortByValue,
     countryNames,
     cityNames,
     specializationNames,
-    clientNames,
-    jobTitleNames,
     appliedFilters,
   } satisfies JobResearchGateSnapshot);
 
@@ -233,8 +205,6 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
     industryIds.length > 0 ||
     specializationIds.length > 0 ||
     statuses.length > 0 ||
-    clientIds.length > 0 ||
-    jobTitleIds.length > 0 ||
     sortByValue !== '';
 
   function handleView() {
@@ -245,8 +215,6 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
       industryIds: industryIds.length ? industryIds : undefined,
       specializationIds: specializationIds.length ? specializationIds : undefined,
       locationIds: locationIds.length ? locationIds : undefined,
-      clientIds: clientIds.length ? clientIds : undefined,
-      jobTitleIds: jobTitleIds.length ? jobTitleIds : undefined,
       sortBy: sort?.sortBy,
       sortOrder: sort?.sortOrder,
     });
@@ -269,8 +237,6 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
       setIndustryIds([]);
       setSpecializationIds([]);
       setStatuses([]);
-      setClientIds([]);
-      setJobTitleIds([]);
       setSortByValue('');
       setAppliedFilters(null);
       setIsResetting(false);
@@ -280,29 +246,7 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
-          <FilterField label="Job Title">
-            <JobTitleFilterButton
-              selected={jobTitleIds}
-              onChange={setJobTitleIds}
-              compact={false}
-              placeholder="All job titles"
-              title="Job Title"
-              labelFor={(id) => jobTitleNames[id] ?? id}
-              onResolve={registerJobTitleName}
-            />
-          </FilterField>
-          <FilterField label="Company">
-            <ClientFilterButton
-              selected={clientIds}
-              onChange={setClientIds}
-              compact={false}
-              placeholder="All companies"
-              title="Company"
-              labelFor={(id) => clientNames[id] ?? id}
-              onResolve={registerClientName}
-            />
-          </FilterField>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
           <FilterField label="Country">
             <LocationFilterButton
               selected={countryIds}
@@ -314,6 +258,19 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
               title="Country"
               labelFor={(id) => countryNames[id] ?? id}
               onResolve={registerCountryName}
+            />
+          </FilterField>
+          <FilterField label="City Coverage">
+            <LocationFilterButton
+              selected={cityIds}
+              onChange={setCityIds}
+              level="CITY_COVERAGE"
+              underId={countryIds.length === 1 ? countryIds[0] : undefined}
+              compact={false}
+              placeholder="All City Coverage"
+              title="City Coverage"
+              labelFor={(id) => cityNames[id] ?? id}
+              onResolve={registerCityName}
             />
           </FilterField>
           <FilterField label="Industry">
@@ -336,19 +293,6 @@ export function JobResearchSearchGate({ canCreate }: { canCreate: boolean }) {
               labelFor={(id) => specializationNames[id] ?? id}
               onResolve={registerSpecializationName}
               industryIds={industryIds}
-            />
-          </FilterField>
-          <FilterField label="City Coverage">
-            <LocationFilterButton
-              selected={cityIds}
-              onChange={setCityIds}
-              level="CITY_COVERAGE"
-              underId={countryIds.length === 1 ? countryIds[0] : undefined}
-              compact={false}
-              placeholder="All City Coverage"
-              title="City Coverage"
-              labelFor={(id) => cityNames[id] ?? id}
-              onResolve={registerCityName}
             />
           </FilterField>
           <FilterField label="Status">

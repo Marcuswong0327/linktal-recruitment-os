@@ -1,17 +1,16 @@
 'use client';
 
 import * as React from 'react';
+import { useSession } from 'next-auth/react';
 import { toast } from 'sonner';
 
-import { ConsultantMultiSelect } from '@/components/ConsultantCombobox';
+import { ConsultantAvatar } from '@/components/ConsultantCombobox';
 import type { CreatableComboboxOption } from '@/components/CreatableCombobox';
 import { GridCellClientCombobox } from '@/components/GridCellClientCombobox';
-import { GridCellCombobox } from '@/components/GridCellCombobox';
-import { useJobTitleOptions } from '@/hooks/use-catalog-options';
 import { GridCellEnumCombobox } from '@/components/GridCellEnumCombobox';
+import { GridCellInput } from '@/components/GridCellInput';
 import { focusNewRowStart, type DataGridNewRow } from '@/components/DataGrid';
 import type {
-  ConsultantEntity,
   CreateJobOrderDto,
   JobOrderEntityQuality,
   JobOrderEntityStatus,
@@ -20,22 +19,20 @@ import { qualityOptions, statusOptions } from './schema';
 
 interface JobOrderDraft {
   clientId: string;
-  jobTitleId: string;
+  /** Free-text Role — resolved to a JobTitle id via upsert on commit. */
+  roleText: string;
   status: string;
   quality: string;
-  consultantIds: string[];
 }
 
 const emptyDraft: JobOrderDraft = {
   clientId: '',
-  jobTitleId: '',
+  roleText: '',
   status: '',
   quality: '',
-  consultantIds: [],
 };
 
 interface UseJobOrderNewRowOptions {
-  consultants: ConsultantEntity[];
   onCreateJobTitle: (name: string) => Promise<CreatableComboboxOption>;
   /** Persists the record. Resolve to commit and clear the row; reject to keep what was typed. */
   onCreate: (dto: CreateJobOrderDto) => Promise<void>;
@@ -46,20 +43,22 @@ interface UseJobOrderNewRowOptions {
  * Builds the always-present "type a new job order here" row — the Job Orders
  * table's last row, parked on its bottom edge (see `DataGridProps.newRow`).
  *
- * Client and Role are the only fields `CreateJobOrderDto` requires; Status,
- * Quality and Consultant are all offered here too but left unsent when
- * untouched, so the server's own defaults (ACTIVE / MEDIUM) still apply
- * rather than this row hardcoding a second copy of them. The remaining
- * columns are computed (submission counts, timestamps) and render blank.
+ * Client and Role are the only fields `CreateJobOrderDto` requires; Status
+ * and Quality are offered here but left unsent when untouched, so the
+ * server's defaults (ACTIVE / MEDIUM) still apply. Role is plain free text
+ * (no typeahead) — on commit the typed string is upserted into JobTitle and
+ * the returned id is sent as `jobTitleId`. Consultant is fixed to the
+ * signed-in user. The remaining columns are computed and render blank.
  */
 export function useJobOrderNewRow({
-  consultants,
   onCreateJobTitle,
   onCreate,
   disabled = false,
 }: UseJobOrderNewRowOptions): DataGridNewRow {
-  // Server-searched — see useJobTitleOptions.
-  const jobTitleSearch = useJobTitleOptions();
+  const { data: session } = useSession();
+  const consultantId = session?.user?.consultantId;
+  const consultantName = session?.user?.name ?? session?.user?.email ?? 'You';
+
   const [draft, setDraft] = React.useState(emptyDraft);
   const [isSaving, setIsSaving] = React.useState(false);
 
@@ -67,18 +66,22 @@ export function useJobOrderNewRow({
     setDraft((d) => ({ ...d, [key]: value }));
   }
 
-  const canCommit = draft.clientId !== '' && draft.jobTitleId !== '' && !disabled;
+  const roleText = draft.roleText.trim();
+  const canCommit = draft.clientId !== '' && roleText !== '' && !disabled;
 
   async function handleCommit() {
     if (!canCommit || isSaving) return;
     setIsSaving(true);
     try {
+      // Upsert into the shared JobTitle catalog so CreateJobOrderDto still
+      // receives a jobTitleId — no schema change, no suggestion UI while typing.
+      const created = await onCreateJobTitle(roleText);
       await onCreate({
         clientId: draft.clientId,
-        jobTitleId: draft.jobTitleId,
+        jobTitleId: created.id,
         ...(draft.status ? { status: draft.status as JobOrderEntityStatus } : {}),
         ...(draft.quality ? { quality: draft.quality as JobOrderEntityQuality } : {}),
-        ...(draft.consultantIds.length ? { consultantIds: draft.consultantIds } : {}),
+        ...(consultantId ? { consultantIds: [consultantId] } : {}),
       });
       setDraft(emptyDraft);
       // Back to the first cell so the next one can be typed immediately —
@@ -121,25 +124,23 @@ export function useJobOrderNewRow({
       />
     ),
     jobTitle: (
-      <GridCellCombobox
-        value={draft.jobTitleId}
-        onValueChange={(id) => set('jobTitleId', id)}
-        options={jobTitleSearch.options}
-        serverSearched
-        onQueryChange={jobTitleSearch.onQueryChange}
-        onCreate={onCreateJobTitle}
+      <GridCellInput
+        value={draft.roleText}
+        onChange={(e) => set('roleText', e.target.value)}
         disabled={disabled || isSaving}
         placeholder="Role"
       />
     ),
-    consultants: (
-      <ConsultantMultiSelect
-        selected={draft.consultantIds}
-        onChange={(ids) => set('consultantIds', ids)}
-        consultants={consultants}
-        disabled={disabled || isSaving}
-        placeholder="Consultants"
-      />
+    consultants: consultantId ? (
+      <div
+        className="flex min-w-0 items-center gap-1.5 px-2"
+        title={`${consultantName} — assigned automatically`}
+      >
+        <ConsultantAvatar consultantId={consultantId} name={consultantName} size={5} />
+        <span className="truncate text-sm">{consultantName}</span>
+      </div>
+    ) : (
+      <span className="px-2 text-sm text-muted-foreground">—</span>
     ),
   };
 
@@ -155,7 +156,7 @@ export function useJobOrderNewRow({
       if (disabled) return;
       const missing = [
         draft.clientId ? null : 'Client',
-        draft.jobTitleId ? null : 'Role',
+        roleText ? null : 'Role',
       ].filter(Boolean);
       toast.error(`${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} required`);
     },

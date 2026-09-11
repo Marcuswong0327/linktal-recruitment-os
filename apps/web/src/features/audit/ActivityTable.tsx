@@ -413,6 +413,7 @@ export function ActivityTable({ currentConsultantId }: { currentConsultantId?: s
         isLoading={isLoading}
         isFetching={isFetching}
         hideSearch
+        columnSizingKey="audit"
         onRowClick={(row) => setSelectedId(row.id)}
         server={{
           total: result?.total ?? 0,

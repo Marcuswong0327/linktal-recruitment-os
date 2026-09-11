@@ -16,34 +16,15 @@ function MutedCell({ value, className }: { value: string | null; className?: str
   );
 }
 
-// Last Contacted At is deliberately the only sortable column header — it's
-// the one CandidateSortField the recruiter worklist actually triages by
-// (see the field's own doc). Role Type/Specialization are categorical
-// (sorting would just be an arbitrary alphabetical grouping); Contact/Notes/
-// Salary are denormalized or free text with no CandidateSortField at all;
-// First/Family Name are sortable server-side (the gate's "Sorted By ->
-// Alphabetical" preset uses it) but not exposed as a clickable header, to
-// keep exactly one sort affordance in the grid itself.
+// Header sort uses server `manualSorting` — accessorFn only unlocks TanStack
+// getCanSort() / column id for API sortBy (same as Stakeholders Name/Role type).
+// Specialization is m2m: filter yes, sort omitted (Prisma can't orderBy many-name).
 export const candidateColumns: ColumnDef<Candidate>[] = [
   {
-    accessorKey: 'jobRoleType',
-    header: 'Role Type',
-    enableSorting: false,
-    size: 140,
-    cell: ({ row }) => <MutedCell value={row.original.jobRoleType} className="block truncate" />,
-  },
-  {
-    id: 'specialization',
-    header: 'Specialization',
-    // Only tagged on ~5% of candidates (see CLAUDE.md), so "—" is the common case.
-    enableSorting: false,
-    size: 170,
-    cell: ({ row }) => <LocationBadgeList locations={row.original.specializations} />,
-  },
-  {
-    id: 'cityCoverage',
+    id: 'location',
+    accessorFn: (row) => row.location ?? '',
     header: 'City Coverage',
-    enableSorting: false,
+    enableSorting: true,
     size: 150,
     cell: ({ row }) => {
       const { location, locationLevel } = row.original;
@@ -61,9 +42,25 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     },
   },
   {
+    accessorKey: 'jobRoleType',
+    header: 'Role Type',
+    enableSorting: true,
+    size: 140,
+    cell: ({ row }) => <MutedCell value={row.original.jobRoleType} className="block truncate" />,
+  },
+  {
+    id: 'specialization',
+    accessorFn: (row) => row.specializations.join(', '),
+    header: 'Specialization',
+    // m2m — filter only; no CandidateSortField / no chevron.
+    enableSorting: false,
+    size: 170,
+    cell: ({ row }) => <LocationBadgeList locations={row.original.specializations} />,
+  },
+  {
     accessorKey: 'firstName',
     header: 'First Name',
-    enableSorting: false,
+    enableSorting: true,
     size: 130,
     cell: ({ row }) => (
       <span className="truncate font-medium text-foreground" title={row.original.firstName ?? undefined}>
@@ -74,7 +71,7 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
   {
     accessorKey: 'lastName',
     header: 'Family Name',
-    enableSorting: false,
+    enableSorting: true,
     size: 130,
     cell: ({ row }) => (
       <span className="truncate font-medium text-foreground" title={row.original.lastName ?? undefined}>
@@ -104,17 +101,16 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
   {
     accessorKey: 'currentSalary',
     header: 'Salary Current',
-    // Free text, resolved from the latest CandidateContactHistory row (see
-    // CandidateEntity.currentSalary) — not a real Candidate column, never
-    // sortable or a filter.
-    enableSorting: false,
+    // Candidate scalar (filter/sort hit this column). Display may also show
+    // contact-history fallbacks via the entity — see CandidateEntity.
+    enableSorting: true,
     size: 130,
     cell: ({ row }) => <MutedCell value={row.original.currentSalary} className="block truncate" />,
   },
   {
     accessorKey: 'expectedSalary',
     header: 'Salary Expected',
-    enableSorting: false,
+    enableSorting: true,
     size: 130,
     cell: ({ row }) => <MutedCell value={row.original.expectedSalary} className="block truncate" />,
   },
@@ -132,6 +128,7 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
   },
   {
     id: 'lastContactedAt',
+    accessorFn: (row) => row.lastContactedAt ?? '',
     header: 'Last Contacted At',
     enableSorting: true,
     size: 140,
@@ -142,12 +139,11 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     ),
   },
   {
-    accessorKey: 'lastContactedBy',
+    id: 'lastContactedBy',
+    accessorFn: (row) => row.lastContactedBy ?? '',
     header: 'Last Contacted By',
-    // Resolved from the latest CandidateContactHistory row, not a real
-    // column on Candidate itself — not a CandidateSortField. Same avatar +
-    // name treatment as Stakeholders'/Companies' equivalent column.
-    enableSorting: false,
+    // Sort maps to denormalized lastContactedById on the API.
+    enableSorting: true,
     size: 160,
     cell: ({ row }) => {
       const { lastContactedById, lastContactedBy } = row.original;

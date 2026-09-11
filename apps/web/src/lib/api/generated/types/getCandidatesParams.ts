@@ -69,6 +69,26 @@ currentCompany?: string;
  */
 currentRole?: string;
 /**
+ * Filter by first name (contains, case-insensitive)
+ */
+firstName?: string;
+/**
+ * Filter by last name (contains, case-insensitive)
+ */
+lastName?: string;
+/**
+ * Filter by current salary text (contains, case-insensitive)
+ */
+currentSalary?: string;
+/**
+ * Filter by expected salary text (contains, case-insensitive)
+ */
+expectedSalary?: string;
+/**
+ * Filter by last-contacted consultant id(s) (denormalized Candidate.lastContactedById)
+ */
+lastContactedByIds?: string[];
+/**
  * Only candidates last contacted on/after this date (ISO 8601)
  */
 lastContactedFrom?: string;

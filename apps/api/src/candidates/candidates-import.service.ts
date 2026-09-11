@@ -21,6 +21,7 @@ import {
   findInFileDuplicates,
   parseWorkbook,
 } from '../common/xlsx-import';
+import { normalizeMobileForStorage } from '../common/phone';
 
 export const CANDIDATE_IMPORT_COLUMNS: ImportColumn[] = [
   { header: 'Display ID', key: 'displayId' },
@@ -246,7 +247,7 @@ export class CandidatesImportService {
           firstName: c.firstName || null,
           lastName: c.lastName || null,
           email: c.email || null,
-          mobile: c.mobile || null,
+          mobile: c.mobile ? (normalizeMobileForStorage(c.mobile) ?? null) : null,
           locationId: locationId!,
           industryId: industryId!,
           currentRole: c.currentRole || null,
@@ -266,7 +267,7 @@ export class CandidatesImportService {
           ...(c.firstName ? { firstName: c.firstName } : {}),
           ...(c.lastName ? { lastName: c.lastName } : {}),
           ...(c.email ? { email: c.email } : {}),
-          ...(c.mobile ? { mobile: c.mobile } : {}),
+          ...(c.mobile ? { mobile: normalizeMobileForStorage(c.mobile) ?? undefined } : {}),
           ...(c.currentRole ? { currentRole: c.currentRole } : {}),
           ...(c.currentCompany ? { currentCompany: c.currentCompany } : {}),
           ...(c.linkedinUrl ? { linkedinUrl: c.linkedinUrl } : {}),

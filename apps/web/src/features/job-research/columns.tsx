@@ -10,22 +10,22 @@ import { cityCoverageLabel, formatDate, type JobResearch } from './schema';
 export function getJobResearchColumns(): ColumnDef<JobResearch>[] {
   return [
     {
-      id: 'cityCoverage',
-      enableSorting: false,
+      // id must match GetJobResearchSortBy.location (server-driven sort).
+      id: 'location',
       header: 'City Coverage',
       cell: ({ row }) => <span>{cityCoverageLabel(row.original)}</span>,
     },
     {
       accessorKey: 'jobTitle',
-      enableSorting: false,
       header: 'Job Title',
       // Absorbs leftover width on a wide screen — see DataGridColumnMeta.grow.
       meta: { grow: true },
       cell: ({ row }) => <span className="font-medium text-foreground">{row.original.jobTitle ?? '—'}</span>,
     },
     {
+      // id must match GetJobResearchSortBy.client — display still uses companyName.
+      id: 'client',
       accessorKey: 'companyName',
-      enableSorting: false,
       header: 'Company',
       cell: ({ row }) =>
         row.original.companyName ? (
@@ -44,7 +44,6 @@ export function getJobResearchColumns(): ColumnDef<JobResearch>[] {
     },
     {
       accessorKey: 'salaryRange',
-      enableSorting: false,
       header: 'Salary',
       cell: ({ row }) => <span className="text-muted-foreground">{row.original.salaryRange ?? '—'}</span>,
     },

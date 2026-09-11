@@ -4,19 +4,20 @@ import { Transform, Type } from 'class-transformer';
 import { IsArray, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 /**
- * Columns the list may be sorted by. Deliberately narrow: ID, name, creation
- * time, and lastContactedAt (a denormalized column — see
- * Stakeholder.lastContactedAt in schema.prisma; Prisma's relation-aggregate
- * `orderBy` only supports `_count`, not `_max`, on to-many relations, so a
- * live join can't sort by "latest contact" directly). Categorical /
- * free-text columns (jobTitle, roleType, coverage, email) are exposed as
- * filters instead, since sorting by them only yields arbitrary alphabetical
- * groupings.
+ * Columns the list may be sorted by. Includes ID, name parts, creation time,
+ * lastContactedAt (denormalized — see Stakeholder.lastContactedAt), plus the
+ * table columns Name/Company/Role type/Job title (`fullName`, `companyName`,
+ * `roleType`, `jobTitle`) which order via relations or firstName+lastName.
+ * Coverage / contact methods / status stay filter-only.
  */
 export enum StakeholderSortField {
   displayId = 'displayId',
   firstName = 'firstName',
   lastName = 'lastName',
+  fullName = 'fullName',
+  companyName = 'companyName',
+  roleType = 'roleType',
+  jobTitle = 'jobTitle',
   createdAt = 'createdAt',
   lastContactedAt = 'lastContactedAt',
 }

@@ -80,9 +80,9 @@ export function contactRecencyClassName(iso: string | null): string {
   return 'text-foreground';
 }
 
-/** Filters committed from the search gate's action bar — CandidatesTable has no filter UI of its own beyond this and its own free-text search box. */
+/** Filters from the search gate; table column filters merge on top at query time. */
 export interface CandidateAppliedFilters {
-  /** Free-text name search — maps to API `q` (firstName / lastName / email / …). */
+  /** Free-text search from the table box — maps to API `q`. */
   q?: string;
   statuses?: CandidateStatus[];
   industryIds?: string[];

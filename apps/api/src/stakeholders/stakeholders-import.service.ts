@@ -20,6 +20,7 @@ import {
   parseWorkbook,
 } from '../common/xlsx-import';
 import { classifyRoleTypeId } from './stakeholders.service';
+import { normalizeMobileForStorage } from '../common/phone';
 
 export const STAKEHOLDER_IMPORT_COLUMNS: ImportColumn[] = [
   { header: 'Display ID', key: 'displayId' },
@@ -247,7 +248,7 @@ export class StakeholdersImportService {
           lastName: c.lastName || null,
           linkedinUrl: c.linkedinUrl || null,
           email: c.email || null,
-          mobile: c.mobile || null,
+          mobile: c.mobile ? (normalizeMobileForStorage(c.mobile) ?? null) : null,
           isAccurate,
           inaccurateReason: c.inaccurateReason || null,
         };
@@ -259,7 +260,7 @@ export class StakeholdersImportService {
           ...(c.lastName ? { lastName: c.lastName } : {}),
           ...(c.linkedinUrl ? { linkedinUrl: c.linkedinUrl } : {}),
           ...(c.email ? { email: c.email } : {}),
-          ...(c.mobile ? { mobile: c.mobile } : {}),
+          ...(c.mobile ? { mobile: normalizeMobileForStorage(c.mobile) ?? undefined } : {}),
           ...(isAccurate !== undefined ? { isAccurate } : {}),
           ...(c.inaccurateReason ? { inaccurateReason: c.inaccurateReason } : {}),
         };

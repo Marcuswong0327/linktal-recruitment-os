@@ -120,6 +120,46 @@ describe('JobResearchService.findAll', () => {
     expect(findMany.mock.calls[1][0].orderBy).toEqual({ displayId: 'asc' });
   });
 
+  it('orders jobTitle / client / location via their relations', async () => {
+    const { service, findMany } = setup();
+    await service.findAll(baseQuery({ sortBy: JobResearchSortField.jobTitle }), makeUser());
+    expect(findMany.mock.calls[0][0].orderBy).toEqual({ jobTitle: { name: 'asc' } });
+
+    await service.findAll(
+      baseQuery({ sortBy: JobResearchSortField.client, sortOrder: SortOrder.desc }),
+      makeUser(),
+    );
+    expect(findMany.mock.calls[1][0].orderBy).toEqual({ client: { companyName: 'desc' } });
+
+    await service.findAll(baseQuery({ sortBy: JobResearchSortField.location }), makeUser());
+    expect(findMany.mock.calls[2][0].orderBy).toEqual({ location: { name: 'asc' } });
+  });
+
+  it('filters by salaryRange contains and posted/contacted date ranges', async () => {
+    const { service, findMany } = setup();
+    await service.findAll(
+      baseQuery({
+        salaryRange: 'super',
+        postedDateFrom: '2026-01-01',
+        postedDateTo: '2026-06-30',
+        lastContactedFrom: '2026-02-01',
+        lastContactedTo: '2026-03-01',
+      }),
+      makeUser(),
+    );
+    expect(findMany.mock.calls[0][0].where).toMatchObject({
+      salaryRange: { contains: 'super', mode: 'insensitive' },
+      postedDate: {
+        gte: new Date('2026-01-01'),
+        lte: new Date('2026-06-30'),
+      },
+      lastContactedAt: {
+        gte: new Date('2026-02-01'),
+        lte: new Date('2026-03-01'),
+      },
+    });
+  });
+
   it('maps hasJobOrder onto the conversion back-reference', async () => {
     const { service, findMany } = setup();
     await service.findAll(baseQuery({ hasJobOrder: true }), makeUser());
