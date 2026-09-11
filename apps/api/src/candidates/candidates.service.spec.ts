@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, NotFoundExc
 import { CandidateStatus, PlacementStatus, SubmissionStatus } from '@prisma/client';
 import { CandidatesService } from './candidates.service';
 import { CreateCandidateDto } from './dto/create-candidate.dto';
-import { QueryCandidatesDto, SortOrder } from './dto/query-candidates.dto';
+import { CandidateSortField, QueryCandidatesDto, SortOrder } from './dto/query-candidates.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { AuthUser } from '../auth/auth.types';
@@ -90,6 +90,21 @@ describe('CandidatesService.create', () => {
     expect(create.mock.calls[0][0].data.specializations).toEqual({
       create: [{ specializationId: 'spec1' }, { specializationId: 'spec2' }],
     });
+  });
+
+  it('standardizes mobile to +61… / +60… on create and keeps unrecognised as typed', async () => {
+    const create = jest.fn().mockResolvedValue(withRelations({ id: 'c1' }));
+    const prisma = { candidate: { create } } as unknown as ExtendedPrismaClient;
+    const service = new CandidatesService(prisma, {} as unknown as PrismaService);
+
+    await service.create(makeDto({ mobile: '0424054143' }), makeUser());
+    expect(create.mock.calls[0][0].data.mobile).toBe('+61424054143');
+
+    await service.create(makeDto({ mobile: '0123456789' }), makeUser());
+    expect(create.mock.calls[1][0].data.mobile).toBe('+60123456789');
+
+    await service.create(makeDto({ mobile: 'ext 42' }), makeUser());
+    expect(create.mock.calls[2][0].data.mobile).toBe('ext 42');
   });
 });
 
@@ -301,6 +316,91 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
 
     // `id` tags along as a tiebreaker on every sort — see CandidatesService.
     expect(findMany.mock.calls[0][0].orderBy).toEqual([{ status: SortOrder.asc }, { id: 'asc' }]);
+  });
+
+  it('orders by jobRoleType name when sortBy is jobRoleType', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(
+      baseQuery({ sortBy: CandidateSortField.jobRoleType, sortOrder: SortOrder.asc }),
+      makeUser(),
+    );
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([
+      { jobRoleType: { name: SortOrder.asc } },
+      { id: 'asc' },
+    ]);
+  });
+
+  it('orders by location name when sortBy is location', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(
+      baseQuery({ sortBy: CandidateSortField.location, sortOrder: SortOrder.desc }),
+      makeUser(),
+    );
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([
+      { location: { name: SortOrder.desc } },
+      { id: 'asc' },
+    ]);
+  });
+
+  it('orders by lastContactedById when sortBy is lastContactedBy', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(
+      baseQuery({ sortBy: CandidateSortField.lastContactedBy, sortOrder: SortOrder.asc }),
+      makeUser(),
+    );
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([
+      { lastContactedById: SortOrder.asc },
+      { id: 'asc' },
+    ]);
+  });
+
+  it('orders scalar salary columns when sortBy is currentSalary or expectedSalary', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(
+      baseQuery({ sortBy: CandidateSortField.currentSalary, sortOrder: SortOrder.asc }),
+      makeUser(),
+    );
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([
+      { currentSalary: SortOrder.asc },
+      { id: 'asc' },
+    ]);
+    await service.findAll(
+      baseQuery({ sortBy: CandidateSortField.expectedSalary, sortOrder: SortOrder.desc }),
+      makeUser(),
+    );
+    expect(findMany.mock.calls[1][0].orderBy).toEqual([
+      { expectedSalary: SortOrder.desc },
+      { id: 'asc' },
+    ]);
+  });
+
+  it('filters firstName/lastName and salary columns with contains (case-insensitive)', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(
+      baseQuery({
+        firstName: 'Jane',
+        lastName: 'Doe',
+        currentSalary: '80k',
+        expectedSalary: '90k',
+      }),
+      makeUser(),
+    );
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toEqual(
+      expect.arrayContaining([
+        { firstName: { contains: 'Jane', mode: 'insensitive' } },
+        { lastName: { contains: 'Doe', mode: 'insensitive' } },
+        { currentSalary: { contains: '80k', mode: 'insensitive' } },
+        { expectedSalary: { contains: '90k', mode: 'insensitive' } },
+      ]),
+    );
+  });
+
+  it('filters lastContactedByIds against the denormalized lastContactedById', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ lastContactedByIds: ['c1', 'c2'] }), makeUser());
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toContainEqual({ lastContactedById: { in: ['c1', 'c2'] } });
   });
 
   it('produces an empty where when no filters are given', async () => {

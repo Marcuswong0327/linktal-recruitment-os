@@ -12,7 +12,6 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
-import { TextFilter } from '@/components/TextFilter';
 import { useGateSnapshot, usePersistGateSnapshot } from '@/hooks/use-gate-snapshot';
 import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { getGetClientsQueryKey, useCreateClient } from '@/lib/api/generated/clients/clients';
@@ -63,7 +62,6 @@ interface CompaniesGateSnapshot {
   specializationIds: string[];
   statuses: string[];
   qualities: string[];
-  companyQ: string;
   sortByValue: SortByValue | '';
   countryNames: Record<string, string>;
   cityNames: Record<string, string>;
@@ -104,8 +102,6 @@ export function CompaniesSearchGate({
   );
   const [statuses, setStatuses] = React.useState<string[]>(snapshot?.statuses ?? []);
   const [qualities, setQualities] = React.useState<string[]>(snapshot?.qualities ?? []);
-  // Free-text company name — committed into appliedFilters.q on Search (API `q`).
-  const [companyQ, setCompanyQ] = React.useState(snapshot?.companyQ ?? '');
   const [sortByValue, setSortByValue] = React.useState<SortByValue | ''>(
     snapshot?.sortByValue ?? '',
   );
@@ -208,7 +204,6 @@ export function CompaniesSearchGate({
     specializationIds,
     statuses,
     qualities,
-    companyQ,
     sortByValue,
     countryNames,
     cityNames,
@@ -234,15 +229,12 @@ export function CompaniesSearchGate({
     specializationIds.length > 0 ||
     statuses.length > 0 ||
     qualities.length > 0 ||
-    companyQ.trim() !== '' ||
     sortByValue !== '';
 
   function handleSearch() {
     const locationIds = [...countryIds, ...cityIds];
     const sort = sortByOptions.find((o) => o.value === sortByValue);
-    const q = companyQ.trim() || undefined;
     setAppliedFilters({
-      q,
       statuses: statuses.length ? (statuses as ClientStatus[]) : undefined,
       qualities: qualities.length ? (qualities as ClientQuality[]) : undefined,
       industryIds: industryIds.length ? industryIds : undefined,
@@ -271,7 +263,6 @@ export function CompaniesSearchGate({
       setSpecializationIds([]);
       setStatuses([]);
       setQualities([]);
-      setCompanyQ('');
       setSortByValue('');
       setAppliedFilters(null);
       setIsResetting(false);
@@ -281,16 +272,7 @@ export function CompaniesSearchGate({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
-          <FilterField label="Company">
-            <TextFilter
-              title="Company"
-              placeholder="Any company"
-              value={companyQ || undefined}
-              onChange={(v) => setCompanyQ(v ?? '')}
-              triggerClassName="w-full justify-between"
-            />
-          </FilterField>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
           <FilterField label="Country">
             <LocationFilterButton
               selected={countryIds}
@@ -302,6 +284,19 @@ export function CompaniesSearchGate({
               title="Country"
               labelFor={(id) => countryNames[id] ?? id}
               onResolve={registerCountryName}
+            />
+          </FilterField>
+          <FilterField label="City Coverage">
+            <LocationFilterButton
+              selected={cityIds}
+              onChange={setCityIds}
+              level="CITY_COVERAGE"
+              underId={countryIds.length === 1 ? countryIds[0] : undefined}
+              compact={false}
+              placeholder="All City Coverage"
+              title="City Coverage"
+              labelFor={(id) => cityNames[id] ?? id}
+              onResolve={registerCityName}
             />
           </FilterField>
           <FilterField label="Industry">
@@ -324,19 +319,6 @@ export function CompaniesSearchGate({
               labelFor={(id) => specializationNames[id] ?? id}
               onResolve={registerSpecializationName}
               industryIds={industryIds}
-            />
-          </FilterField>
-          <FilterField label="City Coverage">
-            <LocationFilterButton
-              selected={cityIds}
-              onChange={setCityIds}
-              level="CITY_COVERAGE"
-              underId={countryIds.length === 1 ? countryIds[0] : undefined}
-              compact={false}
-              placeholder="All City Coverage"
-              title="City Coverage"
-              labelFor={(id) => cityNames[id] ?? id}
-              onResolve={registerCityName}
             />
           </FilterField>
           <FilterField label="Status">

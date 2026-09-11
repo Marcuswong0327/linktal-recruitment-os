@@ -336,9 +336,10 @@ export class JobOrdersService {
     // trick used for Client.quality. Received-date is the secondary sort so
     // same-status rows still land in a stable, useful order.
     if (!sortBy) return [{ status: 'asc' }, { receivedAt: 'desc' }];
-    // jobTitle is a relation (JobOrder.jobTitleId -> JobTitle.name), not a
-    // scalar column, so it can't key `orderBy` the same way as the rest.
+    // jobTitle / client are relations, not scalar columns — order by the
+    // related name the grid actually displays.
     if (sortBy === 'jobTitle') return [{ jobTitle: { name: sortOrder } }];
+    if (sortBy === 'client') return [{ client: { companyName: sortOrder } }];
     return [{ [sortBy]: sortOrder }];
   }
 

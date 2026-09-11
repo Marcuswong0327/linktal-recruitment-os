@@ -5,17 +5,18 @@ import { JobOrderQuality, JobOrderStatus } from '@prisma/client';
 
 /**
  * Columns the list may be sorted by. Mostly ID, numeric counts, salary bounds,
- * and dates — the things with a meaningful order. Categorical columns
- * (jobRoleType, location, status, priorityLevel) are exposed as filters
- * instead, since sorting by them only yields arbitrary groupings.
- * `jobTitle` is the deliberate exception — an alphabetical sort of role names
- * is a real ask (Job Orders table's Role column) — and is handled specially
- * in the service since it's a relation (JobOrder.jobTitleId -> JobTitle.name),
- * not a scalar column `orderBy` can key on directly.
+ * dates, plus a few table columns with a useful order: `jobTitle` / `client`
+ * (alphabetical via their relations), and `quality` (enum declaration order
+ * LOW < MEDIUM < HIGH). Other categoricals (jobRoleType, location, status,
+ * priorityLevel) stay filter-only.
+ * `jobTitle` and `client` are handled specially in the service since they are
+ * relations, not scalar columns `orderBy` can key on directly.
  */
 export enum JobOrderSortField {
   displayId = 'displayId',
   jobTitle = 'jobTitle',
+  client = 'client',
+  quality = 'quality',
   openings = 'openings',
   filledCount = 'filledCount',
   salaryMin = 'salaryMin',

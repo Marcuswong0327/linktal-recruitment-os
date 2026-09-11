@@ -94,7 +94,7 @@ export const getGetCandidatesUrl = (params?: GetCandidatesParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["statuses","industryIds","jobRoleTypeIds","specializationIds","submissionStatuses","placementStatuses","locationIds"];
+    const explodeParameters = ["statuses","industryIds","jobRoleTypeIds","specializationIds","submissionStatuses","placementStatuses","lastContactedByIds","locationIds"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
@@ -327,7 +327,7 @@ export const getGetCandidateJobRoleTypeFacetsUrl = (params?: GetCandidateJobRole
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["statuses","industryIds","specializationIds","submissionStatuses","placementStatuses","locationIds"];
+    const explodeParameters = ["statuses","industryIds","specializationIds","submissionStatuses","placementStatuses","lastContactedByIds","locationIds"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
@@ -595,7 +595,7 @@ export const getExportCandidatesUrl = (params?: ExportCandidatesParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["statuses","industryIds","jobRoleTypeIds","specializationIds","submissionStatuses","placementStatuses","locationIds"];
+    const explodeParameters = ["statuses","industryIds","jobRoleTypeIds","specializationIds","submissionStatuses","placementStatuses","lastContactedByIds","locationIds"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {

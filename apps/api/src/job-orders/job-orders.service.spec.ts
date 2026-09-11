@@ -200,6 +200,38 @@ describe('JobOrdersService.findAll — filters', () => {
   });
 });
 
+describe('JobOrdersService.findAll — sort', () => {
+  function setup() {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = { jobOrder: { findMany, count } } as unknown as ExtendedPrismaClient;
+    return { findMany, service: new JobOrdersService(prisma, base) };
+  }
+
+  const baseQuery = { page: 1, pageSize: 20, sortOrder: 'asc' } as unknown as Record<string, unknown>;
+
+  it('defaults to status asc then receivedAt desc when sortBy is omitted', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery as never, makeUser());
+
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([{ status: 'asc' }, { receivedAt: 'desc' }]);
+  });
+
+  it('orders by quality enum when sortBy is quality', async () => {
+    const { findMany, service } = setup();
+    await service.findAll({ ...baseQuery, sortBy: 'quality', sortOrder: 'desc' } as never, makeUser());
+
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([{ quality: 'desc' }]);
+  });
+
+  it('orders by client companyName when sortBy is client', async () => {
+    const { findMany, service } = setup();
+    await service.findAll({ ...baseQuery, sortBy: 'client', sortOrder: 'asc' } as never, makeUser());
+
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([{ client: { companyName: 'asc' } }]);
+  });
+});
+
 // visible = (industry via parent Client) OR own location OR direct
 // membership on the job order's consultant list — three arms OR-ed, pure list
 // filter, no ownership arm.

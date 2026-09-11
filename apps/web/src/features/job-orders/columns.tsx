@@ -46,7 +46,6 @@ export function getJobOrderColumns(): ColumnDef<JobOrderRow>[] {
     {
       accessorKey: 'quality',
       header: 'Quality',
-      enableSorting: false,
       size: 100,
       meta: { align: 'center' },
       cell: ({ row }) => (
@@ -56,9 +55,9 @@ export function getJobOrderColumns(): ColumnDef<JobOrderRow>[] {
       ),
     },
     {
+      id: 'client',
       accessorKey: 'clientId',
       header: 'Client',
-      enableSorting: false,
       cell: ({ row }) => {
         const { clientId, clientName } = row.original;
         return (
@@ -102,7 +101,7 @@ export function getJobOrderColumns(): ColumnDef<JobOrderRow>[] {
       // the old 'candidatingCount' which the API's strict whitelist
       // (forbidNonWhitelisted) would 400 on.
       id: 'activeSubmissionCount',
-      header: 'No. of Candidate-ing',
+      header: 'No. of CDD',
       size: 150,
       meta: { align: 'center' },
       // "Candidate-ing" = currently active in the pipeline (submitted,

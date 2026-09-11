@@ -75,12 +75,14 @@ interface CreatableComboboxProps {
   /** Spinner in the popup while the caller's search request is in flight. */
   isFetching?: boolean;
   /**
-   * Name of the currently selected option, for when it isn't in `options` —
-   * with server search the visible page rarely contains the existing value.
+   * Name of the currently selected option when it isn't in `options` yet —
+   * with server search the visible page rarely contains the saved value.
+   * Only used to seed the label for `value` until that id is seen in
+   * `options` or chosen from the list (picks/creates are cached so a later
+   * empty search page doesn't fall back to a stale saved name).
    */
   selectedLabel?: string;
 }
-
 const SEARCH_DEBOUNCE_MS = 250;
 
 /**
@@ -109,11 +111,20 @@ export function CreatableCombobox({
   selectedLabel,
 }: CreatableComboboxProps) {
   const byId = React.useMemo(() => new Map(options.map((o) => [o.id, o])), [options]);
-  const selected = byId.get(value);
   const serverSearched = onQueryChange !== undefined;
-  // Falls back to `selectedLabel` because a server-searched list usually
-  // doesn't contain the already-selected row.
-  const label = selected?.name ?? (value ? (selectedLabel ?? '') : '');
+
+  // Names (and pills) for ids that have left the live `options` page —
+  // server search clears results when the popup query resets, so without
+  // this cache the trigger falls back to a stale `selectedLabel` from the
+  // saved entity (e.g. Role type still showing the old name / placeholder
+  // after picking a new one). Same idea as SpecializationPicker's knownById.
+  const knownById = React.useRef(new Map<string, CreatableComboboxOption>());
+  for (const o of options) knownById.current.set(o.id, o);
+  if (value && selectedLabel && !knownById.current.has(value)) {
+    knownById.current.set(value, { id: value, name: selectedLabel });
+  }
+  const selected = (value ? byId.get(value) ?? knownById.current.get(value) : undefined) ?? undefined;
+  const label = selected?.name ?? '';
 
   // The popup's own search text — separate from the trigger's displayed
   // value, and reset each time the popup opens so it always starts as a
@@ -186,6 +197,7 @@ export function CreatableCombobox({
       setCreating(true);
       try {
         const created = await onCreate(name);
+        knownById.current.set(created.id, created);
         onValueChange(created.id);
       } catch {
         // Caller's mutation already surfaces the error (toast); just stop
@@ -195,6 +207,8 @@ export function CreatableCombobox({
       }
       return;
     }
+    const picked = byId.get(itemId);
+    if (picked) knownById.current.set(picked.id, picked);
     onValueChange(itemId);
   }
 

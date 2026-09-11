@@ -1,13 +1,22 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { ClientStatus } from '@prisma/client';
 import { Transform, Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsISO8601,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 
 /**
- * Columns the list may be sorted by. Deliberately narrow: ID and the dates
- * with a meaningful order. Categorical / free-text columns (jobTitle,
- * jobRoleType, location, status) are exposed as filters instead, since sorting
- * by them only yields arbitrary alphabetical groupings.
+ * Columns the list may be sorted by. Dates (posted / last contacted), plus
+ * table columns Job Title / Company / City Coverage / Salary which order via
+ * relations or the free-text salaryRange field.
  */
 export enum JobResearchSortField {
   displayId = 'displayId',
@@ -15,6 +24,10 @@ export enum JobResearchSortField {
   postedDate = 'postedDate',
   lastContactedAt = 'lastContactedAt',
   createdAt = 'createdAt',
+  jobTitle = 'jobTitle',
+  client = 'client',
+  location = 'location',
+  salaryRange = 'salaryRange',
 }
 
 export enum SortOrder {
@@ -160,4 +173,35 @@ export class QueryJobResearchDto {
   @Transform(({ value }) => (value === 'true' ? true : value === 'false' ? false : value))
   @IsBoolean()
   hasJobOrder?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Filter salaryRange by substring (case-insensitive contains)',
+  })
+  @IsOptional()
+  @IsString()
+  salaryRange?: string;
+
+  @ApiPropertyOptional({ description: 'Only rows with postedDate on/after this date (ISO 8601)' })
+  @IsOptional()
+  @IsISO8601()
+  postedDateFrom?: string;
+
+  @ApiPropertyOptional({ description: 'Only rows with postedDate on/before this date (ISO 8601)' })
+  @IsOptional()
+  @IsISO8601()
+  postedDateTo?: string;
+
+  @ApiPropertyOptional({
+    description: 'Only rows last contacted on/after this date (ISO 8601)',
+  })
+  @IsOptional()
+  @IsISO8601()
+  lastContactedFrom?: string;
+
+  @ApiPropertyOptional({
+    description: 'Only rows last contacted on/before this date (ISO 8601)',
+  })
+  @IsOptional()
+  @IsISO8601()
+  lastContactedTo?: string;
 }

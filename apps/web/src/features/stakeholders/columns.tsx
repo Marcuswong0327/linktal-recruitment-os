@@ -154,14 +154,25 @@ export function getStakeholderColumns({
 }: StakeholderColumnsOptions): ColumnDef<StakeholderEntity>[] {
   return [
     {
+      id: 'coverage',
+      header: 'City Coverage',
+      // Filter-only (StakeholdersTable coverage header filter) — not a
+      // StakeholderSortField.
+      enableSorting: false,
+      meta: { align: 'center', strictMinSize: true },
+      cell: ({ row }) => <LocationBadgeList locations={row.original.coverage} />,
+    },
+    {
       id: 'fullName',
-      // No single "fullName" column server-side to sort by (see
-      // StakeholderSortField) — firstName/lastName are separate columns.
+      // accessorFn required — TanStack getCanSort is false for id-only display
+      // columns even with enableSorting: true. Server still sorts by fullName.
+      accessorFn: (row) => stakeholderFullName(row),
+      // Sortable as StakeholderSortField.fullName (firstName then lastName).
       // strictMinSize only — avatar + name + link icon is left-aligned
       // content, not a centered pill like City Coverage/Role type. grow:
       // absorbs leftover width on a wide screen — see DataGridColumnMeta.grow.
+      enableSorting: true,
       meta: { strictMinSize: true, grow: true },
-      enableSorting: false,
       header: 'Name',
       cell: ({ row }) => {
         const stakeholder = row.original;
@@ -188,8 +199,6 @@ export function getStakeholderColumns({
     {
       accessorKey: 'companyName',
       header: 'Company',
-      // Free text via a joined field — not a StakeholderSortField.
-      enableSorting: false,
       cell: ({ row }) => {
         const { clientId, companyName } = row.original;
         if (!companyName) return <span className="text-muted-foreground">—</span>;
@@ -208,21 +217,10 @@ export function getStakeholderColumns({
       },
     },
     {
-      id: 'coverage',
-      header: 'City Coverage',
-      // Not a StakeholderSortField (see query-stakeholders.dto.ts) — exposed
-      // as the 'coverage' header filter instead (StakeholdersTable), same as
-      // Company's analogous City Coverage column/filter.
-      enableSorting: false,
-      meta: { align: 'center', strictMinSize: true },
-      cell: ({ row }) => <LocationBadgeList locations={row.original.coverage} />,
-    },
-    {
       id: 'roleType',
-      // stakeholderRoleTypeId isn't a StakeholderSortField (see
-      // query-stakeholders.dto.ts) — it's exposed as a filter instead, same
-      // reasoning as Client.status.
-      enableSorting: false,
+      // Same accessorFn requirement as Name — unlocks the sort chevron UI.
+      accessorFn: (row) => row.roleType ?? '',
+      enableSorting: true,
       header: 'Role type',
       meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => {
@@ -255,14 +253,13 @@ export function getStakeholderColumns({
     {
       accessorKey: 'jobTitle',
       header: 'Job title',
-      enableSorting: false,
       cell: ({ row }) => <span className="text-muted-foreground">{row.original.jobTitle ?? '—'}</span>,
     },
     {
       id: 'contact',
       header: 'Contact',
       // Email/Mobile/LinkedIn aren't independently sortable server-side
-      // (StakeholderSortField) — same reasoning as Coverage/Role type above.
+      // (StakeholderSortField) — same reasoning as Coverage above.
       enableSorting: false,
       meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => (
@@ -285,8 +282,7 @@ export function getStakeholderColumns({
     {
       accessorKey: 'status',
       header: 'Status',
-      // Not a StakeholderSortField — exposed as a filter instead, same
-      // reasoning as Accuracy/Role type above.
+      // Not a StakeholderSortField — exposed as a filter instead.
       enableSorting: false,
       meta: { align: 'center', strictMinSize: true },
       cell: ({ row }) => {

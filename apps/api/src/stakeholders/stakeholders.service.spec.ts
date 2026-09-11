@@ -1,6 +1,6 @@
 import { StakeholdersService } from './stakeholders.service';
 import { CreateStakeholderDto } from './dto/create-stakeholder.dto';
-import { QueryStakeholdersDto, SortOrder } from './dto/query-stakeholders.dto';
+import { QueryStakeholdersDto, SortOrder, StakeholderSortField } from './dto/query-stakeholders.dto';
 import { ExtendedPrismaClient } from '../prisma/prisma.extensions';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthUser } from '../auth/auth.types';
@@ -108,6 +108,31 @@ describe('StakeholdersService.create', () => {
     });
   });
 
+  it('standardizes mobile to +61… / +60… on create and keeps unrecognised as typed', async () => {
+    const create = jest.fn().mockResolvedValue(withRelations({ id: 's1' }));
+    const prisma = { stakeholder: { create } } as unknown as ExtendedPrismaClient;
+    const { base } = makeBase();
+    const service = new StakeholdersService(prisma, base);
+
+    await service.create(
+      { clientId: 'cl1', firstName: 'Jane', jobTitleId: 'jt-1', mobile: '02 9550 1234' },
+      makeUser(),
+    );
+    expect(create.mock.calls[0][0].data.mobile).toBe('+61295501234');
+
+    await service.create(
+      { clientId: 'cl1', firstName: 'Jane', jobTitleId: 'jt-1', mobile: '0161234567' },
+      makeUser(),
+    );
+    expect(create.mock.calls[1][0].data.mobile).toBe('+60161234567');
+
+    await service.create(
+      { clientId: 'cl1', firstName: 'Jane', jobTitleId: 'jt-1', mobile: 'desk line' },
+      makeUser(),
+    );
+    expect(create.mock.calls[2][0].data.mobile).toBe('desk line');
+  });
+
   // The catalog is read, never grown here — a title new to the catalog is
   // created through /job-titles first.
   it('passes the jobTitleId through and only reads the catalog to classify', async () => {
@@ -211,6 +236,56 @@ describe('StakeholdersService.update', () => {
       deleteMany: {},
       create: [{ locationId: 'bne' }],
     });
+  });
+});
+
+describe('StakeholdersService.findAll — sort', () => {
+  function setup() {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = { stakeholder: { findMany, count } } as unknown as ExtendedPrismaClient;
+    const service = new StakeholdersService(prisma, makeBase().base);
+    return { findMany, service };
+  }
+
+  it('defaults to createdAt desc then id asc when sortBy is omitted', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery(), makeUser());
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([{ createdAt: 'desc' }, { id: 'asc' }]);
+  });
+
+  it('orders by firstName then lastName when sortBy is fullName', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ sortBy: StakeholderSortField.fullName, sortOrder: SortOrder.asc }), makeUser());
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([
+      { firstName: 'asc' },
+      { lastName: 'asc' },
+      { id: 'asc' },
+    ]);
+  });
+
+  it('orders by client companyName when sortBy is companyName', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ sortBy: StakeholderSortField.companyName, sortOrder: SortOrder.desc }), makeUser());
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([
+      { client: { companyName: 'desc' } },
+      { id: 'asc' },
+    ]);
+  });
+
+  it('orders by stakeholderRoleType name when sortBy is roleType', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ sortBy: StakeholderSortField.roleType, sortOrder: SortOrder.asc }), makeUser());
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([
+      { stakeholderRoleType: { name: 'asc' } },
+      { id: 'asc' },
+    ]);
+  });
+
+  it('orders by jobTitle name when sortBy is jobTitle', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ sortBy: StakeholderSortField.jobTitle, sortOrder: SortOrder.asc }), makeUser());
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([{ jobTitle: { name: 'asc' } }, { id: 'asc' }]);
   });
 });
 

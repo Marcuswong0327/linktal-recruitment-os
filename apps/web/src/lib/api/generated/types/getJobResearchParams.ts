@@ -78,4 +78,24 @@ isContacted?: boolean;
  * Filter by whether the research has since been converted into a Job Order — the research funnel’s conversion column
  */
 hasJobOrder?: boolean;
+/**
+ * Filter salaryRange by substring (case-insensitive contains)
+ */
+salaryRange?: string;
+/**
+ * Only rows with postedDate on/after this date (ISO 8601)
+ */
+postedDateFrom?: string;
+/**
+ * Only rows with postedDate on/before this date (ISO 8601)
+ */
+postedDateTo?: string;
+/**
+ * Only rows last contacted on/after this date (ISO 8601)
+ */
+lastContactedFrom?: string;
+/**
+ * Only rows last contacted on/before this date (ISO 8601)
+ */
+lastContactedTo?: string;
 };

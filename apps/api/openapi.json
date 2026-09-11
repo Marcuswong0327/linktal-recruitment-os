@@ -283,7 +283,12 @@
                 "firstName",
                 "lastName",
                 "lastContactedAt",
-                "status"
+                "status",
+                "jobRoleType",
+                "location",
+                "currentSalary",
+                "expectedSalary",
+                "lastContactedBy"
               ]
             }
           },
@@ -423,6 +428,54 @@
             "description": "Filter by current role (contains, case-insensitive)",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "firstName",
+            "required": false,
+            "in": "query",
+            "description": "Filter by first name (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastName",
+            "required": false,
+            "in": "query",
+            "description": "Filter by last name (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "currentSalary",
+            "required": false,
+            "in": "query",
+            "description": "Filter by current salary text (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expectedSalary",
+            "required": false,
+            "in": "query",
+            "description": "Filter by expected salary text (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedByIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by last-contacted consultant id(s) (denormalized Candidate.lastContactedById)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -672,6 +725,54 @@
             }
           },
           {
+            "name": "firstName",
+            "required": false,
+            "in": "query",
+            "description": "Filter by first name (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastName",
+            "required": false,
+            "in": "query",
+            "description": "Filter by last name (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "currentSalary",
+            "required": false,
+            "in": "query",
+            "description": "Filter by current salary text (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expectedSalary",
+            "required": false,
+            "in": "query",
+            "description": "Filter by expected salary text (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedByIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by last-contacted consultant id(s) (denormalized Candidate.lastContactedById)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "name": "lastContactedFrom",
             "required": false,
             "in": "query",
@@ -830,7 +931,12 @@
                 "firstName",
                 "lastName",
                 "lastContactedAt",
-                "status"
+                "status",
+                "jobRoleType",
+                "location",
+                "currentSalary",
+                "expectedSalary",
+                "lastContactedBy"
               ]
             }
           },
@@ -970,6 +1076,54 @@
             "description": "Filter by current role (contains, case-insensitive)",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "firstName",
+            "required": false,
+            "in": "query",
+            "description": "Filter by first name (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastName",
+            "required": false,
+            "in": "query",
+            "description": "Filter by last name (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "currentSalary",
+            "required": false,
+            "in": "query",
+            "description": "Filter by current salary text (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "expectedSalary",
+            "required": false,
+            "in": "query",
+            "description": "Filter by expected salary text (contains, case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedByIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by last-contacted consultant id(s) (denormalized Candidate.lastContactedById)",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {
@@ -3530,6 +3684,10 @@
                 "displayId",
                 "firstName",
                 "lastName",
+                "fullName",
+                "companyName",
+                "roleType",
+                "jobTitle",
                 "createdAt",
                 "lastContactedAt"
               ]
@@ -3838,6 +3996,10 @@
                 "displayId",
                 "firstName",
                 "lastName",
+                "fullName",
+                "companyName",
+                "roleType",
+                "jobTitle",
                 "createdAt",
                 "lastContactedAt"
               ]
@@ -4075,6 +4237,10 @@
                 "displayId",
                 "firstName",
                 "lastName",
+                "fullName",
+                "companyName",
+                "roleType",
+                "jobTitle",
                 "createdAt",
                 "lastContactedAt"
               ]
@@ -5251,6 +5417,8 @@
               "enum": [
                 "displayId",
                 "jobTitle",
+                "client",
+                "quality",
                 "openings",
                 "filledCount",
                 "salaryMin",
@@ -5609,6 +5777,8 @@
               "enum": [
                 "displayId",
                 "jobTitle",
+                "client",
+                "quality",
                 "openings",
                 "filledCount",
                 "salaryMin",
@@ -6373,7 +6543,11 @@
                 "researchedAt",
                 "postedDate",
                 "lastContactedAt",
-                "createdAt"
+                "createdAt",
+                "jobTitle",
+                "client",
+                "location",
+                "salaryRange"
               ]
             }
           },
@@ -6535,6 +6709,51 @@
             "description": "Filter by whether the research has since been converted into a Job Order — the research funnel’s conversion column",
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "name": "salaryRange",
+            "required": false,
+            "in": "query",
+            "description": "Filter salaryRange by substring (case-insensitive contains)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postedDateFrom",
+            "required": false,
+            "in": "query",
+            "description": "Only rows with postedDate on/after this date (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postedDateTo",
+            "required": false,
+            "in": "query",
+            "description": "Only rows with postedDate on/before this date (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedFrom",
+            "required": false,
+            "in": "query",
+            "description": "Only rows last contacted on/after this date (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedTo",
+            "required": false,
+            "in": "query",
+            "description": "Only rows last contacted on/before this date (ISO 8601)",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -6718,7 +6937,11 @@
                 "researchedAt",
                 "postedDate",
                 "lastContactedAt",
-                "createdAt"
+                "createdAt",
+                "jobTitle",
+                "client",
+                "location",
+                "salaryRange"
               ]
             }
           },
@@ -6880,6 +7103,51 @@
             "description": "Filter by whether the research has since been converted into a Job Order — the research funnel’s conversion column",
             "schema": {
               "type": "boolean"
+            }
+          },
+          {
+            "name": "salaryRange",
+            "required": false,
+            "in": "query",
+            "description": "Filter salaryRange by substring (case-insensitive contains)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postedDateFrom",
+            "required": false,
+            "in": "query",
+            "description": "Only rows with postedDate on/after this date (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "postedDateTo",
+            "required": false,
+            "in": "query",
+            "description": "Only rows with postedDate on/before this date (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedFrom",
+            "required": false,
+            "in": "query",
+            "description": "Only rows last contacted on/after this date (ISO 8601)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lastContactedTo",
+            "required": false,
+            "in": "query",
+            "description": "Only rows last contacted on/before this date (ISO 8601)",
+            "schema": {
+              "type": "string"
             }
           },
           {

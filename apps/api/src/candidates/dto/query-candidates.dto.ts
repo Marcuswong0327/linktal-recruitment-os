@@ -4,14 +4,11 @@ import { IsArray, IsEnum, IsISO8601, IsInt, IsOptional, IsString, Max, Min } fro
 import { CandidateStatus, PlacementStatus, SubmissionStatus } from '@prisma/client';
 
 /**
- * Columns the list may be sorted by. Deliberately narrow: IDs, names, and
- * lastContactedAt (a denormalized column — see Candidate.lastContactedAt in
- * schema.prisma). Categorical / free-text columns (industry, jobRoleType,
- * location, currentCompany, currentRole, email) are exposed as filters
- * instead, since sorting by them only yields arbitrary alphabetical
- * groupings. `status` is included despite being categorical — its values have
- * a meaningful temperature order (Cold < Warm < Placed < Uns), unlike the
- * other enums here.
+ * Columns the list may be sorted by. Relation-backed fields (`jobRoleType`,
+ * `location`) order by the related name; `lastContactedBy` orders by the
+ * denormalized `lastContactedById` (no Consultant FK on Candidate). Salary
+ * fields are free-text scalars on Candidate. Specialization is m2m — filter
+ * only, not a sort field.
  */
 export enum CandidateSortField {
   displayId = 'displayId',
@@ -19,6 +16,11 @@ export enum CandidateSortField {
   lastName = 'lastName',
   lastContactedAt = 'lastContactedAt',
   status = 'status',
+  jobRoleType = 'jobRoleType',
+  location = 'location',
+  currentSalary = 'currentSalary',
+  expectedSalary = 'expectedSalary',
+  lastContactedBy = 'lastContactedBy',
 }
 
 export enum SortOrder {
@@ -127,6 +129,35 @@ export class QueryCandidatesDto {
   @IsString()
   currentRole?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by first name (contains, case-insensitive)' })
+  @IsOptional()
+  @IsString()
+  firstName?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by last name (contains, case-insensitive)' })
+  @IsOptional()
+  @IsString()
+  lastName?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by current salary text (contains, case-insensitive)' })
+  @IsOptional()
+  @IsString()
+  currentSalary?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by expected salary text (contains, case-insensitive)' })
+  @IsOptional()
+  @IsString()
+  expectedSalary?: string;
+
+  @ApiPropertyOptional({
+    description: 'Filter by last-contacted consultant id(s) (denormalized Candidate.lastContactedById)',
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  lastContactedByIds?: string[];
 
   @ApiPropertyOptional({ description: 'Only candidates last contacted on/after this date (ISO 8601)' })
   @IsOptional()

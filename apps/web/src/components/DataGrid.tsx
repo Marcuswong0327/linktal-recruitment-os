@@ -4,7 +4,6 @@ import * as React from 'react';
 import {
   type ColumnDef,
   type ColumnFiltersState,
-  type ColumnSizingState,
   type FilterFn,
   type Row,
   type RowSelectionState,
@@ -31,6 +30,7 @@ import {
 import { VscArrowRight } from 'react-icons/vsc';
 
 import { cn } from '@/lib/utils';
+import { usePersistedColumnSizing } from '@/hooks/use-persisted-column-sizing';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -161,6 +161,9 @@ function columnAlignClass(meta: unknown): string | undefined {
   const align = (meta as DataGridColumnMeta | undefined)?.align;
   return align === 'center' ? 'text-center' : align === 'right' ? 'text-right' : undefined;
 }
+
+/** Resize floor cap for non-strict columns — long headers truncate below this. */
+const HEADER_RESIZE_MIN_CAP = 72;
 
 /**
  * Puts the caret back at the start of the `newRow` row — call after a
@@ -595,6 +598,12 @@ interface DataGridProps<TData> {
    * the chip reads ACTIVE while the first request asks for everything.
    */
   initialColumnFilters?: ColumnFiltersState;
+  /**
+   * When set, user-resized column widths are saved to localStorage under this
+   * key and restored on the next visit (per browser). Omit to keep widths
+   * ephemeral for the session only.
+   */
+  columnSizingKey?: string;
   /** Rendered on the right side of the toolbar (filters, "Add" button, etc.). */
   toolbar?: React.ReactNode;
   /** Rendered in the footer, to the left of the row-count text (e.g. a primary "Add" action). */
@@ -706,6 +715,7 @@ export function DataGrid<TData>({
   hideSearch = false,
   filters,
   initialColumnFilters,
+  columnSizingKey,
   toolbar,
   footerActions,
   onRowClick,
@@ -727,7 +737,7 @@ export function DataGrid<TData>({
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [rowSelection, setRowSelectionState] = React.useState<RowSelectionState>({});
-  const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
+  const [columnSizing, setColumnSizing] = usePersistedColumnSizing(columnSizingKey);
   const [contextMenuOpen, setContextMenuOpen] = React.useState(false);
 
   // Mirrors `rowSelection` synchronously, alongside the (batched, one-tick-
@@ -810,6 +820,8 @@ export function DataGrid<TData>({
   // columns. Unlike a pill/control, clipped text isn't broken, so those
   // columns should stay shrinkable well past their widest cell value; only
   // `meta.strictMinSize` columns use the fuller `measuredSizes` floor instead.
+  // Cap (`HEADER_RESIZE_MIN_CAP`) keeps long labels from forcing a wide
+  // minimum — the header truncates with an ellipsis when narrowed.
   const [headerOnlySizes, setHeaderOnlySizes] = React.useState<Record<string, number>>({});
 
   // Attach the faceted filter fn to whichever columns are declared filterable.
@@ -859,7 +871,12 @@ export function DataGrid<TData>({
       const measured = id ? measuredSizes[id] : undefined;
       if (measured !== undefined) {
         const strict = (result.meta as DataGridColumnMeta | undefined)?.strictMinSize;
-        const minFloor = strict ? measured : id ? headerOnlySizes[id] : undefined;
+        const headerFloor = id ? headerOnlySizes[id] : undefined;
+        const minFloor = strict
+          ? measured
+          : headerFloor !== undefined
+            ? Math.min(headerFloor, HEADER_RESIZE_MIN_CAP)
+            : undefined;
         result = {
           ...result,
           minSize: Math.max(minFloor ?? 0, result.minSize ?? 0),
@@ -1819,6 +1836,10 @@ export function DataGrid<TData>({
                   const sorted = header.column.getIsSorted();
                   const canResize = header.column.getCanResize();
                   const headerFilter = headerFilterByColumnId.get(header.column.id);
+                  const headerLabel =
+                    typeof header.column.columnDef.header === 'string'
+                      ? header.column.columnDef.header
+                      : undefined;
                   return (
                     <TableHead
                       key={header.id}
@@ -1826,36 +1847,44 @@ export function DataGrid<TData>({
                         width: header.getSize(),
                         ...(isVirtual ? { display: 'flex' } : {}),
                       }}
-                      className={cn('relative', columnAlignClass(header.column.columnDef.meta))}
+                      className={cn(
+                        'relative min-w-0 overflow-hidden',
+                        columnAlignClass(header.column.columnDef.meta),
+                      )}
                     >
-                      <span className="inline-flex max-w-full items-center gap-1">
+                      <span className="inline-flex min-w-0 max-w-full items-center gap-1">
                         <span
                           data-measure-column={header.column.id}
-                          className="inline-block max-w-full"
+                          className="inline-block min-w-0 max-w-full"
                         >
                           {header.isPlaceholder ? null : canSort ? (
                             <button
                               type="button"
                               onClick={header.column.getToggleSortingHandler()}
+                              title={headerLabel}
                               // uppercase: Preflight sets text-transform:none on
                               // buttons, cancelling the th's uppercase style.
-                              className="inline-flex items-center gap-1 rounded-sm uppercase hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                              className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm uppercase hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                             >
-                              {flexRender(header.column.columnDef.header, header.getContext())}
+                              <span className="truncate">
+                                {flexRender(header.column.columnDef.header, header.getContext())}
+                              </span>
                               {sorted === 'asc' ? (
-                                <ArrowUp className="size-3" />
+                                <ArrowUp className="size-3 shrink-0" />
                               ) : sorted === 'desc' ? (
-                                <ArrowDown className="size-3" />
+                                <ArrowDown className="size-3 shrink-0" />
                               ) : (
-                                <ChevronsUpDown className="size-3 opacity-50" />
+                                <ChevronsUpDown className="size-3 shrink-0 opacity-50" />
                               )}
                             </button>
                           ) : (
-                            flexRender(header.column.columnDef.header, header.getContext())
+                            <span className="block truncate" title={headerLabel}>
+                              {flexRender(header.column.columnDef.header, header.getContext())}
+                            </span>
                           )}
                         </span>
                         {headerFilter ? (
-                          <span data-no-row-drag>
+                          <span className="shrink-0" data-no-row-drag>
                             {(() => {
                               const selected =
                                 (header.column.getFilterValue() as string[]) ?? [];

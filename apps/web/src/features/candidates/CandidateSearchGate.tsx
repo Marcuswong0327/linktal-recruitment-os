@@ -10,10 +10,8 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
-import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { SpecializationFilterButton } from '@/components/SpecializationPicker';
-import { TextFilter } from '@/components/TextFilter';
 import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@/lib/api/generated/industries/industries';
 import {
@@ -67,6 +65,7 @@ function FilterField({ label, children }: { label: string; children: React.React
  * Re-clicking Search with the same selections still counts as a fresh commit
  * (a new `filters` object, even if shallow-equal) — see CandidatesTable's
  * page-reset effect.
+ * Name / Last contacted filters live on table columns, not this gate.
  */
 export function CandidateSearchGate({
   canCreate,
@@ -88,10 +87,6 @@ export function CandidateSearchGate({
   const [jobRoleTypeIds, setJobRoleTypeIds] = React.useState<string[]>([]);
   const [statuses, setStatuses] = React.useState<string[]>([]);
   const [sortByValue, setSortByValue] = React.useState<SortByValue | ''>('');
-  // Free-text name — committed into appliedFilters.q on Search (API `q`).
-  const [nameQ, setNameQ] = React.useState('');
-  const [lastContactedFrom, setLastContactedFrom] = React.useState<string | undefined>();
-  const [lastContactedTo, setLastContactedTo] = React.useState<string | undefined>();
 
   // Country/City/Specialization are server-searched (see LocationFilterButton
   // /SpecializationFilterButton) — the API only returns a name alongside a
@@ -222,8 +217,6 @@ export function CandidateSearchGate({
     specializationIds.length > 0 ||
     jobRoleTypeIds.length > 0 ||
     statuses.length > 0 ||
-    nameQ.trim() !== '' ||
-    Boolean(lastContactedFrom || lastContactedTo) ||
     sortByValue !== '';
 
   const [appliedFilters, setAppliedFilters] = React.useState<CandidateAppliedFilters | null>(null);
@@ -231,16 +224,12 @@ export function CandidateSearchGate({
   function handleSearch() {
     const locationIds = [...countryIds, ...cityIds];
     const sort = sortByOptions.find((o) => o.value === sortByValue);
-    const q = nameQ.trim() || undefined;
     setAppliedFilters({
-      q,
       statuses: statuses.length ? (statuses as CandidateStatus[]) : undefined,
       industryIds: industryIds.length ? industryIds : undefined,
       jobRoleTypeIds: jobRoleTypeIds.length ? jobRoleTypeIds : undefined,
       specializationIds: specializationIds.length ? specializationIds : undefined,
       locationIds: locationIds.length ? locationIds : undefined,
-      lastContactedFrom,
-      lastContactedTo,
       sortBy: sort?.sortBy,
       sortOrder: sort?.sortOrder,
     });
@@ -264,9 +253,6 @@ export function CandidateSearchGate({
       setSpecializationIds([]);
       setJobRoleTypeIds([]);
       setStatuses([]);
-      setNameQ('');
-      setLastContactedFrom(undefined);
-      setLastContactedTo(undefined);
       setSortByValue('');
       setAppliedFilters(null);
       setIsResetting(false);
@@ -276,16 +262,7 @@ export function CandidateSearchGate({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-9">
-          <FilterField label="Name">
-            <TextFilter
-              title="Name"
-              placeholder="Any name"
-              value={nameQ || undefined}
-              onChange={(v) => setNameQ(v ?? '')}
-              triggerClassName="w-full justify-between"
-            />
-          </FilterField>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
           <FilterField label="Country">
             <LocationFilterButton
               selected={countryIds}
@@ -297,6 +274,19 @@ export function CandidateSearchGate({
               title="Country"
               labelFor={(id) => countryNames[id] ?? id}
               onResolve={registerCountryName}
+            />
+          </FilterField>
+          <FilterField label="City Coverage">
+            <LocationFilterButton
+              selected={cityIds}
+              onChange={setCityIds}
+              level="CITY_COVERAGE"
+              underId={countryIds.length === 1 ? countryIds[0] : undefined}
+              compact={false}
+              placeholder="All City Coverage"
+              title="City Coverage"
+              labelFor={(id) => cityNames[id] ?? id}
+              onResolve={registerCityName}
             />
           </FilterField>
           <FilterField label="Industry">
@@ -321,19 +311,6 @@ export function CandidateSearchGate({
               industryIds={industryIds}
             />
           </FilterField>
-          <FilterField label="City Coverage">
-            <LocationFilterButton
-              selected={cityIds}
-              onChange={setCityIds}
-              level="CITY_COVERAGE"
-              underId={countryIds.length === 1 ? countryIds[0] : undefined}
-              compact={false}
-              placeholder="All City Coverage"
-              title="City Coverage"
-              labelFor={(id) => cityNames[id] ?? id}
-              onResolve={registerCityName}
-            />
-          </FilterField>
           <FilterField label="Role Type">
             <RoleTypeFilter
               selected={jobRoleTypeIds}
@@ -349,19 +326,6 @@ export function CandidateSearchGate({
               options={statusOptions}
               selected={statuses}
               onChange={setStatuses}
-              triggerClassName="w-full justify-between"
-            />
-          </FilterField>
-          <FilterField label="Last contacted">
-            <DateRangeFilter
-              title="Last contacted"
-              placeholder="Any date"
-              from={lastContactedFrom}
-              to={lastContactedTo}
-              onChange={({ from, to }) => {
-                setLastContactedFrom(from);
-                setLastContactedTo(to);
-              }}
               triggerClassName="w-full justify-between"
             />
           </FilterField>

@@ -15,6 +15,7 @@ import { classifyJobTitle } from './role-type-classifier';
 import { buildWorkbook, resolveTimeZone, splitContactDateTime, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
 import { searchTokens } from '../common/search-tokens';
+import { normalizeMobileForStorage } from '../common/phone';
 
 /** The subset of QueryStakeholdersDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination/sort but still satisfies this structurally. */
 type StakeholderFilterFields = Pick<
@@ -281,14 +282,25 @@ export class StakeholdersService {
     sortBy: QueryStakeholdersDto['sortBy'],
     sortOrder: QueryStakeholdersDto['sortOrder'],
   ): Prisma.StakeholderOrderByWithRelationInput[] {
-    return [
-      sortBy === 'lastContactedAt'
-        ? { lastContactedAt: { sort: sortOrder, nulls: 'last' } }
-        : sortBy
-          ? { [sortBy]: sortOrder }
-          : { createdAt: 'desc' },
-      { id: 'asc' },
-    ];
+    const tieBreaker: Prisma.StakeholderOrderByWithRelationInput = { id: 'asc' };
+    if (!sortBy) return [{ createdAt: 'desc' }, tieBreaker];
+    if (sortBy === 'lastContactedAt') {
+      return [{ lastContactedAt: { sort: sortOrder, nulls: 'last' } }, tieBreaker];
+    }
+    // Grid "Name" — no single fullName column; first then last.
+    if (sortBy === 'fullName') {
+      return [{ firstName: sortOrder }, { lastName: sortOrder }, tieBreaker];
+    }
+    if (sortBy === 'companyName') {
+      return [{ client: { companyName: sortOrder } }, tieBreaker];
+    }
+    if (sortBy === 'roleType') {
+      return [{ stakeholderRoleType: { name: sortOrder } }, tieBreaker];
+    }
+    if (sortBy === 'jobTitle') {
+      return [{ jobTitle: { name: sortOrder } }, tieBreaker];
+    }
+    return [{ [sortBy]: sortOrder }, tieBreaker];
   }
 
   async findAll(query: QueryStakeholdersDto, user: AuthUser) {
@@ -471,8 +483,11 @@ export class StakeholdersService {
   }
 
   async create(dto: CreateStakeholderDto, _user: AuthUser) {
-    const { coverageLocationIds, roleTypeId, ...scalars } = dto;
-    const data: Prisma.StakeholderUncheckedCreateInput = { ...scalars };
+    const { coverageLocationIds, roleTypeId, mobile, ...scalars } = dto;
+    const data: Prisma.StakeholderUncheckedCreateInput = {
+      ...scalars,
+      ...(mobile !== undefined ? { mobile: normalizeMobileForStorage(mobile) ?? null } : {}),
+    };
     // An explicit role type always wins; otherwise derive one from the title.
     data.stakeholderRoleTypeId =
       roleTypeId ?? (await classifyRoleTypeId(this.base, await jobTitleName(this.base, dto.jobTitleId)));
@@ -491,8 +506,11 @@ export class StakeholdersService {
     // Existence check only — scope never gates a direct write.
     await this.findOne(id, user);
 
-    const { coverageLocationIds, roleTypeId, ...scalars } = dto;
-    const data: Prisma.StakeholderUncheckedUpdateInput = { ...scalars };
+    const { coverageLocationIds, roleTypeId, mobile, ...scalars } = dto;
+    const data: Prisma.StakeholderUncheckedUpdateInput = {
+      ...scalars,
+      ...(mobile !== undefined ? { mobile: normalizeMobileForStorage(mobile) } : {}),
+    };
     // Re-classify only when the title is actually changing and the caller
     // didn't also set the role type explicitly in the same request.
     if (roleTypeId !== undefined) {

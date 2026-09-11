@@ -13,6 +13,10 @@ export const GetStakeholdersForEnrichmentSortBy = {
   displayId: 'displayId',
   firstName: 'firstName',
   lastName: 'lastName',
+  fullName: 'fullName',
+  companyName: 'companyName',
+  roleType: 'roleType',
+  jobTitle: 'jobTitle',
   createdAt: 'createdAt',
   lastContactedAt: 'lastContactedAt',
 } as const;

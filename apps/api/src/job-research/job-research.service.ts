@@ -30,6 +30,11 @@ type JobResearchFilterFields = Pick<
   | 'statuses'
   | 'isContacted'
   | 'hasJobOrder'
+  | 'salaryRange'
+  | 'postedDateFrom'
+  | 'postedDateTo'
+  | 'lastContactedFrom'
+  | 'lastContactedTo'
 >;
 
 // client/consultant/jobTitle/jobRoleType/location are FK relations — every read
@@ -171,6 +176,27 @@ export class JobResearchService {
       where.jobOrder = query.hasJobOrder ? { isNot: null } : { is: null };
     }
 
+    if (query.salaryRange) {
+      where.salaryRange = {
+        contains: query.salaryRange,
+        mode: Prisma.QueryMode.insensitive,
+      };
+    }
+
+    if (query.postedDateFrom || query.postedDateTo) {
+      where.postedDate = {
+        ...(query.postedDateFrom ? { gte: new Date(query.postedDateFrom) } : {}),
+        ...(query.postedDateTo ? { lte: new Date(query.postedDateTo) } : {}),
+      };
+    }
+
+    if (query.lastContactedFrom || query.lastContactedTo) {
+      where.lastContactedAt = {
+        ...(query.lastContactedFrom ? { gte: new Date(query.lastContactedFrom) } : {}),
+        ...(query.lastContactedTo ? { lte: new Date(query.lastContactedTo) } : {}),
+      };
+    }
+
     // Built as an AND-ed list rather than assigning `where.OR` directly — the
     // free-text search below needs its own `OR`, which a second top-level
     // assignment would silently clobber instead of combining with.
@@ -223,12 +249,14 @@ export class JobResearchService {
     sortBy: QueryJobResearchDto['sortBy'],
     sortOrder: QueryJobResearchDto['sortOrder'],
   ): Prisma.ClientJobResearchOrderByWithRelationInput {
-    const nullableSorts: string[] = ['postedDate', 'lastContactedAt'];
-    return !sortBy
-      ? { researchedAt: 'desc' }
-      : nullableSorts.includes(sortBy)
-        ? { [sortBy]: { sort: sortOrder, nulls: 'last' } }
-        : { [sortBy]: sortOrder };
+    if (!sortBy) return { researchedAt: 'desc' };
+    if (sortBy === 'postedDate' || sortBy === 'lastContactedAt') {
+      return { [sortBy]: { sort: sortOrder, nulls: 'last' } };
+    }
+    if (sortBy === 'jobTitle') return { jobTitle: { name: sortOrder } };
+    if (sortBy === 'client') return { client: { companyName: sortOrder } };
+    if (sortBy === 'location') return { location: { name: sortOrder } };
+    return { [sortBy]: sortOrder };
   }
 
   async findAll(query: QueryJobResearchDto, user: AuthUser) {

@@ -12,6 +12,8 @@ export type GetJobOrdersSortBy = typeof GetJobOrdersSortBy[keyof typeof GetJobOr
 export const GetJobOrdersSortBy = {
   displayId: 'displayId',
   jobTitle: 'jobTitle',
+  client: 'client',
+  quality: 'quality',
   openings: 'openings',
   filledCount: 'filledCount',
   salaryMin: 'salaryMin',

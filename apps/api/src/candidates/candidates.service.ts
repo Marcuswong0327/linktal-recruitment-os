@@ -23,6 +23,7 @@ import { UpdateCandidateContactHistoryDto } from './dto/update-candidate-contact
 import { buildWorkbook, resolveTimeZone, splitContactDateTime, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
 import { searchTokens } from '../common/search-tokens';
+import { normalizeMobileForStorage } from '../common/phone';
 
 /** The subset of QueryCandidatesDto that `buildWhere` actually reads — shared with QueryCandidateFacetsDto, which omits pagination/sort/jobRoleTypeIds but still satisfies this structurally. */
 type CandidateFilterFields = Pick<
@@ -38,6 +39,11 @@ type CandidateFilterFields = Pick<
   | 'location'
   | 'currentCompany'
   | 'currentRole'
+  | 'firstName'
+  | 'lastName'
+  | 'currentSalary'
+  | 'expectedSalary'
+  | 'lastContactedByIds'
   | 'lastContactedFrom'
   | 'lastContactedTo'
 >;
@@ -211,9 +217,10 @@ function contains(value?: string) {
  * touch `this`, so hoisting is a zero-risk move.
  */
 export function toPrismaData<T extends CreateCandidateDto | UpdateCandidateDto>(dto: T) {
-  const { workHistory, historicFiles, otherDocuments, specializationIds: _specializationIds, ...rest } = dto;
+  const { workHistory, historicFiles, otherDocuments, specializationIds: _specializationIds, mobile, ...rest } = dto;
   return {
     ...rest,
+    ...(mobile !== undefined ? { mobile: normalizeMobileForStorage(mobile) } : {}),
     ...(workHistory !== undefined
       ? { workHistory: workHistory as unknown as Prisma.InputJsonValue }
       : {}),
@@ -286,6 +293,17 @@ export class CandidatesService {
     if (companyFilter) and.push({ currentCompany: companyFilter });
     const roleFilter = contains(query.currentRole);
     if (roleFilter) and.push({ currentRole: roleFilter });
+    const firstNameFilter = contains(query.firstName);
+    if (firstNameFilter) and.push({ firstName: firstNameFilter });
+    const lastNameFilter = contains(query.lastName);
+    if (lastNameFilter) and.push({ lastName: lastNameFilter });
+    const currentSalaryFilter = contains(query.currentSalary);
+    if (currentSalaryFilter) and.push({ currentSalary: currentSalaryFilter });
+    const expectedSalaryFilter = contains(query.expectedSalary);
+    if (expectedSalaryFilter) and.push({ expectedSalary: expectedSalaryFilter });
+    if (query.lastContactedByIds?.length) {
+      and.push({ lastContactedById: { in: query.lastContactedByIds } });
+    }
 
     if (query.lastContactedFrom || query.lastContactedTo) {
       and.push({
@@ -342,14 +360,22 @@ export class CandidatesService {
     sortBy: QueryCandidatesDto['sortBy'],
     sortOrder: QueryCandidatesDto['sortOrder'],
   ): Prisma.CandidateOrderByWithRelationInput[] {
-    return [
-      !sortBy
-        ? { createdAt: 'desc' }
-        : sortBy === 'lastContactedAt'
-          ? { lastContactedAt: { sort: sortOrder, nulls: 'last' } }
-          : { [sortBy]: sortOrder },
-      { id: 'asc' },
-    ];
+    const tieBreaker: Prisma.CandidateOrderByWithRelationInput = { id: 'asc' };
+    if (!sortBy) return [{ createdAt: 'desc' }, tieBreaker];
+    if (sortBy === 'lastContactedAt') {
+      return [{ lastContactedAt: { sort: sortOrder, nulls: 'last' } }, tieBreaker];
+    }
+    if (sortBy === 'jobRoleType') {
+      return [{ jobRoleType: { name: sortOrder } }, tieBreaker];
+    }
+    if (sortBy === 'location') {
+      return [{ location: { name: sortOrder } }, tieBreaker];
+    }
+    // No Consultant FK on Candidate — sort the denormalized id (stable; names resolve in toEntity).
+    if (sortBy === 'lastContactedBy') {
+      return [{ lastContactedById: sortOrder }, tieBreaker];
+    }
+    return [{ [sortBy]: sortOrder }, tieBreaker];
   }
 
   async findAll(query: QueryCandidatesDto, user: AuthUser) {

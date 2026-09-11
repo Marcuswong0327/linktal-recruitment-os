@@ -115,7 +115,7 @@ export function useJobResearchNewRow({
   }
 
   const editors: Record<string, React.ReactNode> = {
-    cityCoverage: (
+    location: (
       <GridCellLocationCombobox
         value={draft.locationId}
         onValueChange={(id) => set('locationId', id)}
@@ -135,7 +135,7 @@ export function useJobResearchNewRow({
         placeholder="Job title"
       />
     ),
-    companyName: (
+    client: (
       <GridCellClientCombobox
         value={draft.clientId}
         onValueChange={(id) => set('clientId', id)}
