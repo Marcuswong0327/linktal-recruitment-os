@@ -17,7 +17,6 @@ import {
 import { ClientFilterButton } from '@/components/ClientFilterButton';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { JobTitleFilterButton } from '@/components/JobTitleFilterButton';
-import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import {
   getGetJobTitlesQueryKey,
   useCreateJobTitle,
@@ -62,16 +61,9 @@ export function JobResearchTable({
   const queryClient = useQueryClient();
 
   // Column-header filters (in addition to gate locationIds / industry / etc.).
-  const [columnLocationIds, setColumnLocationIds] = React.useState<string[] | undefined>();
   const [jobTitleIds, setJobTitleIds] = React.useState<string[] | undefined>();
   const [clientIds, setClientIds] = React.useState<string[] | undefined>();
 
-  const [locationNames, setLocationNames] = React.useState<Record<string, string>>({});
-  const registerLocationName = React.useCallback(
-    (id: string, name: string) =>
-      setLocationNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
-    [],
-  );
   const [clientNames, setClientNames] = React.useState<Record<string, string>>({});
   const registerClientName = React.useCallback(
     (id: string, name: string) =>
@@ -126,15 +118,9 @@ export function JobResearchTable({
     setPage(1);
     setSortBy(filters.sortBy);
     setSortOrder(filters.sortOrder ?? 'desc');
-    setColumnLocationIds(undefined);
     setJobTitleIds(undefined);
     setClientIds(undefined);
   }, [filters]);
-
-  const mergedLocationIds = React.useMemo(() => {
-    const ids = [...(filters.locationIds ?? []), ...(columnLocationIds ?? [])];
-    return ids.length ? [...new Set(ids)] : undefined;
-  }, [filters.locationIds, columnLocationIds]);
 
   const { data, isLoading, isFetching, isError, error } = useGetJobResearch(
     {
@@ -144,7 +130,7 @@ export function JobResearchTable({
       statuses: filters.statuses as GetJobResearchStatusesItem[] | undefined,
       industryIds: filters.industryIds,
       specializationIds: filters.specializationIds,
-      locationIds: mergedLocationIds,
+      locationIds: filters.locationIds,
       clientIds,
       jobTitleIds,
       sortBy,
@@ -156,8 +142,6 @@ export function JobResearchTable({
   const rows = useInfinitePages(result?.data, page, isFetching);
 
   function handleQueryChange({ search: nextSearch, columnFilters, sorting }: DataGridQuery) {
-    const locationFilter = columnFilters.find((f) => f.id === 'location')?.value as
-      string[] | undefined;
     const jobTitleFilter = columnFilters.find((f) => f.id === 'jobTitle')?.value as
       string[] | undefined;
     const clientFilter = columnFilters.find((f) => f.id === 'client')?.value as string[] | undefined;
@@ -166,7 +150,6 @@ export function JobResearchTable({
     const sortField =
       sort && sort.id in GetJobResearchSortBy ? (sort.id as GetJobResearchSortBy) : undefined;
 
-    setColumnLocationIds(locationFilter?.length ? locationFilter : undefined);
     setJobTitleIds(jobTitleFilter?.length ? jobTitleFilter : undefined);
     setClientIds(clientFilter?.length ? clientFilter : undefined);
     setSortBy(sortField);
@@ -177,24 +160,6 @@ export function JobResearchTable({
 
   const researchFilters: DataGridFilter[] = React.useMemo(
     () => [
-      {
-        columnId: 'location',
-        title: 'City Coverage',
-        options: [],
-        inHeader: true,
-        render: ({ selected, onChange }) => (
-          <LocationFilterButton
-            selected={selected}
-            onChange={onChange}
-            level="CITY_COVERAGE"
-            compact
-            title="City Coverage"
-            labelFor={(id) => locationNames[id] ?? id}
-            onResolve={registerLocationName}
-          />
-        ),
-        labelFor: (id) => locationNames[id] ?? id,
-      },
       {
         columnId: 'jobTitle',
         title: 'Job Title',
@@ -228,14 +193,7 @@ export function JobResearchTable({
         labelFor: (id) => clientNames[id] ?? id,
       },
     ],
-    [
-      locationNames,
-      clientNames,
-      jobTitleNames,
-      registerLocationName,
-      registerClientName,
-      registerJobTitleName,
-    ],
+    [clientNames, jobTitleNames, registerClientName, registerJobTitleName],
   );
 
   async function handleExport() {
@@ -256,7 +214,7 @@ export function JobResearchTable({
             statuses: filters.statuses as unknown as ExportJobResearchStatusesItem[] | undefined,
             industryIds: filters.industryIds,
             specializationIds: filters.specializationIds,
-            locationIds: mergedLocationIds,
+            locationIds: filters.locationIds,
             clientIds,
             jobTitleIds,
             sortBy: sortBy as unknown as ExportJobResearchSortBy | undefined,

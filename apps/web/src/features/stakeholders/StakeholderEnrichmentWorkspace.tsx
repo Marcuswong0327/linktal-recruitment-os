@@ -3,12 +3,15 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Download } from 'lucide-react';
+import { ArrowLeft, Download, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { DataGrid } from '@/components/DataGrid';
+import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
+import { LocationFilterButton } from '@/components/LocationMultiSelect';
 import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
 import { downloadFile } from '@/lib/api/fetcher';
 import {
@@ -22,6 +25,17 @@ import { useCreateStakeholderRoleType, useGetStakeholderRoleTypes } from '@/lib/
 import type { StakeholderEntity, UpdateStakeholderDto } from '@/lib/api/generated/types';
 import { getStakeholderColumns, roleTypeStyle, type StakeholderStatus } from './columns';
 
+const RESET_FADE_MS = 200;
+
+function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      {children}
+    </div>
+  );
+}
+
 /**
  * The cross-company enrichment workspace: every stakeholder across a
  * hand-picked, ordered set of companies (`clientIds`, already deduped and in
@@ -32,6 +46,10 @@ import { getStakeholderColumns, roleTypeStyle, type StakeholderStatus } from './
  * flattens the result back out in `clientIds` order, so the grid shows every
  * stakeholder under company A, then company C, then company B — whatever
  * order they were selected in, independent of the grid's own current sort.
+ *
+ * City Coverage / Role Type refine that set via View (same card UX as the
+ * Companies / Job Opening Search gates); empty applied filters = all contacts
+ * for the selected companies.
  */
 export function StakeholderEnrichmentWorkspace({
   clientIds,
@@ -52,7 +70,24 @@ export function StakeholderEnrichmentWorkspace({
   const [selected, setSelected] = React.useState<StakeholderEntity[]>([]);
   const [isExporting, setIsExporting] = React.useState(false);
 
-  const { data, isLoading, isError, error } = useGetStakeholdersForEnrichment({ clientIds, sortBy: 'firstName', sortOrder: 'asc' });
+  const [cityIds, setCityIds] = React.useState<string[]>([]);
+  const [draftRoleTypeIds, setDraftRoleTypeIds] = React.useState<string[]>([]);
+  const [cityNames, setCityNames] = React.useState<Record<string, string>>({});
+  const registerCityName = React.useCallback(
+    (id: string, name: string) => setCityNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
+    [],
+  );
+
+  const [appliedLocationIds, setAppliedLocationIds] = React.useState<string[] | undefined>();
+  const [appliedRoleTypeIds, setAppliedRoleTypeIds] = React.useState<string[] | undefined>();
+
+  const { data, isLoading, isError, error } = useGetStakeholdersForEnrichment({
+    clientIds,
+    sortBy: 'firstName',
+    sortOrder: 'asc',
+    locationIds: appliedLocationIds,
+    roleTypeIds: appliedRoleTypeIds,
+  });
   const flat = data?.status === 200 ? data.data : [];
 
   // Group by company, then flatten back out in selection order — the whole
@@ -75,6 +110,34 @@ export function StakeholderEnrichmentWorkspace({
     () => roleTypeRows.map((r, i) => ({ id: r.id, name: r.name, triggerClassName: roleTypeStyle(i).triggerClassName })),
     [roleTypeRows],
   );
+  const roleTypeFilterOptions = React.useMemo(
+    () => roleTypeRows.map((r) => ({ value: r.id, label: r.name })),
+    [roleTypeRows],
+  );
+
+  const hasActiveFilters =
+    cityIds.length > 0 ||
+    draftRoleTypeIds.length > 0 ||
+    (appliedLocationIds?.length ?? 0) > 0 ||
+    (appliedRoleTypeIds?.length ?? 0) > 0;
+
+  function handleView() {
+    setAppliedLocationIds(cityIds.length ? cityIds : undefined);
+    setAppliedRoleTypeIds(draftRoleTypeIds.length ? draftRoleTypeIds : undefined);
+  }
+
+  const [isResetting, setIsResetting] = React.useState(false);
+  function handleReset() {
+    if (isResetting) return;
+    setIsResetting(true);
+    window.setTimeout(() => {
+      setCityIds([]);
+      setDraftRoleTypeIds([]);
+      setAppliedLocationIds(undefined);
+      setAppliedRoleTypeIds(undefined);
+      setIsResetting(false);
+    }, RESET_FADE_MS);
+  }
 
   const createRoleType = useCreateStakeholderRoleType({
     mutation: {
@@ -187,27 +250,78 @@ export function StakeholderEnrichmentWorkspace({
         />
       </div>
 
-      <DataGrid
-        columns={columns}
-        data={stakeholders}
-        isLoading={isLoading}
-        searchPlaceholder="Search stakeholders…"
-        emptyState="No stakeholders found for the selected companies."
-        getRowId={(s) => s.id}
-        // Logging a contact now lives on the stakeholder's own detail page
-        // (LogContactRow, an inline row in that page's own contact-history
-        // table) — there's no more standalone modal to trigger from a flat
-        // list, so a row click routes there instead, same as StakeholdersTable.
-        onRowClick={(s) => router.push(`/stakeholders/${s.id}`)}
-        onSelectionChange={setSelected}
-        enableRowRangeSelect
-        toolbar={
-          <Button size="lg" variant="outline" disabled={isExporting || stakeholders.length === 0} onClick={handleExport}>
-            <Download />
-            {isExporting ? 'Exporting…' : `Export to Excel${selected.length > 0 ? ` (${selected.length})` : ''}`}
+      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <FilterField label="City Coverage">
+            <LocationFilterButton
+              selected={cityIds}
+              onChange={setCityIds}
+              level="CITY_COVERAGE"
+              compact={false}
+              placeholder="All City Coverage"
+              title="City Coverage"
+              labelFor={(id) => cityNames[id] ?? id}
+              onResolve={registerCityName}
+            />
+          </FilterField>
+          <FilterField label="Role Type">
+            <DataGridFacetedFilter
+              title="Role Type"
+              placeholder="All role types"
+              options={roleTypeFilterOptions}
+              selected={draftRoleTypeIds}
+              onChange={setDraftRoleTypeIds}
+              triggerClassName="w-full justify-between"
+            />
+          </FilterField>
+        </div>
+        <div className="flex justify-end gap-2">
+          {hasActiveFilters ? (
+            <Button
+              variant="outline"
+              onClick={handleReset}
+              disabled={isResetting}
+              className={cn('transition-opacity duration-200', isResetting && 'pointer-events-none opacity-0')}
+            >
+              <X />
+              Reset
+            </Button>
+          ) : null}
+          <Button onClick={handleView}>
+            <Search />
+            View
           </Button>
-        }
-      />
+        </div>
+      </div>
+
+      <div
+        className={cn(
+          'flex min-h-0 flex-1 flex-col transition-opacity duration-200',
+          isResetting && 'pointer-events-none opacity-0',
+        )}
+      >
+        <DataGrid
+          columns={columns}
+          data={stakeholders}
+          isLoading={isLoading}
+          searchPlaceholder="Search stakeholders…"
+          emptyState="No stakeholders found for the selected companies."
+          getRowId={(s) => s.id}
+          // Logging a contact now lives on the stakeholder's own detail page
+          // (LogContactRow, an inline row in that page's own contact-history
+          // table) — there's no more standalone modal to trigger from a flat
+          // list, so a row click routes there instead, same as StakeholdersTable.
+          onRowClick={(s) => router.push(`/stakeholders/${s.id}`)}
+          onSelectionChange={setSelected}
+          enableRowRangeSelect
+          toolbar={
+            <Button size="lg" variant="outline" disabled={isExporting || stakeholders.length === 0} onClick={handleExport}>
+              <Download />
+              {isExporting ? 'Exporting…' : `Export to Excel${selected.length > 0 ? ` (${selected.length})` : ''}`}
+            </Button>
+          }
+        />
+      </div>
     </PageLayout>
   );
 }

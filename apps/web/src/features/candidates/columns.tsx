@@ -42,20 +42,20 @@ export const candidateColumns: ColumnDef<Candidate>[] = [
     },
   },
   {
+    id: 'specialization',
+    accessorFn: (row) => row.specializations.join(', '),
+    header: 'Specialization',
+    // m2m — no CandidateSortField / no chevron.
+    enableSorting: false,
+    size: 170,
+    cell: ({ row }) => <LocationBadgeList locations={row.original.specializations} />,
+  },
+  {
     accessorKey: 'jobRoleType',
     header: 'Role Type',
     enableSorting: true,
     size: 140,
     cell: ({ row }) => <MutedCell value={row.original.jobRoleType} className="block truncate" />,
-  },
-  {
-    id: 'specialization',
-    accessorFn: (row) => row.specializations.join(', '),
-    header: 'Specialization',
-    // m2m — filter only; no CandidateSortField / no chevron.
-    enableSorting: false,
-    size: 170,
-    cell: ({ row }) => <LocationBadgeList locations={row.original.specializations} />,
   },
   {
     accessorKey: 'firstName',
