@@ -443,10 +443,10 @@ describe('CandidatesService.findAll — scope', () => {
     });
   });
 
-  // A Candidate holds a *set* of specializations and has no `specializationId`
-  // column, so this arm is spelled with the join — `none: {}` is its
-  // "unspecialised", the counterpart to Client's `specializationId: null`.
-  // Asserting the Client spelling here is what previously hid a live 500: a
+  // A Candidate holds a *set* of specializations and has no scalar
+  // `specializationId` column, so this arm is spelled with the join — `none: {}`
+  // is its "unspecialised" (Client uses the same join-table spelling now).
+  // Asserting a scalar Client spelling here previously hid a live 500: a
   // mocked Prisma delegate accepts any object, so the invalid `where` only
   // failed against the real database.
   it('narrows the industry arm by specialization, letting unspecialised records through', async () => {

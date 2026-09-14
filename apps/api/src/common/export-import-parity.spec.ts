@@ -81,7 +81,7 @@ describe('export -> import column parity', () => {
       displayId: 'CLI-000001',
       companyName: 'Acme',
       industry: null,
-      specialization: null,
+      specializations: [],
       locations: [],
       status: 'COLD',
       quality: 'MEDIUM',

@@ -16,6 +16,7 @@ import {
   Phone,
   Plus,
   Trash2,
+  X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -62,7 +63,6 @@ import { CreatableCombobox, type CreatableComboboxOption } from '@/components/Cr
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
 import { LogContactRow, type LogContactValues } from '@/components/LogContactRow';
-import { SpecializationCombobox } from '@/components/SpecializationPicker';
 import { UrlField } from '@/components/UrlField';
 import { PageLayout } from '@/components/app-shell/PageLayout';
 import { useIsMac } from '@/hooks/use-is-mac';
@@ -95,6 +95,7 @@ import { useGetJobResearch } from '@/lib/api/generated/job-research/job-research
 import {
   getGetSpecializationsQueryKey,
   useCreateSpecialization,
+  useGetSpecializations,
 } from '@/lib/api/generated/specializations/specializations';
 import {
   getGetStakeholderRoleTypesQueryKey,
@@ -399,7 +400,9 @@ function CompanyEditForm({
 
   const [companyName, setCompanyName] = React.useState(company.companyName);
   const [industryId, setIndustryId] = React.useState(company.industryId);
-  const [specializationId, setSpecializationId] = React.useState(company.specializationId ?? '');
+  const [specializationIds, setSpecializationIds] = React.useState<string[]>(
+    () => company.specializationIds ?? [],
+  );
   const [locations, setLocations] = React.useState<LocationOption[]>(() =>
     company.locationIds.map((locId, i) => ({ id: locId, name: company.locations[i] ?? locId })),
   );
@@ -418,12 +421,13 @@ function CompanyEditForm({
 
   const locationIdsKey = (ids: string[]) => [...ids].sort().join(',');
   const initialLocationIdsKey = locationIdsKey(company.locationIds);
+  const initialSpecializationIdsKey = locationIdsKey(company.specializationIds ?? []);
   const initialAddresses = (company.addresses ?? []).join('\n');
 
   const isDirty =
     companyName !== company.companyName ||
     industryId !== company.industryId ||
-    specializationId !== (company.specializationId ?? '') ||
+    locationIdsKey(specializationIds) !== initialSpecializationIdsKey ||
     locationIdsKey(locations.map((l) => l.id)) !== initialLocationIdsKey ||
     addresses !== initialAddresses ||
     website !== (company.website ?? '') ||
@@ -440,6 +444,20 @@ function CompanyEditForm({
 
   const { data: industryData } = useGetIndustries();
   const industries = industryData?.status === 200 ? industryData.data : [];
+  const { data: specializationData } = useGetSpecializations(
+    industryId ? { industryIds: [industryId] } : undefined,
+  );
+  const specializations = specializationData?.status === 200 ? specializationData.data : [];
+  // Prefer live catalog names; fall back to the company's saved labels for
+  // ids that haven't shown up in the current industry-scoped fetch yet.
+  const specializationById = React.useMemo(() => {
+    const map = new Map<string, string>();
+    (company.specializationIds ?? []).forEach((id, i) => {
+      map.set(id, company.specializations?.[i] ?? id);
+    });
+    for (const s of specializations) map.set(s.id, s.name);
+    return map;
+  }, [company.specializationIds, company.specializations, specializations]);
   const createIndustry = useCreateIndustry({
     mutation: {
       onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetIndustriesQueryKey() }),
@@ -642,7 +660,7 @@ function CompanyEditForm({
     const data: UpdateClientDto = {
       companyName,
       industryId,
-      specializationId: specializationId || undefined,
+      specializationIds,
       locationIds: locations.map((l) => l.id),
       addresses: addresses
         ? addresses
@@ -1190,7 +1208,7 @@ function CompanyEditForm({
                   value={industryId}
                   onValueChange={(id) => {
                     setIndustryId(id);
-                    setSpecializationId('');
+                    setSpecializationIds([]);
                   }}
                   options={industries}
                   onCreate={handleCreateIndustry}
@@ -1203,16 +1221,42 @@ function CompanyEditForm({
                 description={!industryId ? 'Pick an industry first' : undefined}
                 orientation="horizontal"
               >
-                <SpecializationCombobox
-                  id="specialization"
-                  value={specializationId}
-                  label={company.specialization ?? undefined}
-                  onValueChange={setSpecializationId}
-                  industryId={industryId || undefined}
-                  onCreate={handleCreateSpecialization}
-                  disabled={!canEdit || !industryId}
-                  clearable
-                />
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {specializationIds.length > 0
+                      ? specializationIds.map((id) => (
+                          <Badge key={id} variant="muted" className="gap-1">
+                            {specializationById.get(id) ?? id}
+                            {canEdit ? (
+                              <button
+                                type="button"
+                                aria-label="Remove specialization"
+                                onClick={() =>
+                                  setSpecializationIds((prev) => prev.filter((s) => s !== id))
+                                }
+                              >
+                                <X className="size-3" />
+                              </button>
+                            ) : null}
+                          </Badge>
+                        ))
+                      : null}
+                  </div>
+                  {/* value is always '' — "add one" picker, same as CandidateDetail;
+                      onCreate/onValueChange append, and already-selected options
+                      are filtered out so the dropdown closes after each pick. */}
+                  <CreatableCombobox
+                    id="specialization"
+                    value=""
+                    onValueChange={(id) =>
+                      setSpecializationIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
+                    }
+                    options={specializations.filter((s) => !specializationIds.includes(s.id))}
+                    onCreate={canEdit ? handleCreateSpecialization : undefined}
+                    placeholder="Add a specialization…"
+                    disabled={!canEdit || !industryId}
+                  />
+                </div>
               </FormField>
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium">Consultants</span>

@@ -30,7 +30,7 @@ function makeDto(overrides: Partial<CreateClientDto> = {}): CreateClientDto {
 
 /** The relation keys CLIENT_INCLUDE pulls in — `toEntity` destructures all of them. */
 function withRelations(row: Record<string, unknown> = {}) {
-  return { industry: null, specialization: null, locations: [], stakeholders: [], ...row };
+  return { industry: null, specializations: [], locations: [], stakeholders: [], ...row };
 }
 
 /** A location node as CLIENT_INCLUDE returns it, on the client's own market set. */
@@ -62,7 +62,8 @@ describe('ClientsService.create', () => {
       displayId: 'Client-0101',
       companyName: 'Acme Corp',
       industry: null,
-      specialization: null,
+      specializations: [],
+      specializationIds: [],
       locations: [],
       locationIds: [],
       lastContactType: null,
@@ -84,6 +85,19 @@ describe('ClientsService.create', () => {
     });
     // the relation write replaces the raw id list, it isn't also passed as a column
     expect(create.mock.calls[0][0].data).not.toHaveProperty('locationIds');
+  });
+
+  it('nests specializationIds as a create on the join relation', async () => {
+    const create = jest.fn().mockResolvedValue(withRelations({ id: 'cl1' }));
+    const prisma = { client: { create } } as unknown as ExtendedPrismaClient;
+    const service = new ClientsService(prisma, {} as unknown as PrismaService);
+
+    await service.create(makeDto({ specializationIds: ['spec1', 'spec2'] }), makeUser());
+
+    expect(create.mock.calls[0][0].data.specializations).toEqual({
+      create: [{ specializationId: 'spec1' }, { specializationId: 'spec2' }],
+    });
+    expect(create.mock.calls[0][0].data).not.toHaveProperty('specializationIds');
   });
 
   // The schema can't express "non-empty relation", so this is enforced in the
@@ -148,7 +162,6 @@ describe('ClientsService.update', () => {
     // Generated type omits null (Prisma/class-validator accept it at
     // runtime) — same gap the frontend casts around.
     const dto = {
-      specializationId: null,
       website: null,
       generalDescription: null,
     } as unknown as UpdateClientDto;
@@ -156,7 +169,6 @@ describe('ClientsService.update', () => {
     await service.update('cl1', dto, makeUser());
 
     const savedData = update.mock.calls[0][0].data;
-    expect(savedData.specializationId).toBeNull();
     expect(savedData.website).toBeNull();
     expect(savedData.generalDescription).toBeNull();
   });
@@ -168,6 +180,27 @@ describe('ClientsService.update', () => {
     expect(update.mock.calls[0][0].data.locations).toEqual({
       deleteMany: {},
       create: [{ locationId: 'mel' }],
+    });
+  });
+
+  it('replaces the whole specialization set rather than merging into it', async () => {
+    const { service, update } = makeService();
+    await service.update('cl1', { specializationIds: ['spec2'] }, makeUser());
+
+    expect(update.mock.calls[0][0].data.specializations).toEqual({
+      deleteMany: {},
+      create: [{ specializationId: 'spec2' }],
+    });
+    expect(update.mock.calls[0][0].data).not.toHaveProperty('specializationIds');
+  });
+
+  it('clears all specializations when specializationIds is an empty array', async () => {
+    const { service, update } = makeService();
+    await service.update('cl1', { specializationIds: [] }, makeUser());
+
+    expect(update.mock.calls[0][0].data.specializations).toEqual({
+      deleteMany: {},
+      create: [],
     });
   });
 
@@ -213,13 +246,25 @@ describe('ClientsService.findAll — filters', () => {
     expect(findMany.mock.calls[1][0].where.tobs).toEqual({ none: {} });
   });
 
-  it('filters by industryIds/specializationIds as exact FK matches, distinct from the free-text industry/specialization filters', async () => {
+  it('filters by industryIds as exact FK matches and specializationIds via the join', async () => {
     const { service, findMany } = makeService();
     await service.findAll({ ...baseQuery, industryIds: ['ind1', 'ind2'] }, makeUser());
     expect(findMany.mock.calls[0][0].where.industryId).toEqual({ in: ['ind1', 'ind2'] });
 
     await service.findAll({ ...baseQuery, specializationIds: ['spec1'] }, makeUser());
-    expect(findMany.mock.calls[1][0].where.specializationId).toEqual({ in: ['spec1'] });
+    expect(findMany.mock.calls[1][0].where.AND).toContainEqual({
+      specializations: { some: { specializationId: { in: ['spec1'] } } },
+    });
+  });
+
+  it('matches a free-text specialization against any tagged name', async () => {
+    const { service, findMany } = makeService();
+    await service.findAll({ ...baseQuery, specialization: 'Bakery' }, makeUser());
+    expect(findMany.mock.calls[0][0].where.AND).toContainEqual({
+      specializations: {
+        some: { specialization: { name: { contains: 'Bakery', mode: 'insensitive' } } },
+      },
+    });
   });
 
   // A client carries a *set* of locations at mixed granularity, so both

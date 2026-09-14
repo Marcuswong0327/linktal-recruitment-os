@@ -13085,14 +13085,19 @@
             "nullable": true,
             "description": "Resolved industry name"
           },
-          "specializationId": {
-            "type": "string",
-            "nullable": true
+          "specializations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Resolved specialization names"
           },
-          "specialization": {
-            "type": "string",
-            "nullable": true,
-            "description": "Resolved specialization name"
+          "specializationIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Specialization IDs backing `specializations` — what an editable multi-select actually binds to"
           },
           "locations": {
             "type": "array",
@@ -13195,8 +13200,8 @@
           "companyName",
           "industryId",
           "industry",
-          "specializationId",
-          "specialization",
+          "specializations",
+          "specializationIds",
           "locations",
           "locationIds",
           "addresses",
@@ -13266,10 +13271,12 @@
             "type": "string",
             "description": "Industry ID (see /industries)"
           },
-          "specializationId": {
-            "type": "string",
-            "description": "Specialization ID (see /specializations) — null clears it",
-            "nullable": true
+          "specializationIds": {
+            "description": "Specialization IDs (see /specializations) — omit to leave unchanged on update; [] clears",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "locationIds": {
             "description": "Location nodes this client hires from — its market, not its office address. At least one is required (country level at minimum); mixed granularity is fine.",
@@ -13342,10 +13349,12 @@
             "type": "string",
             "description": "Industry ID (see /industries)"
           },
-          "specializationId": {
-            "type": "string",
-            "description": "Specialization ID (see /specializations) — null clears it",
-            "nullable": true
+          "specializationIds": {
+            "description": "Specialization IDs (see /specializations) — omit to leave unchanged on update; [] clears",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "locationIds": {
             "description": "Location nodes this client hires from — its market, not its office address. At least one is required (country level at minimum); mixed granularity is fine.",

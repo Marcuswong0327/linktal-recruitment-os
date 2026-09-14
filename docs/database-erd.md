@@ -115,7 +115,8 @@ erDiagram
     Industry ||--}| Specialization : "industry"
     Specialization ||--}o Specialization : "parent"
     Industry ||--}| Client : "industry"
-    Specialization ||--}o Client : "specialization"
+    Client ||--}| ClientSpecialization : "client"
+    Specialization ||--}| ClientSpecialization : "specialization"
     Consultant ||--}o Client : "consultant"
     Client ||--}| ClientLocation : "client"
     Location ||--}| ClientLocation : "location"
@@ -174,7 +175,7 @@ erDiagram
 ### Client side
 | Table | Purpose |
 |---|---|
-| `Client` | the hiring company. `industryId` required, `specializationId` optional, hiring market via `ClientLocation` |
+| `Client` | the hiring company. `industryId` required, specializations via `ClientSpecialization` (optional set), hiring market via `ClientLocation` |
 | `ClientLocation` | m2m — where this client hires from |
 | `Tob` | Terms of Business, many per client. Everything but `clientId` optional; `pricing` is free text ("13%-(80k below)15%-18%"), `guaranteePeriod` numeric days |
 | `Stakeholder` | a contact at a client. Both `jobTitleId` and `stakeholderRoleTypeId`; coverage via `StakeholderLocation` |

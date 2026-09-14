@@ -187,7 +187,8 @@ export function CommandPaletteProvider({
             {clientHits.length > 0 && (
               <CommandGroup heading="Companies">
                 {clientHits.map((client) => {
-                  const secondary = client.specialization ?? client.industry ?? undefined;
+                  const secondary =
+                    client.specializations?.[0] ?? client.industry ?? undefined;
                   return (
                     <CommandItem
                       key={client.id}

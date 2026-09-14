@@ -384,7 +384,6 @@ export function CompaniesSearchGate({
             canCreate={canCreate}
             canUpdate={canUpdate}
             canDelete={canDelete}
-            canCreateSpecialization={canCreateSpecialization}
             canCreateIndustry={canCreateIndustry}
           />
         ) : (
@@ -408,11 +407,15 @@ export function CompaniesSearchGate({
               description="Add a new client company."
               industries={industries}
               onCreateIndustry={handleCreateIndustry}
-              onCreateSpecialization={async (name, industryId) => {
-                const res = await createSpecialization.mutateAsync({ data: { name, industryId } });
-                if (res.status !== 201) throw new Error('Failed to add specialization');
-                return res.data;
-              }}
+              onCreateSpecialization={
+                canCreateSpecialization
+                  ? async (name, industryId) => {
+                      const res = await createSpecialization.mutateAsync({ data: { name, industryId } });
+                      if (res.status !== 201) throw new Error('Failed to add specialization');
+                      return res.data;
+                    }
+                  : undefined
+              }
               isSaving={createCompanyMutation.isPending}
               onSave={handleCreate}
               onCancel={() => setCreating(false)}
