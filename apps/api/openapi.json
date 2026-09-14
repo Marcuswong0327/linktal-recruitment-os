@@ -3737,6 +3737,18 @@
             }
           },
           {
+            "name": "industryIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the parent client's industry ID(s). Stakeholder has no industry of its own — matched via Client.industryId.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "name": "jobTitle",
             "required": false,
             "in": "query",
@@ -4049,6 +4061,18 @@
             }
           },
           {
+            "name": "industryIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the parent client's industry ID(s). Stakeholder has no industry of its own — matched via Client.industryId.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "name": "jobTitle",
             "required": false,
             "in": "query",
@@ -4275,6 +4299,18 @@
             "description": "Filter by client ID (exact match)",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "industryIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by the parent client's industry ID(s). Stakeholder has no industry of its own — matched via Client.industryId.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           {

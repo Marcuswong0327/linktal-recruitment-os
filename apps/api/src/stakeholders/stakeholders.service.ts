@@ -20,7 +20,16 @@ import { normalizeMobileForStorage } from '../common/phone';
 /** The subset of QueryStakeholdersDto that `buildWhere` actually reads — shared with the export endpoint, which omits pagination/sort but still satisfies this structurally. */
 type StakeholderFilterFields = Pick<
   QueryStakeholdersDto,
-  'q' | 'clientId' | 'clientIds' | 'jobTitle' | 'roleTypeIds' | 'jobTitleIds' | 'locationIds' | 'accuracy' | 'statuses'
+  | 'q'
+  | 'clientId'
+  | 'clientIds'
+  | 'industryIds'
+  | 'jobTitle'
+  | 'roleTypeIds'
+  | 'jobTitleIds'
+  | 'locationIds'
+  | 'accuracy'
+  | 'statuses'
 >;
 
 // roleType/client are FK relations — every read needs this to get the
@@ -249,6 +258,13 @@ export class StakeholdersService {
     // sits beneath it.
     if (query.locationIds?.length) {
       and.push({ coverage: { some: { location: { ancestorIds: { hasSome: query.locationIds } } } } });
+    }
+
+    // Industry lives on Client — Stakeholder has no industryId of its own.
+    // Separate AND clause from stakeholderScope's `{ client: … }` so both
+    // the explicit industry filter and RBAC scope must match.
+    if (query.industryIds?.length) {
+      and.push({ client: { industryId: { in: query.industryIds } } });
     }
 
     // isAccurate is nullable (three states) — 'unchecked' means null, which

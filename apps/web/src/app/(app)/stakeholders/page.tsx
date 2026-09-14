@@ -2,7 +2,7 @@ import { auth } from '@/auth';
 import { AccessDenied } from '@/components/app-shell/AccessDenied';
 import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
 import { hasPermission } from '@/lib/auth/permissions';
-import { StakeholdersTable } from '@/features/stakeholders/StakeholdersTable';
+import { StakeholdersSearchGate } from '@/features/stakeholders/StakeholdersSearchGate';
 
 export default async function StakeholdersPage() {
   const session = await auth();
@@ -11,7 +11,7 @@ export default async function StakeholdersPage() {
     <PageLayout>
       <PageHeader title="Stakeholders" />
       {hasPermission(session, 'stakeholder', 'read') ? (
-        <StakeholdersTable
+        <StakeholdersSearchGate
           canCreate={hasPermission(session, 'stakeholder', 'create')}
           canUpdate={hasPermission(session, 'stakeholder', 'update')}
           canDelete={hasPermission(session, 'stakeholder', 'delete')}

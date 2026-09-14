@@ -74,7 +74,9 @@ export class QueryStakeholdersDto {
   @IsString()
   q?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by client ID (exact match)' })
+  @ApiPropertyOptional({
+    description: 'Filter by client ID (exact match)',
+  })
   @IsOptional()
   @IsString()
   clientId?: string;
@@ -89,6 +91,17 @@ export class QueryStakeholdersDto {
   @IsArray()
   @IsString({ each: true })
   clientIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      "Filter by the parent client's industry ID(s). Stakeholder has no industry of its own — matched via Client.industryId.",
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(({ value }) => (Array.isArray(value) ? value : [value]))
+  @IsArray()
+  @IsString({ each: true })
+  industryIds?: string[];
 
   @ApiPropertyOptional({ description: 'Filter by job title (contains, case-insensitive)' })
   @IsOptional()

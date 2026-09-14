@@ -354,6 +354,53 @@ describe('StakeholdersService.findAll — scope', () => {
   });
 });
 
+describe('StakeholdersService.findAll — industryIds', () => {
+  function setup() {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = { stakeholder: { findMany, count } } as unknown as ExtendedPrismaClient;
+    const service = new StakeholdersService(prisma, makeBase().base);
+    return { findMany, service };
+  }
+
+  it('filters via client.industryId when industryIds is set', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ industryIds: ['ind-food', 'ind-tech'] }), makeUser({ roleName: 'manager' }));
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toEqual([
+      { client: { industryId: { in: ['ind-food', 'ind-tech'] } } },
+    ]);
+  });
+
+  it('ANDs industryIds with consultant clientScope', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(
+      baseQuery({ industryIds: ['ind-food'] }),
+      makeUser({
+        roleName: 'consultant',
+        consultantId: 'me',
+        industryIds: ['ind1'],
+        locationIds: ['nsw'],
+      }),
+    );
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toEqual(
+      expect.arrayContaining([
+        { client: { industryId: { in: ['ind-food'] } } },
+        {
+          client: {
+            OR: [
+              { industryId: { in: ['ind1'] } },
+              { locations: { some: { location: { ancestorIds: { hasSome: ['nsw'] } } } } },
+              { jobOrders: { some: { deletedAt: null, consultants: { some: { consultantId: 'me' } } } } },
+            ],
+          },
+        },
+      ]),
+    );
+  });
+});
+
 describe('StakeholdersService.findForEnrichment', () => {
   function setup(total = 0) {
     const findMany = jest.fn().mockResolvedValue([]);

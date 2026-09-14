@@ -35,6 +35,12 @@ export function getCompanyColumns({
 }: CompanyColumnsOptions): ColumnDef<Company>[] {
   return [
     {
+      id: 'locations',
+      header: 'City Coverage',
+      enableSorting: false,
+      cell: ({ row }) => <LocationBadgeList locations={row.original.locations} />,
+    },
+    {
       id: 'companyName',
       // Not a GetClientsSortBy field — companyName isn't sortable server-side.
       enableSorting: false,
@@ -78,38 +84,6 @@ export function getCompanyColumns({
       // Read-only muted chips — same treatment as Candidates' specialization
       // column (`LocationBadgeList`). Edit on the company detail page.
       cell: ({ row }) => <LocationBadgeList locations={row.original.specializations ?? []} />,
-    },
-    {
-      id: 'locations',
-      header: 'City Coverage',
-      enableSorting: false,
-      cell: ({ row }) => <LocationBadgeList locations={row.original.locations} />,
-    },
-    {
-      accessorKey: 'lastContactedAt',
-      header: 'Last contacted',
-      enableSorting: false,
-      cell: ({ row }) => <span className="text-muted-foreground">{formatDate(row.original.lastContactedAt)}</span>,
-    },
-    {
-      accessorKey: 'lastContactedBy',
-      header: 'Last contacted by',
-      // Resolved from the latest StakeholderContactHistory row, not a real
-      // column on Client itself — not a GetClientsSortBy field. Same avatar +
-      // name treatment as Stakeholders'/Candidates' equivalent column.
-      enableSorting: false,
-      cell: ({ row }) => {
-        const { lastContactedById, lastContactedBy } = row.original;
-        if (!lastContactedById) {
-          return <span className="text-muted-foreground">—</span>;
-        }
-        return (
-          <div className="flex min-w-0 items-center gap-2">
-            <ConsultantAvatar consultantId={lastContactedById} name={lastContactedBy ?? undefined} size={5} />
-            <span className="truncate text-muted-foreground">{lastContactedBy ?? 'Unknown'}</span>
-          </div>
-        );
-      },
     },
     {
       accessorKey: 'status',
@@ -158,6 +132,32 @@ export function getCompanyColumns({
               disabled={pendingRowId === client.id}
               triggerClassName="mx-auto"
             />
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'lastContactedAt',
+      header: 'Last contacted',
+      enableSorting: false,
+      cell: ({ row }) => <span className="text-muted-foreground">{formatDate(row.original.lastContactedAt)}</span>,
+    },
+    {
+      accessorKey: 'lastContactedBy',
+      header: 'Last contacted by',
+      // Resolved from the latest StakeholderContactHistory row, not a real
+      // column on Client itself — not a GetClientsSortBy field. Same avatar +
+      // name treatment as Stakeholders'/Candidates' equivalent column.
+      enableSorting: false,
+      cell: ({ row }) => {
+        const { lastContactedById, lastContactedBy } = row.original;
+        if (!lastContactedById) {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        return (
+          <div className="flex min-w-0 items-center gap-2">
+            <ConsultantAvatar consultantId={lastContactedById} name={lastContactedBy ?? undefined} size={5} />
+            <span className="truncate text-muted-foreground">{lastContactedBy ?? 'Unknown'}</span>
           </div>
         );
       },

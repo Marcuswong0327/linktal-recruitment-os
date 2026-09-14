@@ -17,6 +17,12 @@ interface TextFilterProps {
   compact?: boolean;
   /** Overrides the trigger button's layout (e.g. `w-full justify-between` in a search gate). */
   triggerClassName?: string;
+  /**
+   * Minimum characters before a non-empty value is committed (same rule as
+   * company / location server search). Empty always clears. Default 0 —
+   * pass 2 for name-style filters.
+   */
+  minLength?: number;
 }
 
 /**
@@ -30,13 +36,26 @@ export function TextFilter({
   placeholder,
   compact = false,
   triggerClassName,
+  minLength = 0,
 }: TextFilterProps) {
   const [draft, setDraft] = React.useState(value ?? '');
   React.useEffect(() => setDraft(value ?? ''), [value]);
   const active = Boolean(value);
+  const trimmed = draft.trim();
+  const tooShort = minLength > 0 && trimmed.length > 0 && trimmed.length < minLength;
 
   function commit() {
-    onChange(draft.trim() || undefined);
+    const next = draft.trim();
+    if (!next) {
+      onChange(undefined);
+      return;
+    }
+    if (minLength > 0 && next.length < minLength) {
+      // Don't apply a 1-char query — clear any prior filter instead.
+      onChange(undefined);
+      return;
+    }
+    onChange(next);
   }
 
   return (
@@ -87,12 +106,20 @@ export function TextFilter({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
+            // Stop Base UI Menu typeahead from stealing letter keys (no onChange otherwise).
+            e.stopPropagation();
             if (e.key === 'Enter') commit();
           }}
+          onKeyUp={(e) => e.stopPropagation()}
           placeholder={placeholder ?? title}
           {...noBrowserAutofill}
           className="h-8 w-full rounded-md border border-input bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-ring"
         />
+        {minLength > 0 && (tooShort || trimmed.length === 0) ? (
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            Type at least {minLength} characters to search.
+          </p>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

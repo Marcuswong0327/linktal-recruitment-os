@@ -1,11 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { keepPreviousData, useQueryClient } from '@tanstack/react-query';
 
-import { CheckCheck, ChevronDown, Download, MapPin, Trash2 } from 'lucide-react';
+import { CheckCheck, ChevronDown, Download, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -31,9 +31,7 @@ import {
   type DataGridFilter,
   type DataGridQuery,
 } from '@/components/DataGrid';
-import { ClientFilterButton } from '@/components/ClientFilterButton';
 import { JobTitleFilterButton } from '@/components/JobTitleFilterButton';
-import { LEVEL_LABEL, LocationFilterButton } from '@/components/LocationMultiSelect';
 import { TextFilter } from '@/components/TextFilter';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
@@ -62,12 +60,12 @@ import type {
   GetStakeholdersAccuracyItem,
   GetStakeholdersSortOrder,
   GetStakeholdersStatusesItem,
-  LocationEntity,
   StakeholderEntity,
   UpdateStakeholderDto,
 } from '@/lib/api/generated/types';
 import { useStakeholderNewRow } from './StakeholderNewRow';
 import { getStakeholderColumns, stakeholderStatusOptions, type StakeholderStatus } from './columns';
+import type { StakeholderAppliedFilters } from './schema';
 
 const PAGE_SIZE = 50;
 
@@ -94,78 +92,69 @@ function roleTypeStyle(index: number) {
 }
 
 export function StakeholdersTable({
+  filters,
   canCreate = true,
   canUpdate = true,
   canDelete = true,
+  focusNewRow = false,
+  onFocusedNewRow,
 }: {
+  filters: StakeholderAppliedFilters;
   canCreate?: boolean;
   canUpdate?: boolean;
   canDelete?: boolean;
+  /** One-shot from the gate when arriving via `/stakeholders?new=1`. */
+  focusNewRow?: boolean;
+  onFocusedNewRow?: () => void;
 }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [page, setPage] = React.useState(1);
   const [search, setSearch] = React.useState<string | undefined>();
-  const [roleTypeIds, setRoleTypeIds] = React.useState<string[] | undefined>();
   const [accuracy, setAccuracy] = React.useState<GetStakeholdersAccuracyItem[] | undefined>();
   const [statuses, setStatuses] = React.useState<GetStakeholdersStatusesItem[] | undefined>();
-  const [locationIds, setLocationIds] = React.useState<string[] | undefined>();
-  const [clientIds, setClientIds] = React.useState<string[] | undefined>();
   const [jobTitleIds, setJobTitleIds] = React.useState<string[] | undefined>();
-  // Name/level for the Coverage filter's currently selected location ids —
-  // the API only returns these alongside a live search result, not by id, so
-  // this is seeded as the user searches (see LocationFilterButton's
-  // onResolve) and only needs to cover whatever's selected in this session.
-  // Same pattern as Companies' marketInfoById.
-  const [coverageInfoById, setCoverageInfoById] = React.useState<
-    Map<string, { name: string; level: LocationEntity['level'] }>
-  >(new Map());
-  const resolveCoverageInfo = React.useCallback((id: string, name: string, level: LocationEntity['level']) => {
-    setCoverageInfoById((prev) => (prev.get(id)?.name === name ? prev : new Map(prev).set(id, { name, level })));
-  }, []);
-  // id → companyName / job title name for filter chips once a search resolves them.
-  const [clientNames, setClientNames] = React.useState<Record<string, string>>({});
-  const registerClientName = React.useCallback(
-    (id: string, name: string) =>
-      setClientNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
-    [],
-  );
   const [jobTitleNames, setJobTitleNames] = React.useState<Record<string, string>>({});
   const registerJobTitleName = React.useCallback(
     (id: string, name: string) =>
       setJobTitleNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
     [],
-  );  const [sortBy, setSortBy] = React.useState<GetStakeholdersSortBy | undefined>();
-  const [sortOrder, setSortOrder] = React.useState<GetStakeholdersSortOrder>('desc');
+  );
+  const [sortBy, setSortBy] = React.useState<GetStakeholdersSortBy | undefined>(filters.sortBy);
+  const [sortOrder, setSortOrder] = React.useState<GetStakeholdersSortOrder>(filters.sortOrder ?? 'desc');
   const [selected, setSelected] = React.useState<StakeholderEntity[]>([]);
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isExporting, setIsExporting] = React.useState(false);
   const importStakeholders = useImportStakeholders();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
 
-
-  // Arrived from the command palette's "Add a Stakeholder" action
-  // (`/stakeholders?new=1`). The new row is always on screen now, so there's
-  // nothing to open — just put the caret in it, then strip the param so
-  // refresh/back doesn't re-steal focus.
   React.useEffect(() => {
-    if (searchParams.get('new') === '1') {
-      requestAnimationFrame(() => focusNewRowStart());
-      router.replace('/stakeholders');
-    }
-  }, [searchParams, router]);
+    setPage(1);
+    setSortBy(filters.sortBy);
+    setSortOrder(filters.sortOrder ?? 'desc');
+    setJobTitleIds(undefined);
+    setStatuses(undefined);
+    setAccuracy(undefined);
+    setSearch(undefined);
+  }, [filters]);
+
+  React.useEffect(() => {
+    if (!focusNewRow) return;
+    requestAnimationFrame(() => focusNewRowStart());
+    onFocusedNewRow?.();
+  }, [focusNewRow, onFocusedNewRow]);
 
   const { data, isLoading, isFetching, isError, error } = useGetStakeholders(
     {
       page,
       pageSize: PAGE_SIZE,
       q: search,
-      roleTypeIds,
+      roleTypeIds: filters.roleTypeIds,
+      industryIds: filters.industryIds,
       accuracy,
       statuses,
-      locationIds,
-      clientIds,
+      locationIds: filters.locationIds,
+      clientIds: filters.clientIds,
       jobTitleIds,
       sortBy,
       sortOrder,
@@ -178,7 +167,6 @@ export function StakeholdersTable({
   const result = data?.status === 200 ? data.data : undefined;
   const stakeholders = useInfinitePages(result?.data, page, isFetching);
 
-
   const { data: roleTypeData } = useGetStakeholderRoleTypes({ take: 200 });
   const roleTypeRows = roleTypeData?.status === 200 ? roleTypeData.data : [];
   const roleTypeOptions = React.useMemo(
@@ -190,7 +178,6 @@ export function StakeholdersTable({
       })),
     [roleTypeRows],
   );
-
 
   const stakeholderFilters: DataGridFilter[] = React.useMemo(
     () => [
@@ -208,25 +195,10 @@ export function StakeholdersTable({
             value={selected[0]}
             onChange={(v) => onChange(v ? [v] : [])}
             placeholder="Search name…"
+            minLength={2}
           />
         ),
         labelFor: (v: string) => v,
-      },
-      {
-        columnId: 'companyName',
-        title: 'Company',
-        options: [],
-        inHeader: true,
-        render: ({ selected, onChange }: { selected: string[]; onChange: (values: string[]) => void }) => (
-          <ClientFilterButton
-            selected={selected}
-            onChange={onChange}
-            onResolve={registerClientName}
-            labelFor={(id) => clientNames[id] ?? id}
-            title="Company"
-          />
-        ),
-        labelFor: (id: string) => clientNames[id] ?? id,
       },
       {
         columnId: 'jobTitle',
@@ -245,64 +217,13 @@ export function StakeholdersTable({
         labelFor: (id: string) => jobTitleNames[id] ?? id,
       },
       {
-        columnId: 'roleType',
-        title: 'Role type',
-        // Same treatment as Companies/Job Orders' header filters: a compact
-        // icon button inside the column header instead of a toolbar pill.
-        // Single-select with a colored badge per option — Role types are a
-        // user-grown catalog rather than a fixed enum, so there's no fixed
-        // semantic color per value — cycle the palette by position instead.
-        single: true,
-        inHeader: true,
-        options: roleTypeRows.map((r, i) => ({
-          value: r.id,
-          label: r.name,
-          variant: roleTypeStyle(i).variant,
-        })),
-      },
-      {
         columnId: 'status',
         title: 'Status',
-        // Multi-select — same reasoning as Role type above.
         inHeader: true,
         options: stakeholderStatusOptions.map((o) => ({ value: o.value, label: o.label, variant: o.variant })),
       },
-      {
-        columnId: 'coverage',
-        title: 'City Coverage',
-        inHeader: true,
-        render: ({ selected, onChange }: { selected: string[]; onChange: (values: string[]) => void }) => (
-          <LocationFilterButton
-            selected={selected}
-            onChange={onChange}
-            onResolve={resolveCoverageInfo}
-            title="City Coverage"
-          />
-        ),
-        labelFor: (id: string) => coverageInfoById.get(id)?.name ?? id,
-        chipContent: (id: string) => {
-          const info = coverageInfoById.get(id);
-          return (
-            <span className="flex items-center gap-1">
-              <MapPin className="size-3" />
-              {info?.name ?? id}
-              {info ? (
-                <span className="text-[10px] tracking-wide opacity-70 uppercase">{LEVEL_LABEL[info.level]}</span>
-              ) : null}
-            </span>
-          );
-        },
-      },
     ],
-    [
-      roleTypeRows,
-      coverageInfoById,
-      resolveCoverageInfo,
-      clientNames,
-      jobTitleNames,
-      registerClientName,
-      registerJobTitleName,
-    ],
+    [jobTitleNames, registerJobTitleName],
   );
 
   const createRoleType = useCreateStakeholderRoleType({
@@ -356,24 +277,18 @@ export function StakeholdersTable({
 
   function handleQueryChange({ search, sorting, columnFilters }: DataGridQuery) {
     const nameFilter = columnFilters.find((f) => f.id === 'fullName')?.value as string[] | undefined;
-    const clientFilter = columnFilters.find((f) => f.id === 'companyName')?.value as string[] | undefined;
     const jobTitleFilter = columnFilters.find((f) => f.id === 'jobTitle')?.value as string[] | undefined;
-    const roleTypeFilter = columnFilters.find((f) => f.id === 'roleType')?.value as string[] | undefined;
     const accuracyFilter = columnFilters.find((f) => f.id === 'isAccurate')?.value as string[] | undefined;
     const statusFilter = columnFilters.find((f) => f.id === 'status')?.value as string[] | undefined;
-    const coverageFilter = columnFilters.find((f) => f.id === 'coverage')?.value as string[] | undefined;
     const sort = sorting[0];
     const sortField = sort && sort.id in GetStakeholdersSortBy ? (sort.id as GetStakeholdersSortBy) : undefined;
     // Name header TextFilter wins over the toolbar free-text box when set —
     // both map to API `q`, and a column filter is the more specific intent.
     const nameQ = nameFilter?.[0]?.trim() || undefined;
     setSearch(nameQ ?? (search.trim() || undefined));
-    setClientIds(clientFilter?.length ? clientFilter : undefined);
     setJobTitleIds(jobTitleFilter?.length ? jobTitleFilter : undefined);
-    setRoleTypeIds(roleTypeFilter);
     setAccuracy(accuracyFilter?.length ? (accuracyFilter as GetStakeholdersAccuracyItem[]) : undefined);
     setStatuses(statusFilter?.length ? (statusFilter as GetStakeholdersStatusesItem[]) : undefined);
-    setLocationIds(coverageFilter?.length ? coverageFilter : undefined);
     setSortBy(sortField);
     setSortOrder(sort?.desc ? 'desc' : 'asc');
     setPage(1);
@@ -485,11 +400,12 @@ export function StakeholdersTable({
         await downloadFile(
           getExportStakeholdersUrl({
             q: search,
-            roleTypeIds,
+            roleTypeIds: filters.roleTypeIds,
+            industryIds: filters.industryIds,
             accuracy,
             statuses,
-            locationIds,
-            clientIds,
+            locationIds: filters.locationIds,
+            clientIds: filters.clientIds,
             jobTitleIds,
             sortBy,
             sortOrder,

@@ -112,8 +112,6 @@ export function CandidatesTable({
   const [columnSpecializationIds, setColumnSpecializationIds] = React.useState<string[] | undefined>();
   const [firstName, setFirstName] = React.useState<string | undefined>();
   const [lastName, setLastName] = React.useState<string | undefined>();
-  const [currentSalary, setCurrentSalary] = React.useState<string | undefined>();
-  const [expectedSalary, setExpectedSalary] = React.useState<string | undefined>();
 
   const [locationNames, setLocationNames] = React.useState<Record<string, string>>({});
   const registerLocationName = React.useCallback(
@@ -211,8 +209,6 @@ export function CandidatesTable({
     setColumnSpecializationIds(undefined);
     setFirstName(undefined);
     setLastName(undefined);
-    setCurrentSalary(undefined);
-    setExpectedSalary(undefined);
   }, [filters]);
 
   const mergedLocationIds = React.useMemo(() => {
@@ -240,8 +236,6 @@ export function CandidatesTable({
       locationIds: mergedLocationIds,
       firstName,
       lastName,
-      currentSalary,
-      expectedSalary,
       sortBy,
       sortOrder,
     };
@@ -255,8 +249,6 @@ export function CandidatesTable({
     mergedLocationIds,
     firstName,
     lastName,
-    currentSalary,
-    expectedSalary,
     sortBy,
     sortOrder,
   ]);
@@ -327,12 +319,6 @@ export function CandidatesTable({
       | undefined;
     const firstNameFilter = columnFilters.find((f) => f.id === 'firstName')?.value as string[] | undefined;
     const lastNameFilter = columnFilters.find((f) => f.id === 'lastName')?.value as string[] | undefined;
-    const currentSalaryFilter = columnFilters.find((f) => f.id === 'currentSalary')?.value as
-      | string[]
-      | undefined;
-    const expectedSalaryFilter = columnFilters.find((f) => f.id === 'expectedSalary')?.value as
-      | string[]
-      | undefined;
 
     const sort = sorting[0];
     const sortField = sort && sort.id in GetCandidatesSortBy ? (sort.id as GetCandidatesSortBy) : undefined;
@@ -342,8 +328,6 @@ export function CandidatesTable({
     setColumnSpecializationIds(specializationFilter?.length ? specializationFilter : undefined);
     setFirstName(firstNameFilter?.[0]?.trim() || undefined);
     setLastName(lastNameFilter?.[0]?.trim() || undefined);
-    setCurrentSalary(currentSalaryFilter?.[0]?.trim() || undefined);
-    setExpectedSalary(expectedSalaryFilter?.[0]?.trim() || undefined);
     setSortBy(sortField);
     setSortOrder(sort?.desc ? 'desc' : 'asc');
     setSearch(nextSearch.trim() || undefined);
@@ -405,7 +389,8 @@ export function CandidatesTable({
             compact
             value={selected[0]}
             onChange={(v) => onChange(v ? [v] : [])}
-            placeholder="Contains…"
+            placeholder="Search first name…"
+            minLength={2}
           />
         ),
         labelFor: (v) => v,
@@ -421,39 +406,8 @@ export function CandidatesTable({
             compact
             value={selected[0]}
             onChange={(v) => onChange(v ? [v] : [])}
-            placeholder="Contains…"
-          />
-        ),
-        labelFor: (v) => v,
-      },
-      {
-        columnId: 'currentSalary',
-        title: 'Salary Current',
-        options: [],
-        inHeader: true,
-        render: ({ selected, onChange }) => (
-          <TextFilter
-            title="Salary Current"
-            compact
-            value={selected[0]}
-            onChange={(v) => onChange(v ? [v] : [])}
-            placeholder="Contains…"
-          />
-        ),
-        labelFor: (v) => v,
-      },
-      {
-        columnId: 'expectedSalary',
-        title: 'Salary Expected',
-        options: [],
-        inHeader: true,
-        render: ({ selected, onChange }) => (
-          <TextFilter
-            title="Salary Expected"
-            compact
-            value={selected[0]}
-            onChange={(v) => onChange(v ? [v] : [])}
-            placeholder="Contains…"
+            placeholder="Search family name…"
+            minLength={2}
           />
         ),
         labelFor: (v) => v,

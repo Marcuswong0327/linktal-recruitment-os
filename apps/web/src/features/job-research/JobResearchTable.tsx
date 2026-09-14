@@ -18,7 +18,6 @@ import { ClientFilterButton } from '@/components/ClientFilterButton';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
 import { JobTitleFilterButton } from '@/components/JobTitleFilterButton';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
-import { TextFilter } from '@/components/TextFilter';
 import {
   getGetJobTitlesQueryKey,
   useCreateJobTitle,
@@ -66,7 +65,6 @@ export function JobResearchTable({
   const [columnLocationIds, setColumnLocationIds] = React.useState<string[] | undefined>();
   const [jobTitleIds, setJobTitleIds] = React.useState<string[] | undefined>();
   const [clientIds, setClientIds] = React.useState<string[] | undefined>();
-  const [salaryRange, setSalaryRange] = React.useState<string | undefined>();
 
   const [locationNames, setLocationNames] = React.useState<Record<string, string>>({});
   const registerLocationName = React.useCallback(
@@ -131,7 +129,6 @@ export function JobResearchTable({
     setColumnLocationIds(undefined);
     setJobTitleIds(undefined);
     setClientIds(undefined);
-    setSalaryRange(undefined);
   }, [filters]);
 
   const mergedLocationIds = React.useMemo(() => {
@@ -150,7 +147,6 @@ export function JobResearchTable({
       locationIds: mergedLocationIds,
       clientIds,
       jobTitleIds,
-      salaryRange,
       sortBy,
       sortOrder,
     },
@@ -165,8 +161,6 @@ export function JobResearchTable({
     const jobTitleFilter = columnFilters.find((f) => f.id === 'jobTitle')?.value as
       string[] | undefined;
     const clientFilter = columnFilters.find((f) => f.id === 'client')?.value as string[] | undefined;
-    const salaryFilter = columnFilters.find((f) => f.id === 'salaryRange')?.value as
-      string[] | undefined;
 
     const sort = sorting[0];
     const sortField =
@@ -175,7 +169,6 @@ export function JobResearchTable({
     setColumnLocationIds(locationFilter?.length ? locationFilter : undefined);
     setJobTitleIds(jobTitleFilter?.length ? jobTitleFilter : undefined);
     setClientIds(clientFilter?.length ? clientFilter : undefined);
-    setSalaryRange(salaryFilter?.[0]?.trim() || undefined);
     setSortBy(sortField);
     setSortOrder(sort?.desc ? 'desc' : 'asc');
     setSearch(nextSearch.trim() || undefined);
@@ -234,22 +227,6 @@ export function JobResearchTable({
         ),
         labelFor: (id) => clientNames[id] ?? id,
       },
-      {
-        columnId: 'salaryRange',
-        title: 'Salary',
-        options: [],
-        inHeader: true,
-        render: ({ selected, onChange }) => (
-          <TextFilter
-            title="Salary"
-            compact
-            value={selected[0]}
-            onChange={(v) => onChange(v ? [v] : [])}
-            placeholder="Contains…"
-          />
-        ),
-        labelFor: (v) => v,
-      },
     ],
     [
       locationNames,
@@ -282,7 +259,6 @@ export function JobResearchTable({
             locationIds: mergedLocationIds,
             clientIds,
             jobTitleIds,
-            salaryRange,
             sortBy: sortBy as unknown as ExportJobResearchSortBy | undefined,
             sortOrder: sortOrder as unknown as ExportJobResearchSortOrder,
             timezone,
