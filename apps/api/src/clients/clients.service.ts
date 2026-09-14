@@ -29,12 +29,10 @@ type ClientFilterFields = Pick<
   | 'location'
 >;
 
-// Industry/specialization are FK relations, not scalars — every read needs
-// this to get the resolved name back, and every write needs it to return one
-// (ClientEntity documents them as plain `string | null`, not the nested
-// `{id, name, ...}` object Prisma would otherwise hand back). `locations` is
-// the client's hiring market: a set of nodes at mixed granularity, resolved to
-// names + ids the same way.
+// Industry is an FK relation; specializations/locations are many-to-many —
+// every read needs this to get the resolved names back, and every write needs
+// it to return one (ClientEntity documents them as plain strings / string
+// arrays, not the nested objects Prisma would otherwise hand back).
 //
 // lastContactType/Category/Notes/By aren't sorted or filtered on (unlike
 // lastContactedAt, which is a denormalized column for that reason), so
@@ -49,7 +47,7 @@ type ClientFilterFields = Pick<
 // StakeholderContactHistory, which is what this include reads.
 const CLIENT_INCLUDE = {
   industry: { select: { name: true } },
-  specialization: { select: { name: true } },
+  specializations: { select: { specializationId: true, specialization: { select: { name: true } } } },
   // `ancestorIds` comes along purely for the single-record scope check, and
   // is stripped back out in `toEntity` — never part of the API response.
   locations: { select: { locationId: true, location: { select: { name: true, ancestorIds: true } } } },
@@ -81,7 +79,7 @@ type LatestContactRow = {
 
 type ClientWithRelations = {
   industry: { name: string } | null;
-  specialization: { name: string } | null;
+  specializations: { specializationId: string; specialization: { name: string } }[];
   locations: { locationId: string; location: { name: string; ancestorIds: string[] } }[];
   stakeholders: {
     contactHistory: LatestContactRow[];
@@ -89,18 +87,24 @@ type ClientWithRelations = {
 };
 
 /**
- * Splits the `locationIds` relation and the JSON columns out of the DTO.
- * Class instances don't structurally satisfy Prisma's `InputJsonValue` (no
- * index signature), so the JSON fields are cast explicitly while the scalar
- * fields keep their compile-time checks. `locationIds` is a nested relation
- * write, not a column — create/update build that part themselves.
+ * Splits the `locationIds` / `specializationIds` relations and the JSON
+ * columns out of the DTO. Class instances don't structurally satisfy Prisma's
+ * `InputJsonValue` (no index signature), so the JSON fields are cast
+ * explicitly while the scalar fields keep their compile-time checks. The id
+ * arrays are nested relation writes, not columns — create/update build those
+ * parts themselves.
  *
  * Exported (not a private method) so ClientsImportService can build the
  * exact same write shape a normal create/update would, without duplicating
  * this — it doesn't touch `this`, so hoisting is a pure, zero-risk move.
  */
 export function toPrismaData<T extends CreateClientDto | UpdateClientDto>(dto: T) {
-  const { locationIds: _locationIds, addresses, ...rest } = dto;
+  const {
+    locationIds: _locationIds,
+    specializationIds: _specializationIds,
+    addresses,
+    ...rest
+  } = dto;
   return {
     ...rest,
     ...(addresses !== undefined ? { addresses: addresses as Prisma.InputJsonValue } : {}),
@@ -147,7 +151,7 @@ type ClientExportRow = {
   companyName: string;
   displayId: string;
   industry: string | null;
-  specialization: string | null;
+  specializations: string[];
   locationPaths: string[];
   status: ClientStatus;
   quality: ClientQuality;
@@ -162,12 +166,13 @@ type ClientExportRow = {
 };
 
 function toEntity<T extends ClientWithRelations>(client: T) {
-  const { industry, specialization, locations, stakeholders, ...rest } = client;
+  const { industry, specializations, locations, stakeholders, ...rest } = client;
   const latest = latestContact(stakeholders.flatMap((s) => s.contactHistory));
   return {
     ...rest,
     industry: industry?.name ?? null,
-    specialization: specialization?.name ?? null,
+    specializations: specializations.map((s) => s.specialization.name),
+    specializationIds: specializations.map((s) => s.specializationId),
     // Ids alongside names: the names are display-only, the ids are what an
     // editable multi-select needs to preselect and diff against.
     locations: locations.map((l) => l.location.name),
@@ -212,19 +217,9 @@ export class ClientsService {
       return filter ? { name: filter } : undefined;
     };
     where.industry = containsName(query.industry);
-    where.specialization = containsName(query.specialization);
 
     if (query.industryIds?.length) {
       where.industryId = { in: query.industryIds };
-    }
-    if (query.specializationIds?.length) {
-      where.specializationId = { in: query.specializationIds };
-    }
-
-    // Terms of Business is a one-to-many table now, not a `tobSigned` flag —
-    // "has terms on file" is the existence of any Tob row.
-    if (query.hasTob != null) {
-      where.tobs = query.hasTob ? { some: {} } : { none: {} };
     }
 
     // Built as an AND-ed list rather than assigning `where.OR` directly —
@@ -233,6 +228,27 @@ export class ClientsService {
     // instead of combining with it (see CandidatesService.findAll for the
     // same idiom already established there).
     const and: Prisma.ClientWhereInput[] = [];
+
+    // Specializations are a join table — id filter and free-text name both go
+    // through `some`, same as Candidate.
+    if (query.specializationIds?.length) {
+      and.push({ specializations: { some: { specializationId: { in: query.specializationIds } } } });
+    }
+    if (query.specialization) {
+      and.push({
+        specializations: {
+          some: {
+            specialization: { name: { contains: query.specialization, mode: Prisma.QueryMode.insensitive } },
+          },
+        },
+      });
+    }
+
+    // Terms of Business is a one-to-many table now, not a `tobSigned` flag —
+    // "has terms on file" is the existence of any Tob row.
+    if (query.hasTob != null) {
+      where.tobs = query.hasTob ? { some: {} } : { none: {} };
+    }
 
     // A client carries a *set* of locations at mixed granularity, so both
     // filters go through the join. Selecting a country matches every client
@@ -370,7 +386,7 @@ export class ClientsService {
       { header: 'Company Name', key: 'companyName', required: true },
       { header: 'Display ID', key: 'displayId' },
       { header: 'Industry', key: 'industry', required: true },
-      { header: 'Specialization', key: 'specialization' },
+      { header: 'Specializations', key: 'specializations' },
       { header: 'Locations', key: 'locations', required: true },
       { header: 'Website', key: 'website' },
       { header: 'Seek Job Market URL', key: 'seekJobMarketUrl' },
@@ -387,7 +403,7 @@ export class ClientsService {
       companyName: c.companyName,
       displayId: c.displayId,
       industry: c.industry ?? '',
-      specialization: c.specialization ?? '',
+      specializations: c.specializations.join('; '),
       locations: c.locationPaths.join('; '),
       website: c.website ?? '',
       seekJobMarketUrl: c.seekJobMarketUrl ?? '',
@@ -454,6 +470,9 @@ export class ClientsService {
       data: {
         ...toPrismaData(dto),
         locations: { create: dto.locationIds.map((locationId) => ({ locationId })) },
+        ...(dto.specializationIds !== undefined
+          ? { specializations: { create: dto.specializationIds.map((specializationId) => ({ specializationId })) } }
+          : {}),
       },
       include: CLIENT_INCLUDE,
     });
@@ -481,6 +500,14 @@ export class ClientsService {
               locations: {
                 deleteMany: {},
                 create: dto.locationIds.map((locationId) => ({ locationId })),
+              },
+            }
+          : {}),
+        ...(dto.specializationIds !== undefined
+          ? {
+              specializations: {
+                deleteMany: {},
+                create: dto.specializationIds.map((specializationId) => ({ specializationId })),
               },
             }
           : {}),

@@ -46,6 +46,7 @@ const SYNTHETIC_FK_LISTS: Record<string, string> = {
   'JobOrder.consultantIds': 'Consultant',
   'Stakeholder.coverageLocationIds': 'Location',
   'Client.locationIds': 'Location',
+  'Client.specializationIds': 'Specialization',
 };
 
 /**

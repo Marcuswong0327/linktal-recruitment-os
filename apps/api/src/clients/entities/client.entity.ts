@@ -12,10 +12,10 @@ import { Client, ClientQuality, ClientStatus, Prisma } from '@prisma/client';
  * nullable value) with an explicit `type`, because Prisma always returns the
  * column, just as `null` when empty.
  *
- * `industry`/`specialization`/`locations` aren't part of the raw `Client`
- * model (only the FK ids are, and locations is a many-to-many relation with no
- * scalar column at all) — they're the FKs' resolved names, added here so
- * callers keep getting plain strings instead of having to join against
+ * `industry`/`specializations`/`locations` aren't part of the raw `Client`
+ * model (only the FK ids are, and specializations/locations are many-to-many
+ * relations with no scalar column) — they're the FKs' resolved names, added
+ * here so callers keep getting plain strings instead of having to join against
  * /industries, /specializations or /locations themselves just to display
  * what's already set.
  *
@@ -32,9 +32,18 @@ export class ClientEntity implements Omit<Client, 'deletedAt' | 'deletedById'> {
   industryId!: string;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved industry name' })
   industry!: string | null;
-  @ApiProperty({ type: String, nullable: true }) specializationId!: string | null;
-  @ApiProperty({ type: String, nullable: true, description: 'Resolved specialization name' })
-  specialization!: string | null;
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'string' },
+    description: 'Resolved specialization names',
+  })
+  specializations!: string[];
+  @ApiProperty({
+    type: 'array',
+    items: { type: 'string' },
+    description: 'Specialization IDs backing `specializations` — what an editable multi-select actually binds to',
+  })
+  specializationIds!: string[];
   @ApiProperty({
     type: 'array',
     items: { type: 'string' },

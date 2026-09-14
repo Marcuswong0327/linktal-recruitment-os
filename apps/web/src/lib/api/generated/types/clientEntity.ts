@@ -19,13 +19,10 @@ export interface ClientEntity {
      * @nullable
      */
   industry: string | null;
-  /** @nullable */
-  specializationId: string | null;
-  /**
-     * Resolved specialization name
-     * @nullable
-     */
-  specialization: string | null;
+  /** Resolved specialization names */
+  specializations: string[];
+  /** Specialization IDs backing `specializations` — what an editable multi-select actually binds to */
+  specializationIds: string[];
   /** Resolved names of the Location nodes this client hires from — its market, not its office address */
   locations: string[];
   /** Location IDs backing `locations` — what an editable multi-select actually binds to */

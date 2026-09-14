@@ -25,18 +25,14 @@ export class CreateClientDto {
   @IsString()
   industryId!: string;
 
-  // Explicitly nullable: `undefined` means "leave it alone" (Prisma skips the
-  // key), so clearing a specialization needs a value that isn't undefined.
-  // @IsOptional() already waves null through at runtime — this only makes the
-  // generated client's type say so.
   @ApiPropertyOptional({
-    description: 'Specialization ID (see /specializations) — null clears it',
-    type: String,
-    nullable: true,
+    description: 'Specialization IDs (see /specializations) — omit to leave unchanged on update; [] clears',
+    type: [String],
   })
   @IsOptional()
-  @IsString()
-  specializationId?: string | null;
+  @IsArray()
+  @IsString({ each: true })
+  specializationIds?: string[];
 
   @ApiProperty({
     description:

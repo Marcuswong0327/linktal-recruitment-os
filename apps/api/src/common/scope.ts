@@ -28,9 +28,10 @@ import { AuthUser } from '../auth/auth.types';
  * Null semantics differ by tier, deliberately:
  *  - `industryId` is REQUIRED on Client/Candidate, so the industry arm never
  *    has to decide what an untagged record means.
- *  - `specializationId` is optional, and an unspecialised record matches any
- *    grant on its industry. Without that passthrough, the ~72% of candidates
- *    carrying no specialization would vanish the moment the arm switches on.
+ *  - Specialization tags are optional (join table); an unspecialised record
+ *    matches any grant on its industry. Without that passthrough, the ~72% of
+ *    candidates carrying no specialization would vanish the moment the arm
+ *    switches on.
  *
  * An empty-grants consultant needs no special case to see nothing: an empty
  * `industryIds`/`locationIds` array makes `{ in: [] }` / `{ hasSome: [] }`
@@ -46,9 +47,10 @@ function locationIsUnder(locationIds: string[]) {
 /**
  * The industry arm, optionally narrowed by specialization.
  *
- * `viaClient` is where the industry lives relative to the record — Client and
- * Candidate own theirs; Stakeholder, JobOrder and ClientJobResearch reach it
- * through their parent Client.
+ * Client (and Candidate) carry a *set* of specializations via a join table —
+ * `none: {}` is "unspecialised" and still passes on industry alone. Via-client
+ * entities (JobOrder, research, etc.) reuse this same Client-shaped arm under
+ * `client: …`.
  */
 function industryArm(user: AuthUser, viaClient: boolean): Prisma.ClientWhereInput {
   const own: Prisma.ClientWhereInput = { industryId: { in: user.industryIds } };
@@ -56,27 +58,24 @@ function industryArm(user: AuthUser, viaClient: boolean): Prisma.ClientWhereInpu
   // no grants means "the whole industry", not "nothing".
   if (user.specializationIds.length > 0) {
     own.OR = [
-      // Unspecialised records pass through on their industry alone.
-      { specializationId: null },
-      { specialization: { ancestorIds: { hasSome: user.specializationIds } } },
+      { specializations: { none: {} } },
+      {
+        specializations: {
+          some: { specialization: { ancestorIds: { hasSome: user.specializationIds } } },
+        },
+      },
     ];
   }
   return viaClient ? ({ client: own } as Prisma.ClientWhereInput) : own;
 }
 
 /**
- * The same arm for **Candidate**, which cannot reuse the one above.
+ * The same arm for **Candidate** — same join-table spelling as Client's
+ * industry arm, but typed as CandidateWhereInput (own industryId + location FK).
  *
- * Client carries a single `specializationId` FK; a Candidate carries a *set*
- * (`CandidateSpecialization[]`) and has no such scalar column at all. Casting
- * the Client shape across — which is what this used to do — produced a `where`
- * Prisma rejects outright (`Unknown argument 'specializationId'`), so a
- * consultant holding any specialization grant got a 500 from `GET /candidates`
- * rather than a filtered list. Every consultant in the seed holds 2–4.
- *
- * `none: {}` is the join-table spelling of "unspecialised", matching the
- * `specializationId: null` passthrough above: a candidate with no tags at all
- * still qualifies on their industry.
+ * Historically Client used a scalar `specializationId` and Candidate could not
+ * share that shape; both now use the join table. Kept as a separate helper so
+ * the Candidate type stays precise.
  */
 function candidateIndustryArm(user: AuthUser): Prisma.CandidateWhereInput {
   const own: Prisma.CandidateWhereInput = { industryId: { in: user.industryIds } };

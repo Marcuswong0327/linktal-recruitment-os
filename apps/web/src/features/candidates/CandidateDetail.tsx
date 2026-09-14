@@ -328,7 +328,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
   // Industry/role type/specializations/resumes are reference-table pickers
   // or uploads, not plain registered inputs — tracked as their own state
-  // (like CompanyDetail's industryId/specializationId) and merged into the
+  // (like CompanyDetail's industryId/specializationIds) and merged into the
   // patch on submit, since RHF's dirty-tracking doesn't see them.
   // Status is a pill in the header rather than a registered input, so like the
   // pickers below it lives in its own state and is merged in on submit.

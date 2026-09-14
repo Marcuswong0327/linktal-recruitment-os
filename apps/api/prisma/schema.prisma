@@ -464,7 +464,7 @@ model Specialization {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  clients     Client[]
+  clients     ClientSpecialization[]
   candidates  CandidateSpecialization[]
   consultants ConsultantSpecialization[]
 
@@ -484,12 +484,12 @@ model Client {
   companyName String
 
   // Required — the industry arm of the scope resolver relies on this never
-  // being null (see the SCOPING note above). Specialization is the optional
-  // narrowing within it.
-  industryId       String
-  industry         Industry        @relation(fields: [industryId], references: [id], onDelete: Restrict)
-  specializationId String?
-  specialization   Specialization? @relation(fields: [specializationId], references: [id], onDelete: SetNull)
+  // being null (see the SCOPING note above). Specializations are the optional
+  // narrowing within it (many-to-many via ClientSpecialization).
+  industryId String
+  industry   Industry @relation(fields: [industryId], references: [id], onDelete: Restrict)
+
+  specializations ClientSpecialization[]
 
   // Where this client SEEKS candidates from (its hiring market), not its own
   // office address — a *set* of nodes at any level, since the source data is
@@ -522,9 +522,20 @@ model Client {
   @@index([status])
   @@index([deletedAt])
   @@index([industryId])
-  @@index([specializationId])
   @@index([lastContactedAt])
   @@index([quality])
+}
+
+// Many-to-many: a client can carry several specializations (same shape as
+// CandidateSpecialization). Explicit join model for per-row audit diffs.
+model ClientSpecialization {
+  clientId         String
+  client           Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  specializationId String
+  specialization   Specialization @relation(fields: [specializationId], references: [id], onDelete: Cascade)
+
+  @@id([clientId, specializationId])
+  @@index([specializationId])
 }
 
 // Many-to-many: a client's hiring market, at mixed granularity — see the
@@ -803,8 +814,8 @@ model Candidate {
   @@index([displayId(ops: raw("gin_trgm_ops"))], type: Gin, map: "Candidate_displayId_trgm_idx")
 }
 
-// Many-to-many: a candidate can carry several specializations, unlike Client's
-// single specializationId. Explicit join model, same audit-diffing reasoning as
+// Many-to-many: a candidate can carry several specializations (same shape as
+// ClientSpecialization). Explicit join model, same audit-diffing reasoning as
 // ConsultantIndustry.
 model CandidateSpecialization {
   candidateId      String

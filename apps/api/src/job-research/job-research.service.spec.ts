@@ -204,7 +204,7 @@ describe('JobResearchService.findAll', () => {
     expect(findMany.mock.calls[0][0].where.AND).toEqual(
       expect.arrayContaining([
         { client: { industryId: { in: ['ind1'] } } },
-        { client: { specializationId: { in: ['spec1'] } } },
+        { client: { specializations: { some: { specializationId: { in: ['spec1'] } } } } },
       ]),
     );
   });

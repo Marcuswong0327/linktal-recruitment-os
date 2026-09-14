@@ -3,6 +3,7 @@
 import * as React from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
@@ -10,17 +11,19 @@ import { CompanyNameField } from '@/components/CompanyNameField';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
-import { SpecializationCombobox, type SpecializationOption } from '@/components/SpecializationPicker';
+import type { SpecializationOption } from '@/components/SpecializationPicker';
+import { useGetSpecializations } from '@/lib/api/generated/specializations/specializations';
 import type { CreateClientDto } from '@/lib/api/generated/types';
 import { qualityOptions, statusOptions, type ClientQuality, type ClientStatus } from './schema';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { X } from 'lucide-react';
 
 /** Editable fields shared by the create sheet. Editing an existing company happens on its detail page. */
 export interface CompanyFormValues {
   companyName: string;
   industryId: string;
-  specializationId: string;
+  specializationIds: string[];
   locations: LocationOption[];
   addresses: string;
   website: string;
@@ -42,7 +45,7 @@ export function buildCompanyPayload(values: CompanyFormValues): CreateClientDto 
   return {
     companyName: values.companyName,
     industryId: values.industryId,
-    specializationId: values.specializationId || undefined,
+    specializationIds: values.specializationIds.length ? values.specializationIds : undefined,
     locationIds: values.locations.map((l) => l.id),
     addresses: values.addresses ? splitLines(values.addresses) : undefined,
     website: values.website || undefined,
@@ -69,7 +72,7 @@ export function CompanyForm({
   description: string;
   industries: { id: string; name: string }[];
   onCreateIndustry: (name: string) => Promise<{ id: string; name: string }>;
-  onCreateSpecialization: (name: string, industryId: string) => Promise<SpecializationOption>;
+  onCreateSpecialization?: (name: string, industryId: string) => Promise<SpecializationOption>;
   isSaving: boolean;
   onSave: (values: CompanyFormValues) => void;
   onCancel: () => void;
@@ -77,7 +80,7 @@ export function CompanyForm({
   const router = useRouter();
   const [companyName, setCompanyName] = React.useState('');
   const [industryId, setIndustryId] = React.useState('');
-  const [specializationId, setSpecializationId] = React.useState('');
+  const [specializationIds, setSpecializationIds] = React.useState<string[]>([]);
   const [locations, setLocations] = React.useState<LocationOption[]>([]);
   const [addresses, setAddresses] = React.useState('');
   const [website, setWebsite] = React.useState('');
@@ -87,12 +90,21 @@ export function CompanyForm({
   const [status, setStatus] = React.useState<ClientStatus>('COLD');
   const [quality, setQuality] = React.useState<ClientQuality>('MEDIUM');
 
+  const { data: specializationData } = useGetSpecializations(
+    industryId ? { industryIds: [industryId] } : undefined,
+  );
+  const specializations = specializationData?.status === 200 ? specializationData.data : [];
+  const specializationById = React.useMemo(
+    () => new Map(specializations.map((s) => [s.id, s.name])),
+    [specializations],
+  );
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     onSave({
       companyName,
       industryId,
-      specializationId,
+      specializationIds,
       locations,
       addresses,
       website,
@@ -131,7 +143,7 @@ export function CompanyForm({
             value={industryId}
             onValueChange={(id) => {
               setIndustryId(id);
-              setSpecializationId('');
+              setSpecializationIds([]);
             }}
             options={industries}
             onCreate={onCreateIndustry}
@@ -142,15 +154,41 @@ export function CompanyForm({
           htmlFor="company-specialization"
           description={!industryId ? 'Pick an industry first' : undefined}
         >
-          <SpecializationCombobox
-            id="company-specialization"
-            value={specializationId}
-            onValueChange={setSpecializationId}
-            industryId={industryId || undefined}
-            onCreate={(name) => onCreateSpecialization(name, industryId)}
-            disabled={!industryId}
-            clearable
-          />
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap gap-1.5">
+              {specializationIds.length > 0
+                ? specializationIds.map((id) => (
+                    <Badge key={id} variant="muted" className="gap-1">
+                      {specializationById.get(id) ?? id}
+                      <button
+                        type="button"
+                        aria-label="Remove specialization"
+                        onClick={() =>
+                          setSpecializationIds((prev) => prev.filter((s) => s !== id))
+                        }
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </Badge>
+                  ))
+                : null}
+            </div>
+            <CreatableCombobox
+              id="company-specialization"
+              value=""
+              onValueChange={(id) =>
+                setSpecializationIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
+              }
+              options={specializations.filter((s) => !specializationIds.includes(s.id))}
+              onCreate={
+                onCreateSpecialization
+                  ? (name) => onCreateSpecialization(name, industryId)
+                  : undefined
+              }
+              placeholder="Add a specialization…"
+              disabled={!industryId}
+            />
+          </div>
         </FormField>
         <FormField
           label="City Coverage"

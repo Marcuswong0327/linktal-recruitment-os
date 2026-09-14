@@ -193,12 +193,31 @@ describe('ClientsImportService.validate', () => {
     const { service } = makeServices({
       specializations: [{ id: 'spec1', name: 'Bakery', industryId: 'some-other-industry' }],
     });
-    const buffer = await makeClientWorkbook([validRow({ specialization: 'Bakery' })]);
+    const buffer = await makeClientWorkbook([validRow({ specializations: 'Bakery' })]);
 
     const { errors, plans } = await service.validate(buffer);
 
     expect(plans).toEqual([]);
-    expect(errors).toEqual([expect.objectContaining({ row: 2, column: 'Specialization' })]);
+    expect(errors).toEqual([expect.objectContaining({ row: 2, column: 'Specializations' })]);
+  });
+
+  it('parses semicolon-separated Specializations under the row industry', async () => {
+    const { service } = makeServices({
+      specializations: [
+        { id: 'spec1', name: 'Bakery', industryId: INDUSTRY.id },
+        { id: 'spec2', name: 'Meat', industryId: INDUSTRY.id },
+      ],
+    });
+    const buffer = await makeClientWorkbook([validRow({ specializations: 'Bakery; Meat' })]);
+
+    const { errors, plans } = await service.validate(buffer);
+
+    expect(errors).toEqual([]);
+    expect(plans).toHaveLength(1);
+    expect(plans[0]).toMatchObject({
+      kind: 'insert',
+      specializationIds: ['spec1', 'spec2'],
+    });
   });
 
   it('rejects an invalid Status/Quality enum value', async () => {

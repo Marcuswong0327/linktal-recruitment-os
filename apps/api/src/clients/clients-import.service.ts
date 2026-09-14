@@ -31,11 +31,10 @@ export const CLIENT_IMPORT_COLUMNS: ImportColumn[] = [
     required: true,
     dropdown: { kind: 'reference', sheetTitle: 'Industries', columnKey: 'name' },
   },
-  {
-    header: 'Specialization',
-    key: 'specialization',
-    dropdown: { kind: 'reference', sheetTitle: 'Specializations', columnKey: 'name' },
-  },
+  // Multi-value (semicolon-separated) — deliberately no dropdown: Excel's
+  // list validation can only replace a cell's whole value, never append to
+  // it, so a dropdown here would actively break entering more than one.
+  { header: 'Specializations', key: 'specializations' },
   // Multi-value (semicolon-separated) — deliberately no dropdown: Excel's
   // list validation can only replace a cell's whole value, never append to
   // it, so a dropdown here would actively break entering more than one.
@@ -49,15 +48,22 @@ export const CLIENT_IMPORT_COLUMNS: ImportColumn[] = [
 ];
 
 const CLIENT_IMPORT_INSTRUCTIONS = [
-  'Industry and Specialization must exactly match an existing name in this system (case-insensitive). An unmatched value is rejected, never guessed or auto-created.',
+  'Industry and Specializations must exactly match an existing name in this system (case-insensitive). An unmatched value is rejected, never guessed or auto-created.',
+  'Specializations: semicolon-separated, must exist under the row\'s own Industry — an unmatched value is rejected.',
   'Locations: semicolon-separated Country and/or City Coverage values from the Locations sheet, e.g. "Australia; Sydney NSW". At least one is required.',
   'Status: COLD, WARM, or TRADED. Quality: LOW, MEDIUM, or HIGH.',
   'Not included in this template — edit these from the Company page instead: Addresses.',
 ];
 
 type ClientRowPlan =
-  | { kind: 'insert'; data: Prisma.ClientUncheckedCreateInput; locationIds: string[] }
-  | { kind: 'update'; existingId: string; data: Prisma.ClientUncheckedUpdateInput; locationIds: string[] };
+  | { kind: 'insert'; data: Prisma.ClientUncheckedCreateInput; locationIds: string[]; specializationIds: string[] }
+  | {
+      kind: 'update';
+      existingId: string;
+      data: Prisma.ClientUncheckedUpdateInput;
+      locationIds: string[];
+      specializationIds: string[];
+    };
 
 const URL_COLUMNS = [
   ['website', 'Website'],
@@ -198,23 +204,24 @@ export class ClientsImportService {
         }
       }
 
-      // null = explicit clear (decision: optional column blank on update
-      // wipes it); undefined = not provided at all (insert: simply omitted).
-      let specializationId: string | null | undefined;
-      if (c.specialization) {
+      // Specializations: semicolon-separated under the row's industry. Blank
+      // on update clears the set (same as Candidate import).
+      const specializationIds: string[] = [];
+      if (c.specializations) {
         if (industryId) {
-          specializationId = specializationsByIndustry.get(industryId)?.get(c.specialization.toLowerCase());
-          if (!specializationId) {
-            rowErrors.push({
-              row: row.rowNumber,
-              column: 'Specialization',
-              message: `Unknown specialization "${c.specialization}" under industry "${c.industry}".`,
-            });
+          for (const name of c.specializations.split(';').map((s) => s.trim()).filter(Boolean)) {
+            const id = specializationsByIndustry.get(industryId)?.get(name.toLowerCase());
+            if (id) specializationIds.push(id);
+            else {
+              rowErrors.push({
+                row: row.rowNumber,
+                column: 'Specializations',
+                message: `Unknown specialization "${name}" under industry "${c.industry}".`,
+              });
+            }
           }
         }
         // else: Industry itself already failed above — skip a redundant cascade error here.
-      } else if (isUpdate) {
-        specializationId = null;
       }
 
       const locationIds: string[] = [];
@@ -251,7 +258,6 @@ export class ClientsImportService {
         const data: Prisma.ClientUncheckedUpdateInput = {
           companyName: c.companyName,
           industryId: industryId!,
-          specializationId,
           website: c.website || null,
           seekJobMarketUrl: c.seekJobMarketUrl || null,
           linkedinJobMarketUrl: c.linkedinJobMarketUrl || null,
@@ -259,12 +265,11 @@ export class ClientsImportService {
           status: status!,
           quality: quality!,
         };
-        plans.push({ kind: 'update', existingId: existingId!, data, locationIds });
+        plans.push({ kind: 'update', existingId: existingId!, data, locationIds, specializationIds });
       } else {
         const data: Prisma.ClientUncheckedCreateInput = {
           companyName: c.companyName,
           industryId: industryId!,
-          ...(specializationId ? { specializationId } : {}),
           ...(c.website ? { website: c.website } : {}),
           ...(c.seekJobMarketUrl ? { seekJobMarketUrl: c.seekJobMarketUrl } : {}),
           ...(c.linkedinJobMarketUrl ? { linkedinJobMarketUrl: c.linkedinJobMarketUrl } : {}),
@@ -272,7 +277,7 @@ export class ClientsImportService {
           status: status!,
           quality: quality!,
         };
-        plans.push({ kind: 'insert', data, locationIds });
+        plans.push({ kind: 'insert', data, locationIds, specializationIds });
       }
     }
 
@@ -301,7 +306,17 @@ export class ClientsImportService {
         for (const plan of rowsChunk) {
           if (plan.kind === 'insert') {
             const created = await tx.client.create({
-              data: { ...plan.data, locations: { create: plan.locationIds.map((locationId) => ({ locationId })) } },
+              data: {
+                ...plan.data,
+                locations: { create: plan.locationIds.map((locationId) => ({ locationId })) },
+                ...(plan.specializationIds.length > 0
+                  ? {
+                      specializations: {
+                        create: plan.specializationIds.map((specializationId) => ({ specializationId })),
+                      },
+                    }
+                  : {}),
+              },
             });
             await tx.auditLog.create({
               data: {
@@ -318,6 +333,10 @@ export class ClientsImportService {
             const data = {
               ...plan.data,
               locations: { deleteMany: {}, create: plan.locationIds.map((locationId) => ({ locationId })) },
+              specializations: {
+                deleteMany: {},
+                create: plan.specializationIds.map((specializationId) => ({ specializationId })),
+              },
             };
             const updated = await tx.client.update({ where: { id: plan.existingId }, data });
             await tx.auditLog.create({

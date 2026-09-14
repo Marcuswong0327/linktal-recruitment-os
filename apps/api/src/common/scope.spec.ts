@@ -159,14 +159,12 @@ describe('the specialization narrowing', () => {
     });
   });
 
-  // ~72% of candidates carry no specialization; without this passthrough they'd
-  // all vanish the moment the arm activates.
+  // ~72% of candidates (and many clients) carry no specialization; without this
+  // passthrough they'd all vanish the moment the arm activates.
   //
-  // Candidate is spelled differently from every other entity on purpose: it
-  // holds a *set* of specializations (`CandidateSpecialization[]`) and has no
-  // `specializationId` column, so `none: {}` is its "unspecialised". Reusing
-  // the Client shape here previously produced a `where` Prisma rejects outright
-  // — see the regression test below.
+  // Both Client and Candidate hold a *set* of specializations via a join table
+  // and have no scalar `specializationId` column, so `none: {}` is
+  // "unspecialised". Emitting a scalar FK here would 500 against the real DB.
   it('lets an unspecialised candidate pass on its industry alone', () => {
     const arm = (candidateScope(makeUser({ specializationIds: ['spec1'] })).OR as Record<string, never>[])[0];
     expect(arm).toEqual({
@@ -178,15 +176,21 @@ describe('the specialization narrowing', () => {
     });
   });
 
-  // Regression: Client has a scalar `specializationId`, Candidate does not.
-  // Casting the Client arm across compiled fine and passed a mocked-Prisma
-  // test, then 500'd against the real database for every consultant holding a
-  // specialization grant — which is all of them.
-  it('never emits a scalar specializationId for Candidate', () => {
-    const emitted = JSON.stringify(candidateScope(makeUser({ specializationIds: ['spec1'] })));
-    expect(emitted).not.toContain('"specializationId"');
-    // Client, which does have the column, still uses it.
-    expect(JSON.stringify(clientScope(makeUser({ specializationIds: ['spec1'] })))).toContain('"specializationId"');
+  it('lets an unspecialised client pass on its industry alone', () => {
+    const arm = (clientScope(makeUser({ specializationIds: ['spec1'] })).OR as Record<string, never>[])[0];
+    expect(arm).toEqual({
+      industryId: { in: ['ind1'] },
+      OR: [
+        { specializations: { none: {} } },
+        { specializations: { some: { specialization: { ancestorIds: { hasSome: ['spec1'] } } } } },
+      ],
+    });
+  });
+
+  it('never emits a scalar specializationId for Client or Candidate', () => {
+    const user = makeUser({ specializationIds: ['spec1'] });
+    expect(JSON.stringify(candidateScope(user))).not.toContain('"specializationId"');
+    expect(JSON.stringify(clientScope(user))).not.toContain('"specializationId"');
   });
 
   it('narrows through the client relation too, for the via-client entities', () => {

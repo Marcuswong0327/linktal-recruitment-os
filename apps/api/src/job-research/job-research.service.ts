@@ -208,7 +208,11 @@ export class JobResearchService {
       and.push({ client: { industryId: { in: query.industryIds } } });
     }
     if (query.specializationIds?.length) {
-      and.push({ client: { specializationId: { in: query.specializationIds } } });
+      and.push({
+        client: {
+          specializations: { some: { specializationId: { in: query.specializationIds } } },
+        },
+      });
     }
 
     // Location is a node in the tree — selecting a state matches every ad
