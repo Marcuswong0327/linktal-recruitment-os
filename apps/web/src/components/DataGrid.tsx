@@ -772,18 +772,26 @@ export function DataGrid<TData>({
   // the new array) rather than gated on `infiniteScroll` alone, so a filter/
   // sort/search change — which replaces the set outright even in infinite
   // mode — still clears it.
+  const getRowIdRef = React.useRef(getRowId);
+  getRowIdRef.current = getRowId;
+
   const prevDataRef = React.useRef(data);
   React.useEffect(() => {
     const prev = prevDataRef.current;
     prevDataRef.current = data;
+    const resolveId = getRowIdRef.current;
+    const sameRowSet =
+      resolveId &&
+      prev.length === data.length &&
+      prev.every((row, i) => resolveId(row) === resolveId(data[i]));
     const isAppend =
       server?.infiniteScroll &&
-      getRowId &&
+      resolveId &&
       data.length >= prev.length &&
-      prev.every((row, i) => getRowId(row) === getRowId(data[i]));
-    if (isAppend) return;
-    setRowSelection((prev) => (Object.keys(prev).length === 0 ? prev : {}));
-  }, [data, setRowSelection, server?.infiniteScroll, getRowId]);
+      prev.every((row, i) => resolveId(row) === resolveId(data[i]));
+    if (isAppend || sameRowSet) return;
+    setRowSelection((prevSel) => (Object.keys(prevSel).length === 0 ? prevSel : {}));
+  }, [data, setRowSelection, server?.infiniteScroll]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     initialColumnFilters ?? [],
   );
@@ -1251,26 +1259,16 @@ export function DataGrid<TData>({
   const handleRowMouseDown = React.useCallback(
     (e: React.MouseEvent, row: Row<TData>) => {
       if (!enableRowRangeSelect || e.button !== 0) return;
-      // Unconditional, even for cells this function goes on to exclude below
-      // — a mousedown on, say, a Role trigger that turns into any drag (even
-      // just clicking to open its popup, then moving a little before mouseup)
-      // is otherwise never told to suppress the browser's *native* multi-row
-      // text selection, since the early return below happens first and this
-      // line was never reached. That's a completely different mechanism from
-      // this component's own row-range-select below — no dragStateRef, no
-      // React state — just the browser doing what an unprevented mousedown+
-      // drag always does, and it reads exactly like "everything between got
-      // selected" because, natively, it did.
-      e.preventDefault();
-      // Let interactive cells (pills, comboboxes, the row's own link) handle
-      // their own mousedown — starting a drag from inside one would fight
-      // its click/open behavior. The role check is a second line of defense
-      // for *portaled* popup content (a Select/Combobox option list): React
-      // bubbles its events up through the component tree regardless of where
-      // the portal actually mounts in the DOM, but the target's real DOM
-      // ancestors are wherever that portal root is — never inside this row —
-      // so a plain `.closest('[data-no-row-drag]')` on the native target
-      // can't see it.
+      // Let interactive cells (pills, comboboxes, checkboxes, the row's own
+      // link) handle their own mousedown — starting a drag from inside one
+      // would fight its click/open behavior, and preventDefault() on a
+      // checkbox mousedown blocks Base UI from toggling it. The role check
+      // is a second line of defense for *portaled* popup content (a
+      // Select/Combobox option list): React bubbles its events up through
+      // the component tree regardless of where the portal actually mounts
+      // in the DOM, but the target's real DOM ancestors are wherever that
+      // portal root is — never inside this row — so a plain
+      // `.closest('[data-no-row-drag]')` on the native target can't see it.
       //
       // The `[data-open]` check is the one that actually matters: any
       // base-ui popup (Select, Combobox, Menu, ...) stamps this on itself
@@ -1301,6 +1299,9 @@ export function DataGrid<TData>({
       ) {
         return;
       }
+      // Suppress the browser's native multi-row text selection while dragging
+      // across rows — only after interactive cells have been excluded above.
+      e.preventDefault();
       const additive = e.metaKey || e.ctrlKey;
       dragStateRef.current = {
         anchorId: row.id,

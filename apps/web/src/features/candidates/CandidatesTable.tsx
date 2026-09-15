@@ -27,14 +27,11 @@ import {
 } from '@/components/ui/context-menu';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { DataGrid, type DataGridFilter, type DataGridQuery } from '@/components/DataGrid';
-import { LocationFilterButton } from '@/components/LocationMultiSelect';
-import { SpecializationFilterButton } from '@/components/SpecializationPicker';
 import { TextFilter } from '@/components/TextFilter';
 import { useGetIndustries } from '@/lib/api/generated/industries/industries';
 import {
   getGetJobRoleTypesQueryKey,
   useCreateJobRoleType,
-  useGetJobRoleTypes,
 } from '@/lib/api/generated/job-role-types/job-role-types';
 import { useCandidateNewRow } from './CandidateNewRow';
 import { useInfinitePages } from '@/hooks/use-infinite-pages';
@@ -106,38 +103,14 @@ export function CandidatesTable({
   const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
   const [isExporting, setIsExporting] = React.useState(false);
 
-  // Column-header filters (merged with gate where noted).
-  const [columnLocationIds, setColumnLocationIds] = React.useState<string[] | undefined>();
-  const [columnJobRoleTypeIds, setColumnJobRoleTypeIds] = React.useState<string[] | undefined>();
-  const [columnSpecializationIds, setColumnSpecializationIds] = React.useState<string[] | undefined>();
+  // Column-header filters (name only — location/role/specialization live in the gate).
   const [firstName, setFirstName] = React.useState<string | undefined>();
   const [lastName, setLastName] = React.useState<string | undefined>();
-  const [currentSalary, setCurrentSalary] = React.useState<string | undefined>();
-  const [expectedSalary, setExpectedSalary] = React.useState<string | undefined>();
 
-  const [locationNames, setLocationNames] = React.useState<Record<string, string>>({});
-  const registerLocationName = React.useCallback(
-    (id: string, name: string) => setLocationNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
-    [],
-  );
-  const [specializationNames, setSpecializationNames] = React.useState<Record<string, string>>({});
-  const registerSpecializationName = React.useCallback(
-    (id: string, name: string) =>
-      setSpecializationNames((prev) => (prev[id] === name ? prev : { ...prev, [id]: name })),
-    [],
-  );
-
-  // Rosters for the new row's pickers + header filters.
+  // Rosters for the new row's pickers.
   const { data: industryData } = useGetIndustries();
   const industries = industryData?.status === 200 ? industryData.data : [];
   const createJobRoleType = useCreateJobRoleType();
-
-  const { data: roleTypesData } = useGetJobRoleTypes({ take: 200 });
-  const roleTypes = roleTypesData?.status === 200 ? roleTypesData.data : [];
-  const jobRoleTypeOptions = React.useMemo(
-    () => roleTypes.map((r) => ({ value: r.id, label: r.name })),
-    [roleTypes],
-  );
 
   async function handleCreateJobRoleType(name: string) {
     try {
@@ -206,42 +179,20 @@ export function CandidatesTable({
     setPage(1);
     setSortBy(filters.sortBy);
     setSortOrder(filters.sortOrder ?? 'desc');
-    setColumnLocationIds(undefined);
-    setColumnJobRoleTypeIds(undefined);
-    setColumnSpecializationIds(undefined);
     setFirstName(undefined);
     setLastName(undefined);
-    setCurrentSalary(undefined);
-    setExpectedSalary(undefined);
   }, [filters]);
-
-  const mergedLocationIds = React.useMemo(() => {
-    const ids = [...(filters.locationIds ?? []), ...(columnLocationIds ?? [])];
-    return ids.length ? [...new Set(ids)] : undefined;
-  }, [filters.locationIds, columnLocationIds]);
-
-  const mergedJobRoleTypeIds = React.useMemo(() => {
-    const ids = [...(filters.jobRoleTypeIds ?? []), ...(columnJobRoleTypeIds ?? [])];
-    return ids.length ? [...new Set(ids)] : undefined;
-  }, [filters.jobRoleTypeIds, columnJobRoleTypeIds]);
-
-  const mergedSpecializationIds = React.useMemo(() => {
-    const ids = [...(filters.specializationIds ?? []), ...(columnSpecializationIds ?? [])];
-    return ids.length ? [...new Set(ids)] : undefined;
-  }, [filters.specializationIds, columnSpecializationIds]);
 
   const listParams = React.useMemo((): Omit<GetCandidatesParams, 'page' | 'pageSize'> => {
     return {
       q: search ?? filters.q,
       statuses: filters.statuses as GetCandidatesStatusesItem[] | undefined,
       industryIds: filters.industryIds,
-      jobRoleTypeIds: mergedJobRoleTypeIds,
-      specializationIds: mergedSpecializationIds,
-      locationIds: mergedLocationIds,
+      jobRoleTypeIds: filters.jobRoleTypeIds,
+      specializationIds: filters.specializationIds,
+      locationIds: filters.locationIds,
       firstName,
       lastName,
-      currentSalary,
-      expectedSalary,
       sortBy,
       sortOrder,
     };
@@ -250,13 +201,11 @@ export function CandidatesTable({
     filters.q,
     filters.statuses,
     filters.industryIds,
-    mergedJobRoleTypeIds,
-    mergedSpecializationIds,
-    mergedLocationIds,
+    filters.jobRoleTypeIds,
+    filters.specializationIds,
+    filters.locationIds,
     firstName,
     lastName,
-    currentSalary,
-    expectedSalary,
     sortBy,
     sortOrder,
   ]);
@@ -320,30 +269,14 @@ export function CandidatesTable({
   }
 
   function handleQueryChange({ search: nextSearch, columnFilters, sorting }: DataGridQuery) {
-    const locationFilter = columnFilters.find((f) => f.id === 'location')?.value as string[] | undefined;
-    const jobRoleFilter = columnFilters.find((f) => f.id === 'jobRoleType')?.value as string[] | undefined;
-    const specializationFilter = columnFilters.find((f) => f.id === 'specialization')?.value as
-      | string[]
-      | undefined;
     const firstNameFilter = columnFilters.find((f) => f.id === 'firstName')?.value as string[] | undefined;
     const lastNameFilter = columnFilters.find((f) => f.id === 'lastName')?.value as string[] | undefined;
-    const currentSalaryFilter = columnFilters.find((f) => f.id === 'currentSalary')?.value as
-      | string[]
-      | undefined;
-    const expectedSalaryFilter = columnFilters.find((f) => f.id === 'expectedSalary')?.value as
-      | string[]
-      | undefined;
 
     const sort = sorting[0];
     const sortField = sort && sort.id in GetCandidatesSortBy ? (sort.id as GetCandidatesSortBy) : undefined;
 
-    setColumnLocationIds(locationFilter?.length ? locationFilter : undefined);
-    setColumnJobRoleTypeIds(jobRoleFilter?.length ? jobRoleFilter : undefined);
-    setColumnSpecializationIds(specializationFilter?.length ? specializationFilter : undefined);
     setFirstName(firstNameFilter?.[0]?.trim() || undefined);
     setLastName(lastNameFilter?.[0]?.trim() || undefined);
-    setCurrentSalary(currentSalaryFilter?.[0]?.trim() || undefined);
-    setExpectedSalary(expectedSalaryFilter?.[0]?.trim() || undefined);
     setSortBy(sortField);
     setSortOrder(sort?.desc ? 'desc' : 'asc');
     setSearch(nextSearch.trim() || undefined);
@@ -352,48 +285,6 @@ export function CandidatesTable({
 
   const candidateFilters: DataGridFilter[] = React.useMemo(
     () => [
-      {
-        columnId: 'location',
-        title: 'City Coverage',
-        options: [],
-        inHeader: true,
-        render: ({ selected, onChange }) => (
-          <LocationFilterButton
-            selected={selected}
-            onChange={onChange}
-            level="CITY_COVERAGE"
-            compact
-            title="City Coverage"
-            labelFor={(id) => locationNames[id] ?? id}
-            onResolve={registerLocationName}
-          />
-        ),
-        labelFor: (id) => locationNames[id] ?? id,
-      },
-      {
-        columnId: 'jobRoleType',
-        title: 'Role Type',
-        options: jobRoleTypeOptions,
-        inHeader: true,
-      },
-      {
-        columnId: 'specialization',
-        title: 'Specialization',
-        options: [],
-        inHeader: true,
-        render: ({ selected, onChange }) => (
-          <SpecializationFilterButton
-            selected={selected}
-            onChange={onChange}
-            compact
-            title="Specialization"
-            labelFor={(id) => specializationNames[id] ?? id}
-            onResolve={registerSpecializationName}
-            industryIds={filters.industryIds}
-          />
-        ),
-        labelFor: (id) => specializationNames[id] ?? id,
-      },
       {
         columnId: 'firstName',
         title: 'First Name',
@@ -405,7 +296,8 @@ export function CandidatesTable({
             compact
             value={selected[0]}
             onChange={(v) => onChange(v ? [v] : [])}
-            placeholder="Contains…"
+            placeholder="Search first name…"
+            minLength={2}
           />
         ),
         labelFor: (v) => v,
@@ -421,52 +313,14 @@ export function CandidatesTable({
             compact
             value={selected[0]}
             onChange={(v) => onChange(v ? [v] : [])}
-            placeholder="Contains…"
-          />
-        ),
-        labelFor: (v) => v,
-      },
-      {
-        columnId: 'currentSalary',
-        title: 'Salary Current',
-        options: [],
-        inHeader: true,
-        render: ({ selected, onChange }) => (
-          <TextFilter
-            title="Salary Current"
-            compact
-            value={selected[0]}
-            onChange={(v) => onChange(v ? [v] : [])}
-            placeholder="Contains…"
-          />
-        ),
-        labelFor: (v) => v,
-      },
-      {
-        columnId: 'expectedSalary',
-        title: 'Salary Expected',
-        options: [],
-        inHeader: true,
-        render: ({ selected, onChange }) => (
-          <TextFilter
-            title="Salary Expected"
-            compact
-            value={selected[0]}
-            onChange={(v) => onChange(v ? [v] : [])}
-            placeholder="Contains…"
+            placeholder="Search family name…"
+            minLength={2}
           />
         ),
         labelFor: (v) => v,
       },
     ],
-    [
-      locationNames,
-      specializationNames,
-      registerLocationName,
-      registerSpecializationName,
-      jobRoleTypeOptions,
-      filters.industryIds,
-    ],
+    [],
   );
 
   // Bypasses a single-mutation hook (which only tracks one in-flight call at
@@ -609,7 +463,7 @@ export function CandidatesTable({
           total === 0 ? (
             <div className="flex flex-col items-center gap-1.5 py-4 text-center">
               <p className="font-medium">No candidates match these filters.</p>
-              {mergedSpecializationIds?.length ? (
+              {filters.specializationIds?.length ? (
                 <p className="text-sm text-muted-foreground">
                   Specialization is only tagged on ~5% of candidates — try removing it above.
                 </p>

@@ -90,7 +90,7 @@ export const getGetStakeholdersUrl = (params?: GetStakeholdersParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["clientIds","roleTypeIds","jobTitleIds","locationIds","accuracy","statuses"];
+    const explodeParameters = ["clientIds","industryIds","roleTypeIds","jobTitleIds","locationIds","accuracy","statuses"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
@@ -452,7 +452,7 @@ export const getExportStakeholdersUrl = (params?: ExportStakeholdersParams,) => 
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["clientIds","roleTypeIds","jobTitleIds","locationIds","accuracy","statuses"];
+    const explodeParameters = ["clientIds","industryIds","roleTypeIds","jobTitleIds","locationIds","accuracy","statuses"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
@@ -685,7 +685,7 @@ export const getGetStakeholdersForEnrichmentUrl = (params: GetStakeholdersForEnr
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["roleTypeIds","jobTitleIds","locationIds","accuracy","statuses","clientIds"];
+    const explodeParameters = ["industryIds","roleTypeIds","jobTitleIds","locationIds","accuracy","statuses","clientIds"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {

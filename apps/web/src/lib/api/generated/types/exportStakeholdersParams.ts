@@ -29,6 +29,10 @@ clientId?: string;
  */
 clientIds?: string[];
 /**
+ * Filter by the parent client's industry ID(s). Stakeholder has no industry of its own — matched via Client.industryId.
+ */
+industryIds?: string[];
+/**
  * Filter by job title (contains, case-insensitive)
  */
 jobTitle?: string;
