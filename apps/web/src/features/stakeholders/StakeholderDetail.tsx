@@ -1,10 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  ArrowLeft,
   ChevronDown,
   CornerDownLeft,
   FileText,
@@ -109,12 +107,10 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-// The "Back" button normally returns to the Stakeholders list, but a
-// stakeholder can also be reached from its Company's own Stakeholders card
-// — in that case Back should return there instead of a list the visitor
-// never opened. Origin comes in as `?from=company` on the link that brought
-// them here, not browser history, so a page refresh or a bookmark keeps
-// behaving the same way. Mirrors CompanyDetail's own useBackTarget.
+// After delete, redirect to the Stakeholders list — or to the Company the
+// visitor came from when the link carried `?from=company`. Origin comes in
+// on the link, not browser history, so a page refresh or bookmark keeps
+// the same post-delete destination. Mirrors CompanyDetail's useBackTarget.
 function useBackTarget(stakeholder?: Pick<StakeholderEntity, 'clientId' | 'companyName'>) {
   const searchParams = useSearchParams();
   const from = searchParams.get('from');
@@ -169,7 +165,6 @@ export function StakeholderDetail({
 }) {
   const { data, isLoading, isError, error } = useGetStakeholder(id);
   const stakeholder = data?.status === 200 ? data.data : undefined;
-  const backTarget = useBackTarget(stakeholder);
 
   if (isLoading) {
     return (
@@ -188,12 +183,6 @@ export function StakeholderDetail({
           <p className="text-sm text-muted-foreground">
             {error instanceof Error ? error.message : `No stakeholder with ID ${id}.`}
           </p>
-        </div>
-        <div>
-          <Button variant="outline" nativeButton={false} render={<Link href={backTarget.href} />}>
-            <ArrowLeft />
-            Back to {backTarget.label.toLowerCase()}
-          </Button>
         </div>
       </PageLayout>
     );
@@ -411,18 +400,7 @@ function StakeholderEditForm({
 
   return (
     <PageLayout className="overflow-auto">
-      <div className="flex flex-col gap-4 border-b border-border pb-5">
-        <Button
-          variant="ghost"
-          size="sm"
-          nativeButton={false}
-          render={<Link href={backTarget.href} />}
-          className="-ml-2 self-start text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft />
-          Back to {backTarget.label}
-        </Button>
-
+      <div className="flex flex-col gap-3 border-b border-border pb-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 font-heading text-lg font-semibold text-primary">

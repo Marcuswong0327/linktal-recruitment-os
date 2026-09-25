@@ -1,9 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Download, Search, X } from 'lucide-react';
+import { Download, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -54,19 +53,12 @@ function FilterField({ label, children }: { label: string; children: React.React
 export function StakeholderEnrichmentWorkspace({
   clientIds,
   canUpdate,
-  from,
 }: {
   clientIds: string[];
   canUpdate: boolean;
-  /** Which list opened this workspace — see `backHref`. */
-  from?: string;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  // Both lists that open this workspace restore their own gate on
-  // `?restore=1` (see useGateSnapshot). Companies stays the fallback so an
-  // older link, or one typed by hand, behaves as it always did.
-  const backHref = from === 'job-opening-search' ? '/job-opening-search?restore=1' : '/companies?restore=1';
   const [selected, setSelected] = React.useState<StakeholderEntity[]>([]);
   const [isExporting, setIsExporting] = React.useState(false);
 
@@ -233,17 +225,7 @@ export function StakeholderEnrichmentWorkspace({
 
   return (
     <PageLayout>
-      <div className="flex flex-col gap-3">
-        <Button
-          variant="ghost"
-          size="sm"
-          nativeButton={false}
-          render={<Link href={backHref} />}
-          className="-ml-2 self-start text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft />
-          {from === 'job-opening-search' ? 'Back to Job Opening Search' : 'Back to Companies'}
-        </Button>
+      <div className="flex flex-col gap-2 pb-1">
         <p className="text-sm text-muted-foreground">
           {`Every contact across ${clientIds.length} selected compan${clientIds.length === 1 ? 'y' : 'ies'}, grouped in the order you selected them — filter, edit, and export before reaching out.`}
         </p>

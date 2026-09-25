@@ -1,10 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import {
   AlertTriangle,
-  ArrowLeft,
   ArrowRight,
   Check,
   ChevronDown,
@@ -155,12 +153,6 @@ export function CandidateDetail({ id }: { id: string }) {
           title="Candidate not found"
           description={error?.message ?? `No candidate with ID ${id}.`}
         />
-        <div>
-          <Button variant="outline" nativeButton={false} render={<Link href="/candidates" />}>
-            <ArrowLeft />
-            Back to candidates
-          </Button>
-        </div>
       </PageLayout>
     );
   }
@@ -631,18 +623,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
   return (
     <PageLayout className="overflow-auto">
-      <div className="flex flex-col gap-4 border-b border-border pb-5">
-        <Button
-          variant="ghost"
-          size="sm"
-          nativeButton={false}
-          render={<Link href="/candidates" />}
-          className="-ml-2 self-start text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft />
-          Back to Candidates
-        </Button>
-
+      <div className="flex flex-col gap-3 border-b border-border pb-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 font-heading text-lg font-semibold text-primary">

@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight, CornerDownLeft, FileText } from 'lucide-react';
+import { ArrowUpRight, CornerDownLeft, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -113,12 +113,6 @@ export function JobOrderDetail({ id }: { id: string }) {
         <div className="flex flex-col gap-2">
           <h1 className="font-heading text-xl font-semibold">Job order not found</h1>
           <p className="text-sm text-muted-foreground">{error?.message ?? `No job order with ID ${id}.`}</p>
-        </div>
-        <div>
-          <Button variant="outline" nativeButton={false} render={<Link href="/job-orders" />}>
-            <ArrowLeft />
-            Back to job orders
-          </Button>
         </div>
       </PageLayout>
     );
@@ -333,18 +327,8 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
 
   return (
     <PageLayout className="overflow-auto">
-      <div className="flex flex-col gap-4 border-b border-border pb-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            nativeButton={false}
-            render={<Link href="/job-orders" />}
-            className="-ml-2 self-start text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft />
-            Back to Job Orders
-          </Button>
+      <div className="flex flex-col gap-3 border-b border-border pb-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="flex items-center gap-3">
             {isDirty && !saving ? (
               <span className="text-xs text-muted-foreground">Unsaved changes</span>

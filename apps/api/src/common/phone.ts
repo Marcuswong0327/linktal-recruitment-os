@@ -120,6 +120,29 @@ export function normalizeMobileForStorage(
   return standardizePhone(trimmed) ?? trimmed;
 }
 
+/**
+ * Digits to match against `mobileDigits` during free-text search.
+ *
+ * Storage rewrites AU/MY domestics to `+61…` / `+60…`, so a typed `0424…`
+ * must be rewritten the same way (or at least stripped of the trunk `0`)
+ * before `contains` against `61424…`. Full numbers go through
+ * {@link standardizePhone}; incomplete domestics that still start with `0`
+ * drop that `0` so a partial needle can sit inside the stored digit string.
+ */
+export function digitsForPhoneSearch(raw: string | null | undefined): string {
+  const digits = digitsOnly(raw);
+  if (!digits) return '';
+
+  const standardized = standardizePhone(raw);
+  if (standardized) return digitsOnly(standardized);
+
+  // Incomplete domestic trunk (e.g. "042405") — strip leading 0 so the
+  // remainder can match inside a +61/+60 mobileDigits value.
+  if (/^0[1-9]/.test(digits)) return digits.slice(1);
+
+  return digits;
+}
+
 export function isValidPhone(phone: string | null | undefined): boolean {
   if (!phone) return false;
   const d = digitsOnly(phone);
