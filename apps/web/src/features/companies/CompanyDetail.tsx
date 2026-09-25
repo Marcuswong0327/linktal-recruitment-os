@@ -305,11 +305,11 @@ function StakeholderActionsMenu({
       <DropdownMenuContent align="end">
         <DropdownMenuItem disabled={!email} onClick={() => email && copyValue(email, 'Email')}>
           <Mail />
-          {email ? 'Copy email' : 'No email on file'}
+          {email ?? 'No email on file'}
         </DropdownMenuItem>
         <DropdownMenuItem disabled={!mobile} onClick={() => mobile && copyValue(mobile, 'Mobile')}>
           <Phone />
-          {mobile ? 'Copy mobile' : 'No mobile on file'}
+          {mobile ?? 'No mobile on file'}
         </DropdownMenuItem>
         <SplitActionRow
           icon={LinkedinIcon}

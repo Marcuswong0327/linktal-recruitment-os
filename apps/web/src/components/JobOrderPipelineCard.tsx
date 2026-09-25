@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Check, Mail, Phone, Plus, Trash2, X } from 'lucide-react';
+import { Check, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/table';
 import { CandidateCombobox } from '@/components/CandidateCombobox';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import { LinkedinIcon } from '@/components/BrandIcons';
+import { ContactMethodsCell } from '@/components/ContactMethodsCell';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { cn } from '@/lib/utils';
 import { noBrowserAutofill } from '@/lib/no-browser-autofill';
@@ -68,65 +68,7 @@ function toDateInputValue(value: string | null | undefined) {
   return value ? value.slice(0, 10) : '';
 }
 
-function copyValue(value: string, label: string) {
-  navigator.clipboard.writeText(value).then(
-    () => toast.success(`${label} copied`),
-    () => toast.error(`Couldn't copy ${label.toLowerCase()}`),
-  );
-}
-
-/** One icon per contact method — mirrors CandidateDetail's ContactIconButton/ContactCopyButton, sized down for a table cell. A method with no value on file renders greyed-out and inert rather than being hidden, so the row doesn't reflow. */
-function ContactIcon({
-  icon: Icon,
-  href,
-  onClick,
-  disabled,
-  label,
-  activeClassName = 'text-muted-foreground hover:text-foreground',
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  href?: string;
-  onClick?: () => void;
-  disabled?: boolean;
-  label: string;
-  activeClassName?: string;
-}) {
-  const className = cn(
-    'flex size-6 items-center justify-center rounded-md transition-colors',
-    disabled ? 'cursor-not-allowed text-muted-foreground' : cn(activeClassName, 'hover:bg-accent'),
-  );
-  const icon = <Icon className={cn('size-3.5', disabled && 'opacity-30 grayscale')} />;
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={onClick}
-        title={label}
-        aria-label={label}
-        className={className}
-      >
-        {icon}
-      </button>
-    );
-  }
-  return (
-    <a
-      href={disabled ? undefined : href}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-disabled={disabled}
-      onClick={disabled ? (e) => e.preventDefault() : undefined}
-      title={label}
-      aria-label={label}
-      className={className}
-    >
-      {icon}
-    </a>
-  );
-}
-
-/** Mail (copy) / Phone (copy) / LinkedIn (redirect) — shared between the pipeline table's candidate rows and the Information card's Key Stakeholder contact. */
+/** Mail (copy) / Phone (copy) / LinkedIn (open) — shared between the pipeline table and Key Stakeholder contacts. Hover shows the value; click copies email/mobile. */
 export function ContactIconRow({
   email,
   mobile,
@@ -137,27 +79,7 @@ export function ContactIconRow({
   linkedinUrl?: string | null;
 }) {
   return (
-    <div className="flex items-center gap-0.5">
-      <ContactIcon
-        icon={Mail}
-        onClick={email ? () => copyValue(email, 'Email') : undefined}
-        disabled={!email}
-        label={email ? 'Copy email' : 'No email on file'}
-      />
-      <ContactIcon
-        icon={Phone}
-        onClick={mobile ? () => copyValue(mobile, 'Mobile') : undefined}
-        disabled={!mobile}
-        label={mobile ? 'Copy mobile' : 'No mobile on file'}
-      />
-      <ContactIcon
-        icon={LinkedinIcon}
-        href={linkedinUrl ?? undefined}
-        disabled={!linkedinUrl}
-        label={linkedinUrl ? 'LinkedIn' : 'No LinkedIn on file'}
-        activeClassName="text-[#0A66C2]"
-      />
-    </div>
+    <ContactMethodsCell email={email} mobile={mobile} linkedinUrl={linkedinUrl} size="sm" />
   );
 }
 

@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/table';
 import { LinkedinIcon } from '@/components/BrandIcons';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+import { ContactCopyIcon } from '@/components/ContactMethodsCell';
 import { useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
@@ -154,41 +155,6 @@ function ContactIconButton({
     >
       <Icon className={cn('size-4', disabled && 'opacity-30 grayscale')} />
     </a>
-  );
-}
-
-function copyValue(value: string, label: string) {
-  navigator.clipboard.writeText(value).then(
-    () => toast.success(`${label} copied`),
-    () => toast.error(`Couldn't copy ${label.toLowerCase()}`),
-  );
-}
-
-/** Same look as ContactIconButton, but copies to the clipboard instead of navigating — for Mobile, which has no useful direct-interact link (no tel: dialer on desktop). */
-function ContactCopyButton({
-  icon: Icon,
-  value,
-  label,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  value?: string | null;
-  label: string;
-}) {
-  const disabled = !value;
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => value && copyValue(value, label)}
-      title={disabled ? `No ${label.toLowerCase()} on file` : `Copy ${label.toLowerCase()}`}
-      aria-label={disabled ? `No ${label.toLowerCase()} on file` : `Copy ${label.toLowerCase()}`}
-      className={cn(
-        'flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors',
-        disabled ? 'cursor-not-allowed' : 'hover:bg-accent hover:text-foreground',
-      )}
-    >
-      <Icon className={cn('size-4', disabled && 'opacity-30 grayscale')} />
-    </button>
   );
 }
 
@@ -432,8 +398,8 @@ function StakeholderEditForm({
 
   const contactActionsMenu = (
     <div className="flex items-center gap-1">
-      <ContactCopyButton icon={Mail} value={email} label="Email" />
-      <ContactCopyButton icon={Phone} value={mobile} label="Mobile" />
+      <ContactCopyIcon icon={Mail} value={email} label="Email" />
+      <ContactCopyIcon icon={Phone} value={mobile} label="Mobile" />
       <ContactIconButton
         icon={LinkedinIcon}
         href={linkedinUrl}
