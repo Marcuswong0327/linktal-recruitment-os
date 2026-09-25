@@ -223,7 +223,7 @@ function sameWorkHistory(a: WorkHistoryItem[], b: WorkHistoryItem[]) {
   );
 }
 
-/** One icon per contact method (Email/Mobile/LinkedIn/Seek Talent) — click opens it. A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. Mirrors CompanyDetail's LinkIconButton for its Website field. */
+/** One icon per contact method (Email/Mobile/LinkedIn/Seek Talent) — Email and Mobile copy to clipboard; LinkedIn and Seek open in a new tab. A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. Mirrors CompanyDetail's LinkIconButton for its Website field. */
 function ContactIconButton({
   icon: Icon,
   href,
@@ -651,11 +651,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
   const contactActionsMenu = (
     <div className="flex items-center gap-1">
-      <ContactIconButton
-        icon={Mail}
-        href={candidate.email ? `mailto:${candidate.email}` : null}
-        label="Email"
-      />
+      <ContactCopyButton icon={Mail} value={candidate.email} label="Email" />
       <ContactCopyButton icon={Phone} value={candidate.mobile} label="Mobile" />
       <ContactIconButton
         icon={LinkedinIcon}

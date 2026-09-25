@@ -23,6 +23,7 @@ import { UpdateJobOrderDto } from './dto/update-job-order.dto';
 import { QueryJobOrdersDto } from './dto/query-job-orders.dto';
 import { ExportJobOrdersDto } from './dto/export-job-orders.dto';
 import { SetJobOrderConsultantsDto } from './dto/set-job-order-consultants.dto';
+import { SetJobOrderKeyStakeholdersDto } from './dto/set-job-order-key-stakeholders.dto';
 import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
 import { ImportOptionsDto } from '../common/dto/import-options.dto';
 import { XLSX_CONTENT_TYPE, exportFilename } from '../common/xlsx-export';
@@ -185,6 +186,22 @@ export class JobOrdersController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.jobOrders.setConsultants(id, dto.consultantIds, user);
+  }
+
+  @Put(':id/key-stakeholders')
+  @RequirePermission('job_order', 'update')
+  @ApiOperation({
+    operationId: 'setJobOrderKeyStakeholders',
+    summary:
+      "Replace this job order's key stakeholder contacts (full-set-replace). Each id must belong to the job order's client.",
+  })
+  @ApiResponse({ status: 200, description: 'Key stakeholders updated', type: JobOrderEntity })
+  setKeyStakeholders(
+    @Param('id') id: string,
+    @Body() dto: SetJobOrderKeyStakeholdersDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.jobOrders.setKeyStakeholders(id, dto.stakeholderIds, user);
   }
 
   @Delete(':id')

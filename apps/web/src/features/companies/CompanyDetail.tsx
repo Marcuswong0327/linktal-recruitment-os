@@ -277,7 +277,7 @@ function SplitActionRow({
   );
 }
 
-/** Each row (besides phone) splits into a direct-interact action (mailto:/open in a new tab) and a separate copy action — see `SplitActionRow`. Website is the company's, not the stakeholder's — Stakeholder carries no site of its own. Phone has no direct-interact counterpart (no tel: link), so its row stays copy-only. */
+/** Each row (besides email/phone) splits into a direct-interact action (open in a new tab) and a separate copy action — see `SplitActionRow`. Email and phone are copy-only (no mailto:/tel:). Website is the company's, not the stakeholder's — Stakeholder carries no site of its own. */
 function StakeholderActionsMenu({
   email,
   mobile,
@@ -303,14 +303,10 @@ function StakeholderActionsMenu({
         }
       />
       <DropdownMenuContent align="end">
-        <SplitActionRow
-          icon={Mail}
-          value={email}
-          label="Email"
-          emptyLabel="No email on file"
-          copyLabel="Email"
-          href={(v) => `mailto:${v}`}
-        />
+        <DropdownMenuItem disabled={!email} onClick={() => email && copyValue(email, 'Email')}>
+          <Mail />
+          {email ? 'Copy email' : 'No email on file'}
+        </DropdownMenuItem>
         <DropdownMenuItem disabled={!mobile} onClick={() => mobile && copyValue(mobile, 'Mobile')}>
           <Phone />
           {mobile ? 'Copy mobile' : 'No mobile on file'}

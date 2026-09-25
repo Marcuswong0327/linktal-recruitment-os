@@ -25,8 +25,7 @@ export interface NewSpecializationRequest {
 interface NewSpecializationDialogProps {
   /**
    * Held separately from `open` so the name and industry survive the ~150ms
-   * close animation instead of blanking mid-fade — same reasoning as
-   * `ConfirmSubmitCandidateDialog`'s `candidate`.
+   * close animation instead of blanking mid-fade.
    */
   request: NewSpecializationRequest | null;
   /** The full industry catalog — 4 rows, so no search needed. */

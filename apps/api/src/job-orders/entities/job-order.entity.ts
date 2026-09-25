@@ -14,6 +14,15 @@ export class JobOrderConsultantEntity {
   @ApiProperty() name!: string;
 }
 
+/** One key stakeholder contact for this job order — see JobOrderKeyStakeholder. */
+export class JobOrderKeyStakeholderEntity {
+  @ApiProperty() id!: string;
+  @ApiProperty() name!: string;
+  @ApiProperty({ type: String, nullable: true }) email!: string | null;
+  @ApiProperty({ type: String, nullable: true }) mobile!: string | null;
+  @ApiProperty({ type: String, nullable: true }) linkedinUrl!: string | null;
+}
+
 export class JobOrderPipelineCandidateEntity {
   @ApiProperty() submissionId!: string;
   @ApiProperty() candidateId!: string;
@@ -157,15 +166,11 @@ export class JobOrderEntity implements Omit<JobOrder, 'deletedAt' | 'deletedById
   @ApiProperty({ type: JobOrderPipelineCandidateEntity, isArray: true })
   pipelineSubmissions!: JobOrderPipelineCandidateEntity[];
 
-  // Computed, not stored — the client's most-recently-contacted stakeholder.
-  // Deliberately not a `keyStakeholderId` column on JobOrder: this schema
-  // avoids manually-assigned "ownership" fields (see the SCOPING note above
-  // Consultant in schema.prisma) — same reasoning as CompanyDetail's
-  // "Consultants" list being derived from job orders rather than stored.
-  @ApiProperty({ type: String, nullable: true, description: "The client's most recently contacted stakeholder" })
-  keyStakeholderId!: string | null;
-  @ApiProperty({ type: String, nullable: true }) keyStakeholderName!: string | null;
-  @ApiProperty({ type: String, nullable: true }) keyStakeholderEmail!: string | null;
-  @ApiProperty({ type: String, nullable: true }) keyStakeholderMobile!: string | null;
-  @ApiProperty({ type: String, nullable: true }) keyStakeholderLinkedinUrl!: string | null;
+  @ApiProperty({
+    type: JobOrderKeyStakeholderEntity,
+    isArray: true,
+    description:
+      'Key contacts for this job order — persisted multi-select from the parent client (see PUT /job-orders/:id/key-stakeholders)',
+  })
+  keyStakeholders!: JobOrderKeyStakeholderEntity[];
 }

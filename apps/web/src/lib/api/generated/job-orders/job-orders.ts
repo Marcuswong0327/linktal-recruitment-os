@@ -36,6 +36,7 @@ import type {
   PaginatedJobOrdersEntity,
   PipelineTimelineEventEntity,
   SetJobOrderConsultantsDto,
+  SetJobOrderKeyStakeholdersDto,
   UpdateJobOrderDto
 } from '../types';
 
@@ -1435,4 +1436,104 @@ export const useSetJobOrderConsultants = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getSetJobOrderConsultantsMutationOptions(options), queryClient);
+    }
+    export type setJobOrderKeyStakeholdersResponse200 = {
+  data: JobOrderEntity
+  status: 200
+}
+
+export type setJobOrderKeyStakeholdersResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type setJobOrderKeyStakeholdersResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type setJobOrderKeyStakeholdersResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type setJobOrderKeyStakeholdersResponseSuccess = (setJobOrderKeyStakeholdersResponse200) & {
+  headers: Headers;
+};
+export type setJobOrderKeyStakeholdersResponseError = (setJobOrderKeyStakeholdersResponse400 | setJobOrderKeyStakeholdersResponse404 | setJobOrderKeyStakeholdersResponse500) & {
+  headers: Headers;
+};
+
+export type setJobOrderKeyStakeholdersResponse = (setJobOrderKeyStakeholdersResponseSuccess | setJobOrderKeyStakeholdersResponseError)
+
+export const getSetJobOrderKeyStakeholdersUrl = (id: string,) => {
+
+
+
+
+  return `/job-orders/${id}/key-stakeholders`
+}
+
+/**
+ * @summary Replace this job order's key stakeholder contacts (full-set-replace). Each id must belong to the job order's client.
+ */
+export const setJobOrderKeyStakeholders = async (id: string,
+    setJobOrderKeyStakeholdersDto: SetJobOrderKeyStakeholdersDto, options?: RequestInit): Promise<setJobOrderKeyStakeholdersResponse> => {
+
+  return customFetch<setJobOrderKeyStakeholdersResponse>(getSetJobOrderKeyStakeholdersUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setJobOrderKeyStakeholdersDto)
+  }
+);}
+
+
+
+
+
+export const getSetJobOrderKeyStakeholdersMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setJobOrderKeyStakeholders>>, TError,{id: string;data: SetJobOrderKeyStakeholdersDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setJobOrderKeyStakeholders>>, TError,{id: string;data: SetJobOrderKeyStakeholdersDto}, TContext> => {
+
+const mutationKey = ['setJobOrderKeyStakeholders'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setJobOrderKeyStakeholders>>, {id: string;data: SetJobOrderKeyStakeholdersDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setJobOrderKeyStakeholders(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetJobOrderKeyStakeholdersMutationResult = NonNullable<Awaited<ReturnType<typeof setJobOrderKeyStakeholders>>>
+    export type SetJobOrderKeyStakeholdersMutationBody = SetJobOrderKeyStakeholdersDto
+    export type SetJobOrderKeyStakeholdersMutationError = ErrorResponse
+
+    /**
+ * @summary Replace this job order's key stakeholder contacts (full-set-replace). Each id must belong to the job order's client.
+ */
+export const useSetJobOrderKeyStakeholders = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setJobOrderKeyStakeholders>>, TError,{id: string;data: SetJobOrderKeyStakeholdersDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof setJobOrderKeyStakeholders>>,
+        TError,
+        {id: string;data: SetJobOrderKeyStakeholdersDto},
+        TContext
+      > => {
+      return useMutation(getSetJobOrderKeyStakeholdersMutationOptions(options), queryClient);
     }

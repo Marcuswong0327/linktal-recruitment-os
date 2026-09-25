@@ -30,10 +30,11 @@ const SOFT_DELETE_MODELS = new Set([
 ]);
 
 // Soft-delete set plus the RBAC/identity tables (hard-deleted, but still audited).
-// ConsultantIndustry and JobOrderConsultant are both written as individual
-// top-level create/delete calls (never a nested relation write), so this
-// interception layer actually sees and diffs each row — see
-// ConsultantsService.setIndustries and JobOrdersService.setConsultants.
+// ConsultantIndustry, JobOrderConsultant and JobOrderKeyStakeholder are all
+// written as individual top-level create/delete calls (never a nested relation
+// write), so this interception layer actually sees and diffs each row — see
+// ConsultantsService.setIndustries, JobOrdersService.setConsultants and
+// JobOrdersService.setKeyStakeholders.
 export const AUDITED_MODELS = new Set([
   ...SOFT_DELETE_MODELS,
   'Consultant',
@@ -41,6 +42,7 @@ export const AUDITED_MODELS = new Set([
   'Permission',
   'ConsultantIndustry',
   'JobOrderConsultant',
+  'JobOrderKeyStakeholder',
   // Location writes are now admin-editable/deletable (issue #157) rather than
   // bulk-load-only, so they need the same paper trail as everything else.
   // ConsultantLocation is individual top-level create/delete calls too (see

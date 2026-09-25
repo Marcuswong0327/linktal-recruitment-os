@@ -6540,6 +6540,82 @@
         ]
       }
     },
+    "/job-orders/{id}/key-stakeholders": {
+      "put": {
+        "operationId": "setJobOrderKeyStakeholders",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetJobOrderKeyStakeholdersDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Key stakeholders updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOrderEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace this job order's key stakeholder contacts (full-set-replace). Each id must belong to the job order's client.",
+        "tags": [
+          "Job Orders"
+        ]
+      }
+    },
     "/job-research": {
       "get": {
         "operationId": "getJobResearch",
@@ -14304,6 +14380,36 @@
           "placementStartDate"
         ]
       },
+      "JobOrderKeyStakeholderEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "mobile": {
+            "type": "string",
+            "nullable": true
+          },
+          "linkedinUrl": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "email",
+          "mobile",
+          "linkedinUrl"
+        ]
+      },
       "JobOrderEntity": {
         "type": "object",
         "properties": {
@@ -14488,26 +14594,12 @@
               "$ref": "#/components/schemas/JobOrderPipelineCandidateEntity"
             }
           },
-          "keyStakeholderId": {
-            "type": "string",
-            "nullable": true,
-            "description": "The client's most recently contacted stakeholder"
-          },
-          "keyStakeholderName": {
-            "type": "string",
-            "nullable": true
-          },
-          "keyStakeholderEmail": {
-            "type": "string",
-            "nullable": true
-          },
-          "keyStakeholderMobile": {
-            "type": "string",
-            "nullable": true
-          },
-          "keyStakeholderLinkedinUrl": {
-            "type": "string",
-            "nullable": true
+          "keyStakeholders": {
+            "description": "Key contacts for this job order — persisted multi-select from the parent client (see PUT /job-orders/:id/key-stakeholders)",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobOrderKeyStakeholderEntity"
+            }
           }
         },
         "required": [
@@ -14547,11 +14639,7 @@
           "createdAt",
           "updatedAt",
           "pipelineSubmissions",
-          "keyStakeholderId",
-          "keyStakeholderName",
-          "keyStakeholderEmail",
-          "keyStakeholderMobile",
-          "keyStakeholderLinkedinUrl"
+          "keyStakeholders"
         ]
       },
       "PaginatedJobOrdersEntity": {
@@ -14822,6 +14910,21 @@
         },
         "required": [
           "consultantIds"
+        ]
+      },
+      "SetJobOrderKeyStakeholdersDto": {
+        "type": "object",
+        "properties": {
+          "stakeholderIds": {
+            "description": "Stakeholder IDs that are key contacts for this job order — replaces the whole set",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "stakeholderIds"
         ]
       },
       "JobResearchEntity": {

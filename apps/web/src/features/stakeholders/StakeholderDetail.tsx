@@ -123,7 +123,7 @@ function useBackTarget(stakeholder?: Pick<StakeholderEntity, 'clientId' | 'compa
   return { href: '/stakeholders', label: 'Stakeholders' };
 }
 
-/** One icon per contact method (Email/Mobile/LinkedIn) — click opens it (Mobile copies instead, see ContactCopyButton). A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. Mirrors CompanyDetail's LinkIconButton for its Website field. */
+/** One icon per contact method (Email/Mobile/LinkedIn) — Email and Mobile copy to clipboard; LinkedIn opens in a new tab. A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. Mirrors CompanyDetail's LinkIconButton for its Website field. */
 function ContactIconButton({
   icon: Icon,
   href,
@@ -432,7 +432,7 @@ function StakeholderEditForm({
 
   const contactActionsMenu = (
     <div className="flex items-center gap-1">
-      <ContactIconButton icon={Mail} href={email ? `mailto:${email}` : null} label="Email" />
+      <ContactCopyButton icon={Mail} value={email} label="Email" />
       <ContactCopyButton icon={Phone} value={mobile} label="Mobile" />
       <ContactIconButton
         icon={LinkedinIcon}

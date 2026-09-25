@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight, Briefcase, CornerDownLeft, FileText } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, CornerDownLeft, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -27,6 +28,7 @@ import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { ContactIconRow, JobOrderPipelineCard } from '@/components/JobOrderPipelineCard';
 import { FileUploadField } from '@/components/FileUploadField';
+import { TagMultiSelect, type TagOption } from '@/components/TagMultiSelect';
 import { PageLayout } from '@/components/app-shell/PageLayout';
 import { useIsMac } from '@/hooks/use-is-mac';
 import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shortcut';
@@ -35,10 +37,12 @@ import { useGetClient } from '@/lib/api/generated/clients/clients';
 import {
   getGetJobOrderQueryKey,
   getGetJobOrdersQueryKey,
+  setJobOrderKeyStakeholders as setJobOrderKeyStakeholdersRequest,
   useGetJobOrder,
   useUpdateJobOrder,
 } from '@/lib/api/generated/job-orders/job-orders';
 import { useCreateJobTitle } from '@/lib/api/generated/job-titles/job-titles';
+import { useGetStakeholders } from '@/lib/api/generated/stakeholders/stakeholders';
 import { useJobTitleOptions } from '@/hooks/use-catalog-options';
 import { useUploadJobOrderFile } from '@/lib/api/generated/uploads/uploads';
 import type { UpdateJobOrderDto } from '@/lib/api/generated/types';
@@ -55,11 +59,17 @@ const textareaClass =
 
 const shortDateFormatter = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
-function formatSalary(min: number | null, max: number | null, currency: string | null) {
-  if (min == null && max == null) return '—';
-  const cur = currency ? `${currency} ` : '';
-  if (min != null && max != null) return `${cur}${min.toLocaleString()} – ${max.toLocaleString()}`;
-  return `${cur}${(min ?? max)!.toLocaleString()}`;
+function parseOptionalNumber(raw: string): number | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function sameOptionalNumber(a: string, b: number | null | undefined): boolean {
+  const parsed = parseOptionalNumber(a);
+  if (parsed === undefined) return b == null;
+  return b != null && parsed === b;
 }
 
 export function JobOrderDetail({ id }: { id: string }) {
@@ -99,13 +109,11 @@ export function JobOrderDetail({ id }: { id: string }) {
 function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
   const queryClient = useQueryClient();
 
-
   // Only fetched for its industryId (not otherwise on JobOrderEntity, which
   // strips it back out — see job-orders.service.ts's toEntity) — feeds the
   // pipeline table's non-blocking industry-mismatch warning on submit.
   const { data: clientData } = useGetClient(jobOrder.clientId);
   const client = clientData?.status === 200 ? clientData.data : undefined;
-
 
   // Server-searched: the catalog is far larger than one page, so a pre-fetched
   // slice can't offer most of it (see useJobTitleOptions).
@@ -132,6 +140,74 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
   const [clientId, setClientId] = React.useState(jobOrder.clientId);
   const [status, setStatus] = React.useState<JobOrderStatus>(jobOrder.status);
   const [quality, setQuality] = React.useState<JobOrderQuality>(jobOrder.quality);
+  const [salaryMin, setSalaryMin] = React.useState(
+    jobOrder.salaryMin != null ? String(jobOrder.salaryMin) : '',
+  );
+  const [salaryMax, setSalaryMax] = React.useState(
+    jobOrder.salaryMax != null ? String(jobOrder.salaryMax) : '',
+  );
+  const [salaryCurrency, setSalaryCurrency] = React.useState(jobOrder.salaryCurrency ?? '');
+  const [openings, setOpenings] = React.useState(String(jobOrder.openings));
+  const [keyStakeholderIds, setKeyStakeholderIds] = React.useState(
+    () => (jobOrder.keyStakeholders ?? []).map((s) => s.id),
+  );
+  const [saving, setSaving] = React.useState(false);
+
+  const { data: stakeholdersData } = useGetStakeholders(
+    { clientId, pageSize: 100 },
+    { query: { enabled: Boolean(clientId) } },
+  );
+  const clientStakeholders = stakeholdersData?.status === 200 ? stakeholdersData.data.data : [];
+  const stakeholderOptions: TagOption[] = clientStakeholders.map((s) => ({
+    value: s.id,
+    label: [s.firstName, s.lastName].filter(Boolean).join(' ') || 'Unnamed contact',
+  }));
+  // Labels for already-selected ids that aren't in the (re)loaded client list
+  // yet — e.g. right after a company change before the new query settles, or
+  // a soft-deleted contact still hanging on the join until Save prunes it.
+  const selectedStakeholderMeta = React.useMemo(() => {
+    const fromEntity = new Map(
+      (jobOrder.keyStakeholders ?? []).map((s) => [s.id, s] as const),
+    );
+    const fromClient = new Map(
+      clientStakeholders.map((s) => [
+        s.id,
+        {
+          id: s.id,
+          name: [s.firstName, s.lastName].filter(Boolean).join(' ') || 'Unnamed contact',
+          email: s.email,
+          mobile: s.mobile,
+          linkedinUrl: s.linkedinUrl,
+        },
+      ] as const),
+    );
+    return keyStakeholderIds.map((id) => {
+      const live = fromClient.get(id);
+      if (live) return live;
+      const stale = fromEntity.get(id);
+      if (stale) return stale;
+      return { id, name: id, email: null, mobile: null, linkedinUrl: null };
+    });
+  }, [keyStakeholderIds, clientStakeholders, jobOrder.keyStakeholders]);
+
+  // Drop picks that aren't on the newly selected company once its stakeholder
+  // list has loaded — same outcome the API enforces on Save. Only when the
+  // company actually changed; don't prune the original selection just because
+  // the list page misses a soft-deleted or off-page contact.
+  React.useEffect(() => {
+    if (clientId === jobOrder.clientId) return;
+    if (stakeholdersData?.status !== 200) return;
+    const allowed = new Set(stakeholdersData.data.data.map((s) => s.id));
+    setKeyStakeholderIds((prev) => {
+      const next = prev.filter((id) => allowed.has(id));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [clientId, jobOrder.clientId, stakeholdersData]);
+
+  const initialStakeholderIds = (jobOrder.keyStakeholders ?? []).map((s) => s.id);
+  const stakeholdersDirty =
+    keyStakeholderIds.length !== initialStakeholderIds.length ||
+    keyStakeholderIds.some((id) => !initialStakeholderIds.includes(id));
 
   const isDirty =
     description !== (jobOrder.description ?? '') ||
@@ -141,17 +217,17 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
     jobTitleId !== (jobOrder.jobTitleId ?? '') ||
     clientId !== jobOrder.clientId ||
     status !== jobOrder.status ||
-    quality !== jobOrder.quality;
+    quality !== jobOrder.quality ||
+    !sameOptionalNumber(salaryMin, jobOrder.salaryMin) ||
+    !sameOptionalNumber(salaryMax, jobOrder.salaryMax) ||
+    salaryCurrency !== (jobOrder.salaryCurrency ?? '') ||
+    !sameOptionalNumber(openings, jobOrder.openings) ||
+    stakeholdersDirty;
 
   const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty);
 
   const updateJobOrder = useUpdateJobOrder({
     mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
-        queryClient.invalidateQueries({ queryKey: getGetJobOrderQueryKey(jobOrder.id) });
-        toast.success(`Saved changes to ${jobOrder.jobTitle ?? 'this job order'}`);
-      },
       onError: (err) => toast.error(err.message || 'Failed to save job order'),
     },
   });
@@ -166,9 +242,6 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
     return res.data;
   }
 
-  // Live label for the header — reflects an in-progress edit before it's saved.
-  const selectedJobTitle = selectedJobTitleLabel ?? 'Untitled role';
-
   // Suffixed with the field name ("Medium quality") the way the old static
   // quality badge already read. Values and colors still come from the shared
   // option list in schema.ts; only the label text differs.
@@ -179,10 +252,16 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
 
   const formRef = React.useRef<HTMLFormElement>(null);
   const isMac = useIsMac();
-  useSaveShortcut(() => formRef.current?.requestSubmit(), isDirty && !updateJobOrder.isPending);
+  useSaveShortcut(() => formRef.current?.requestSubmit(), isDirty && !saving);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const openingsValue = parseOptionalNumber(openings);
+    if (openingsValue == null || openingsValue < 1) {
+      toast.error('Openings must be at least 1');
+      return;
+    }
+
     const data: UpdateJobOrderDto = {
       clientId,
       jobTitleId: jobTitleId || undefined,
@@ -192,66 +271,50 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
       otherDocumentsUrl: otherDocumentsUrl || undefined,
       status,
       quality,
+      salaryMin: parseOptionalNumber(salaryMin),
+      salaryMax: parseOptionalNumber(salaryMax),
+      salaryCurrency: salaryCurrency.trim() || undefined,
+      openings: openingsValue,
     };
-    updateJobOrder.mutate({ id: jobOrder.id, data });
+
+    setSaving(true);
+    try {
+      await updateJobOrder.mutateAsync({ id: jobOrder.id, data });
+      if (stakeholdersDirty || clientId !== jobOrder.clientId) {
+        await setJobOrderKeyStakeholdersRequest(jobOrder.id, {
+          stakeholderIds: keyStakeholderIds,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: getGetJobOrdersQueryKey() });
+      queryClient.invalidateQueries({ queryKey: getGetJobOrderQueryKey(jobOrder.id) });
+      toast.success(`Saved changes to ${jobOrder.jobTitle ?? 'this job order'}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save job order');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <PageLayout className="overflow-auto">
       <div className="flex flex-col gap-4 border-b border-border pb-5">
-        <Button
-          variant="ghost"
-          size="sm"
-          nativeButton={false}
-          render={<Link href="/job-orders" />}
-          className="-ml-2 self-start text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft />
-          Back to Job Orders
-        </Button>
-
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <Briefcase className="size-6" />
-            </span>
-            <div className="flex flex-col gap-1.5">
-              <h1 className="font-heading text-2xl font-semibold tracking-tight">{selectedJobTitle}</h1>
-              {/* Click-to-edit pills, on the subheading line beside the
-                  displayId rather than crowding the title. Like
-                  `selectedJobTitle` above, they show the in-progress value and
-                  are committed by "Save changes" with everything else on the
-                  page — deliberately not save-on-select, so one page doesn't
-                  mix two save models and the unsaved-changes guard stays
-                  honest. flex-wrap: three pills plus the id overflow a narrow
-                  viewport, and this row shouldn't push the Save button off. */}
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-xs text-muted-foreground">{jobOrder.displayId}</span>
-                <EnumSelect
-                  value={status}
-                  onValueChange={(v) => setStatus(v as JobOrderStatus)}
-                  options={statusOptions}
-                  disabled={updateJobOrder.isPending}
-                  size="badge"
-                  className="w-fit"
-                />
-                <EnumSelect
-                  value={quality}
-                  onValueChange={(v) => setQuality(v as JobOrderQuality)}
-                  options={qualityPillOptions}
-                  disabled={updateJobOrder.isPending}
-                  size="badge"
-                  className="w-fit"
-                />
-              </div>
-            </div>
-          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            nativeButton={false}
+            render={<Link href="/job-orders" />}
+            className="-ml-2 self-start text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft />
+            Back to Job Orders
+          </Button>
           <div className="flex items-center gap-3">
-            {isDirty && !updateJobOrder.isPending ? (
+            {isDirty && !saving ? (
               <span className="text-xs text-muted-foreground">Unsaved changes</span>
             ) : null}
-            <Button type="submit" form="job-order-form" size="lg" disabled={updateJobOrder.isPending || !isDirty}>
-              {updateJobOrder.isPending ? (
+            <Button type="submit" form="job-order-form" size="lg" disabled={saving || !isDirty}>
+              {saving ? (
                 'Saving…'
               ) : (
                 <>
@@ -282,12 +345,7 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
       >
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <JobOrderPipelineCard
-              jobOrder={jobOrder}
-              clientIndustryId={client?.industryId}
-              clientIndustry={client?.industry}
-            />
-          </div>
+            <JobOrderPipelineCard jobOrder={jobOrder} />          </div>
 
           <Card size="sm">
             <CardHeader className="border-b">
@@ -297,6 +355,26 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
+              <FormField label="Company" htmlFor="clientId" required orientation="horizontal">
+                <div className="flex items-center gap-1.5">
+                  <ClientCombobox
+                    id="clientId"
+                    value={clientId}
+                    onValueChange={setClientId}
+                    selectedLabel={clientId === jobOrder.clientId ? client?.companyName : undefined}
+                    disabled={saving}
+                    className="flex-1"
+                  />
+                  <Link
+                    href={`/companies/${clientId}?from=job-order&jobOrderId=${jobOrder.id}&jobOrderTitle=${encodeURIComponent(jobOrder.jobTitle ?? '')}`}
+                    aria-label="View company page"
+                    title="View company page"
+                    className="flex shrink-0 items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <ArrowUpRight className="size-4" />
+                  </Link>
+                </div>
+              </FormField>
               <FormField label="Role" htmlFor="jobTitle" orientation="horizontal">
                 <CreatableCombobox
                   id="jobTitle"
@@ -308,64 +386,112 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
                   selectedLabel={selectedJobTitleLabel}
                   onCreate={handleCreateJobTitle}
                   placeholder="e.g. Production Manager"
-                  disabled={updateJobOrder.isPending}
+                  disabled={saving}
                 />
               </FormField>
-              <FormField label="Company" htmlFor="clientId" required orientation="horizontal">
-                <div className="flex items-center gap-1.5">
-                  <ClientCombobox
-                    id="clientId"
-                    value={clientId}
-                    onValueChange={setClientId}
-                    selectedLabel={client?.companyName}
-                    disabled={updateJobOrder.isPending}
-                    className="flex-1"
+              <FormField label="Role Status" htmlFor="status" orientation="horizontal">
+                <EnumSelect
+                  id="status"
+                  value={status}
+                  onValueChange={(v) => setStatus(v as JobOrderStatus)}
+                  options={statusOptions}
+                  disabled={saving}
+                  size="badge"
+                  className="w-fit"
+                />
+              </FormField>
+              <FormField label="Quality" htmlFor="quality" orientation="horizontal">
+                <EnumSelect
+                  id="quality"
+                  value={quality}
+                  onValueChange={(v) => setQuality(v as JobOrderQuality)}
+                  options={qualityPillOptions}
+                  disabled={saving}
+                  size="badge"
+                  className="w-fit"
+                />
+              </FormField>
+              <FormField label="Salary" htmlFor="salaryMin" orientation="horizontal">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Input
+                    id="salaryMin"
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="Min"
+                    value={salaryMin}
+                    onChange={(e) => setSalaryMin(e.target.value)}
+                    disabled={saving}
+                    className="w-24"
                   />
-                  <Link
-                    href={`/companies/${jobOrder.clientId}?from=job-order&jobOrderId=${jobOrder.id}&jobOrderTitle=${encodeURIComponent(jobOrder.jobTitle ?? '')}`}
-                    aria-label="View company page"
-                    title="View company page"
-                    className="flex shrink-0 items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-                  >
-                    <ArrowUpRight className="size-4" />
-                  </Link>
+                  <span className="text-muted-foreground">–</span>
+                  <Input
+                    id="salaryMax"
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="Max"
+                    value={salaryMax}
+                    onChange={(e) => setSalaryMax(e.target.value)}
+                    disabled={saving}
+                    className="w-24"
+                    aria-label="Salary max"
+                  />
+                  <Input
+                    id="salaryCurrency"
+                    placeholder="AUD"
+                    value={salaryCurrency}
+                    onChange={(e) => setSalaryCurrency(e.target.value)}
+                    disabled={saving}
+                    className="w-16"
+                    aria-label="Salary currency"
+                  />
                 </div>
               </FormField>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">Salary</span>
-                <span className="font-medium">
-                  {formatSalary(jobOrder.salaryMin, jobOrder.salaryMax, jobOrder.salaryCurrency)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">Opening</span>
-                <span className="font-medium">
-                  {jobOrder.openings}
-                  <span className="ml-1 text-xs text-muted-foreground">({jobOrder.filledCount} filled)</span>
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">Key Stakeholder</span>
-                {jobOrder.keyStakeholderId ? (
-                  <Link
-                    href={`/stakeholders/${jobOrder.keyStakeholderId}`}
-                    className="font-medium underline hover:font-semibold"
-                  >
-                    {jobOrder.keyStakeholderName}
-                  </Link>
-                ) : (
-                  <span className="font-medium text-muted-foreground">—</span>
-                )}
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">Stakeholder Contact</span>
-                <ContactIconRow
-                  email={jobOrder.keyStakeholderEmail}
-                  mobile={jobOrder.keyStakeholderMobile}
-                  linkedinUrl={jobOrder.keyStakeholderLinkedinUrl}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-2">
+              <FormField label="Opening" htmlFor="openings" orientation="horizontal">
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="openings"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    value={openings}
+                    onChange={(e) => setOpenings(e.target.value)}
+                    disabled={saving}
+                    className="w-20"
+                  />
+                  <span className="text-xs text-muted-foreground">({jobOrder.filledCount} filled)</span>
+                </div>
+              </FormField>
+              <FormField label="Key Stakeholders" htmlFor="keyStakeholders" orientation="horizontal">
+                <div className="flex w-full flex-col gap-2">
+                  <TagMultiSelect
+                    title="Key Stakeholders"
+                    options={stakeholderOptions}
+                    selected={keyStakeholderIds}
+                    onChange={setKeyStakeholderIds}
+                    disabled={saving || !clientId}
+                    fullCellHitArea={false}
+                  />
+                  {selectedStakeholderMeta.length > 0 ? (
+                    <ul className="flex flex-col gap-1.5" id="keyStakeholders">
+                      {selectedStakeholderMeta.map((s) => (
+                        <li key={s.id} className="flex items-center justify-between gap-2">
+                          <Link
+                            href={`/stakeholders/${s.id}`}
+                            className="truncate font-medium underline hover:font-semibold"
+                          >
+                            {s.name}
+                          </Link>
+                          <ContactIconRow
+                            email={s.email}
+                            mobile={s.mobile}
+                            linkedinUrl={s.linkedinUrl}
+                          />
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              </FormField>              <div className="flex items-center justify-between gap-2">
                 <span className="text-muted-foreground">Created Date</span>
                 <span className="font-medium">{shortDateFormatter.format(new Date(jobOrder.createdAt))}</span>
               </div>
