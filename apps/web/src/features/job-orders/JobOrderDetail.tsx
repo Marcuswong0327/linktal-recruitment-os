@@ -34,6 +34,7 @@ import { useIsMac } from '@/hooks/use-is-mac';
 import { blockImplicitEnterSubmit, useSaveShortcut } from '@/hooks/use-save-shortcut';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { useGetClient } from '@/lib/api/generated/clients/clients';
+import { useGetLocations } from '@/lib/api/generated/locations/locations';
 import {
   getGetJobOrderQueryKey,
   getGetJobOrdersQueryKey,
@@ -45,7 +46,7 @@ import { useCreateJobTitle } from '@/lib/api/generated/job-titles/job-titles';
 import { useGetStakeholders } from '@/lib/api/generated/stakeholders/stakeholders';
 import { useJobTitleOptions } from '@/hooks/use-catalog-options';
 import { useUploadJobOrderFile } from '@/lib/api/generated/uploads/uploads';
-import type { UpdateJobOrderDto } from '@/lib/api/generated/types';
+import type { LocationEntity, UpdateJobOrderDto } from '@/lib/api/generated/types';
 import {
   type JobOrder,
   type JobOrderQuality,
@@ -59,6 +60,27 @@ const textareaClass =
 
 const shortDateFormatter = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
+/** Country id for a location node — `ancestorIds` is self + parents, root-last. */
+function countryIdForLocation(loc: LocationEntity): string {
+  return loc.ancestorIds.at(-1) ?? loc.id;
+}
+
+/**
+ * Unique COUNTRY ids covering the company's city coverage / countries.
+ * Missing catalog rows are skipped; empty input → empty (no filter).
+ */
+function countryIdsFromClientLocations(
+  locationIds: string[],
+  byId: Map<string, LocationEntity>,
+): string[] {
+  const countries = new Set<string>();
+  for (const id of locationIds) {
+    const loc = byId.get(id);
+    if (!loc) continue;
+    countries.add(countryIdForLocation(loc));
+  }
+  return [...countries];
+}
 function parseOptionalNumber(raw: string): number | undefined {
   const trimmed = raw.trim();
   if (!trimmed) return undefined;
@@ -109,12 +131,6 @@ export function JobOrderDetail({ id }: { id: string }) {
 function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
   const queryClient = useQueryClient();
 
-  // Only fetched for its industryId (not otherwise on JobOrderEntity, which
-  // strips it back out — see job-orders.service.ts's toEntity) — feeds the
-  // pipeline table's non-blocking industry-mismatch warning on submit.
-  const { data: clientData } = useGetClient(jobOrder.clientId);
-  const client = clientData?.status === 200 ? clientData.data : undefined;
-
   // Server-searched: the catalog is far larger than one page, so a pre-fetched
   // slice can't offer most of it (see useJobTitleOptions).
   const jobTitleSearch = useJobTitleOptions();
@@ -138,6 +154,26 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
     jobTitleSearch.options.find((jt) => jt.id === jobTitleId)?.name ??
     (jobTitleId === jobOrder.jobTitleId ? (jobOrder.jobTitle ?? undefined) : undefined);
   const [clientId, setClientId] = React.useState(jobOrder.clientId);
+
+  // Tracks the Information panel company (including unsaved changes) so the
+  // Submit Candidate picker filters by that company's city coverage countries.
+  const { data: clientData } = useGetClient(clientId, {
+    query: { enabled: Boolean(clientId) },
+  });
+  const client = clientData?.status === 200 ? clientData.data : undefined;
+
+  // Small catalog (~countries + city coverages) — one page is enough to resolve
+  // client locationIds → COUNTRY ids for the candidate picker.
+  const { data: locationsData } = useGetLocations({ take: 100 });
+  const locationsById = React.useMemo(() => {
+    const rows: LocationEntity[] = locationsData?.status === 200 ? locationsData.data : [];
+    return new Map(rows.map((l) => [l.id, l]));
+  }, [locationsData]);
+  const candidateLocationIds = React.useMemo(
+    () => countryIdsFromClientLocations(client?.locationIds ?? [], locationsById),
+    [client?.locationIds, locationsById],
+  );
+
   const [status, setStatus] = React.useState<JobOrderStatus>(jobOrder.status);
   const [quality, setQuality] = React.useState<JobOrderQuality>(jobOrder.quality);
   const [salaryMin, setSalaryMin] = React.useState(
@@ -345,7 +381,11 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
       >
         <div className="grid gap-5 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <JobOrderPipelineCard jobOrder={jobOrder} />          </div>
+            <JobOrderPipelineCard
+              jobOrder={jobOrder}
+              candidateLocationIds={candidateLocationIds}
+            />
+          </div>
 
           <Card size="sm">
             <CardHeader className="border-b">

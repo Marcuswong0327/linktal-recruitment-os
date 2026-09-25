@@ -341,8 +341,14 @@ function PipelineRow({
  */
 export function JobOrderPipelineCard({
   jobOrder,
+  candidateLocationIds,
 }: {
   jobOrder: JobOrderEntity;
+  /**
+   * Country location ids derived from the company's city coverage — narrows
+   * the Submit Candidate picker. Empty/omitted = no location filter.
+   */
+  candidateLocationIds?: string[];
 }) {
   const queryClient = useQueryClient();
 
@@ -532,6 +538,7 @@ export function JobOrderPipelineCard({
                 value={pickedCandidate}
                 onChange={setPickedCandidate}
                 disabledIds={submittedCandidateIds}
+                locationIds={candidateLocationIds}
               />
               <Button
                 type="button"
