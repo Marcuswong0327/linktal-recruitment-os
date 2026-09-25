@@ -115,7 +115,9 @@ export function useJobOrderNewRow({
         placeholder="Quality"
       />
     ),
-    clientId: (
+    // Column id is `client` (see columns.tsx) — DataGrid looks up editors by
+    // column.id, so this must match or the Client cell stays empty.
+    client: (
       <GridCellClientCombobox
         value={draft.clientId}
         onValueChange={(id) => set('clientId', id)}

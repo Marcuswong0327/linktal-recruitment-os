@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { DataGrid } from '@/components/DataGrid';
 import { DataGridFacetedFilter } from '@/components/DataGridFacetedFilter';
 import { LocationFilterButton } from '@/components/LocationMultiSelect';
-import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
+import { PageLayout } from '@/components/app-shell/PageLayout';
 import { downloadFile } from '@/lib/api/fetcher';
 import {
   getExportStakeholdersByIdsUrl,
@@ -244,10 +244,9 @@ export function StakeholderEnrichmentWorkspace({
           <ArrowLeft />
           {from === 'job-opening-search' ? 'Back to Job Opening Search' : 'Back to Companies'}
         </Button>
-        <PageHeader
-          title="Stakeholder Enrichment Workspace"
-          description={`Every contact across ${clientIds.length} selected compan${clientIds.length === 1 ? 'y' : 'ies'}, grouped in the order you selected them — filter, edit, and export before reaching out.`}
-        />
+        <p className="text-sm text-muted-foreground">
+          {`Every contact across ${clientIds.length} selected compan${clientIds.length === 1 ? 'y' : 'ies'}, grouped in the order you selected them — filter, edit, and export before reaching out.`}
+        </p>
       </div>
 
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">

@@ -37,8 +37,11 @@ interface GridCellComboboxProps {
   serverSearched?: boolean;
   /** Fires as the user types (raw, undebounced) — the caller owns the search. */
   onQueryChange?: (query: string) => void;
-  /** Replaces the default empty-list copy when the query is long enough to search. */
-  emptyMessage?: string;
+  /**
+   * Replaces the default empty-list copy when the query is long enough to search.
+   * Accepts a React node so callers can include a link (e.g. "go to Companies").
+   */
+  emptyMessage?: React.ReactNode;
   /**
    * Empty the box after a pick instead of leaving the chosen name in it — for
    * a cell that collects several values, where the box is a staging area and

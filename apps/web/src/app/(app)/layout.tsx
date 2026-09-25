@@ -1,5 +1,6 @@
 import { auth } from '@/auth';
 import { AppSidebar } from '@/components/app-shell/AppSidebar';
+import { AppTopBarTitle } from '@/components/app-shell/AppTopBarTitle';
 import { CommandPaletteProvider, CommandPaletteTrigger } from '@/components/app-shell/GlobalCommandPalette';
 import { NotificationsToggle } from '@/components/app-shell/NotificationsToggle';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
@@ -32,6 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <SidebarInset className="h-svh">
             <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
               <SidebarTrigger className="-ml-1" />
+              <AppTopBarTitle />
               <div className="ml-auto flex items-center gap-2">
                 <CommandPaletteTrigger />
                 <NotificationsToggle />
