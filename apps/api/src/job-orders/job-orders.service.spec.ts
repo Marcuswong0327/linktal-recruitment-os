@@ -78,11 +78,12 @@ describe('JobOrdersService.create', () => {
 
     await service.create(
       { clientId: 'cl1', jobTitleId: 'jt-1', consultantIds: ['c1', 'c2'] },
-      makeUser(),
+      makeUser({ consultantId: 'actor-1' }),
     );
 
+    expect(create.mock.calls[0][0].data.ownerConsultantId).toBe('actor-1');
     expect(create.mock.calls[0][0].data.consultants).toEqual({
-      create: [{ consultantId: 'c1' }, { consultantId: 'c2' }],
+      create: [{ consultantId: 'c1' }, { consultantId: 'c2' }, { consultantId: 'actor-1' }],
     });
     expect(create.mock.calls[0][0].data).not.toHaveProperty('consultantIds');
   });
@@ -94,6 +95,7 @@ describe('JobOrdersService.create', () => {
 
     await service.create({ clientId: 'cl1', jobTitleId: 'jt-1' }, makeUser({ consultantId: 'actor-1' }));
 
+    expect(create.mock.calls[0][0].data.ownerConsultantId).toBe('actor-1');
     expect(create.mock.calls[0][0].data.consultants).toEqual({
       create: [{ consultantId: 'actor-1' }],
     });
@@ -398,10 +400,11 @@ describe('JobOrdersService.setConsultants', () => {
   function makeService(
     current: { consultantId: string }[] = [],
     consultantRows: { id: string; isActive: boolean }[] = [],
+    ownerConsultantId: string | null = null,
   ) {
     const jobOrderConsultantDelete = jest.fn().mockResolvedValue({});
     const jobOrderConsultantCreate = jest.fn().mockResolvedValue({});
-    const findUnique = jest.fn().mockResolvedValue(withRelations({ id: 'j1' }));
+    const findUnique = jest.fn().mockResolvedValue(withRelations({ id: 'j1', ownerConsultantId }));
     const prisma = {
       jobOrder: { findUnique },
       jobOrderConsultant: {
@@ -494,6 +497,35 @@ describe('JobOrdersService.setConsultants', () => {
     const { service, jobOrderConsultantCreate } = makeService([], [{ id: 'c1', isActive: true }]);
     await service.setConsultants('j1', ['c1', 'c1'], makeUser());
     expect(jobOrderConsultantCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the owner when the client omits them from the replace set', async () => {
+    const { service, jobOrderConsultantCreate, jobOrderConsultantDelete } = makeService(
+      [{ consultantId: 'owner-1' }, { consultantId: 'c2' }],
+      [{ id: 'c2', isActive: true }, { id: 'owner-1', isActive: true }],
+      'owner-1',
+    );
+    await service.setConsultants('j1', ['c2'], makeUser());
+
+    expect(jobOrderConsultantDelete).not.toHaveBeenCalled();
+    expect(jobOrderConsultantCreate).not.toHaveBeenCalled();
+  });
+
+  it('can remove a non-owner while keeping the owner', async () => {
+    const { service, jobOrderConsultantCreate, jobOrderConsultantDelete } = makeService(
+      [{ consultantId: 'owner-1' }, { consultantId: 'c2' }],
+      [{ id: 'owner-1', isActive: true }],
+      'owner-1',
+    );
+    await service.setConsultants('j1', [], makeUser());
+
+    expect(jobOrderConsultantDelete).toHaveBeenCalledWith({
+      where: { jobOrderId_consultantId: { jobOrderId: 'j1', consultantId: 'c2' } },
+    });
+    expect(jobOrderConsultantDelete).not.toHaveBeenCalledWith({
+      where: { jobOrderId_consultantId: { jobOrderId: 'j1', consultantId: 'owner-1' } },
+    });
+    expect(jobOrderConsultantCreate).not.toHaveBeenCalled();
   });
 });
 

@@ -95,6 +95,8 @@ export interface CompanyAppliedFilters {
   specializationIds?: string[];
   /** Country + City selections merged — the API resolves any level through the location tree's ancestor path. */
   locationIds?: string[];
+  /** Assigned-to filter — matches ClientConsultant OR job-order consultants for this company. */
+  consultantIds?: string[];
   sortBy?: GetClientsSortBy;
   sortOrder?: GetClientsSortOrder;
 }

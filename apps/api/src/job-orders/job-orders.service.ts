@@ -481,11 +481,17 @@ export class JobOrdersService {
 
   async create(dto: CreateJobOrderDto, user: AuthUser) {
     const { consultantIds, ...rest } = dto;
-    // When the client omits assignees (new-row UI always sends the signed-in
-    // user, but API/import callers may not), default to the actor so a fresh
-    // job order isn't orphaned with an empty consultant list.
-    const assigneeIds =
-      consultantIds && consultantIds.length > 0 ? consultantIds : [user.consultantId];
+    // Owner is always the creating actor. Assignees default to the owner when
+    // the client omits them; when they pass an explicit list, the owner is
+    // still forced onto the join so the locked chip has a row from day one.
+    const ownerConsultantId = user.consultantId;
+    const assigneeIds = Array.from(
+      new Set(
+        consultantIds && consultantIds.length > 0
+          ? [...consultantIds, ownerConsultantId]
+          : [ownerConsultantId],
+      ),
+    );
     // displayId is assigned by the DB (JobOrder_displayId_seq default). A
     // brand-new job order has no submissions yet, but still runs through
     // toEntity so the response shape (pipelineSubmissions: []) matches every
@@ -493,6 +499,7 @@ export class JobOrdersService {
     const jobOrder = await this.prisma.jobOrder.create({
       data: {
         ...rest,
+        ownerConsultantId,
         consultants: { create: assigneeIds.map((consultantId) => ({ consultantId })) },
       },
       include: JOB_ORDER_INCLUDE,
@@ -544,26 +551,31 @@ export class JobOrdersService {
    * can be on the same job order at once.
    */
   async setConsultants(id: string, consultantIds: string[], actor: AuthUser) {
-    const jobOrder = await this.prisma.jobOrder.findUnique({ where: { id }, select: { id: true } });
+    const jobOrder = await this.prisma.jobOrder.findUnique({
+      where: { id },
+      select: { id: true, ownerConsultantId: true },
+    });
     if (!jobOrder) {
       throw new NotFoundException(`Job order ${id} not found`);
     }
 
-    const uniqueIds = Array.from(new Set(consultantIds));
-    if (uniqueIds.length > 0) {
+    // Owner is non-removable: re-insert after validating the client's list so
+    // a legacy/inactive owner doesn't fail INACTIVE_CONSULTANT on every edit.
+    const requestedIds = Array.from(new Set(consultantIds));
+    if (requestedIds.length > 0) {
       const consultants = await this.prisma.consultant.findMany({
-        where: { id: { in: uniqueIds } },
+        where: { id: { in: requestedIds } },
         select: { id: true, isActive: true },
       });
       const found = new Map(consultants.map((c) => [c.id, c.isActive]));
-      const missing = uniqueIds.filter((v) => !found.has(v));
+      const missing = requestedIds.filter((v) => !found.has(v));
       if (missing.length > 0) {
         throw new BadRequestException({
           code: 'INVALID_CONSULTANT',
           message: `Unknown consultant id(s): ${missing.join(', ')}`,
         });
       }
-      const inactive = uniqueIds.filter((v) => found.get(v) === false);
+      const inactive = requestedIds.filter((v) => found.get(v) === false);
       if (inactive.length > 0) {
         throw new BadRequestException({
           code: 'INACTIVE_CONSULTANT',
@@ -571,6 +583,14 @@ export class JobOrdersService {
         });
       }
     }
+
+    const uniqueIds = Array.from(
+      new Set(
+        jobOrder.ownerConsultantId
+          ? [...requestedIds, jobOrder.ownerConsultantId]
+          : requestedIds,
+      ),
+    );
 
     const current = await this.prisma.jobOrderConsultant.findMany({
       where: { jobOrderId: id },

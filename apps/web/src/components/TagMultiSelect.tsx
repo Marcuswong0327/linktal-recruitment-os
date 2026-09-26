@@ -116,6 +116,12 @@ interface TagMultiSelectProps {
    * existing grid columns keep full-cell hit targets.
    */
   fullCellHitArea?: boolean;
+  /**
+   * Values that cannot be removed from the selection (no chip X; re-merged
+   * if a value-change would drop them). Used e.g. for Job Order owner
+   * consultants on Company detail.
+   */
+  lockedValues?: string[];
 }
 
 /**
@@ -138,7 +144,10 @@ export function TagMultiSelect({
   onCreate,
   tagActions,
   fullCellHitArea = true,
+  lockedValues = [],
 }: TagMultiSelectProps) {
+  const lockedSet = React.useMemo(() => new Set(lockedValues), [lockedValues]);
+
   // Rows created through this picker before `options`/`selectableOptions`
   // (owned by the caller's own query) has refetched to include them — merged
   // in so the new tag renders with its real name immediately instead of a
@@ -177,7 +186,15 @@ export function TagMultiSelect({
       ? [...filtered.map((o) => o.value), CREATE_SENTINEL]
       : filtered.map((o) => o.value);
 
+  function withLocked(next: string[]) {
+    if (lockedSet.size === 0) return next;
+    const merged = new Set(next);
+    for (const id of lockedSet) merged.add(id);
+    return Array.from(merged);
+  }
+
   function remove(value: string) {
+    if (lockedSet.has(value)) return;
     onChange(selected.filter((v) => v !== value));
   }
 
@@ -189,7 +206,7 @@ export function TagMultiSelect({
       try {
         const created = await onCreate(name);
         setJustCreated((prev) => [...prev, created]);
-        onChange([...selected.filter((v) => v !== CREATE_SENTINEL), created.value]);
+        onChange(withLocked([...selected.filter((v) => v !== CREATE_SENTINEL), created.value]));
         setInputValue('');
       } catch {
         // Caller's own mutation already surfaces the error (toast); just
@@ -199,7 +216,7 @@ export function TagMultiSelect({
       }
       return;
     }
-    onChange(next);
+    onChange(withLocked(next));
   }
 
   return (
@@ -282,7 +299,7 @@ export function TagMultiSelect({
               )}
             >
               {option.label}
-              {!disabled ? (
+              {!disabled && !lockedSet.has(value) ? (
                 // A <button> here would nest inside Combobox.Trigger's own
                 // <button> — invalid HTML. The browser silently auto-closes
                 // the outer button as soon as it parses the inner one, so the

@@ -36,6 +36,7 @@ import type {
   ImportClientsBody,
   ImportResultEntity,
   PaginatedClientsEntity,
+  SetClientConsultantsDto,
   UpdateClientDto
 } from '../types';
 
@@ -89,7 +90,7 @@ export const getGetClientsUrl = (params?: GetClientsParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["statuses","industryIds","specializationIds","locationIds","qualities"];
+    const explodeParameters = ["statuses","industryIds","specializationIds","locationIds","consultantIds","qualities"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
@@ -451,7 +452,7 @@ export const getExportClientsUrl = (params?: ExportClientsParams,) => {
   const normalizedParams = new URLSearchParams();
 
   Object.entries(params || {}).forEach(([key, value]) => {
-    const explodeParameters = ["statuses","industryIds","specializationIds","locationIds","qualities"];
+    const explodeParameters = ["statuses","industryIds","specializationIds","locationIds","consultantIds","qualities"];
 
     if (Array.isArray(value) && explodeParameters.includes(key)) {
       value.forEach((v) => {
@@ -1206,6 +1207,106 @@ export const useDeleteClient = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getDeleteClientMutationOptions(options), queryClient);
+    }
+    export type setClientConsultantsResponse200 = {
+  data: ClientEntity
+  status: 200
+}
+
+export type setClientConsultantsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type setClientConsultantsResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type setClientConsultantsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type setClientConsultantsResponseSuccess = (setClientConsultantsResponse200) & {
+  headers: Headers;
+};
+export type setClientConsultantsResponseError = (setClientConsultantsResponse400 | setClientConsultantsResponse404 | setClientConsultantsResponse500) & {
+  headers: Headers;
+};
+
+export type setClientConsultantsResponse = (setClientConsultantsResponseSuccess | setClientConsultantsResponseError)
+
+export const getSetClientConsultantsUrl = (id: string,) => {
+
+
+
+
+  return `/clients/${id}/consultants`
+}
+
+/**
+ * @summary Replace the set of consultants manually assigned to this company (ClientConsultant)
+ */
+export const setClientConsultants = async (id: string,
+    setClientConsultantsDto: SetClientConsultantsDto, options?: RequestInit): Promise<setClientConsultantsResponse> => {
+
+  return customFetch<setClientConsultantsResponse>(getSetClientConsultantsUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setClientConsultantsDto)
+  }
+);}
+
+
+
+
+
+export const getSetClientConsultantsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setClientConsultants>>, TError,{id: string;data: SetClientConsultantsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setClientConsultants>>, TError,{id: string;data: SetClientConsultantsDto}, TContext> => {
+
+const mutationKey = ['setClientConsultants'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setClientConsultants>>, {id: string;data: SetClientConsultantsDto}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setClientConsultants(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetClientConsultantsMutationResult = NonNullable<Awaited<ReturnType<typeof setClientConsultants>>>
+    export type SetClientConsultantsMutationBody = SetClientConsultantsDto
+    export type SetClientConsultantsMutationError = ErrorResponse
+
+    /**
+ * @summary Replace the set of consultants manually assigned to this company (ClientConsultant)
+ */
+export const useSetClientConsultants = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setClientConsultants>>, TError,{id: string;data: SetClientConsultantsDto}, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof setClientConsultants>>,
+        TError,
+        {id: string;data: SetClientConsultantsDto},
+        TContext
+      > => {
+      return useMutation(getSetClientConsultantsMutationOptions(options), queryClient);
     }
     export type getClientContactHistoryResponse200 = {
   data: ClientContactHistoryEntity[]

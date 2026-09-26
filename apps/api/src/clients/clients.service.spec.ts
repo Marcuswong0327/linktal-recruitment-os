@@ -30,7 +30,7 @@ function makeDto(overrides: Partial<CreateClientDto> = {}): CreateClientDto {
 
 /** The relation keys CLIENT_INCLUDE pulls in — `toEntity` destructures all of them. */
 function withRelations(row: Record<string, unknown> = {}) {
-  return { industry: null, specializations: [], locations: [], stakeholders: [], ...row };
+  return { industry: null, specializations: [], locations: [], consultants: [], stakeholders: [], ...row };
 }
 
 /** A location node as CLIENT_INCLUDE returns it, on the client's own market set. */
@@ -66,6 +66,7 @@ describe('ClientsService.create', () => {
       specializationIds: [],
       locations: [],
       locationIds: [],
+      consultants: [],
       lastContactType: null,
       lastContactCategory: null,
       lastContactNotes: null,
@@ -382,5 +383,79 @@ describe('ClientsService.findOne', () => {
     await expect(
       service.findOne('missing', makeUser({ roleName: 'consultant' })),
     ).rejects.toThrow('Client missing not found');
+  });
+});
+
+describe('ClientsService.findAll consultantIds', () => {
+  it('matches via ClientConsultant OR job-order consultants', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const count = jest.fn().mockResolvedValue(0);
+    const prisma = { client: { findMany, count } } as unknown as ExtendedPrismaClient;
+    const service = new ClientsService(prisma, {} as unknown as PrismaService);
+
+    await service.findAll({ ...baseQuery, consultantIds: ['c1', 'c2'] }, makeUser());
+
+    const where = findMany.mock.calls[0][0].where;
+    expect(where.AND).toEqual(
+      expect.arrayContaining([
+        {
+          OR: [
+            { consultants: { some: { consultantId: { in: ['c1', 'c2'] } } } },
+            {
+              jobOrders: {
+                some: { consultants: { some: { consultantId: { in: ['c1', 'c2'] } } } },
+              },
+            },
+          ],
+        },
+      ]),
+    );
+  });
+});
+
+describe('ClientsService.setConsultants', () => {
+  it('diffs create/delete against the current ClientConsultant set', async () => {
+    const findUnique = jest
+      .fn()
+      .mockResolvedValueOnce(withRelations({ id: 'cl1' })) // findOne gate
+      .mockResolvedValueOnce(
+        withRelations({
+          id: 'cl1',
+          consultants: [{ consultantId: 'c1', consultant: { fullName: 'Ada' } }],
+        }),
+      ); // return after replace
+    const findManyConsultants = jest.fn().mockResolvedValue([
+      { id: 'c1', isActive: true },
+      { id: 'c2', isActive: true },
+    ]);
+    const findManyJoins = jest.fn().mockResolvedValue([{ consultantId: 'c1' }]);
+    const create = jest.fn().mockResolvedValue({});
+    const del = jest.fn().mockResolvedValue({});
+    const prisma = {
+      client: { findUnique },
+      consultant: { findMany: findManyConsultants },
+      clientConsultant: { findMany: findManyJoins, create, delete: del },
+    } as unknown as ExtendedPrismaClient;
+    const service = new ClientsService(prisma, {} as unknown as PrismaService);
+
+    await service.setConsultants('cl1', ['c2'], makeUser());
+
+    expect(del).toHaveBeenCalledWith({
+      where: { clientId_consultantId: { clientId: 'cl1', consultantId: 'c1' } },
+    });
+    expect(create).toHaveBeenCalledWith({ data: { clientId: 'cl1', consultantId: 'c2' } });
+  });
+
+  it('rejects unknown consultant ids', async () => {
+    const findUnique = jest.fn().mockResolvedValue(withRelations({ id: 'cl1' }));
+    const prisma = {
+      client: { findUnique },
+      consultant: { findMany: jest.fn().mockResolvedValue([]) },
+    } as unknown as ExtendedPrismaClient;
+    const service = new ClientsService(prisma, {} as unknown as PrismaService);
+
+    await expect(service.setConsultants('cl1', ['missing'], makeUser())).rejects.toMatchObject({
+      response: { code: 'INVALID_CONSULTANT' },
+    });
   });
 });

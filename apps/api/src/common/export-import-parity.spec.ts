@@ -91,6 +91,7 @@ describe('export -> import column parity', () => {
       generalDescription: null,
       lastContactedAt: null,
       stakeholders: [],
+      consultants: [],
     };
     const prisma = { client: { findMany: jest.fn().mockResolvedValue([client]) } } as unknown as ConstructorParameters<typeof ClientsService>[0];
     const base = {

@@ -28,6 +28,11 @@ export interface JobOrderEntity {
   clientDisplayId: string | null;
   /** Consultants working this job order — several can work it concurrently (see PUT /job-orders/:id/consultants) */
   consultants: JobOrderConsultantEntity[];
+  /**
+     * Consultant who owns this job order (creator). Always kept on consultants — cannot be removed via PUT …/consultants. Null only on legacy rows.
+     * @nullable
+     */
+  ownerConsultantId: string | null;
   /** @nullable */
   jobTitleId: string | null;
   /**

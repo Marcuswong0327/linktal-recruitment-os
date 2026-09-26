@@ -2700,6 +2700,18 @@
             }
           },
           {
+            "name": "consultantIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by assigned consultant ID(s) — matches companies where any of these consultants are on ClientConsultant OR on a job order for that company.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
             "name": "qualities",
             "required": false,
             "in": "query",
@@ -3006,6 +3018,18 @@
             "required": false,
             "in": "query",
             "description": "Filter by Location id(s). Selecting a country or state matches every client whose market sits beneath it, via the ancestor path.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "consultantIds",
+            "required": false,
+            "in": "query",
+            "description": "Filter by assigned consultant ID(s) — matches companies where any of these consultants are on ClientConsultant OR on a job order for that company.",
             "schema": {
               "type": "array",
               "items": {
@@ -3435,6 +3459,82 @@
           }
         ],
         "summary": "Soft-delete a client (recoverable, cascades)",
+        "tags": [
+          "Clients"
+        ]
+      }
+    },
+    "/clients/{id}/consultants": {
+      "put": {
+        "operationId": "setClientConsultants",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetClientConsultantsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Client with updated consultants",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientEntity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Replace the set of consultants manually assigned to this company (ClientConsultant)",
         "tags": [
           "Clients"
         ]
@@ -13174,6 +13274,21 @@
           "count"
         ]
       },
+      "ClientConsultantEntity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
       "ClientEntity": {
         "type": "object",
         "properties": {
@@ -13297,6 +13412,13 @@
             "nullable": true,
             "description": "Resolved name of the consultant who made the most recent contact, across all stakeholders"
           },
+          "consultants": {
+            "description": "Manual Assigned-to consultants (ClientConsultant) — not job-order assignees",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientConsultantEntity"
+            }
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -13329,6 +13451,7 @@
           "lastContactCategory",
           "lastContactNotes",
           "lastContactedBy",
+          "consultants",
           "createdAt",
           "updatedAt"
         ]
@@ -13521,6 +13644,21 @@
             "example": "MEDIUM"
           }
         }
+      },
+      "SetClientConsultantsDto": {
+        "type": "object",
+        "properties": {
+          "consultantIds": {
+            "description": "Consultant IDs assigned to this company — replaces the whole ClientConsultant set",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "consultantIds"
+        ]
       },
       "ClientContactHistoryEntity": {
         "type": "object",
@@ -14442,6 +14580,11 @@
               "$ref": "#/components/schemas/JobOrderConsultantEntity"
             }
           },
+          "ownerConsultantId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Consultant who owns this job order (creator). Always kept on consultants — cannot be removed via PUT …/consultants. Null only on legacy rows."
+          },
           "jobTitleId": {
             "type": "string",
             "nullable": true
@@ -14609,6 +14752,7 @@
           "clientName",
           "clientDisplayId",
           "consultants",
+          "ownerConsultantId",
           "jobTitleId",
           "jobTitle",
           "jobRoleTypeId",

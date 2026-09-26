@@ -89,6 +89,13 @@ export class JobOrderEntity implements Omit<JobOrder, 'deletedAt' | 'deletedById
     description: 'Consultants working this job order — several can work it concurrently (see PUT /job-orders/:id/consultants)',
   })
   consultants!: JobOrderConsultantEntity[];
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Consultant who owns this job order (creator). Always kept on consultants — cannot be removed via PUT …/consultants. Null only on legacy rows.',
+  })
+  ownerConsultantId!: string | null;
   @ApiProperty({ type: String, nullable: true }) jobTitleId!: string | null;
   @ApiProperty({
     type: String,
