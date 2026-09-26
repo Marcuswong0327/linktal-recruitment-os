@@ -219,6 +219,8 @@ model Consultant {
   tobsRepresented     Tob[]
   jobResearch         ClientJobResearch[]
   jobOrderAssignments JobOrderConsultant[] // Which job orders this consultant is working — see SCOPING below and JobOrderConsultant.
+  ownedJobOrders      JobOrder[]           @relation("JobOrderOwner") // Job orders this consultant owns (creator) — see JobOrder.ownerConsultantId.
+  clientAssignments   ClientConsultant[] // Manual company assignees (Assigned-to filter) — see ClientConsultant; distinct from JO membership.
   emailTemplates      EmailTemplate[] // See the OUTREACH CAMPAIGNS section below.
   outreachCampaigns   OutreachCampaign[]
 
@@ -518,12 +520,32 @@ model Client {
   jobResearch  ClientJobResearch[]
   jobOrders    JobOrder[]
   tobs         Tob[] // Terms of Business — one-to-many: a client can have multiple TOB records over time
+  // Manual "Assigned to" assignees — distinct from JobOrderConsultant. List filter
+  // matches this OR job-order membership (see ClientsService.buildWhere).
+  consultants ClientConsultant[]
 
   @@index([status])
   @@index([deletedAt])
   @@index([industryId])
   @@index([lastContactedAt])
   @@index([quality])
+}
+
+// Many-to-many: which consultants are manually assigned to this company for
+// the Companies "Assigned to" filter / detail editor. Explicit join (same
+// audit reasoning as JobOrderConsultant). Does NOT replace RBAC scope —
+// scope stays industry/location/JO membership.
+model ClientConsultant {
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  consultantId String
+  consultant   Consultant @relation(fields: [consultantId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+
+  @@id([clientId, consultantId])
+  @@index([consultantId])
 }
 
 // Many-to-many: a client can carry several specializations (same shape as
@@ -881,6 +903,12 @@ model JobOrder {
   // Consultant).
   consultants JobOrderConsultant[]
 
+  // The consultant who created / "owns" this job order — always kept on the
+  // consultants set (cannot be removed via PUT …/consultants). Nullable only
+  // for rows that pre-date the column; new creates always set it.
+  ownerConsultantId String?
+  ownerConsultant   Consultant? @relation("JobOrderOwner", fields: [ownerConsultantId], references: [id], onDelete: SetNull)
+
   // Key contacts for this brief — multi-select from the parent client's
   // stakeholders (see JobOrderKeyStakeholder). Replaces the old derived
   // "most recently contacted" single contact on the entity.
@@ -943,6 +971,7 @@ model JobOrder {
   @@index([locationId])
   @@index([jobTitleId])
   @@index([jobRoleTypeId])
+  @@index([ownerConsultantId])
 }
 
 // Many-to-many: which consultants are working a given job order. Explicit

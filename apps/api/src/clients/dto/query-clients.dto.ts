@@ -120,6 +120,17 @@ export class QueryClientsDto {
   locationIds?: string[];
 
   @ApiPropertyOptional({
+    description:
+      'Filter by assigned consultant ID(s) — matches companies where any of these consultants are on ClientConsultant OR on a job order for that company.',
+    type: [String],
+  })
+  @IsOptional()
+  @Transform(toArray)
+  @IsArray()
+  @IsString({ each: true })
+  consultantIds?: string[];
+
+  @ApiPropertyOptional({
     description: 'Filter by lead quality (one or more). Omit for all qualities.',
     enum: ClientQuality,
     isArray: true,

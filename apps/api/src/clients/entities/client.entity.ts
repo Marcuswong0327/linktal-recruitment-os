@@ -89,6 +89,17 @@ export class ClientEntity implements Omit<Client, 'deletedAt' | 'deletedById'> {
   lastContactNotes!: string | null;
   @ApiProperty({ type: String, nullable: true, description: 'Resolved name of the consultant who made the most recent contact, across all stakeholders' })
   lastContactedBy!: string | null;
+  @ApiProperty({
+    type: () => [ClientConsultantEntity],
+    description: 'Manual Assigned-to consultants (ClientConsultant) — not job-order assignees',
+  })
+  consultants!: ClientConsultantEntity[];
   @ApiProperty() createdAt!: Date;
   @ApiProperty() updatedAt!: Date;
+}
+
+/** One consultant manually assigned to this company — see ClientConsultant. */
+export class ClientConsultantEntity {
+  @ApiProperty() id!: string;
+  @ApiProperty() name!: string;
 }

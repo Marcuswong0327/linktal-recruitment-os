@@ -5,6 +5,7 @@
  * API for Linktal Recruitment OS
  * OpenAPI spec version: 1.0
  */
+import type { ClientConsultantEntity } from './clientConsultantEntity';
 import type { ClientEntityQuality } from './clientEntityQuality';
 import type { ClientEntityStatus } from './clientEntityStatus';
 
@@ -72,6 +73,8 @@ export interface ClientEntity {
      * @nullable
      */
   lastContactedBy: string | null;
+  /** Manual Assigned-to consultants (ClientConsultant) — not job-order assignees */
+  consultants: ClientConsultantEntity[];
   createdAt: string;
   updatedAt: string;
 }

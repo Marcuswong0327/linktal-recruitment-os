@@ -62,6 +62,7 @@ import { CreatableCombobox, type CreatableComboboxOption } from '@/components/Cr
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
 import { LogContactRow, type LogContactValues } from '@/components/LogContactRow';
+import { TagMultiSelect } from '@/components/TagMultiSelect';
 import { UrlField } from '@/components/UrlField';
 import { PageLayout } from '@/components/app-shell/PageLayout';
 import { useIsMac } from '@/hooks/use-is-mac';
@@ -77,6 +78,7 @@ import {
   useGetClient,
   useGetClientContactHistory,
   useRestoreClient,
+  useSetClientConsultants,
   useUpdateClient,
 } from '@/lib/api/generated/clients/clients';
 import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
@@ -409,7 +411,7 @@ function CompanyEditForm({
   const initialSpecializationIdsKey = locationIdsKey(company.specializationIds ?? []);
   const initialAddresses = (company.addresses ?? []).join('\n');
 
-  const isDirty =
+  const formFieldsDirty =
     companyName !== company.companyName ||
     industryId !== company.industryId ||
     locationIdsKey(specializationIds) !== initialSpecializationIdsKey ||
@@ -419,8 +421,6 @@ function CompanyEditForm({
     seekJobMarketUrl !== (company.seekJobMarketUrl ?? '') ||
     linkedinJobMarketUrl !== (company.linkedinJobMarketUrl ?? '') ||
     generalDescription !== (company.generalDescription ?? '');
-
-  const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty && canEdit);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getGetClientQueryKey(company.id) });
@@ -478,21 +478,27 @@ function CompanyEditForm({
     mutation: {
       onSuccess: () => {
         invalidate();
-        toast.success('Company updated');
       },
       onError: (err) => toast.error(err.message || 'Failed to update company'),
     },
   });
+
+  const setClientConsultants = useSetClientConsultants({
+    mutation: {
+      onSuccess: () => {
+        invalidate();
+      },
+      onError: (err) => toast.error(err.message || 'Failed to update consultants'),
+    },
+  });
+
+  const saving = updateCompany.isPending || setClientConsultants.isPending;
 
   const deleteCompany = useDeleteClient();
   const restoreCompany = useRestoreClient();
 
   const formRef = React.useRef<HTMLFormElement>(null);
   const isMac = useIsMac();
-  useSaveShortcut(
-    () => formRef.current?.requestSubmit(),
-    canEdit && isDirty && !updateCompany.isPending,
-  );
 
   const { data: stakeholdersData } = useGetStakeholders({ clientId: company.id, pageSize: 50 });
   const stakeholders = stakeholdersData?.status === 200 ? stakeholdersData.data.data : [];
@@ -596,18 +602,61 @@ function CompanyEditForm({
     });
   }
 
-  // No per-record "owning consultant" on Client (deliberately removed —
-  // see the SCOPING note in schema.prisma). The closest real answer to "who's
-  // dealing with this company" is whoever's on this client's job orders.
+  // Manual assignees live on ClientConsultant. Job-order *owners* are locked
+  // in the picker (cannot remove); other JO assignees still seed the list but
+  // remain removable as extras.
   const { data: jobOrdersData } = useGetJobOrders({ clientId: company.id, pageSize: 50 });
   const jobOrders = jobOrdersData?.status === 200 ? jobOrdersData.data.data : [];
-  const dealingConsultants = React.useMemo(() => {
+  const jobOrderConsultantIds = React.useMemo(() => {
     const byId = new Map<string, string>();
     for (const jo of jobOrders) {
       for (const c of jo.consultants) byId.set(c.id, c.name);
     }
-    return Array.from(byId, ([id, name]) => ({ id, name }));
+    return Array.from(byId.keys());
   }, [jobOrders]);
+
+  const lockedConsultantIds = React.useMemo(() => {
+    const ids = new Set<string>();
+    for (const jo of jobOrders) {
+      if (jo.ownerConsultantId) ids.add(jo.ownerConsultantId);
+    }
+    return Array.from(ids);
+  }, [jobOrders]);
+
+  const mergeConsultantIds = (...lists: string[][]) => {
+    const set = new Set<string>();
+    for (const list of lists) for (const id of list) set.add(id);
+    return Array.from(set);
+  };
+
+  const manualConsultantIds = (company.consultants ?? []).map((c) => c.id);
+  const seededConsultantIds = mergeConsultantIds(
+    manualConsultantIds,
+    jobOrderConsultantIds,
+    lockedConsultantIds,
+  );
+  const seededConsultantKey = locationIdsKey(seededConsultantIds);
+
+  const [assignedConsultantIds, setAssignedConsultantIds] = React.useState(seededConsultantIds);
+  // Re-seed when company changes or when JO list / manual assignees arrive.
+  React.useEffect(() => {
+    setAssignedConsultantIds(seededConsultantIds);
+    
+  }, [company.id, seededConsultantKey]);
+
+  const consultantOptions = React.useMemo(
+    () => consultants.map((c) => ({ value: c.id, label: c.fullName })),
+    [consultants],
+  );
+
+  const consultantsDirty = locationIdsKey(assignedConsultantIds) !== seededConsultantKey;
+  const isDirty = formFieldsDirty || consultantsDirty;
+  const { promptOpen, confirmLeave, cancelLeave } = useUnsavedChangesGuard(isDirty && canEdit);
+
+  useSaveShortcut(
+    () => formRef.current?.requestSubmit(),
+    canEdit && isDirty && !saving,
+  );
 
   const { data: jobResearchData } = useGetJobResearch({ clientId: company.id, pageSize: 50 });
   const jobResearch = jobResearchData?.status === 200 ? jobResearchData.data.data : [];
@@ -640,26 +689,44 @@ function CompanyEditForm({
     return res.data;
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const data: UpdateClientDto = {
-      companyName,
-      industryId,
-      specializationIds,
-      locationIds: locations.map((l) => l.id),
-      addresses: addresses
-        ? addresses
-            .split('\n')
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : [],
-      website: website || undefined,
-      seekJobMarketUrl: seekJobMarketUrl || undefined,
-      linkedinJobMarketUrl: linkedinJobMarketUrl || undefined,
-      generalDescription: generalDescription || undefined,
-    };
-    updateCompany.mutate({ id: company.id, data });
-    setEditingLinks(false);
+    const tasks: Promise<unknown>[] = [];
+    if (formFieldsDirty) {
+      const data: UpdateClientDto = {
+        companyName,
+        industryId,
+        specializationIds,
+        locationIds: locations.map((l) => l.id),
+        addresses: addresses
+          ? addresses
+              .split('\n')
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [],
+        website: website || undefined,
+        seekJobMarketUrl: seekJobMarketUrl || undefined,
+        linkedinJobMarketUrl: linkedinJobMarketUrl || undefined,
+        generalDescription: generalDescription || undefined,
+      };
+      tasks.push(updateCompany.mutateAsync({ id: company.id, data }));
+    }
+    if (consultantsDirty) {
+      tasks.push(
+        setClientConsultants.mutateAsync({
+          id: company.id,
+          data: { consultantIds: assignedConsultantIds },
+        }),
+      );
+    }
+    if (tasks.length === 0) return;
+    try {
+      await Promise.all(tasks);
+      toast.success('Company updated');
+      setEditingLinks(false);
+    } catch {
+      // per-mutation onError already toasts
+    }
   }
 
   function handleDelete() {
@@ -720,16 +787,16 @@ function CompanyEditForm({
             ) : null}
             {canEdit ? (
               <div className="flex items-center gap-3">
-                {isDirty && !updateCompany.isPending ? (
+                {isDirty && !saving ? (
                   <span className="text-xs text-muted-foreground">Unsaved changes</span>
                 ) : null}
                 <Button
                   type="submit"
                   form="company-form"
                   size="lg"
-                  disabled={updateCompany.isPending || !isDirty}
+                  disabled={saving || !isDirty}
                 >
-                  {updateCompany.isPending ? (
+                  {saving ? (
                     'Saving…'
                   ) : (
                     <>
@@ -1234,22 +1301,36 @@ function CompanyEditForm({
               </FormField>
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium">Consultants</span>
-                {dealingConsultants.length > 0 ? (
+                {canEdit ? (
+                  <TagMultiSelect
+                    title="Consultants"
+                    options={consultantOptions}
+                    selected={assignedConsultantIds}
+                    onChange={(ids) =>
+                      setAssignedConsultantIds(mergeConsultantIds(ids, lockedConsultantIds))
+                    }
+                    lockedValues={lockedConsultantIds}
+                    disabled={saving}
+                    fullCellHitArea={false}
+                  />
+                ) : assignedConsultantIds.length > 0 ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    {dealingConsultants.map((c) => (
+                    {assignedConsultantIds.map((id) => (
                       <div
-                        key={c.id}
+                        key={id}
                         className="flex items-center gap-1.5 rounded-full bg-muted/50 py-1 pr-2.5 pl-1 text-sm"
                       >
-                        <ConsultantAvatar consultantId={c.id} name={c.name} size={5} />
-                        <span>{c.name}</span>
+                        <ConsultantAvatar
+                          consultantId={id}
+                          name={consultantLabelFor(id)}
+                          size={5}
+                        />
+                        <span>{consultantLabelFor(id)}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    None yet — assigned via this company's job orders.
-                  </p>
+                  <p className="text-xs text-muted-foreground">No consultants assigned.</p>
                 )}
               </div>
               <Collapsible.Root

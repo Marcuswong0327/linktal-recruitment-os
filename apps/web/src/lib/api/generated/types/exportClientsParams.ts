@@ -49,6 +49,10 @@ location?: string;
  */
 locationIds?: string[];
 /**
+ * Filter by assigned consultant ID(s) — matches companies where any of these consultants are on ClientConsultant OR on a job order for that company.
+ */
+consultantIds?: string[];
+/**
  * Filter by lead quality (one or more). Omit for all qualities.
  */
 qualities?: ExportClientsQualitiesItem[];

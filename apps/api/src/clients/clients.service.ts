@@ -27,6 +27,7 @@ type ClientFilterFields = Pick<
   | 'hasTob'
   | 'locationIds'
   | 'location'
+  | 'consultantIds'
 >;
 
 // Industry is an FK relation; specializations/locations are many-to-many —
@@ -51,6 +52,9 @@ const CLIENT_INCLUDE = {
   // `ancestorIds` comes along purely for the single-record scope check, and
   // is stripped back out in `toEntity` — never part of the API response.
   locations: { select: { locationId: true, location: { select: { name: true, ancestorIds: true } } } },
+  consultants: {
+    select: { consultantId: true, consultant: { select: { fullName: true } } },
+  },
   stakeholders: {
     where: { deletedAt: null },
     select: {
@@ -81,6 +85,7 @@ type ClientWithRelations = {
   industry: { name: string } | null;
   specializations: { specializationId: string; specialization: { name: string } }[];
   locations: { locationId: string; location: { name: string; ancestorIds: string[] } }[];
+  consultants: { consultantId: string; consultant: { fullName: string } }[];
   stakeholders: {
     contactHistory: LatestContactRow[];
   }[];
@@ -166,7 +171,7 @@ type ClientExportRow = {
 };
 
 function toEntity<T extends ClientWithRelations>(client: T) {
-  const { industry, specializations, locations, stakeholders, ...rest } = client;
+  const { industry, specializations, locations, consultants, stakeholders, ...rest } = client;
   const latest = latestContact(stakeholders.flatMap((s) => s.contactHistory));
   return {
     ...rest,
@@ -177,6 +182,7 @@ function toEntity<T extends ClientWithRelations>(client: T) {
     // editable multi-select needs to preselect and diff against.
     locations: locations.map((l) => l.location.name),
     locationIds: locations.map((l) => l.locationId),
+    consultants: consultants.map((c) => ({ id: c.consultantId, name: c.consultant.fullName })),
     lastContactType: latest?.contactType ?? null,
     lastContactCategory: latest?.category ?? null,
     lastContactNotes: latest?.notes ?? null,
@@ -261,6 +267,20 @@ export class ClientsService {
         locations: {
           some: { location: { name: { contains: query.location, mode: Prisma.QueryMode.insensitive } } },
         },
+      });
+    }
+
+    // Assigned-to: ClientConsultant OR JobOrderConsultant on any of this client's job orders.
+    if (query.consultantIds?.length) {
+      and.push({
+        OR: [
+          { consultants: { some: { consultantId: { in: query.consultantIds } } } },
+          {
+            jobOrders: {
+              some: { consultants: { some: { consultantId: { in: query.consultantIds } } } },
+            },
+          },
+        ],
       });
     }
 
@@ -516,6 +536,59 @@ export class ClientsService {
     });
 
     return toEntity(client);
+  }
+
+  /**
+   * Full-set-replace of this company's manual assignees (ClientConsultant).
+   * Does not touch JobOrderConsultant. No scope-mismatch guard — same idea
+   * as assigning someone onto a job order outside their industry/location.
+   */
+  async setConsultants(id: string, consultantIds: string[], actor: AuthUser) {
+    await this.findOne(id, actor);
+
+    const uniqueIds = Array.from(new Set(consultantIds));
+    if (uniqueIds.length > 0) {
+      const consultants = await this.prisma.consultant.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true, isActive: true },
+      });
+      const found = new Map(consultants.map((c) => [c.id, c.isActive]));
+      const missing = uniqueIds.filter((v) => !found.has(v));
+      if (missing.length > 0) {
+        throw new BadRequestException({
+          code: 'INVALID_CONSULTANT',
+          message: `Unknown consultant id(s): ${missing.join(', ')}`,
+        });
+      }
+      const inactive = uniqueIds.filter((v) => found.get(v) === false);
+      if (inactive.length > 0) {
+        throw new BadRequestException({
+          code: 'INACTIVE_CONSULTANT',
+          message: `Inactive consultant id(s): ${inactive.join(', ')}`,
+        });
+      }
+    }
+
+    const current = await this.prisma.clientConsultant.findMany({
+      where: { clientId: id },
+      select: { consultantId: true },
+    });
+    const currentIds = current.map((c) => c.consultantId);
+    const currentSet = new Set(currentIds);
+    const nextSet = new Set(uniqueIds);
+    const toAdd = uniqueIds.filter((v) => !currentSet.has(v));
+    const toRemove = currentIds.filter((v) => !nextSet.has(v));
+
+    for (const consultantId of toRemove) {
+      await this.prisma.clientConsultant.delete({
+        where: { clientId_consultantId: { clientId: id, consultantId } },
+      });
+    }
+    for (const consultantId of toAdd) {
+      await this.prisma.clientConsultant.create({ data: { clientId: id, consultantId } });
+    }
+
+    return this.findOne(id, actor);
   }
 
   /**

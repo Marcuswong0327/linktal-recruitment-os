@@ -15,6 +15,7 @@ import { SpecializationFilterButton } from '@/components/SpecializationPicker';
 import { useGateSnapshot, usePersistGateSnapshot } from '@/hooks/use-gate-snapshot';
 import { useSeedFiltersFromScope } from '@/hooks/use-seed-filters-from-scope';
 import { getGetClientsQueryKey, useCreateClient } from '@/lib/api/generated/clients/clients';
+import { useGetConsultants } from '@/lib/api/generated/consultants/consultants';
 import { getGetIndustriesQueryKey, useCreateIndustry, useGetIndustries } from '@/lib/api/generated/industries/industries';
 import {
   getGetSpecializationsQueryKey,
@@ -62,6 +63,7 @@ interface CompaniesGateSnapshot {
   specializationIds: string[];
   statuses: string[];
   qualities: string[];
+  consultantIds: string[];
   sortByValue: SortByValue | '';
   countryNames: Record<string, string>;
   cityNames: Record<string, string>;
@@ -102,6 +104,7 @@ export function CompaniesSearchGate({
   );
   const [statuses, setStatuses] = React.useState<string[]>(snapshot?.statuses ?? []);
   const [qualities, setQualities] = React.useState<string[]>(snapshot?.qualities ?? []);
+  const [consultantIds, setConsultantIds] = React.useState<string[]>(snapshot?.consultantIds ?? []);
   const [sortByValue, setSortByValue] = React.useState<SortByValue | ''>(
     snapshot?.sortByValue ?? '',
   );
@@ -136,6 +139,13 @@ export function CompaniesSearchGate({
   const { data: industriesData } = useGetIndustries();
   const industries = industriesData?.status === 200 ? industriesData.data : [];
   const industryOptions = React.useMemo(() => industries.map((i) => ({ value: i.id, label: i.name })), [industries]);
+
+  const { data: consultantsData } = useGetConsultants({ pageSize: 100, isActive: true });
+  const consultants = consultantsData?.status === 200 ? consultantsData.data.data : [];
+  const consultantOptions = React.useMemo(
+    () => consultants.map((c) => ({ value: c.id, label: c.fullName })),
+    [consultants],
+  );
 
   // Add-company lives here (not CompaniesTable) specifically so the command
   // palette's "Add a Company" action works even before the gate's own table
@@ -204,6 +214,7 @@ export function CompaniesSearchGate({
     specializationIds,
     statuses,
     qualities,
+    consultantIds,
     sortByValue,
     countryNames,
     cityNames,
@@ -229,6 +240,7 @@ export function CompaniesSearchGate({
     specializationIds.length > 0 ||
     statuses.length > 0 ||
     qualities.length > 0 ||
+    consultantIds.length > 0 ||
     sortByValue !== '';
 
   function handleSearch() {
@@ -240,6 +252,7 @@ export function CompaniesSearchGate({
       industryIds: industryIds.length ? industryIds : undefined,
       specializationIds: specializationIds.length ? specializationIds : undefined,
       locationIds: locationIds.length ? locationIds : undefined,
+      consultantIds: consultantIds.length ? consultantIds : undefined,
       sortBy: sort?.sortBy,
       sortOrder: sort?.sortOrder,
     });
@@ -263,6 +276,7 @@ export function CompaniesSearchGate({
       setSpecializationIds([]);
       setStatuses([]);
       setQualities([]);
+      setConsultantIds([]);
       setSortByValue('');
       setAppliedFilters(null);
       setIsResetting(false);
@@ -272,86 +286,104 @@ export function CompaniesSearchGate({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
-          <FilterField label="Country">
-            <LocationFilterButton
-              selected={countryIds}
-              onChange={setCountryIds}
-              level="COUNTRY"
-              browsable
-              compact={false}
-              placeholder="All countries"
-              title="Country"
-              labelFor={(id) => countryNames[id] ?? id}
-              onResolve={registerCountryName}
-            />
-          </FilterField>
-          <FilterField label="City Coverage">
-            <LocationFilterButton
-              selected={cityIds}
-              onChange={setCityIds}
-              level="CITY_COVERAGE"
-              underId={countryIds.length === 1 ? countryIds[0] : undefined}
-              compact={false}
-              placeholder="All City Coverage"
-              title="City Coverage"
-              labelFor={(id) => cityNames[id] ?? id}
-              onResolve={registerCityName}
-            />
-          </FilterField>
-          <FilterField label="Industry">
-            <DataGridFacetedFilter
-              title="Industry"
-              placeholder="All industries"
-              options={industryOptions}
-              selected={industryIds}
-              onChange={setIndustryIds}
-              triggerClassName="w-full justify-between"
-            />
-          </FilterField>
-          <FilterField label="Specialization">
-            <SpecializationFilterButton
-              selected={specializationIds}
-              onChange={setSpecializationIds}
-              compact={false}
-              placeholder="All specializations"
-              title="Specialization"
-              labelFor={(id) => specializationNames[id] ?? id}
-              onResolve={registerSpecializationName}
-              industryIds={industryIds}
-            />
-          </FilterField>
-          <FilterField label="Status">
-            <DataGridFacetedFilter
-              title="Status"
-              placeholder="All statuses"
-              options={statusOptions}
-              selected={statuses}
-              onChange={setStatuses}
-              triggerClassName="w-full justify-between"
-            />
-          </FilterField>
-          <FilterField label="Quality">
-            <DataGridFacetedFilter
-              title="Quality"
-              placeholder="All qualities"
-              options={qualityOptions}
-              selected={qualities}
-              onChange={setQualities}
-              triggerClassName="w-full justify-between"
-            />
-          </FilterField>
-          <FilterField label="Sorted By">
-            <DataGridFacetedFilter
-              title="Sorted By"
-              placeholder="Default order"
-              single
-              options={sortByOptions}
-              selected={sortByValue ? [sortByValue] : []}
-              onChange={(values) => setSortByValue((values[0] as SortByValue) ?? '')}
-              triggerClassName="w-full justify-between"
-            />
-          </FilterField>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex flex-col gap-3">
+            <FilterField label="Country">
+              <LocationFilterButton
+                selected={countryIds}
+                onChange={setCountryIds}
+                level="COUNTRY"
+                browsable
+                compact={false}
+                placeholder="All countries"
+                title="Country"
+                labelFor={(id) => countryNames[id] ?? id}
+                onResolve={registerCountryName}
+              />
+            </FilterField>
+            <FilterField label="City Coverage">
+              <LocationFilterButton
+                selected={cityIds}
+                onChange={setCityIds}
+                level="CITY_COVERAGE"
+                underId={countryIds.length === 1 ? countryIds[0] : undefined}
+                compact={false}
+                placeholder="All City Coverage"
+                title="City Coverage"
+                labelFor={(id) => cityNames[id] ?? id}
+                onResolve={registerCityName}
+              />
+            </FilterField>
+          </div>
+          <div className="flex flex-col gap-3">
+            <FilterField label="Industry">
+              <DataGridFacetedFilter
+                title="Industry"
+                placeholder="All industries"
+                options={industryOptions}
+                selected={industryIds}
+                onChange={setIndustryIds}
+                triggerClassName="w-full justify-between"
+              />
+            </FilterField>
+            <FilterField label="Specialization">
+              <SpecializationFilterButton
+                selected={specializationIds}
+                onChange={setSpecializationIds}
+                compact={false}
+                placeholder="All specializations"
+                title="Specialization"
+                labelFor={(id) => specializationNames[id] ?? id}
+                onResolve={registerSpecializationName}
+                industryIds={industryIds}
+              />
+            </FilterField>
+          </div>
+          <div className="flex flex-col gap-3">
+            <FilterField label="Status">
+              <DataGridFacetedFilter
+                title="Status"
+                placeholder="All statuses"
+                options={statusOptions}
+                selected={statuses}
+                onChange={setStatuses}
+                triggerClassName="w-full justify-between"
+              />
+            </FilterField>
+            <FilterField label="Quality">
+              <DataGridFacetedFilter
+                title="Quality"
+                placeholder="All qualities"
+                options={qualityOptions}
+                selected={qualities}
+                onChange={setQualities}
+                triggerClassName="w-full justify-between"
+              />
+            </FilterField>
+          </div>
+          <div className="flex flex-col gap-3">
+            <FilterField label="Assigned to">
+              <DataGridFacetedFilter
+                title="Assigned to"
+                placeholder="All consultants"
+                options={consultantOptions}
+                selected={consultantIds}
+                onChange={setConsultantIds}
+                triggerClassName="w-full justify-between"
+              />
+            </FilterField>
+            <FilterField label="Sorted By">
+              <DataGridFacetedFilter
+                title="Sorted By"
+                placeholder="Default order"
+                single
+                options={sortByOptions}
+                selected={sortByValue ? [sortByValue] : []}
+                onChange={(values) => setSortByValue((values[0] as SortByValue) ?? '')}
+                triggerClassName="w-full justify-between"
+              />
+            </FilterField>
+          </div>
         </div>
         <div className="flex justify-end gap-2">
           {hasActiveFilters ? (

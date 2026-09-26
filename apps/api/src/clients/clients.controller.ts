@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   StreamableFile,
   UploadedFile,
@@ -18,6 +19,7 @@ import { ClientsService } from './clients.service';
 import { ClientsImportService } from './clients-import.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
+import { SetClientConsultantsDto } from './dto/set-client-consultants.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
 import { ExportClientsDto } from './dto/export-clients.dto';
 import { ExportByIdsDto } from '../common/dto/export-by-ids.dto';
@@ -164,6 +166,21 @@ export class ClientsController {
   @ApiResponse({ status: 200, description: 'Client updated', type: ClientEntity })
   update(@Param('id') id: string, @Body() dto: UpdateClientDto, @CurrentUser() user: AuthUser) {
     return this.clients.update(id, dto, user);
+  }
+
+  @Put(':id/consultants')
+  @RequirePermission('client', 'update')
+  @ApiOperation({
+    operationId: 'setClientConsultants',
+    summary: 'Replace the set of consultants manually assigned to this company (ClientConsultant)',
+  })
+  @ApiResponse({ status: 200, description: 'Client with updated consultants', type: ClientEntity })
+  setConsultants(
+    @Param('id') id: string,
+    @Body() dto: SetClientConsultantsDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.clients.setConsultants(id, dto.consultantIds, user);
   }
 
   // No note-timeline routes of its own, deliberately: client-side notes live
