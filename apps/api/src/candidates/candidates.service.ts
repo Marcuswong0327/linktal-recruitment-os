@@ -23,7 +23,7 @@ import { UpdateCandidateContactHistoryDto } from './dto/update-candidate-contact
 import { buildWorkbook, resolveTimeZone, splitContactDateTime, ExportColumn } from '../common/xlsx-export';
 import { logExport } from '../common/audit-export';
 import { searchTokens } from '../common/search-tokens';
-import { normalizeMobileForStorage } from '../common/phone';
+import { normalizeMobileForStorage, digitsForPhoneSearch } from '../common/phone';
 
 /** The subset of QueryCandidatesDto that `buildWhere` actually reads — shared with QueryCandidateFacetsDto, which omits pagination/sort/jobRoleTypeIds but still satisfies this structurally. */
 type CandidateFilterFields = Pick<
@@ -339,12 +339,14 @@ export class CandidatesService {
     const isPhoneQuery = !!q && phoneDigits.length >= MIN_PHONE_QUERY_DIGITS && PHONE_QUERY.test(q.trim());
 
     if (isPhoneQuery && q) {
-      // The same subscriber can be stored as "+61 0490 346 098" or
-      // "0490346098" — identical from the last 8 digits on, different before
-      // that. Matching the tail is what makes those two forms find each other;
-      // 8 digits is still specific enough not to collide across the roster.
+      // Rewrite the typed query through the same AU/MY rules as storage so
+      // "0424…" matches mobileDigits "61424…". Then take the trailing
+      // PHONE_MATCH_DIGITS so "+61 0490…" and "0490…" still share a needle.
+      const searchDigits = digitsForPhoneSearch(q);
       const needle =
-        phoneDigits.length > PHONE_MATCH_DIGITS ? phoneDigits.slice(-PHONE_MATCH_DIGITS) : phoneDigits;
+        searchDigits.length > PHONE_MATCH_DIGITS
+          ? searchDigits.slice(-PHONE_MATCH_DIGITS)
+          : searchDigits;
       and.push({ OR: [{ mobileDigits: { contains: needle } }, ...textSearchArms(q)] });
     } else if (q) {
       for (const term of searchTokens(q)) {

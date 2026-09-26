@@ -28,6 +28,7 @@ function withRelations(row: Record<string, unknown> = {}) {
   return {
     client: null,
     consultants: [],
+    keyStakeholders: [],
     jobTitle: null,
     jobRoleType: null,
     location: null,
@@ -303,7 +304,7 @@ describe('JobOrdersService.findOne', () => {
     const { service } = makeService(
       withRelations({
         id: 'j1',
-        client: { industryId: 'finance', stakeholders: [] },
+        client: { industryId: 'finance', companyName: 'Acme', displayId: 'CLI-1' },
         location: { name: 'Perth', level: 'CITY', ancestorIds: ['perth', 'wa', 'au'] },
       }),
     );
@@ -338,21 +339,54 @@ describe('JobOrdersService.findOne', () => {
 });
 
 describe('JobOrdersService.update', () => {
-  function makeService(existing: unknown = withRelations({ id: 'j1' })) {
+  function makeService(existing: unknown = withRelations({ id: 'j1', clientId: 'cl1' })) {
     const findUnique = jest.fn().mockResolvedValue(existing);
     const update = jest.fn().mockResolvedValue(withRelations({ id: 'j1', clientId: 'cl2' }));
-    const prisma = { jobOrder: { findUnique, update } } as unknown as ExtendedPrismaClient;
-    return { service: new JobOrdersService(prisma, base), update };
+    const keyStakeholderFindMany = jest.fn().mockResolvedValue([]);
+    const keyStakeholderDelete = jest.fn().mockResolvedValue({});
+    const prisma = {
+      jobOrder: { findUnique, update },
+      jobOrderKeyStakeholder: {
+        findMany: keyStakeholderFindMany,
+        delete: keyStakeholderDelete,
+      },
+    } as unknown as ExtendedPrismaClient;
+    return {
+      service: new JobOrdersService(prisma, base),
+      update,
+      keyStakeholderFindMany,
+      keyStakeholderDelete,
+    };
   }
 
-  it('re-links to a different client with no follow-up write and no guard', async () => {
-    const { service, update } = makeService();
+  it('re-links to a different client and prunes key stakeholders not on the new client', async () => {
+    const { service, update, keyStakeholderFindMany, keyStakeholderDelete } = makeService();
+    keyStakeholderFindMany.mockResolvedValue([{ stakeholderId: 'stale-1' }]);
+
     await service.update('j1', { clientId: 'cl2' }, makeUser());
 
     expect(update).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'j1' }, data: { clientId: 'cl2' } }),
     );
+    expect(keyStakeholderFindMany).toHaveBeenCalledWith({
+      where: {
+        jobOrderId: 'j1',
+        stakeholder: { clientId: { not: 'cl2' } },
+      },
+      select: { stakeholderId: true },
+    });
+    expect(keyStakeholderDelete).toHaveBeenCalledWith({
+      where: { jobOrderId_stakeholderId: { jobOrderId: 'j1', stakeholderId: 'stale-1' } },
+    });
+  });
+
+  it('skips key-stakeholder prune when clientId is unchanged', async () => {
+    const { service, keyStakeholderFindMany } = makeService(
+      withRelations({ id: 'j1', clientId: 'cl1' }),
+    );
+    await service.update('j1', { status: 'ACTIVE' as never }, makeUser());
+    expect(keyStakeholderFindMany).not.toHaveBeenCalled();
   });
 });
 
@@ -460,5 +494,102 @@ describe('JobOrdersService.setConsultants', () => {
     const { service, jobOrderConsultantCreate } = makeService([], [{ id: 'c1', isActive: true }]);
     await service.setConsultants('j1', ['c1', 'c1'], makeUser());
     expect(jobOrderConsultantCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('JobOrdersService.setKeyStakeholders', () => {
+  function makeService(
+    current: { stakeholderId: string }[] = [],
+    stakeholderRows: { id: string; clientId: string; deletedAt: Date | null }[] = [],
+    jobOrderClientId = 'cl1',
+  ) {
+    const joinDelete = jest.fn().mockResolvedValue({});
+    const joinCreate = jest.fn().mockResolvedValue({});
+    const findUnique = jest.fn().mockResolvedValue(
+      withRelations({ id: 'j1', clientId: jobOrderClientId }),
+    );
+    const prisma = {
+      jobOrder: { findUnique },
+      jobOrderKeyStakeholder: {
+        findMany: jest.fn().mockResolvedValue(current),
+        delete: joinDelete,
+        create: joinCreate,
+      },
+      stakeholder: { findMany: jest.fn().mockResolvedValue(stakeholderRows) },
+    } as unknown as ExtendedPrismaClient;
+    return { service: new JobOrdersService(prisma, base), joinDelete, joinCreate };
+  }
+
+  it('404s when the job order does not exist', async () => {
+    const prisma = {
+      jobOrder: { findUnique: jest.fn().mockResolvedValue(null) },
+    } as unknown as ExtendedPrismaClient;
+    const service = new JobOrdersService(prisma, base);
+    await expect(service.setKeyStakeholders('missing', ['s1'], makeUser())).rejects.toThrow(
+      'Job order missing not found',
+    );
+  });
+
+  it('rejects an unknown stakeholder id', async () => {
+    const { service } = makeService([], []);
+    await expect(service.setKeyStakeholders('j1', ['s1'], makeUser())).rejects.toMatchObject({
+      response: { code: 'INVALID_STAKEHOLDER' },
+    });
+  });
+
+  it('rejects a stakeholder belonging to a different client', async () => {
+    const { service } = makeService([], [{ id: 's1', clientId: 'other', deletedAt: null }]);
+    await expect(service.setKeyStakeholders('j1', ['s1'], makeUser())).rejects.toMatchObject({
+      response: { code: 'STAKEHOLDER_WRONG_CLIENT' },
+    });
+  });
+
+  it('rejects a soft-deleted stakeholder', async () => {
+    const { service } = makeService([], [
+      { id: 's1', clientId: 'cl1', deletedAt: new Date() },
+    ]);
+    await expect(service.setKeyStakeholders('j1', ['s1'], makeUser())).rejects.toMatchObject({
+      response: { code: 'DELETED_STAKEHOLDER' },
+    });
+  });
+
+  it('adds stakeholders not already on the job order', async () => {
+    const { service, joinCreate, joinDelete } = makeService(
+      [],
+      [
+        { id: 's1', clientId: 'cl1', deletedAt: null },
+        { id: 's2', clientId: 'cl1', deletedAt: null },
+      ],
+    );
+    await service.setKeyStakeholders('j1', ['s1', 's2'], makeUser());
+
+    expect(joinCreate).toHaveBeenCalledWith({ data: { jobOrderId: 'j1', stakeholderId: 's1' } });
+    expect(joinCreate).toHaveBeenCalledWith({ data: { jobOrderId: 'j1', stakeholderId: 's2' } });
+    expect(joinDelete).not.toHaveBeenCalled();
+  });
+
+  it('removes stakeholders no longer in the set, before adding new ones', async () => {
+    const { service, joinCreate, joinDelete } = makeService(
+      [{ stakeholderId: 's1' }, { stakeholderId: 's2' }],
+      [{ id: 's3', clientId: 'cl1', deletedAt: null }],
+    );
+    await service.setKeyStakeholders('j1', ['s3'], makeUser());
+
+    expect(joinDelete).toHaveBeenCalledWith({
+      where: { jobOrderId_stakeholderId: { jobOrderId: 'j1', stakeholderId: 's1' } },
+    });
+    expect(joinDelete).toHaveBeenCalledWith({
+      where: { jobOrderId_stakeholderId: { jobOrderId: 'j1', stakeholderId: 's2' } },
+    });
+    expect(joinCreate).toHaveBeenCalledWith({ data: { jobOrderId: 'j1', stakeholderId: 's3' } });
+  });
+
+  it('dedupes repeated ids in the request', async () => {
+    const { service, joinCreate } = makeService(
+      [],
+      [{ id: 's1', clientId: 'cl1', deletedAt: null }],
+    );
+    await service.setKeyStakeholders('j1', ['s1', 's1'], makeUser());
+    expect(joinCreate).toHaveBeenCalledTimes(1);
   });
 });

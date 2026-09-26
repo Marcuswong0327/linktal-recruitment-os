@@ -286,6 +286,25 @@ describe('CandidatesService.findAll (where-clause construction)', () => {
     );
   });
 
+  it('rewrites an AU domestic phone query to mobileDigits that match +61 storage', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ q: '0424054143' }), makeUser());
+
+    const where = findMany.mock.calls[0][0].where;
+    const orClause = where.AND.find((c: Record<string, unknown>) => 'OR' in c);
+    // Full rewrite → 61424054143; needle is last 8 digits (24054143).
+    expect(orClause.OR).toContainEqual({ mobileDigits: { contains: '24054143' } });
+  });
+
+  it('strips trunk 0 on a short AU phone query so it can contain-match +61 mobileDigits', async () => {
+    const { findMany, service } = setup();
+    await service.findAll(baseQuery({ q: '042405' }), makeUser());
+
+    const where = findMany.mock.calls[0][0].where;
+    const orClause = where.AND.find((c: Record<string, unknown>) => 'OR' in c);
+    expect(orClause.OR).toContainEqual({ mobileDigits: { contains: '42405' } });
+  });
+
   it("matches a free-text location against the node's own name", async () => {
     const { findMany, service } = setup();
     await service.findAll(baseQuery({ location: 'Sydney' }), makeUser());

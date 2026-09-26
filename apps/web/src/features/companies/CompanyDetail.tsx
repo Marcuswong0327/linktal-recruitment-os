@@ -4,7 +4,6 @@ import * as React from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  ArrowLeft,
   ChevronDown,
   Contact,
   CornerDownLeft,
@@ -128,12 +127,10 @@ const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
   minute: '2-digit',
 });
 
-// The "Back" button normally returns to the Companies list, but a company
-// can also be reached from another page's own link out (e.g. a Stakeholder
-// row's Company column) — in that case Back should return there instead, not
-// to a list the visitor never opened. Origin comes in as `?from=` on the
-// link that brought them here, not browser history, so a page refresh or a
-// bookmark keeps behaving the same way.
+// After delete, redirect to the Companies list — or to the page the visitor
+// came from when the link carried `?from=` (stakeholders list, job-orders
+// list, or a specific job order). Origin comes in on the link, not browser
+// history, so a page refresh or bookmark keeps the same post-delete destination.
 const BACK_TARGETS: Record<string, { href: string; label: string }> = {
   stakeholders: { href: '/stakeholders', label: 'Stakeholders' },
   'job-orders': { href: '/job-orders', label: 'Job Orders' },
@@ -143,9 +140,8 @@ function useBackTarget() {
   const searchParams = useSearchParams();
   const from = searchParams.get('from');
   // A specific Job Order's Company link (JobOrderDetail) carries its own id
-  // (and title, for the button label) instead of a static target — unlike
-  // the list-level `from=job-orders`, this returns to the exact detail page
-  // the visitor came from, not the list.
+  // instead of a static target — unlike the list-level `from=job-orders`,
+  // this returns to the exact detail page the visitor came from.
   if (from === 'job-order') {
     const jobOrderId = searchParams.get('jobOrderId');
     const jobOrderTitle = searchParams.get('jobOrderTitle');
@@ -277,7 +273,7 @@ function SplitActionRow({
   );
 }
 
-/** Each row (besides phone) splits into a direct-interact action (mailto:/open in a new tab) and a separate copy action — see `SplitActionRow`. Website is the company's, not the stakeholder's — Stakeholder carries no site of its own. Phone has no direct-interact counterpart (no tel: link), so its row stays copy-only. */
+/** Each row (besides email/phone) splits into a direct-interact action (open in a new tab) and a separate copy action — see `SplitActionRow`. Email and phone are copy-only (no mailto:/tel:). Website is the company's, not the stakeholder's — Stakeholder carries no site of its own. */
 function StakeholderActionsMenu({
   email,
   mobile,
@@ -303,17 +299,13 @@ function StakeholderActionsMenu({
         }
       />
       <DropdownMenuContent align="end">
-        <SplitActionRow
-          icon={Mail}
-          value={email}
-          label="Email"
-          emptyLabel="No email on file"
-          copyLabel="Email"
-          href={(v) => `mailto:${v}`}
-        />
+        <DropdownMenuItem disabled={!email} onClick={() => email && copyValue(email, 'Email')}>
+          <Mail />
+          {email ?? 'No email on file'}
+        </DropdownMenuItem>
         <DropdownMenuItem disabled={!mobile} onClick={() => mobile && copyValue(mobile, 'Mobile')}>
           <Phone />
-          {mobile ? 'Copy mobile' : 'No mobile on file'}
+          {mobile ?? 'No mobile on file'}
         </DropdownMenuItem>
         <SplitActionRow
           icon={LinkedinIcon}
@@ -349,7 +341,6 @@ export function CompanyDetail({
 }) {
   const { data, isLoading, isError, error } = useGetClient(id);
   const company = data?.status === 200 ? data.data : undefined;
-  const backTarget = useBackTarget();
 
   if (isLoading) {
     return (
@@ -368,12 +359,6 @@ export function CompanyDetail({
           <p className="text-sm text-muted-foreground">
             {error instanceof Error ? error.message : `No company with ID ${id}.`}
           </p>
-        </div>
-        <div>
-          <Button variant="outline" nativeButton={false} render={<Link href={backTarget.href} />}>
-            <ArrowLeft />
-            Back to {backTarget.label.toLowerCase()}
-          </Button>
         </div>
       </PageLayout>
     );
@@ -701,18 +686,7 @@ function CompanyEditForm({
 
   return (
     <PageLayout className="overflow-auto">
-      <div className="flex flex-col gap-4 border-b border-border pb-5">
-        <Button
-          variant="ghost"
-          size="sm"
-          nativeButton={false}
-          render={<Link href={backTarget.href} />}
-          className="-ml-2 self-start text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft />
-          Back to {backTarget.label}
-        </Button>
-
+      <div className="flex flex-col gap-3 border-b border-border pb-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 font-heading text-lg font-semibold text-primary">

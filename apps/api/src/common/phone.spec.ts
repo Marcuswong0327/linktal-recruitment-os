@@ -1,5 +1,6 @@
 import {
   detectPhoneCountry,
+  digitsForPhoneSearch,
   digitsOnly,
   isValidPhone,
   normalizeMobileForStorage,
@@ -93,6 +94,25 @@ describe('normalizeMobileForStorage', () => {
   it('keeps unrecognised trimmed original', () => {
     expect(normalizeMobileForStorage('  ext 42  ')).toBe('ext 42');
     expect(normalizeMobileForStorage('+44 20 7946 0958')).toBe('+44 20 7946 0958');
+  });
+});
+
+describe('digitsForPhoneSearch', () => {
+  it('rewrites full AU/MY domestics to the same digits as storage', () => {
+    expect(digitsForPhoneSearch('0424054143')).toBe('61424054143');
+    expect(digitsForPhoneSearch('0424 054 143')).toBe('61424054143');
+    expect(digitsForPhoneSearch('0123456789')).toBe('60123456789');
+    expect(digitsForPhoneSearch('+61 424 054 143')).toBe('61424054143');
+  });
+
+  it('strips a leading trunk 0 on incomplete domestics so they can match inside +61/+60', () => {
+    expect(digitsForPhoneSearch('042405')).toBe('42405');
+    expect(digitsForPhoneSearch('0424')).toBe('424');
+  });
+
+  it('passes through unrecognised digit strings unchanged', () => {
+    expect(digitsForPhoneSearch('12345')).toBe('12345');
+    expect(digitsForPhoneSearch('ext 42')).toBe('42');
   });
 });
 

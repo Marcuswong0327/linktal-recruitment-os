@@ -107,6 +107,15 @@ interface TagMultiSelectProps {
     onEdit?: (option: TagOption) => void;
     onDelete?: (option: TagOption) => void;
   };
+  /**
+   * Render an `absolute inset-0` click catcher so the whole DataGrid
+   * `TableCell` (which is `relative`) opens the popup. Must stay off
+   * outside a cell — without a tight positioned ancestor the catcher expands
+   * to a large layout box (e.g. `<main>`), paints a grey wash when open, and
+   * steals / re-fires clicks so the menu keeps popping open. Defaults on so
+   * existing grid columns keep full-cell hit targets.
+   */
+  fullCellHitArea?: boolean;
 }
 
 /**
@@ -128,6 +137,7 @@ export function TagMultiSelect({
   triggerClassName,
   onCreate,
   tagActions,
+  fullCellHitArea = true,
 }: TagMultiSelectProps) {
   // Rows created through this picker before `options`/`selectableOptions`
   // (owned by the caller's own query) has refetched to include them — merged
@@ -217,34 +227,40 @@ export function TagMultiSelect({
           below (which is now `relative`, so it's positioned too and — being
           later in the DOM — stacks above this): only the cell's empty margin
           around the chips falls through to this, so a chip's own X still
-          gets first claim on a click landing on it. */}
-      <button
-        type="button"
-        tabIndex={-1}
-        aria-hidden
-        disabled={disabled}
-        onClick={() => setOpen(true)}
-        className={cn(
-          // `group-hover`, not `hover` — this box already spans the true
-          // cell (see the doc above), but Trigger stacks on top of it and
-          // would otherwise steal the pointer for its own, `w-full`-but-
-          // still-cell-*content*-box-bound area, only leaving this one
-          // reacting to hovers that land in the cell's own padding. Keying
-          // off TableCell's own `group` (DataGrid.tsx) instead makes a
-          // hover anywhere in the cell — padding included — light up the
-          // same, single, edge-to-edge highlight.
-          'absolute inset-0 rounded-md outline-none transition-colors group-hover:bg-accent/50 disabled:pointer-events-none',
-          open && 'bg-accent/50',
-        )}
-      />
+          gets first claim on a click landing on it. Only when
+          `fullCellHitArea` — see prop. */}
+      {fullCellHitArea ? (
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden
+          disabled={disabled}
+          onClick={() => setOpen(true)}
+          className={cn(
+            // `group-hover`, not `hover` — this box already spans the true
+            // cell (see the doc above), but Trigger stacks on top of it and
+            // would otherwise steal the pointer for its own, `w-full`-but-
+            // still-cell-*content*-box-bound area, only leaving this one
+            // reacting to hovers that land in the cell's own padding. Keying
+            // off TableCell's own `group` (DataGrid.tsx) instead makes a
+            // hover anywhere in the cell — padding included — light up the
+            // same, single, edge-to-edge highlight.
+            'absolute inset-0 rounded-md outline-none transition-colors group-hover:bg-accent/50 disabled:pointer-events-none',
+            open && 'bg-accent/50',
+          )}
+        />
+      ) : null}
       <Combobox.Trigger
         aria-label={selected.length === 0 ? `Add ${title.toLowerCase()}` : undefined}
         className={cn(
-          // No background/hover of its own — the catcher above (now
-          // spanning the full cell via TableCell's `group`) is the only
-          // highlight, so it isn't a smaller, visibly inset pill sitting on
-          // top of the true cell-wide one.
+          // With the catcher: no background/hover of its own — the catcher
+          // (spanning the full cell via TableCell's `group`) is the only
+          // highlight. Without it (forms/detail): the trigger itself owns
+          // hover/open wash so the control stays localized.
           'relative flex min-h-8 w-full max-w-full flex-wrap items-center gap-1 rounded-md border border-transparent px-1 py-0.5 text-left outline-none transition-colors disabled:pointer-events-none disabled:opacity-50',
+          fullCellHitArea
+            ? null
+            : cn('hover:bg-accent/50', open && 'bg-accent/50'),
           selected.length === 0 && 'justify-center',
           triggerClassName,
         )}

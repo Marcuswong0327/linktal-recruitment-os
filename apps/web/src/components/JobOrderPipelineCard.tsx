@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
-import { Check, Mail, Phone, Plus, Trash2, X } from 'lucide-react';
+import { Check, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -19,8 +19,7 @@ import {
 } from '@/components/ui/table';
 import { CandidateCombobox } from '@/components/CandidateCombobox';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import { ConfirmSubmitCandidateDialog } from '@/components/ConfirmSubmitCandidateDialog';
-import { LinkedinIcon } from '@/components/BrandIcons';
+import { ContactMethodsCell } from '@/components/ContactMethodsCell';
 import { deleteWithUndo } from '@/lib/delete-with-undo';
 import { cn } from '@/lib/utils';
 import { noBrowserAutofill } from '@/lib/no-browser-autofill';
@@ -69,65 +68,7 @@ function toDateInputValue(value: string | null | undefined) {
   return value ? value.slice(0, 10) : '';
 }
 
-function copyValue(value: string, label: string) {
-  navigator.clipboard.writeText(value).then(
-    () => toast.success(`${label} copied`),
-    () => toast.error(`Couldn't copy ${label.toLowerCase()}`),
-  );
-}
-
-/** One icon per contact method — mirrors CandidateDetail's ContactIconButton/ContactCopyButton, sized down for a table cell. A method with no value on file renders greyed-out and inert rather than being hidden, so the row doesn't reflow. */
-function ContactIcon({
-  icon: Icon,
-  href,
-  onClick,
-  disabled,
-  label,
-  activeClassName = 'text-muted-foreground hover:text-foreground',
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  href?: string;
-  onClick?: () => void;
-  disabled?: boolean;
-  label: string;
-  activeClassName?: string;
-}) {
-  const className = cn(
-    'flex size-6 items-center justify-center rounded-md transition-colors',
-    disabled ? 'cursor-not-allowed text-muted-foreground' : cn(activeClassName, 'hover:bg-accent'),
-  );
-  const icon = <Icon className={cn('size-3.5', disabled && 'opacity-30 grayscale')} />;
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={onClick}
-        title={label}
-        aria-label={label}
-        className={className}
-      >
-        {icon}
-      </button>
-    );
-  }
-  return (
-    <a
-      href={disabled ? undefined : href}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-disabled={disabled}
-      onClick={disabled ? (e) => e.preventDefault() : undefined}
-      title={label}
-      aria-label={label}
-      className={className}
-    >
-      {icon}
-    </a>
-  );
-}
-
-/** Mail (mailto) / Phone (copy) / LinkedIn (redirect) — shared between the pipeline table's candidate rows and the Information card's Key Stakeholder contact. */
+/** Mail (copy) / Phone (copy) / LinkedIn (open) — shared between the pipeline table and Key Stakeholder contacts. Hover shows the value; click copies email/mobile. */
 export function ContactIconRow({
   email,
   mobile,
@@ -138,27 +79,7 @@ export function ContactIconRow({
   linkedinUrl?: string | null;
 }) {
   return (
-    <div className="flex items-center gap-0.5">
-      <ContactIcon
-        icon={Mail}
-        href={email ? `mailto:${email}` : undefined}
-        disabled={!email}
-        label={email ? 'Email' : 'No email on file'}
-      />
-      <ContactIcon
-        icon={Phone}
-        onClick={mobile ? () => copyValue(mobile, 'Mobile') : undefined}
-        disabled={!mobile}
-        label={mobile ? 'Copy mobile' : 'No mobile on file'}
-      />
-      <ContactIcon
-        icon={LinkedinIcon}
-        href={linkedinUrl ?? undefined}
-        disabled={!linkedinUrl}
-        label={linkedinUrl ? 'LinkedIn' : 'No LinkedIn on file'}
-        activeClassName="text-[#0A66C2]"
-      />
-    </div>
+    <ContactMethodsCell email={email} mobile={mobile} linkedinUrl={linkedinUrl} size="sm" />
   );
 }
 
@@ -198,8 +119,10 @@ function TickCrossButton({
             : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground'),
         active &&
           tone === 'positive' &&
-          'border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
-        active && tone === 'negative' && 'border-destructive/40 bg-destructive/15 text-destructive',
+          'border-[#184B9C]/40 bg-[#184B9C]/15 text-[#184B9C]',
+        active &&
+          tone === 'negative' &&
+          'border-border bg-muted text-muted-foreground',
         active && disabled && 'opacity-80',
       )}
     >
@@ -208,7 +131,7 @@ function TickCrossButton({
   );
 }
 
-/** Gray by default, green when ticked, red when crossed — clicking the already-active button toggles it back off (undo), same "set state" shape used throughout instead of a separate undo control. */
+/** Gray by default, brand-blue when ticked, muted grey when crossed — clicking the already-active button toggles it back off (undo), same "set state" shape used throughout instead of a separate undo control. */
 function TickCrossPair({
   state,
   onTick,
@@ -334,57 +257,59 @@ function PipelineRow({
         />
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-2">
-          <DateTimeField
-            value={interview?.interviewDate}
-            onChange={(iso) => iso && onInterviewDateChange(iso)}
-            disabled={saving || !interviewGateOpen}
-            size="sm"
-            dateAriaLabel="Interview date"
-            hourAriaLabel="Interview hour"
-            minuteAriaLabel="Interview minute"
-          />
-          <TickCrossPair
-            state={outcomeState}
-            disabled={saving || !interviewGateOpen || !interview}
-            onTick={() => onInterviewOutcome(outcomeState === 'tick' ? 'SCHEDULED' : 'PASSED')}
-            onCross={() => onInterviewOutcome(outcomeState === 'cross' ? 'SCHEDULED' : 'FAILED')}
-            tickLabel="Passed interview"
-            crossLabel="Failed interview"
-          />
-        </div>
+        <DateTimeField
+          value={interview?.interviewDate}
+          onChange={(iso) => iso && onInterviewDateChange(iso)}
+          disabled={saving || !interviewGateOpen}
+          size="sm"
+          layout="stacked"
+          hourMode="business12h"
+          dateAriaLabel="Interview date"
+          hourAriaLabel="Interview hour"
+          minuteAriaLabel="Interview minute"
+        />
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-2">
-          <TickCrossPair
-            state={cddState}
+        <TickCrossPair
+          state={outcomeState}
+          disabled={saving || !interviewGateOpen || !interview}
+          onTick={() => onInterviewOutcome(outcomeState === 'tick' ? 'SCHEDULED' : 'PASSED')}
+          onCross={() => onInterviewOutcome(outcomeState === 'cross' ? 'SCHEDULED' : 'FAILED')}
+          tickLabel="Passed interview"
+          crossLabel="Failed interview"
+        />
+      </TableCell>
+      <TableCell>
+        <TickCrossPair
+          state={cddState}
+          disabled={saving}
+          onTick={() => onCdd(cddState === 'tick' ? null : true)}
+          onCross={() => onCdd(cddState === 'cross' ? null : false)}
+          tickLabel="CDD accepted"
+          crossLabel="CDD declined"
+        />
+      </TableCell>
+      <TableCell>
+        {accepted ? (
+          <input
+            type="date"
+            aria-label="Starting date"
+            value={toDateInputValue(placement?.startDate)}
+            min={interviewDateValue || undefined}
+            onChange={(e) => {
+              const date = e.target.value;
+              if (!date) return;
+              if (interviewDateValue && date < interviewDateValue) {
+                toast.error('Starting date cannot be earlier than the interview date');
+                return;
+              }
+              onStartDateChange(date);
+            }}
             disabled={saving}
-            onTick={() => onCdd(cddState === 'tick' ? null : true)}
-            onCross={() => onCdd(cddState === 'cross' ? null : false)}
-            tickLabel="CDD accepted"
-            crossLabel="CDD declined"
+            {...noBrowserAutofill}
+            className={dateInputClass}
           />
-          {accepted ? (
-            <input
-              type="date"
-              aria-label="Starting date"
-              value={toDateInputValue(placement?.startDate)}
-              min={interviewDateValue || undefined}
-              onChange={(e) => {
-                const date = e.target.value;
-                if (!date) return;
-                if (interviewDateValue && date < interviewDateValue) {
-                  toast.error('Starting date cannot be earlier than the interview date');
-                  return;
-                }
-                onStartDateChange(date);
-              }}
-              disabled={saving}
-              {...noBrowserAutofill}
-              className={dateInputClass}
-            />
-          ) : null}
-        </div>
+        ) : null}
       </TableCell>
       <TableCell>
         <button
@@ -416,13 +341,14 @@ function PipelineRow({
  */
 export function JobOrderPipelineCard({
   jobOrder,
-  clientIndustryId,
-  clientIndustry,
+  candidateLocationIds,
 }: {
   jobOrder: JobOrderEntity;
-  clientIndustryId?: string | null;
-  /** Resolved industry name, for the mismatch copy in the confirm dialog. */
-  clientIndustry?: string | null;
+  /**
+   * Country location ids derived from the company's city coverage — narrows
+   * the Submit Candidate picker. Empty/omitted = no location filter.
+   */
+  candidateLocationIds?: string[];
 }) {
   const queryClient = useQueryClient();
 
@@ -484,19 +410,14 @@ export function JobOrderPipelineCard({
 
   const [submitOpen, setSubmitOpen] = React.useState(false);
   const [pickedCandidate, setPickedCandidate] = React.useState<CandidateEntity | null>(null);
-  const [confirmSubmitOpen, setConfirmSubmitOpen] = React.useState(false);
   const createSubmission = useCreateSubmission({
     mutation: {
       onSuccess: () => {
         invalidateAll();
         setPickedCandidate(null);
-        setConfirmSubmitOpen(false);
         setSubmitOpen(false);
         toast.success('Submitted');
       },
-      // Leaves the dialog open so the message is read next to what caused it —
-      // notably the ALREADY_SUBMITTED conflict when someone else got there
-      // first between opening the picker and confirming.
       onError: (err) => toast.error(err.message || 'Failed to submit'),
     },
   });
@@ -524,17 +445,7 @@ export function JobOrderPipelineCard({
     });
   }
 
-  // Close the popover before opening the dialog rather than stacking the two:
-  // the modal dialog's focus trap would dismiss the popover at an
-  // unpredictable moment otherwise, and focus needs to land back on the
-  // trigger when the dialog closes.
   function handleSubmitClick() {
-    if (!pickedCandidate) return;
-    setSubmitOpen(false);
-    setConfirmSubmitOpen(true);
-  }
-
-  function handleConfirmSubmit() {
     if (!pickedCandidate) return;
     createSubmission.mutate({ data: { candidateId: pickedCandidate.id, jobOrderId: jobOrder.id } });
   }
@@ -608,8 +519,10 @@ export function JobOrderPipelineCard({
 
   return (
     <Card size="sm">
-      <CardHeader className="flex flex-row items-center justify-between border-b">
-        <CardTitle>Candidate Pipeline ({rows.length} Candidates ING)</CardTitle>
+      <CardHeader className="flex flex-row items-center justify-between border-b py-2 [.border-b]:pb-2">
+        <CardTitle className="text-sm">
+          Candidate Pipeline ({rows.length} Candidates ING)
+        </CardTitle>
         <Popover open={submitOpen} onOpenChange={setSubmitOpen}>
           <PopoverTrigger
             render={
@@ -625,8 +538,14 @@ export function JobOrderPipelineCard({
                 value={pickedCandidate}
                 onChange={setPickedCandidate}
                 disabledIds={submittedCandidateIds}
+                locationIds={candidateLocationIds}
               />
-              <Button type="button" size="sm" disabled={!pickedCandidate} onClick={handleSubmitClick}>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!pickedCandidate || createSubmission.isPending}
+                onClick={handleSubmitClick}
+              >
                 Submit
               </Button>
             </div>
@@ -644,9 +563,14 @@ export function JobOrderPipelineCard({
                   <TableHead className="w-10">No.</TableHead>
                   <TableHead>Name / Contact</TableHead>
                   <TableHead>Submitted Date</TableHead>
-                  <TableHead>Client Shortlisted to Interview</TableHead>
-                  <TableHead>Interview Date &amp; Outcome</TableHead>
-                  <TableHead>CDD Accepted &amp; Starting Date</TableHead>
+                  <TableHead className="whitespace-normal leading-tight">
+                    <span className="block">CLT SHORTLISTED</span>
+                    <span className="block">TO INTERVIEW</span>
+                  </TableHead>
+                  <TableHead>Interview Date</TableHead>
+                  <TableHead>Outcome</TableHead>
+                  <TableHead>CDD Accepted</TableHead>
+                  <TableHead>Starting Date</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -752,17 +676,6 @@ export function JobOrderPipelineCard({
           </div>
         )}
       </CardContent>
-
-      <ConfirmSubmitCandidateDialog
-        open={confirmSubmitOpen}
-        candidate={pickedCandidate}
-        jobOrder={jobOrder}
-        clientIndustryId={clientIndustryId}
-        clientIndustry={clientIndustry}
-        isSubmitting={createSubmission.isPending}
-        onCancel={() => setConfirmSubmitOpen(false)}
-        onConfirm={handleConfirmSubmit}
-      />
 
       <ConfirmDeleteDialog
         open={confirmingRemove !== null}

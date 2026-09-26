@@ -26,6 +26,12 @@ interface CandidateComboboxProps {
   disabledIds?: ReadonlySet<string>;
   /** Right-aligned note explaining why a `disabledIds` row can't be picked. */
   disabledNote?: string;
+  /**
+   * When set, `GET /candidates` is narrowed with `locationIds` (country ids
+   * include every city coverage beneath them). Omit or pass empty to search
+   * the full reachable catalog.
+   */
+  locationIds?: string[];
 }
 
 /**
@@ -54,6 +60,7 @@ export function CandidateCombobox({
   placeholder = 'Select a candidate',
   disabledIds,
   disabledNote = 'Already submitted',
+  locationIds,
 }: CandidateComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [inputValue, setInputValue] = React.useState('');
@@ -65,8 +72,10 @@ export function CandidateCombobox({
   }, [inputValue]);
 
   const searchEnabled = debouncedQuery.length >= MIN_QUERY_LENGTH;
+  const locationFilter =
+    locationIds && locationIds.length > 0 ? locationIds : undefined;
   const { data, isFetching, isError } = useGetCandidates(
-    { q: debouncedQuery, pageSize: PAGE_SIZE },
+    { q: debouncedQuery, pageSize: PAGE_SIZE, locationIds: locationFilter },
     { query: { enabled: searchEnabled, placeholderData: keepPreviousData } },
   );
   // Paginated envelope — rows are one level deeper than LocationCombobox's.

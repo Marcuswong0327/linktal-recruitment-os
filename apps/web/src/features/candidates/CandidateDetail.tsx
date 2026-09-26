@@ -1,10 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import {
   AlertTriangle,
-  ArrowLeft,
   ArrowRight,
   Check,
   ChevronDown,
@@ -46,6 +44,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { LinkedinIcon, SeekIcon } from '@/components/BrandIcons';
+import { ContactCopyIcon } from '@/components/ContactMethodsCell';
 import { useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { useJobRoleTypeOptions } from '@/hooks/use-catalog-options';
@@ -154,12 +153,6 @@ export function CandidateDetail({ id }: { id: string }) {
           title="Candidate not found"
           description={error?.message ?? `No candidate with ID ${id}.`}
         />
-        <div>
-          <Button variant="outline" nativeButton={false} render={<Link href="/candidates" />}>
-            <ArrowLeft />
-            Back to candidates
-          </Button>
-        </div>
       </PageLayout>
     );
   }
@@ -223,7 +216,7 @@ function sameWorkHistory(a: WorkHistoryItem[], b: WorkHistoryItem[]) {
   );
 }
 
-/** One icon per contact method (Email/Mobile/LinkedIn/Seek Talent) — click opens it. A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. Mirrors CompanyDetail's LinkIconButton for its Website field. */
+/** One icon per contact method (Email/Mobile/LinkedIn/Seek Talent) — Email and Mobile copy to clipboard; LinkedIn and Seek open in a new tab. A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. Mirrors CompanyDetail's LinkIconButton for its Website field. */
 function ContactIconButton({
   icon: Icon,
   href,
@@ -256,41 +249,6 @@ function ContactIconButton({
     >
       <Icon className={cn('size-4', disabled && 'opacity-30 grayscale')} />
     </a>
-  );
-}
-
-function copyValue(value: string, label: string) {
-  navigator.clipboard.writeText(value).then(
-    () => toast.success(`${label} copied`),
-    () => toast.error(`Couldn't copy ${label.toLowerCase()}`),
-  );
-}
-
-/** Same look as ContactIconButton, but copies to the clipboard instead of navigating — for Mobile, which has no useful direct-interact link (no tel: dialer on desktop). */
-function ContactCopyButton({
-  icon: Icon,
-  value,
-  label,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  value?: string | null;
-  label: string;
-}) {
-  const disabled = !value;
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => value && copyValue(value, label)}
-      title={disabled ? `No ${label.toLowerCase()} on file` : `Copy ${label.toLowerCase()}`}
-      aria-label={disabled ? `No ${label.toLowerCase()} on file` : `Copy ${label.toLowerCase()}`}
-      className={cn(
-        'flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors',
-        disabled ? 'cursor-not-allowed' : 'hover:bg-accent hover:text-foreground',
-      )}
-    >
-      <Icon className={cn('size-4', disabled && 'opacity-30 grayscale')} />
-    </button>
   );
 }
 
@@ -651,12 +609,8 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
   const contactActionsMenu = (
     <div className="flex items-center gap-1">
-      <ContactIconButton
-        icon={Mail}
-        href={candidate.email ? `mailto:${candidate.email}` : null}
-        label="Email"
-      />
-      <ContactCopyButton icon={Phone} value={candidate.mobile} label="Mobile" />
+      <ContactCopyIcon icon={Mail} value={candidate.email} label="Email" />
+      <ContactCopyIcon icon={Phone} value={candidate.mobile} label="Mobile" />
       <ContactIconButton
         icon={LinkedinIcon}
         href={candidate.linkedinUrl}
@@ -669,18 +623,7 @@ function CandidateEditForm({ candidate }: { candidate: Candidate }) {
 
   return (
     <PageLayout className="overflow-auto">
-      <div className="flex flex-col gap-4 border-b border-border pb-5">
-        <Button
-          variant="ghost"
-          size="sm"
-          nativeButton={false}
-          render={<Link href="/candidates" />}
-          className="-ml-2 self-start text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft />
-          Back to Candidates
-        </Button>
-
+      <div className="flex flex-col gap-3 border-b border-border pb-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 font-heading text-lg font-semibold text-primary">

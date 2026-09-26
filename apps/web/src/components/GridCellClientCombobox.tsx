@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import Link from 'next/link';
 import { keepPreviousData } from '@tanstack/react-query';
 
 import {
@@ -32,9 +33,10 @@ interface GridCellClientComboboxProps {
  * takes the `q` parameter instead, the same way the table's own search box
  * does.
  *
- * Not creatable: `CreateClientDto` needs an industry and at least one
- * location as well as a name, so a client can't be conjured from a typed
- * string. Companies are added from the Companies table's own new row.
+ * Not creatable here: `CreateClientDto` needs an industry and at least one
+ * location as well as a name. When search finds nothing, the empty state
+ * points at `/companies?new=1` so the consultant can add the company there,
+ * then return and pick it in this cell.
  */
 export function GridCellClientCombobox({
   id,
@@ -78,7 +80,22 @@ export function GridCellClientCombobox({
       serverSearched
       onQueryChange={setQuery}
       emptyMessage={
-        searchEnabled ? 'No companies found.' : 'Type at least 2 characters to search.'
+        searchEnabled ? (
+          <span className="flex flex-col items-center gap-1 px-1">
+            <span>No companies found.</span>
+            <Link
+              href="/companies?new=1"
+              className="font-medium text-primary underline-offset-2 hover:underline"
+              // Keep the combobox from treating the click as a list dismiss
+              // that steals focus before navigation.
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              Add it on Companies
+            </Link>
+          </span>
+        ) : (
+          'Type at least 2 characters to search.'
+        )
       }
       placeholder={placeholder}
       disabled={disabled}

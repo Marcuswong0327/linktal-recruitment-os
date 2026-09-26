@@ -1,10 +1,8 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  ArrowLeft,
   ChevronDown,
   CornerDownLeft,
   FileText,
@@ -41,6 +39,7 @@ import {
 } from '@/components/ui/table';
 import { LinkedinIcon } from '@/components/BrandIcons';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
+import { ContactCopyIcon } from '@/components/ContactMethodsCell';
 import { useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
@@ -108,12 +107,10 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-// The "Back" button normally returns to the Stakeholders list, but a
-// stakeholder can also be reached from its Company's own Stakeholders card
-// — in that case Back should return there instead of a list the visitor
-// never opened. Origin comes in as `?from=company` on the link that brought
-// them here, not browser history, so a page refresh or a bookmark keeps
-// behaving the same way. Mirrors CompanyDetail's own useBackTarget.
+// After delete, redirect to the Stakeholders list — or to the Company the
+// visitor came from when the link carried `?from=company`. Origin comes in
+// on the link, not browser history, so a page refresh or bookmark keeps
+// the same post-delete destination. Mirrors CompanyDetail's useBackTarget.
 function useBackTarget(stakeholder?: Pick<StakeholderEntity, 'clientId' | 'companyName'>) {
   const searchParams = useSearchParams();
   const from = searchParams.get('from');
@@ -123,7 +120,7 @@ function useBackTarget(stakeholder?: Pick<StakeholderEntity, 'clientId' | 'compa
   return { href: '/stakeholders', label: 'Stakeholders' };
 }
 
-/** One icon per contact method (Email/Mobile/LinkedIn) — click opens it (Mobile copies instead, see ContactCopyButton). A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. Mirrors CompanyDetail's LinkIconButton for its Website field. */
+/** One icon per contact method (Email/Mobile/LinkedIn) — Email and Mobile copy to clipboard; LinkedIn opens in a new tab. A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. Mirrors CompanyDetail's LinkIconButton for its Website field. */
 function ContactIconButton({
   icon: Icon,
   href,
@@ -157,41 +154,6 @@ function ContactIconButton({
   );
 }
 
-function copyValue(value: string, label: string) {
-  navigator.clipboard.writeText(value).then(
-    () => toast.success(`${label} copied`),
-    () => toast.error(`Couldn't copy ${label.toLowerCase()}`),
-  );
-}
-
-/** Same look as ContactIconButton, but copies to the clipboard instead of navigating — for Mobile, which has no useful direct-interact link (no tel: dialer on desktop). */
-function ContactCopyButton({
-  icon: Icon,
-  value,
-  label,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  value?: string | null;
-  label: string;
-}) {
-  const disabled = !value;
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={() => value && copyValue(value, label)}
-      title={disabled ? `No ${label.toLowerCase()} on file` : `Copy ${label.toLowerCase()}`}
-      aria-label={disabled ? `No ${label.toLowerCase()} on file` : `Copy ${label.toLowerCase()}`}
-      className={cn(
-        'flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors',
-        disabled ? 'cursor-not-allowed' : 'hover:bg-accent hover:text-foreground',
-      )}
-    >
-      <Icon className={cn('size-4', disabled && 'opacity-30 grayscale')} />
-    </button>
-  );
-}
-
 export function StakeholderDetail({
   id,
   canEdit = true,
@@ -203,7 +165,6 @@ export function StakeholderDetail({
 }) {
   const { data, isLoading, isError, error } = useGetStakeholder(id);
   const stakeholder = data?.status === 200 ? data.data : undefined;
-  const backTarget = useBackTarget(stakeholder);
 
   if (isLoading) {
     return (
@@ -222,12 +183,6 @@ export function StakeholderDetail({
           <p className="text-sm text-muted-foreground">
             {error instanceof Error ? error.message : `No stakeholder with ID ${id}.`}
           </p>
-        </div>
-        <div>
-          <Button variant="outline" nativeButton={false} render={<Link href={backTarget.href} />}>
-            <ArrowLeft />
-            Back to {backTarget.label.toLowerCase()}
-          </Button>
         </div>
       </PageLayout>
     );
@@ -432,8 +387,8 @@ function StakeholderEditForm({
 
   const contactActionsMenu = (
     <div className="flex items-center gap-1">
-      <ContactIconButton icon={Mail} href={email ? `mailto:${email}` : null} label="Email" />
-      <ContactCopyButton icon={Phone} value={mobile} label="Mobile" />
+      <ContactCopyIcon icon={Mail} value={email} label="Email" />
+      <ContactCopyIcon icon={Phone} value={mobile} label="Mobile" />
       <ContactIconButton
         icon={LinkedinIcon}
         href={linkedinUrl}
@@ -445,18 +400,7 @@ function StakeholderEditForm({
 
   return (
     <PageLayout className="overflow-auto">
-      <div className="flex flex-col gap-4 border-b border-border pb-5">
-        <Button
-          variant="ghost"
-          size="sm"
-          nativeButton={false}
-          render={<Link href={backTarget.href} />}
-          className="-ml-2 self-start text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft />
-          Back to {backTarget.label}
-        </Button>
-
+      <div className="flex flex-col gap-3 border-b border-border pb-3">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 font-heading text-lg font-semibold text-primary">

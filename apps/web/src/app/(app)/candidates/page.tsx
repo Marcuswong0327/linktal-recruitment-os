@@ -1,6 +1,6 @@
 import { auth } from '@/auth';
 import { AccessDenied } from '@/components/app-shell/AccessDenied';
-import { PageHeader, PageLayout } from '@/components/app-shell/PageLayout';
+import { PageLayout } from '@/components/app-shell/PageLayout';
 import { hasPermission } from '@/lib/auth/permissions';
 import { CandidateSearchGate } from '@/features/candidates/CandidateSearchGate';
 
@@ -9,7 +9,6 @@ export default async function CandidatesPage() {
 
   return (
     <PageLayout>
-      <PageHeader title="Candidates" />
       {hasPermission(session, 'candidate', 'read') ? (
         <CandidateSearchGate
           canCreate={hasPermission(session, 'candidate', 'create')}

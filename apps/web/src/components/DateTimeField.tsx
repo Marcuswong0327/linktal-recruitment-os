@@ -13,6 +13,8 @@ import {
 } from '@/components/ui/select';
 import {
   DEFAULT_HOUR,
+  businessHourOptions,
+  formatHourLabel,
   hourOptions,
   joinDateTimeParts,
   minuteOptions,
@@ -41,6 +43,8 @@ export function DateTimeField({
   onChange,
   disabled,
   size = 'default',
+  layout = 'inline',
+  hourMode = '24h',
   className,
   dateClassName,
   dateAriaLabel = 'Date',
@@ -52,6 +56,14 @@ export function DateTimeField({
   onChange: (iso: string | null) => void;
   disabled?: boolean;
   size?: 'sm' | 'default';
+  /** `stacked` puts the date on its own row above the hour:minute rolls. */
+  layout?: 'inline' | 'stacked';
+  /**
+   * `business12h` offers 6 AM–9 PM with AM/PM labels (values still 24h `HH`).
+   * Legacy hours outside that window are appended so an existing value still
+   * appears selected.
+   */
+  hourMode?: '24h' | 'business12h';
   className?: string;
   dateClassName?: string;
   dateAriaLabel?: string;
@@ -65,12 +77,32 @@ export function DateTimeField({
   // silently emit a timestamp for today.
   const timeDisabled = disabled || !date;
 
+  const hourRollOptions = React.useMemo(() => {
+    if (hourMode !== 'business12h') {
+      return hourOptions.map((h) => ({ value: h, label: h }));
+    }
+    const base = businessHourOptions.map((h) => ({
+      value: h,
+      label: formatHourLabel(h),
+    }));
+    // Keep a legacy out-of-window hour selectable so the roll doesn't go blank.
+    if (hour && !businessHourOptions.includes(hour)) {
+      return [...base, { value: hour, label: formatHourLabel(hour) }];
+    }
+    return base;
+  }, [hourMode, hour]);
+
   function emit(nextDate: string, nextHour: string, nextMinute: string) {
     onChange(joinDateTimeParts(nextDate, nextHour, nextMinute));
   }
 
   return (
-    <div className={cn('flex items-center gap-1.5', className)}>
+    <div
+      className={cn(
+        layout === 'stacked' ? 'flex flex-col items-start gap-1' : 'flex items-center gap-1.5',
+        className,
+      )}
+    >
       <input
         id={dateId}
         type="date"
@@ -84,16 +116,17 @@ export function DateTimeField({
       <div className="flex items-center gap-0.5">
         <TimeRoll
           value={hour}
-          options={hourOptions}
+          options={hourRollOptions}
           onValueChange={(v) => emit(date, v, minute || '00')}
           disabled={timeDisabled}
           ariaLabel={hourAriaLabel}
           isSm={isSm}
+          wide={hourMode === 'business12h'}
         />
         <span className={cn('text-muted-foreground', isSm ? 'text-xs' : 'text-sm')}>:</span>
         <TimeRoll
           value={minute}
-          options={minuteOptions}
+          options={minuteOptions.map((m) => ({ value: m, label: m }))}
           onValueChange={(v) => emit(date, hour || DEFAULT_HOUR, v)}
           disabled={timeDisabled}
           ariaLabel={minuteAriaLabel}
@@ -111,27 +144,38 @@ function TimeRoll({
   disabled,
   ariaLabel,
   isSm,
+  wide = false,
 }: {
   value: string;
-  options: string[];
+  options: { value: string; label: string }[];
   onValueChange: (value: string) => void;
   disabled?: boolean;
   ariaLabel: string;
   isSm: boolean;
+  /** Wider trigger for AM/PM hour labels (`6 AM`). */
+  wide?: boolean;
 }) {
   return (
     <Select value={value} onValueChange={(v) => onValueChange(v as string)} disabled={disabled}>
       <SelectTrigger
         size={isSm ? 'sm' : 'default'}
         aria-label={ariaLabel}
-        className={cn('tabular-nums', isSm ? 'w-14 px-1.5 text-xs' : 'w-16')}
+        className={cn(
+          'tabular-nums',
+          isSm ? 'px-1.5 text-xs' : null,
+          wide ? (isSm ? 'w-[4.5rem]' : 'w-20') : isSm ? 'w-14' : 'w-16',
+        )}
       >
-        <SelectValue placeholder="--" />
+        <SelectValue placeholder="--">
+          {value
+            ? (options.find((o) => o.value === value)?.label ?? value)
+            : undefined}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent className="min-w-0">
         {options.map((option) => (
-          <SelectItem key={option} value={option} className="tabular-nums">
-            {option}
+          <SelectItem key={option.value} value={option.value} className="tabular-nums">
+            {option.label}
           </SelectItem>
         ))}
       </SelectContent>

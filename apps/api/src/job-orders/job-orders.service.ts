@@ -55,21 +55,20 @@ const JOB_ORDER_INCLUDE = {
       industryId: true,
       companyName: true,
       displayId: true,
-      // Feeds the computed "key stakeholder" below — the most recently
-      // contacted stakeholder of this job order's client. Not a stored FK
-      // (see the entity's comment); every live stakeholder rides along here
-      // since client rosters are small and the pick happens in JS, where
-      // `orderBy: lastContactedAt desc` would put untouched (null) rows first
-      // under Postgres's default DESC-nulls-first ordering.
-      stakeholders: {
-        where: { deletedAt: null },
-        select: { id: true, firstName: true, lastName: true, email: true, mobile: true, linkedinUrl: true, lastContactedAt: true },
-      },
     },
   },
   // Who's working this job order — see JobOrderConsultant in schema.prisma.
   // Several consultants can be on the same job order concurrently.
   consultants: { select: { consultantId: true, consultant: { select: { fullName: true } } } },
+  // Persisted key contacts — see JobOrderKeyStakeholder.
+  keyStakeholders: {
+    select: {
+      stakeholderId: true,
+      stakeholder: {
+        select: { firstName: true, lastName: true, email: true, mobile: true, linkedinUrl: true, deletedAt: true },
+      },
+    },
+  },
   jobTitle: { select: { name: true } },
   jobRoleType: { select: { name: true } },
   // `ancestorIds` comes along on the location purely for the single-record
@@ -96,26 +95,26 @@ const JOB_ORDER_INCLUDE = {
   },
 } satisfies Prisma.JobOrderInclude;
 
-type ClientStakeholderForKeyContact = {
-  id: string;
-  firstName: string | null;
-  lastName: string | null;
-  email: string | null;
-  mobile: string | null;
-  linkedinUrl: string | null;
-  lastContactedAt: Date | null;
-};
-
 type JobOrderWithRelations = {
   client:
     | {
         industryId: string;
         companyName: string;
         displayId: string;
-        stakeholders: ClientStakeholderForKeyContact[];
       }
     | null;
   consultants: { consultantId: string; consultant: { fullName: string } }[];
+  keyStakeholders: {
+    stakeholderId: string;
+    stakeholder: {
+      firstName: string | null;
+      lastName: string | null;
+      email: string | null;
+      mobile: string | null;
+      linkedinUrl: string | null;
+      deletedAt: Date | null;
+    } | null;
+  }[];
   jobTitle: { name: string } | null;
   jobRoleType: { name: string } | null;
   location: { name: string; level: string; ancestorIds: string[] } | null;
@@ -138,20 +137,10 @@ type JobOrderWithRelations = {
   }[];
 };
 
-/** Best guess at "who to talk to" for this job order's client: whoever was contacted most recently, falling back to the first stakeholder on file. No stakeholder at all → null (not "not configured yet" — see the entity's comment on why this isn't a stored field). */
-function pickKeyStakeholder(stakeholders: ClientStakeholderForKeyContact[]) {
-  if (stakeholders.length === 0) return null;
-  return stakeholders.reduce((best, s) => {
-    const bestTime = best.lastContactedAt?.getTime() ?? -Infinity;
-    const time = s.lastContactedAt?.getTime() ?? -Infinity;
-    return time > bestTime ? s : best;
-  });
-}
-
-/** A candidate is stored as first/last name, either of which may be missing. */
-function displayName(candidate: { firstName: string | null; lastName: string | null } | null): string {
-  const name = [candidate?.firstName, candidate?.lastName].filter(Boolean).join(' ');
-  return name || 'Unknown candidate';
+/** A person is stored as first/last name, either of which may be missing. */
+function displayName(person: { firstName: string | null; lastName: string | null } | null): string {
+  const name = [person?.firstName, person?.lastName].filter(Boolean).join(' ');
+  return name || 'Unknown';
 }
 
 /**
@@ -188,8 +177,7 @@ type JobOrderExportRow = {
 };
 
 function toEntity<T extends JobOrderWithRelations>(jobOrder: T) {
-  const { submissions, client, consultants, jobTitle, jobRoleType, location, ...rest } = jobOrder;
-  const keyStakeholder = client ? pickKeyStakeholder(client.stakeholders) : null;
+  const { submissions, client, consultants, keyStakeholders, jobTitle, jobRoleType, location, ...rest } = jobOrder;
   return {
     ...rest,
     // `clientId` (on ...rest) is what you PATCH; these two are what you show
@@ -218,13 +206,15 @@ function toEntity<T extends JobOrderWithRelations>(jobOrder: T) {
       placementFeeValue: s.placement?.feeValue ?? null,
       placementStartDate: s.placement?.startDate ?? null,
     })),
-    keyStakeholderId: keyStakeholder?.id ?? null,
-    keyStakeholderName: keyStakeholder
-      ? [keyStakeholder.firstName, keyStakeholder.lastName].filter(Boolean).join(' ') || 'Unnamed contact'
-      : null,
-    keyStakeholderEmail: keyStakeholder?.email ?? null,
-    keyStakeholderMobile: keyStakeholder?.mobile ?? null,
-    keyStakeholderLinkedinUrl: keyStakeholder?.linkedinUrl ?? null,
+    keyStakeholders: keyStakeholders
+      .filter((row) => row.stakeholder && !row.stakeholder.deletedAt)
+      .map((row) => ({
+        id: row.stakeholderId,
+        name: displayName(row.stakeholder),
+        email: row.stakeholder!.email,
+        mobile: row.stakeholder!.mobile,
+        linkedinUrl: row.stakeholder!.linkedinUrl,
+      })),
   };
 }
 
@@ -511,13 +501,33 @@ export class JobOrdersService {
   }
 
   async update(id: string, dto: UpdateJobOrderDto, user: AuthUser) {
-    await this.findOne(id, user);
+    const existing = await this.findOne(id, user);
 
     const jobOrder = await this.prisma.jobOrder.update({
       where: { id },
       data: { ...dto },
       include: JOB_ORDER_INCLUDE,
     });
+
+    // Changing company drops key-stakeholder join rows that aren't on the
+    // new client — those contacts can't stay "key" for a different company.
+    if (dto.clientId && dto.clientId !== existing.clientId) {
+      const stale = await this.prisma.jobOrderKeyStakeholder.findMany({
+        where: {
+          jobOrderId: id,
+          stakeholder: { clientId: { not: dto.clientId } },
+        },
+        select: { stakeholderId: true },
+      });
+      for (const row of stale) {
+        await this.prisma.jobOrderKeyStakeholder.delete({
+          where: { jobOrderId_stakeholderId: { jobOrderId: id, stakeholderId: row.stakeholderId } },
+        });
+      }
+      if (stale.length > 0) {
+        return this.findOne(id, user);
+      }
+    }
 
     return toEntity(jobOrder);
   }
@@ -579,6 +589,73 @@ export class JobOrdersService {
     }
     for (const consultantId of toAdd) {
       await this.prisma.jobOrderConsultant.create({ data: { jobOrderId: id, consultantId } });
+    }
+
+    return this.findOne(id, actor);
+  }
+
+  /**
+   * Full-set-replace of this job order's key stakeholder contacts — same
+   * audited per-row create/delete shape as setConsultants. Every id must
+   * belong to the job order's current client (cross-company picks are
+   * rejected); soft-deleted stakeholders are also rejected.
+   */
+  async setKeyStakeholders(id: string, stakeholderIds: string[], actor: AuthUser) {
+    const jobOrder = await this.prisma.jobOrder.findUnique({
+      where: { id },
+      select: { id: true, clientId: true },
+    });
+    if (!jobOrder) {
+      throw new NotFoundException(`Job order ${id} not found`);
+    }
+
+    const uniqueIds = Array.from(new Set(stakeholderIds));
+    if (uniqueIds.length > 0) {
+      const stakeholders = await this.prisma.stakeholder.findMany({
+        where: { id: { in: uniqueIds } },
+        select: { id: true, clientId: true, deletedAt: true },
+      });
+      const found = new Map(stakeholders.map((s) => [s.id, s]));
+      const missing = uniqueIds.filter((v) => !found.has(v));
+      if (missing.length > 0) {
+        throw new BadRequestException({
+          code: 'INVALID_STAKEHOLDER',
+          message: `Unknown stakeholder id(s): ${missing.join(', ')}`,
+        });
+      }
+      const wrongClient = uniqueIds.filter((v) => found.get(v)!.clientId !== jobOrder.clientId);
+      if (wrongClient.length > 0) {
+        throw new BadRequestException({
+          code: 'STAKEHOLDER_WRONG_CLIENT',
+          message: `Stakeholder id(s) not on this job order's client: ${wrongClient.join(', ')}`,
+        });
+      }
+      const deleted = uniqueIds.filter((v) => found.get(v)!.deletedAt != null);
+      if (deleted.length > 0) {
+        throw new BadRequestException({
+          code: 'DELETED_STAKEHOLDER',
+          message: `Deleted stakeholder id(s): ${deleted.join(', ')}`,
+        });
+      }
+    }
+
+    const current = await this.prisma.jobOrderKeyStakeholder.findMany({
+      where: { jobOrderId: id },
+      select: { stakeholderId: true },
+    });
+    const currentIds = current.map((c) => c.stakeholderId);
+    const currentSet = new Set(currentIds);
+    const nextSet = new Set(uniqueIds);
+    const toAdd = uniqueIds.filter((v) => !currentSet.has(v));
+    const toRemove = currentIds.filter((v) => !nextSet.has(v));
+
+    for (const stakeholderId of toRemove) {
+      await this.prisma.jobOrderKeyStakeholder.delete({
+        where: { jobOrderId_stakeholderId: { jobOrderId: id, stakeholderId } },
+      });
+    }
+    for (const stakeholderId of toAdd) {
+      await this.prisma.jobOrderKeyStakeholder.create({ data: { jobOrderId: id, stakeholderId } });
     }
 
     return this.findOne(id, actor);

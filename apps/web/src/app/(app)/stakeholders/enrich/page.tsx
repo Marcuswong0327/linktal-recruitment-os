@@ -1,8 +1,6 @@
-import Link from 'next/link';
 import { auth } from '@/auth';
 import { AccessDenied } from '@/components/app-shell/AccessDenied';
 import { PageLayout } from '@/components/app-shell/PageLayout';
-import { Button } from '@/components/ui/button';
 import { hasPermission } from '@/lib/auth/permissions';
 import { StakeholderEnrichmentWorkspace } from '@/features/stakeholders/StakeholderEnrichmentWorkspace';
 
@@ -20,26 +18,18 @@ export default async function StakeholderEnrichmentPage({
     );
   }
 
-  const { clientIds: clientIdsParam, from } = await searchParams;
+  const { clientIds: clientIdsParam } = await searchParams;
   const clientIds = (clientIdsParam ?? '').split(',').filter(Boolean);
 
   if (clientIds.length === 0) {
     return (
       <PageLayout>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <h1 className="font-heading text-xl font-semibold">No companies selected</h1>
           <p className="text-sm text-muted-foreground">
             Select one or more companies (or Job Research rows) and choose &quot;Enrich Stakeholders&quot; to open
             this workspace.
           </p>
-          <Button
-            size="lg"
-            nativeButton={false}
-            render={<Link href={from === 'job-opening-search' ? '/job-opening-search' : '/companies'} />}
-            className="self-start"
-          >
-            {from === 'job-opening-search' ? 'Back to Job Opening Search' : 'Back to Companies'}
-          </Button>
         </div>
       </PageLayout>
     );
@@ -49,7 +39,6 @@ export default async function StakeholderEnrichmentPage({
     <StakeholderEnrichmentWorkspace
       clientIds={clientIds}
       canUpdate={hasPermission(session, 'stakeholder', 'update')}
-      from={from}
     />
   );
 }

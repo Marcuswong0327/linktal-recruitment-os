@@ -384,7 +384,7 @@ function DataGridNewRowCells<TData>({
       <TableRow className="hover:bg-transparent" style={isVirtual ? { display: 'flex', width: '100%' } : undefined} aria-hidden>
         <TableCell
           colSpan={columns.length}
-          className="py-0.5 text-center text-[11px] text-muted-foreground"
+          className="py-1.5 text-center text-sm font-medium text-foreground/70"
           style={isVirtual ? { display: 'flex', width: '100%', justifyContent: 'center' } : undefined}
         >
           Press Enter to add · Esc to cancel
@@ -2047,7 +2047,7 @@ export function DataGrid<TData>({
                 <TableRow style={isVirtual ? { display: 'flex', width: '100%' } : undefined}>
                   <TableCell
                     colSpan={totalColumns}
-                    className="py-3 text-center text-xs text-muted-foreground"
+                    className="py-1.5 text-center text-[10px] text-muted-foreground/60"
                     // `colSpan` only stretches the cell under real table
                     // layout — virtualized rows make their `TableRow` a flex
                     // container, which turns colSpan into a no-op and

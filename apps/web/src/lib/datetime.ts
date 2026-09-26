@@ -15,6 +15,24 @@ export const hourOptions: string[] = Array.from({ length: 24 }, (_, i) =>
 );
 
 /**
+ * Business-hours roll for interview scheduling — 6 AM through 9 PM inclusive.
+ * Values stay 24h `HH` so {@link joinDateTimeParts} is unchanged; labels use
+ * {@link formatHourLabel}.
+ */
+export const businessHourOptions: string[] = Array.from({ length: 16 }, (_, i) =>
+  String(i + 6).padStart(2, '0'),
+);
+
+/** 12-hour AM/PM label for a 24h `HH` string (`"06"` → `"6 AM"`, `"13"` → `"1 PM"`). */
+export function formatHourLabel(hh: string): string {
+  const n = Number(hh);
+  if (Number.isNaN(n) || n < 0 || n > 23) return hh;
+  const period = n < 12 ? 'AM' : 'PM';
+  const h12 = n % 12 === 0 ? 12 : n % 12;
+  return `${h12} ${period}`;
+}
+
+/**
  * Minute roll options. Only the quarter hours exist as choices — a native
  * `<input type="datetime-local">` can't be narrowed this way (its `step`
  * governs arrow-key stepping only, and Firefox ignores even that), so the roll

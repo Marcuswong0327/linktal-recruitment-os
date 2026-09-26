@@ -637,6 +637,7 @@ model Stakeholder {
 
   contactHistory             StakeholderContactHistory[]
   outreachCampaignRecipients OutreachCampaignRecipient[] // See the OUTREACH CAMPAIGNS section below.
+  jobOrderKeyAssignments     JobOrderKeyStakeholder[]
 
   @@index([clientId])
   @@index([deletedAt])
@@ -880,6 +881,11 @@ model JobOrder {
   // Consultant).
   consultants JobOrderConsultant[]
 
+  // Key contacts for this brief — multi-select from the parent client's
+  // stakeholders (see JobOrderKeyStakeholder). Replaces the old derived
+  // "most recently contacted" single contact on the entity.
+  keyStakeholders JobOrderKeyStakeholder[]
+
   // Both, same split as Stakeholder: the client's brief vs. the consultant's
   // classification. The sheet has a single "Role" column, imported into both.
   jobTitleId    String?
@@ -957,6 +963,23 @@ model JobOrderConsultant {
 
   @@id([jobOrderId, consultantId])
   @@index([consultantId])
+}
+
+// Many-to-many: which of the parent client's stakeholders are the key
+// contacts for this job order. Explicit join (same audit reasoning as
+// JobOrderConsultant). Every stakeholderId must belong to the job order's
+// clientId — enforced in JobOrdersService.setKeyStakeholders.
+model JobOrderKeyStakeholder {
+  jobOrderId String
+  jobOrder   JobOrder @relation(fields: [jobOrderId], references: [id], onDelete: Cascade)
+
+  stakeholderId String
+  stakeholder   Stakeholder @relation(fields: [stakeholderId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+
+  @@id([jobOrderId, stakeholderId])
+  @@index([stakeholderId])
 }
 
 // ============================================================================

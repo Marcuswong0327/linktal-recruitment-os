@@ -9,6 +9,7 @@ import type { JobOrderConsultantEntity } from './jobOrderConsultantEntity';
 import type { JobOrderEntityLocationLevel } from './jobOrderEntityLocationLevel';
 import type { JobOrderEntityQuality } from './jobOrderEntityQuality';
 import type { JobOrderEntityStatus } from './jobOrderEntityStatus';
+import type { JobOrderKeyStakeholderEntity } from './jobOrderKeyStakeholderEntity';
 import type { JobOrderPipelineCandidateEntity } from './jobOrderPipelineCandidateEntity';
 
 export interface JobOrderEntity {
@@ -115,17 +116,6 @@ export interface JobOrderEntity {
   createdAt: string;
   updatedAt: string;
   pipelineSubmissions: JobOrderPipelineCandidateEntity[];
-  /**
-     * The client's most recently contacted stakeholder
-     * @nullable
-     */
-  keyStakeholderId: string | null;
-  /** @nullable */
-  keyStakeholderName: string | null;
-  /** @nullable */
-  keyStakeholderEmail: string | null;
-  /** @nullable */
-  keyStakeholderMobile: string | null;
-  /** @nullable */
-  keyStakeholderLinkedinUrl: string | null;
+  /** Key contacts for this job order — persisted multi-select from the parent client (see PUT /job-orders/:id/key-stakeholders) */
+  keyStakeholders: JobOrderKeyStakeholderEntity[];
 }
