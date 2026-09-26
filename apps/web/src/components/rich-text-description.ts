@@ -72,7 +72,7 @@ function transformOfficePastedHtmlDom(html: string): string {
 }
 
 function transformOfficePastedHtmlRegex(html: string): string {
-  let cleaned = html
+  const cleaned = html
     .replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<\/?o:[^>]*>/gi, '')
