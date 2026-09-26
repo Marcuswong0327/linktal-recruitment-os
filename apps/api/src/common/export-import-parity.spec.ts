@@ -190,6 +190,7 @@ describe('export -> import column parity', () => {
       receivedAt: new Date(),
       closedAt: null,
       submissions: [],
+      keyStakeholders: [],
     };
     const prisma = { jobOrder: { findMany: jest.fn().mockResolvedValue([jobOrder]) } } as unknown as ConstructorParameters<typeof JobOrdersService>[0];
     const base = {
