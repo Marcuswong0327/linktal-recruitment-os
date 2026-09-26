@@ -21,13 +21,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ClientCombobox } from '@/components/ClientCombobox';
 import { CreatableCombobox } from '@/components/CreatableCombobox';
 import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { ContactIconRow, JobOrderPipelineCard } from '@/components/JobOrderPipelineCard';
 import { FileUploadField } from '@/components/FileUploadField';
+import {
+  RichTextDescriptionEditor,
+  sanitizeDescriptionHtml,
+} from '@/components/RichTextDescriptionEditor';
 import { TagMultiSelect, type TagOption } from '@/components/TagMultiSelect';
 import { PageLayout } from '@/components/app-shell/PageLayout';
 import { useIsMac } from '@/hooks/use-is-mac';
@@ -54,9 +57,6 @@ import {
   qualityOptions,
   statusOptions,
 } from './schema';
-
-const textareaClass =
-  'min-h-32 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30';
 
 const shortDateFormatter = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
@@ -295,7 +295,7 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
     const data: UpdateJobOrderDto = {
       clientId,
       jobTitleId: jobTitleId || undefined,
-      description: description || undefined,
+      description: sanitizeDescriptionHtml(description) || undefined,
       jdFileUrl: jdFileUrl || undefined,
       clientAdsUrl: clientAdsUrl || undefined,
       otherDocumentsUrl: otherDocumentsUrl || undefined,
@@ -361,10 +361,10 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
         ref={formRef}
         onSubmit={handleSubmit}
         onKeyDown={blockImplicitEnterSubmit}
-        className="flex flex-col gap-5"
+        className="flex flex-col gap-3"
       >
-        <div className="grid gap-5 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
+          <div>
             <JobOrderPipelineCard
               jobOrder={jobOrder}
               candidateLocationIds={candidateLocationIds}
@@ -372,8 +372,8 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
           </div>
 
           <Card size="sm">
-            <CardHeader className="border-b">
-              <CardTitle className="flex items-center gap-2">
+            <CardHeader className="border-b py-2 [.border-b]:pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
                 <FileText className="size-4 text-muted-foreground" />
                 Information
               </CardTitle>
@@ -523,65 +523,52 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
           </Card>
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader className="border-b">
-              <CardTitle className="flex items-center gap-2">Description</CardTitle>
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
+          <Card size="sm">
+            <CardHeader className="border-b py-2 [.border-b]:pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">Description</CardTitle>
             </CardHeader>
             <CardContent>
-              <textarea
+              <RichTextDescriptionEditor
                 id="description"
                 aria-label="Description"
-                className={textareaClass}
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={setDescription}
+                disabled={saving}
               />
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="border-b">
-              <CardTitle className="flex items-center gap-2">Files History - e.g. JD Ads Other Documents</CardTitle>
+          <Card size="sm">
+            <CardHeader className="border-b py-2 [.border-b]:pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">Files History - e.g. JD Ads Other Documents</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-auto rounded-md border border-border">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="divide-x divide-border">
-                      <TableHead>JD</TableHead>
-                      <TableHead>Client Ads</TableHead>
-                      <TableHead>Other Documents</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow className="divide-x divide-border">
-                      <TableCell>
-                        <FileUploadField
-                          id="jdFileUrl"
-                          value={jdFileUrl}
-                          onChange={(url) => setJdFileUrl(url ?? '')}
-                          upload={handleUploadFile}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <FileUploadField
-                          id="clientAdsUrl"
-                          value={clientAdsUrl}
-                          onChange={(url) => setClientAdsUrl(url ?? '')}
-                          upload={handleUploadFile}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <FileUploadField
-                          id="otherDocumentsUrl"
-                          value={otherDocumentsUrl}
-                          onChange={(url) => setOtherDocumentsUrl(url ?? '')}
-                          upload={handleUploadFile}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
+              <div className="flex flex-col gap-3">
+                <FormField label="JD" htmlFor="jdFileUrl">
+                  <FileUploadField
+                    id="jdFileUrl"
+                    value={jdFileUrl}
+                    onChange={(url) => setJdFileUrl(url ?? '')}
+                    upload={handleUploadFile}
+                  />
+                </FormField>
+                <FormField label="Client Ads" htmlFor="clientAdsUrl">
+                  <FileUploadField
+                    id="clientAdsUrl"
+                    value={clientAdsUrl}
+                    onChange={(url) => setClientAdsUrl(url ?? '')}
+                    upload={handleUploadFile}
+                  />
+                </FormField>
+                <FormField label="Other Documents" htmlFor="otherDocumentsUrl">
+                  <FileUploadField
+                    id="otherDocumentsUrl"
+                    value={otherDocumentsUrl}
+                    onChange={(url) => setOtherDocumentsUrl(url ?? '')}
+                    upload={handleUploadFile}
+                  />
+                </FormField>
               </div>
             </CardContent>
           </Card>
