@@ -675,7 +675,7 @@ function CompanyEditForm({
         ref={formRef}
         onSubmit={handleSubmit}
         onKeyDown={blockImplicitEnterSubmit}
-        className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]"
+        className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,25rem)]"
       >
         <div className="flex flex-col gap-3">
           <Card size="sm">
@@ -1286,6 +1286,8 @@ function CompanyEditForm({
                 selected={locations}
                 onChange={setLocations}
                 disabled={!canEdit}
+                showLevel={false}
+                browsable={false}
               />
             </CardContent>
             <CardContent className="grid gap-4 border-t pt-4">

@@ -18,6 +18,12 @@ import {
   getGetIndustriesQueryKey,
   useCreateIndustry,
 } from '@/lib/api/generated/industries/industries';
+import {
+  getGetSpecializationsQueryKey,
+  useCreateSpecialization,
+} from '@/lib/api/generated/specializations/specializations';
+import { GridCellSpecializationCombobox } from '@/components/GridCellSpecializationCombobox';
+import type { PickedSpecialization } from '@/components/GridCellSpecializationCombobox';
 import type {
   ClientEntityQuality,
   ClientEntityStatus,
@@ -28,6 +34,7 @@ import { qualityOptions, statusOptions } from './schema';
 interface CompanyDraft {
   companyName: string;
   industryId: string;
+  specialization: PickedSpecialization | null;
   locations: LocationChoice[];
   status: string;
   quality: string;
@@ -36,6 +43,7 @@ interface CompanyDraft {
 const emptyDraft: CompanyDraft = {
   companyName: '',
   industryId: '',
+  specialization: null,
   locations: [],
   status: '',
   quality: '',
@@ -49,6 +57,8 @@ interface UseCompanyNewRowOptions {
   industries: { value: string; label: string }[];
   /** `industry:create` — without it the Industry cell is pick-only. */
   canCreateIndustry?: boolean;
+  /** `specialization:create` — without it the Specialization cell is pick-only. */
+  canCreateSpecialization?: boolean;
 }
 
 /**
@@ -56,14 +66,15 @@ interface UseCompanyNewRowOptions {
  * see `DataGridProps.newRow`.
  *
  * Industry is required on create (scope resolver), so the new-row Industry
- * cell stays editable. Specialization is edited only on the company detail
- * page — same as Candidates' grid (read-only chips in the list).
+ * cell stays editable. Specialization is optional and only searchable once
+ * Industry is set — one pick on this row; more are edited on the detail page.
  */
 export function useCompanyNewRow({
   onCreate,
   disabled = false,
   industries,
   canCreateIndustry = false,
+  canCreateSpecialization = false,
 }: UseCompanyNewRowOptions): DataGridNewRow {
   const router = useRouter();
   const { data: session } = useSession();
@@ -76,6 +87,12 @@ export function useCompanyNewRow({
   const createIndustry = useCreateIndustry({
     mutation: {
       onSuccess: () => queryClient.invalidateQueries({ queryKey: getGetIndustriesQueryKey() }),
+    },
+  });
+  const createSpecialization = useCreateSpecialization({
+    mutation: {
+      onSuccess: () =>
+        queryClient.invalidateQueries({ queryKey: getGetSpecializationsQueryKey() }),
     },
   });
 
@@ -103,6 +120,7 @@ export function useCompanyNewRow({
         companyName: draft.companyName.trim(),
         industryId,
         locationIds: draft.locations.map((l) => l.id),
+        ...(draft.specialization ? { specializationIds: [draft.specialization.id] } : {}),
         ...(draft.status ? { status: draft.status as ClientEntityStatus } : {}),
         ...(draft.quality ? { quality: draft.quality as ClientEntityQuality } : {}),
       });
@@ -137,7 +155,13 @@ export function useCompanyNewRow({
     industry: (
       <GridCellCombobox
         value={draft.industryId}
-        onValueChange={(v) => set('industryId', v)}
+        onValueChange={(v) =>
+          setDraft((d) => ({
+            ...d,
+            industryId: v,
+            specialization: d.industryId === v ? d.specialization : null,
+          }))
+        }
         options={industryOptions}
         onCreate={
           canCreateIndustry
@@ -151,6 +175,31 @@ export function useCompanyNewRow({
         }
         disabled={disabled || isSaving}
         placeholder="Industry"
+      />
+    ),
+    specializations: (
+      <GridCellSpecializationCombobox
+        value={draft.specialization?.id ?? ''}
+        onValueChange={(picked) => set('specialization', picked)}
+        industryId={industryId}
+        disabled={disabled || isSaving || !industryId}
+        placeholder="Specialization"
+        onCreate={
+          canCreateSpecialization && industryId
+            ? async (name) => {
+                const res = await createSpecialization.mutateAsync({
+                  data: { name, industryId },
+                });
+                if (res.status !== 201) throw new Error('Failed to add specialization');
+                toast.success(`${res.data.name} added`);
+                return {
+                  id: res.data.id,
+                  name: res.data.name,
+                  industryId: res.data.industryId,
+                };
+              }
+            : undefined
+        }
       />
     ),
     locations: (

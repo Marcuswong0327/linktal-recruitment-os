@@ -209,6 +209,7 @@ export function AddStakeholderRow({
           selected={values.coverage}
           onChange={(coverage) => set('coverage', coverage)}
           scopeLocationIds={scopeLocationIds}
+          showLevel={false}
         />
       </FormField>
     </InlineAddRow>

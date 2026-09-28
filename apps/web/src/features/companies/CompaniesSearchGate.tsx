@@ -417,6 +417,7 @@ export function CompaniesSearchGate({
             canUpdate={canUpdate}
             canDelete={canDelete}
             canCreateIndustry={canCreateIndustry}
+            canCreateSpecialization={canCreateSpecialization}
           />
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card py-24 text-center">
