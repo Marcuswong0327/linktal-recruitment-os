@@ -11,35 +11,35 @@ import type { WorkHistoryItemDto } from './workHistoryItemDto';
 
 export interface UpdateCandidateDto {
   /** First name */
-  firstName?: string;
+  firstName?: string | null;
   /** Last name */
-  lastName?: string;
+  lastName?: string | null;
   /** Email address */
-  email?: string;
+  email?: string | null;
   /** Mobile number */
-  mobile?: string;
+  mobile?: string | null;
   /** Most specific known Location node (see /locations) — city if no suburb is known, and so on */
   locationId?: string;
   /** Industry ID (see /industries) */
   industryId?: string;
   /** Job role type ID (see /job-role-types) */
-  jobRoleTypeId?: string;
+  jobRoleTypeId?: string | null;
   /** Title at their current employer, in the employer's own words */
   currentRole?: string;
   /** Current company */
   currentCompany?: string;
   /** Free text, not a number — the source records values like "35 per hour" */
-  currentSalary?: string;
+  currentSalary?: string | null;
   /** Free text, same reasoning as currentSalary */
-  expectedSalary?: string;
+  expectedSalary?: string | null;
   /** LinkedIn URL */
-  linkedinUrl?: string;
+  linkedinUrl?: string | null;
   /** Seek Talent Search profile URL */
-  seekTalentUrl?: string;
+  seekTalentUrl?: string | null;
   /** Raw resume file — object storage key from POST /candidates/upload, not a URL */
-  rawResumeUrl?: string;
+  rawResumeUrl?: string | null;
   /** Edited resume file — Linktal's own reformatted version, object storage key from POST /candidates/upload, not a URL */
-  editedResumeUrl?: string;
+  editedResumeUrl?: string | null;
   /** Work history entries */
   workHistory?: WorkHistoryItemDto[];
   /** Older/superseded resume or document versions */

@@ -339,15 +339,15 @@ function StakeholderEditForm({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const data: UpdateStakeholderDto = {
-      firstName: firstName || undefined,
-      lastName: lastName || undefined,
-      jobTitleId: jobTitleId || undefined,
-      roleTypeId: roleTypeId || undefined,
-      linkedinUrl: linkedinUrl || undefined,
-      email: email || undefined,
-      mobile: mobile || undefined,
+      firstName: firstName || null,
+      lastName: lastName || null,
+      jobTitleId: jobTitleId || null,
+      roleTypeId: roleTypeId || null,
+      linkedinUrl: linkedinUrl || null,
+      email: email || null,
+      mobile: mobile || null,
       status,
-      generalDescription: generalDescription || undefined,
+      generalDescription: generalDescription || null,
       coverageLocationIds: coverage.map((c) => c.id),
     };
     updateStakeholder.mutate({ id: stakeholder.id, data });

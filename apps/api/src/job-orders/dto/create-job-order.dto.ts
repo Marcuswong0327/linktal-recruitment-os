@@ -47,23 +47,23 @@ export class CreateJobOrderDto {
   @IsString()
   jobResearchId?: string;
 
-  @ApiPropertyOptional({ description: 'Minimum salary', example: 120000 })
+  @ApiPropertyOptional({ description: 'Minimum salary', example: 120000, nullable: true })
   @IsOptional()
   @IsNumber()
   @Min(0)
-  salaryMin?: number;
+  salaryMin?: number | null;
 
-  @ApiPropertyOptional({ description: 'Maximum salary', example: 150000 })
+  @ApiPropertyOptional({ description: 'Maximum salary', example: 150000, nullable: true })
   @IsOptional()
   @IsNumber()
   @Min(0)
-  salaryMax?: number;
+  salaryMax?: number | null;
 
-  @ApiPropertyOptional({ description: 'Salary currency', example: 'AUD', default: 'AUD' })
+  @ApiPropertyOptional({ description: 'Salary currency', example: 'AUD', default: 'AUD', nullable: true })
   @IsOptional()
   @IsString()
   @MaxLength(3)
-  salaryCurrency?: string;
+  salaryCurrency?: string | null;
 
   @ApiPropertyOptional({
     description: 'Forecast value of this job order, entered before anyone is placed — distinct from a Placement fee',
@@ -80,10 +80,10 @@ export class CreateJobOrderDto {
   @Min(1)
   openings?: number;
 
-  @ApiPropertyOptional({ description: 'Job description' })
+  @ApiPropertyOptional({ description: 'Job description', nullable: true })
   @IsOptional()
   @IsString()
-  description?: string;
+  description?: string | null;
 
   @ApiPropertyOptional({ description: 'Requirements' })
   @IsOptional()
@@ -117,21 +117,21 @@ export class CreateJobOrderDto {
   // Not @IsUrl, same reasoning as Tob.sourceFileLink: these hold SharePoint
   // links, bare file paths, and the occasional note — rejecting non-URLs
   // would lose the only pointer to the original document.
-  @ApiPropertyOptional({ description: 'Link to the job description document' })
+  @ApiPropertyOptional({ description: 'Link to the job description document', nullable: true })
   @IsOptional()
   @IsString()
   @MaxLength(2000)
-  jdFileUrl?: string;
+  jdFileUrl?: string | null;
 
-  @ApiPropertyOptional({ description: "Link to the client's own published ad for this role" })
+  @ApiPropertyOptional({ description: "Link to the client's own published ad for this role", nullable: true })
   @IsOptional()
   @IsString()
   @MaxLength(2000)
-  clientAdsUrl?: string;
+  clientAdsUrl?: string | null;
 
-  @ApiPropertyOptional({ description: 'Link to any other document supporting this job order' })
+  @ApiPropertyOptional({ description: 'Link to any other document supporting this job order', nullable: true })
   @IsOptional()
   @IsString()
   @MaxLength(2000)
-  otherDocumentsUrl?: string;
+  otherDocumentsUrl?: string | null;
 }

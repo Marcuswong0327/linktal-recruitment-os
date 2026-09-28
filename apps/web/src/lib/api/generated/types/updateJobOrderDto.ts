@@ -20,17 +20,17 @@ export interface UpdateJobOrderDto {
   /** ClientJobResearch row this job order originated from, if any (see /job-research) */
   jobResearchId?: string;
   /** Minimum salary */
-  salaryMin?: number;
+  salaryMin?: number | null;
   /** Maximum salary */
-  salaryMax?: number;
+  salaryMax?: number | null;
   /** Salary currency */
-  salaryCurrency?: string;
+  salaryCurrency?: string | null;
   /** Forecast value of this job order, entered before anyone is placed — distinct from a Placement fee */
   estimatedValue?: number;
   /** Number of openings */
   openings?: number;
   /** Job description */
-  description?: string;
+  description?: string | null;
   /** Requirements */
   requirements?: string;
   /** Briefing notes — internal, distinct from the public-facing description/requirements copy */
@@ -42,9 +42,9 @@ export interface UpdateJobOrderDto {
   /** Priority: 1=High, 2=Medium, 3=Low */
   priorityLevel?: number;
   /** Link to the job description document */
-  jdFileUrl?: string;
+  jdFileUrl?: string | null;
   /** Link to the client's own published ad for this role */
-  clientAdsUrl?: string;
+  clientAdsUrl?: string | null;
   /** Link to any other document supporting this job order */
-  otherDocumentsUrl?: string;
+  otherDocumentsUrl?: string | null;
 }
