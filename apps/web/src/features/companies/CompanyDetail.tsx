@@ -7,11 +7,8 @@ import {
   ChevronDown,
   Contact,
   CornerDownLeft,
-  Copy,
-  EllipsisVertical,
   FileText,
   Globe,
-  Mail,
   Phone,
   Plus,
   Trash2,
@@ -34,12 +31,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Kbd } from '@/components/ui/kbd';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -56,6 +47,7 @@ import { AddStakeholderRow, type AddStakeholderValues } from '@/components/AddSt
 import { AddTobRow, type AddTobValues } from '@/components/AddTobRow';
 import { fileViewUrl } from '@/components/FileUploadField';
 import { LinkedinIcon, SeekIcon } from '@/components/BrandIcons';
+import { ContactMethodsCell } from '@/components/ContactMethodsCell';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { ConsultantAvatar, useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox, type CreatableComboboxOption } from '@/components/CreatableCombobox';
@@ -121,14 +113,6 @@ import type {
 } from '@/lib/api/generated/types';
 import { formatDate as formatJobResearchDate } from '@/features/job-research/schema';
 import { qualityOptions, statusOptions, type ClientQuality, type ClientStatus } from './schema';
-
-const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
-  day: '2-digit',
-  month: 'short',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-});
 
 const contactHistoryDateFormatter = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
@@ -201,131 +185,6 @@ function LinkIconButton({
       />
       <TooltipContent>{disabled ? `No ${label.toLowerCase()} on file` : label}</TooltipContent>
     </Tooltip>
-  );
-}
-
-function copyValue(value: string, label: string) {
-  navigator.clipboard.writeText(value).then(
-    () => toast.success(`${label} copied`),
-    () => toast.error(`Couldn't copy ${label.toLowerCase()}`),
-  );
-}
-
-/**
- * A menu row for a contact method that can both be opened directly and
- * copied. Rendered as two adjacent `DropdownMenuItem`s rather than one row
- * with a nested button — Base UI tracks "highlighted" per composite-list
- * item (the whole row), not by pointer position within it, so a nested
- * button can't have its own independent hover state inside a single Item.
- * Two Items means two independently-highlightable targets instead. Falls
- * back to a single disabled item when there's no value to act on.
- */
-function SplitActionRow({
-  icon: Icon,
-  value,
-  label,
-  emptyLabel,
-  copyLabel,
-  href,
-  external,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  value?: string | null;
-  label: string;
-  emptyLabel: string;
-  copyLabel: string;
-  href: (value: string) => string;
-  external?: boolean;
-}) {
-  if (!value) {
-    return (
-      <DropdownMenuItem disabled>
-        <Icon />
-        {emptyLabel}
-      </DropdownMenuItem>
-    );
-  }
-  return (
-    <div className="flex items-center gap-0.5">
-      <DropdownMenuItem
-        className="flex-1"
-        render={
-          <a
-            href={href(value)}
-            target={external ? '_blank' : undefined}
-            rel={external ? 'noopener noreferrer' : undefined}
-          />
-        }
-      >
-        <Icon />
-        {label}
-      </DropdownMenuItem>
-      <div className="h-4 w-px shrink-0 bg-border" aria-hidden />
-      <DropdownMenuItem
-        className="w-8 shrink-0 justify-center px-0"
-        onClick={() => copyValue(value, copyLabel)}
-        aria-label={`Copy ${copyLabel.toLowerCase()}`}
-      >
-        <Copy className="size-3.5" />
-      </DropdownMenuItem>
-    </div>
-  );
-}
-
-/** Each row (besides email/phone) splits into a direct-interact action (open in a new tab) and a separate copy action — see `SplitActionRow`. Email and phone are copy-only (no mailto:/tel:). Website is the company's, not the stakeholder's — Stakeholder carries no site of its own. */
-function StakeholderActionsMenu({
-  email,
-  mobile,
-  linkedinUrl,
-  website,
-}: {
-  email?: string | null;
-  mobile?: string | null;
-  linkedinUrl?: string | null;
-  website?: string | null;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <button
-            type="button"
-            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            aria-label="Contact actions"
-          >
-            <EllipsisVertical className="size-4" />
-          </button>
-        }
-      />
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem disabled={!email} onClick={() => email && copyValue(email, 'Email')}>
-          <Mail />
-          {email ?? 'No email on file'}
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={!mobile} onClick={() => mobile && copyValue(mobile, 'Mobile')}>
-          <Phone />
-          {mobile ?? 'No mobile on file'}
-        </DropdownMenuItem>
-        <SplitActionRow
-          icon={LinkedinIcon}
-          value={linkedinUrl}
-          label="LinkedIn"
-          emptyLabel="No LinkedIn on file"
-          copyLabel="LinkedIn"
-          href={(v) => v}
-          external
-        />
-        <SplitActionRow
-          icon={Globe}
-          value={website}
-          label="Company's website"
-          emptyLabel="No website on file"
-          copyLabel="Website"
-          href={(v) => v}
-          external
-        />
-      </DropdownMenuContent>
-    </DropdownMenu>
   );
 }
 
@@ -543,6 +402,11 @@ function CompanyEditForm({
   }
 
   const [addStakeholderOpen, setAddStakeholderOpen] = React.useState(false);
+  const stakeholderScrollRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!addStakeholderOpen) return;
+    stakeholderScrollRef.current?.scrollTo({ top: 0 });
+  }, [addStakeholderOpen]);
   const roleTypesParams = { take: 200 };
   const { data: roleTypeData } = useGetStakeholderRoleTypes(roleTypesParams);
   const roleTypeOptions: CreatableComboboxOption[] = (
@@ -602,8 +466,6 @@ function CompanyEditForm({
         email: values.email || undefined,
         mobile: values.mobile || undefined,
         coverageLocationIds: values.coverage.map((c) => c.id),
-        isAccurate: values.isAccurate ?? undefined,
-        inaccurateReason: values.inaccurateReason || undefined,
       } as CreateStakeholderDto,
     });
   }
@@ -813,9 +675,9 @@ function CompanyEditForm({
         ref={formRef}
         onSubmit={handleSubmit}
         onKeyDown={blockImplicitEnterSubmit}
-        className="grid gap-3 lg:grid-cols-3"
+        className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]"
       >
-        <div className="flex flex-col gap-3 lg:col-span-2">
+        <div className="flex flex-col gap-3">
           <Card size="sm">
             <CardHeader className="flex flex-row items-center justify-between border-b py-2 [.border-b]:pb-2">
               <CardTitle className="text-sm">Contact history</CardTitle>
@@ -939,18 +801,36 @@ function CompanyEditForm({
                   No stakeholders logged for this company yet.
                 </p>
               ) : (
-                <div className="max-h-96 overflow-auto rounded-md border border-border">
+                <div
+                  ref={stakeholderScrollRef}
+                  className="max-h-96 overflow-auto rounded-md border border-border"
+                >
                   <Table>
                     <TableHeader>
                       <TableRow className="divide-x divide-border">
-                        <TableHead>Name</TableHead>
-                        <TableHead>Title</TableHead>
-                        <TableHead>Contact</TableHead>
-                        <TableHead>Latest Contact Date</TableHead>
-                        <TableHead className="text-center">Actions</TableHead>
+                        <TableHead>First Name</TableHead>
+                        <TableHead>Last Name</TableHead>
+                        <TableHead>Current Job Title</TableHead>
+                        <TableHead>Role Type</TableHead>
+                        <TableHead>City Coverage</TableHead>
+                        <TableHead className="text-center">Contacts</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
+                      {canEdit ? (
+                        <AddStakeholderRow
+                          colSpan={6}
+                          open={addStakeholderOpen}
+                          onOpenChange={setAddStakeholderOpen}
+                          showTrigger={false}
+                          roleTypes={roleTypeOptions}
+                          onCreateRoleType={handleCreateRoleType}
+                          onCreateJobTitle={handleCreateJobTitle}
+                          isSaving={createStakeholder.isPending}
+                          onSave={handleAddStakeholder}
+                          scopeLocationIds={company.locationIds}
+                        />
+                      ) : null}
                       {stakeholders.map((s) => (
                         <TableRow key={s.id} className="divide-x divide-border">
                           <TableCell className="whitespace-normal">
@@ -958,9 +838,14 @@ function CompanyEditForm({
                               href={`/stakeholders/${s.id}?from=company`}
                               className="text-foreground hover:underline"
                             >
-                              {[s.firstName, s.lastName].filter(Boolean).join(' ') ||
-                                'Unnamed contact'}
+                              {s.firstName || '—'}
                             </Link>
+                          </TableCell>
+                          <TableCell className="whitespace-normal">
+                            {s.lastName || <span className="text-muted-foreground">—</span>}
+                          </TableCell>
+                          <TableCell className="whitespace-normal">
+                            {s.jobTitle || <span className="text-muted-foreground">—</span>}
                           </TableCell>
                           <TableCell className="whitespace-normal">
                             {s.roleType ? (
@@ -970,52 +855,22 @@ function CompanyEditForm({
                             )}
                           </TableCell>
                           <TableCell className="whitespace-normal">
-                            {s.lastContactedById ? (
-                              <div className="flex min-w-0 items-center gap-2">
-                                <ConsultantAvatar
-                                  consultantId={s.lastContactedById}
-                                  name={s.lastContactedBy ?? undefined}
-                                  size={5}
-                                />
-                                <span className="truncate">{s.lastContactedBy}</span>
-                              </div>
-                            ) : s.lastContactedAt ? (
-                              <span className="text-muted-foreground">Imported</span>
+                            {s.coverage.length > 0 ? (
+                              <span>{s.coverage.join(', ')}</span>
                             ) : (
                               <span className="text-muted-foreground">—</span>
                             )}
                           </TableCell>
                           <TableCell>
-                            {s.lastContactedAt ? (
-                              contactDateFormatter.format(new Date(s.lastContactedAt))
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center justify-center">
-                              <StakeholderActionsMenu
-                                email={s.email}
-                                mobile={s.mobile}
-                                linkedinUrl={s.linkedinUrl}
-                                website={company.website}
-                              />
-                            </div>
+                            <ContactMethodsCell
+                              email={s.email}
+                              mobile={s.mobile}
+                              linkedinUrl={s.linkedinUrl}
+                              size="sm"
+                            />
                           </TableCell>
                         </TableRow>
                       ))}
-                      {canEdit ? (
-                        <AddStakeholderRow
-                          colSpan={5}
-                          open={addStakeholderOpen}
-                          onOpenChange={setAddStakeholderOpen}
-                          roleTypes={roleTypeOptions}
-                          onCreateRoleType={handleCreateRoleType}
-                          onCreateJobTitle={handleCreateJobTitle}
-                          isSaving={createStakeholder.isPending}
-                          onSave={handleAddStakeholder}
-                        />
-                      ) : null}
                     </TableBody>
                   </Table>
                 </div>

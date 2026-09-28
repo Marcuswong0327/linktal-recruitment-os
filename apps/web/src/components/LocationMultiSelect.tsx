@@ -52,6 +52,12 @@ interface LocationMultiSelectProps {
    * `LocationCombobox`/`ConsultantCombobox` is the intent.
    */
   bare?: boolean;
+  /**
+   * When set, the dropdown only offers these nodes and city coverages under
+   * them (a result stays if its id is in the list, or its ancestorIds include
+   * one). Omit to search the whole catalog.
+   */
+  scopeLocationIds?: string[];
 }
 
 /**
@@ -73,6 +79,7 @@ export function LocationMultiSelect({
   placeholder = 'Search locations…',
   triggerClassName,
   bare = false,
+  scopeLocationIds,
 }: LocationMultiSelectProps) {
   // Tracked only for the click-catcher's own `bg-accent/50` hover-alike
   // styling below — not passed to Combobox.Root as a controlled `open` (see
@@ -94,7 +101,20 @@ export function LocationMultiSelect({
     { q: debouncedQuery || undefined, take: 50 },
     { query: { placeholderData: keepPreviousData } },
   );
-  const results: LocationEntity[] = data?.status === 200 ? data.data : [];
+  const allResults: LocationEntity[] = data?.status === 200 ? data.data : [];
+  const scope = React.useMemo(
+    () => (scopeLocationIds ? new Set(scopeLocationIds) : null),
+    [scopeLocationIds],
+  );
+  const results = React.useMemo(
+    () =>
+      scope
+        ? allResults.filter(
+            (r) => scope.has(r.id) || r.ancestorIds.some((ancestorId) => scope.has(ancestorId)),
+          )
+        : allResults,
+    [allResults, scope],
+  );
   const resultsById = React.useMemo(() => new Map(results.map((r) => [r.id, r])), [results]);
   const selectedIds = React.useMemo(() => selected.map((s) => s.id), [selected]);
   const items = React.useMemo(() => results.map((r) => r.id), [results]);
