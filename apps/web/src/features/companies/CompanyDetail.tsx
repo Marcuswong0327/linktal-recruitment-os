@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,6 +59,7 @@ import { LinkedinIcon, SeekIcon } from '@/components/BrandIcons';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 import { ConsultantAvatar, useConsultantLookup } from '@/components/ConsultantCombobox';
 import { CreatableCombobox, type CreatableComboboxOption } from '@/components/CreatableCombobox';
+import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
 import { LogContactRow, type LogContactValues } from '@/components/LogContactRow';
@@ -119,7 +120,7 @@ import type {
   UpdateClientDto,
 } from '@/lib/api/generated/types';
 import { formatDate as formatJobResearchDate } from '@/features/job-research/schema';
-import { qualityOptions, statusOptions } from './schema';
+import { qualityOptions, statusOptions, type ClientQuality, type ClientStatus } from './schema';
 
 const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit',
@@ -127,6 +128,12 @@ const contactDateFormatter = new Intl.DateTimeFormat('en-GB', {
   year: 'numeric',
   hour: '2-digit',
   minute: '2-digit',
+});
+
+const contactHistoryDateFormatter = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
 });
 
 // After delete, redirect to the Companies list — or to the page the visitor
@@ -152,16 +159,6 @@ function useBackTarget() {
     }
   }
   return (from && BACK_TARGETS[from]) || { href: '/companies', label: 'Companies' };
-}
-
-function initials(name: string) {
-  if (!name) return '?';
-  return name
-    .split(' ')
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
 }
 
 /** One icon per external link (Website/LinkedIn/Seek) — click opens it in a new tab. A method with no value on file renders greyed-out and inert rather than being hidden, so the icon row's position doesn't shift. */
@@ -402,6 +399,8 @@ function CompanyEditForm({
   const [generalDescription, setGeneralDescription] = React.useState(
     company.generalDescription ?? '',
   );
+  const [status, setStatus] = React.useState<ClientStatus>(company.status);
+  const [quality, setQuality] = React.useState<ClientQuality>(company.quality);
   // Purely a display toggle for the links row below — not part of isDirty.
   const [editingLinks, setEditingLinks] = React.useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);
@@ -420,7 +419,9 @@ function CompanyEditForm({
     website !== (company.website ?? '') ||
     seekJobMarketUrl !== (company.seekJobMarketUrl ?? '') ||
     linkedinJobMarketUrl !== (company.linkedinJobMarketUrl ?? '') ||
-    generalDescription !== (company.generalDescription ?? '');
+    generalDescription !== (company.generalDescription ?? '') ||
+    status !== company.status ||
+    quality !== company.quality;
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getGetClientQueryKey(company.id) });
@@ -505,6 +506,11 @@ function CompanyEditForm({
 
   const [logContactOpen, setLogContactOpen] = React.useState(false);
   const [logContactStakeholderId, setLogContactStakeholderId] = React.useState('');
+  const contactHistoryScrollRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    if (!logContactOpen) return;
+    contactHistoryScrollRef.current?.scrollTo({ top: 0 });
+  }, [logContactOpen]);
   const addStakeholderContactHistory = useAddStakeholderContactHistory({
     mutation: {
       onSuccess: () => {
@@ -708,6 +714,8 @@ function CompanyEditForm({
         seekJobMarketUrl: seekJobMarketUrl || undefined,
         linkedinJobMarketUrl: linkedinJobMarketUrl || undefined,
         generalDescription: generalDescription || undefined,
+        status,
+        quality,
       };
       tasks.push(updateCompany.mutateAsync({ id: company.id, data }));
     }
@@ -748,30 +756,10 @@ function CompanyEditForm({
     router.push(backTarget.href);
   }
 
-  const currentStatus = statusOptions.find((o) => o.value === company.status)!;
-  const currentQuality = qualityOptions.find((o) => o.value === company.quality)!;
-
   return (
     <PageLayout className="overflow-auto">
       <div className="flex flex-col gap-3 border-b border-border pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 font-heading text-lg font-semibold text-primary">
-              {initials(company.companyName)}
-            </span>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-3">
-                <h1 className="font-heading text-2xl font-semibold tracking-tight">
-                  {company.companyName}
-                </h1>
-                <Badge className={currentStatus.triggerClassName}>{currentStatus.label}</Badge>
-                <Badge className={currentQuality.triggerClassName}>{currentQuality.label}</Badge>
-              </div>
-              <span className="font-mono text-xs text-muted-foreground">
-                {company.displayId} · {company.industry ?? 'No industry'}
-              </span>
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="flex items-center gap-3">
             {canDelete ? (
               <Button
@@ -825,68 +813,54 @@ function CompanyEditForm({
         ref={formRef}
         onSubmit={handleSubmit}
         onKeyDown={blockImplicitEnterSubmit}
-        className="grid gap-5 lg:grid-cols-3"
+        className="grid gap-3 lg:grid-cols-3"
       >
-        <div className="flex flex-col gap-5 lg:col-span-2">
-          <Card>
-            <CardHeader className="border-b">
-              <CardTitle>Contact history</CardTitle>
-              <CardDescription>
-                Every logged contact, across all of this company's stakeholders.
-              </CardDescription>
+        <div className="flex flex-col gap-3 lg:col-span-2">
+          <Card size="sm">
+            <CardHeader className="flex flex-row items-center justify-between border-b py-2 [.border-b]:pb-2">
+              <CardTitle className="text-sm">Contact history</CardTitle>
+              {canEdit && stakeholders.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleLogContactOpenChange(true)}
+                >
+                  <Phone />
+                  Log Contact History
+                </Button>
+              ) : null}
             </CardHeader>
             <CardContent>
               {contactHistory.length === 0 && !canEdit ? (
                 <p className="p-4 text-sm text-muted-foreground">No contact logged yet.</p>
               ) : (
-                <div className="max-h-96 overflow-auto rounded-md border border-border">
-                  <Table>
+                <div
+                  ref={contactHistoryScrollRef}
+                  className="max-h-96 overflow-auto rounded-md border border-border"
+                >
+                  <Table className="table-fixed">
+                    <colgroup>
+                      <col className="w-[62%]" />
+                      <col className="w-[24%]" />
+                      <col className="w-[14%]" />
+                    </colgroup>
                     <TableHeader>
                       <TableRow className="divide-x divide-border">
                         <TableHead>Content</TableHead>
-                        <TableHead>With</TableHead>
+                        <TableHead>People</TableHead>
                         <TableHead>Date</TableHead>
-                        <TableHead>By</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {contactHistory.map((row) => (
-                        <TableRow key={row.id} className="divide-x divide-border">
-                          <TableCell className="max-w-xs whitespace-normal break-words">
-                            {row.notes ? (
-                              <p className="whitespace-pre-wrap">{row.notes}</p>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </TableCell>
-                          <TableCell className="whitespace-normal">{row.stakeholderName}</TableCell>
-                          <TableCell>
-                            {contactDateFormatter.format(new Date(row.contactedAt))}
-                          </TableCell>
-                          <TableCell className="whitespace-normal">
-                            {row.contactedById ? (
-                              <div className="flex min-w-0 items-center gap-2">
-                                <ConsultantAvatar
-                                  consultantId={row.contactedById}
-                                  name={consultantLabelFor(row.contactedById)}
-                                  size={5}
-                                />
-                                <span className="truncate">
-                                  {consultantLabelFor(row.contactedById)}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground">Imported</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
                       {canEdit ? (
                         <LogContactRow
-                          colSpan={4}
+                          colSpan={3}
                           open={logContactOpen}
                           onOpenChange={handleLogContactOpenChange}
-                          triggerDisabled={stakeholders.length === 0}
+                          showTrigger={false}
+                          autoDate
+                          notesPrimary
                           isSaving={addStakeholderContactHistory.isPending}
                           onSave={handleLogContact}
                           subjectPicker={{
@@ -898,6 +872,40 @@ function CompanyEditForm({
                           }}
                         />
                       ) : null}
+                      {contactHistory.map((row) => (
+                        <TableRow key={row.id} className="divide-x divide-border">
+                          <TableCell className="whitespace-normal break-words">
+                            {row.notes ? (
+                              <p className="whitespace-pre-wrap">{row.notes}</p>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="whitespace-normal">
+                            <div className="flex flex-col gap-1">
+                              <span>With: {row.stakeholderName}</span>
+                              {row.contactedById ? (
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <span className="shrink-0">By:</span>
+                                  <ConsultantAvatar
+                                    consultantId={row.contactedById}
+                                    name={consultantLabelFor(row.contactedById)}
+                                    size={5}
+                                  />
+                                  <span className="min-w-0 break-words">
+                                    {consultantLabelFor(row.contactedById)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">By: Imported</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="whitespace-normal">
+                            {contactHistoryDateFormatter.format(new Date(row.contactedAt))}
+                          </TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
                   </Table>
                 </div>
@@ -905,37 +913,24 @@ function CompanyEditForm({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex border-b flex-row items-center justify-between">
+          <Card size="sm">
+            <CardHeader className="flex flex-row items-center justify-between border-b py-2 [.border-b]:pb-2">
               <div>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
                   <Contact className="size-4 text-muted-foreground" />
                   Stakeholders
                 </CardTitle>
               </div>
               {canEdit ? (
-                <div className="flex items-center gap-2">
-                  {stakeholders.length > 0 ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleLogContactOpenChange(true)}
-                    >
-                      <Phone />
-                      Log Contact History
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setAddStakeholderOpen(true)}
-                  >
-                    <Plus />
-                    Add Stakeholder
-                  </Button>
-                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAddStakeholderOpen(true)}
+                >
+                  <Plus />
+                  Add Stakeholder
+                </Button>
               ) : null}
             </CardHeader>
             <CardContent>
@@ -1028,9 +1023,9 @@ function CompanyEditForm({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="border-b">
-              <CardTitle>Job Opening Research History</CardTitle>
+          <Card size="sm">
+            <CardHeader className="border-b py-2 [.border-b]:pb-2">
+              <CardTitle className="text-sm">Job Opening Research History</CardTitle>
             </CardHeader>
             <CardContent>
               {jobResearch.length === 0 ? (
@@ -1105,9 +1100,9 @@ function CompanyEditForm({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex border-b flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
+          <Card size="sm">
+            <CardHeader className="flex flex-row items-center justify-between border-b py-2 [.border-b]:pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
                 <FileText className="size-4 text-muted-foreground" />
                 Terms of Business
               </CardTitle>
@@ -1224,10 +1219,10 @@ function CompanyEditForm({
           </Card>
         </div>
 
-        <div className="flex flex-col gap-5">
-          <Card>
-            <CardHeader className="border-b">
-              <CardTitle className="flex items-center gap-2">Information</CardTitle>
+        <div className="flex flex-col gap-3">
+          <Card size="sm">
+            <CardHeader className="border-b py-2 [.border-b]:pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">Information</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4">
               <FormField
@@ -1298,6 +1293,28 @@ function CompanyEditForm({
                     disabled={!canEdit || !industryId}
                   />
                 </div>
+              </FormField>
+              <FormField label="Status" htmlFor="status" orientation="horizontal">
+                <EnumSelect
+                  id="status"
+                  value={status}
+                  onValueChange={(v) => setStatus(v as ClientStatus)}
+                  options={statusOptions}
+                  disabled={!canEdit || saving}
+                  size="badge"
+                  className="w-fit"
+                />
+              </FormField>
+              <FormField label="Quality" htmlFor="quality" orientation="horizontal">
+                <EnumSelect
+                  id="quality"
+                  value={quality}
+                  onValueChange={(v) => setQuality(v as ClientQuality)}
+                  options={qualityOptions}
+                  disabled={!canEdit || saving}
+                  size="badge"
+                  className="w-fit"
+                />
               </FormField>
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium">Consultants</span>
@@ -1405,9 +1422,9 @@ function CompanyEditForm({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="border-b">
-              <CardTitle className="flex items-center gap-2">City Coverage</CardTitle>
+          <Card size="sm">
+            <CardHeader className="border-b py-2 [.border-b]:pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">City Coverage</CardTitle>
             </CardHeader>
             <CardContent>
               <LocationMultiSelect
@@ -1437,9 +1454,9 @@ function CompanyEditForm({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>General Description About This Company</CardTitle>
+          <Card size="sm">
+            <CardHeader className="border-b py-2 [.border-b]:pb-2">
+              <CardTitle className="text-sm">General Description About This Company</CardTitle>
             </CardHeader>
             <CardContent>
               <FormField label="" htmlFor="generalDescription">

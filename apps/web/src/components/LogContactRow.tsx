@@ -29,6 +29,21 @@ interface LogContactRowProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   triggerDisabled?: boolean;
+  /**
+   * When false, the closed "+" row is omitted — the caller opens the form
+   * from its own button (Company detail's Contact history header).
+   */
+  showTrigger?: boolean;
+  /**
+   * When true, the date is today's date (YYYY-MM-DD) and the When field is
+   * hidden. The logged-in user is still recorded server-side as contactedBy.
+   */
+  autoDate?: boolean;
+  /**
+   * Notes take the wide primary field; the subject picker sits beside it.
+   * Used on Company detail so logging starts in the notes box.
+   */
+  notesPrimary?: boolean;
   isSaving: boolean;
   onSave: (values: LogContactValues) => void;
   /** When the caller doesn't already know who the contact is with (e.g. logging from a company page that covers several stakeholders) — renders a required picker field ahead of the date. */
@@ -59,6 +74,9 @@ export function LogContactRow({
   open,
   onOpenChange,
   triggerDisabled,
+  showTrigger = true,
+  autoDate = false,
+  notesPrimary = false,
   isSaving,
   onSave,
   subjectPicker,
@@ -85,6 +103,54 @@ export function LogContactRow({
 
   const canSave = !subjectPicker || subjectPicker.value !== '';
 
+  if (!open && !showTrigger) return null;
+
+  const subjectField = subjectPicker ? (
+    <FormField label={subjectPicker.label} htmlFor="contact-subject" required>
+      <EnumSelect
+        id="contact-subject"
+        value={subjectPicker.value}
+        onValueChange={subjectPicker.onValueChange}
+        options={subjectPicker.options}
+        placeholder={subjectPicker.placeholder}
+      />
+    </FormField>
+  ) : null;
+
+  const whenField = autoDate ? null : (
+    <FormField
+      label="When"
+      htmlFor="contact-date"
+      required
+      description="Defaults to today — change this to log a past contact."
+    >
+      <input
+        id="contact-date"
+        type="date"
+        value={contactedAt}
+        onChange={(e) => setContactedAt(e.target.value)}
+        {...noBrowserAutofill}
+        className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/30"
+      />
+    </FormField>
+  );
+
+  const notesField = (
+    <FormField label="Notes" htmlFor="contact-notes">
+      <textarea
+        id="contact-notes"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        {...noBrowserAutofill}
+        className={
+          notesPrimary
+            ? 'min-h-36 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30'
+            : 'min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30'
+        }
+      />
+    </FormField>
+  );
+
   return (
     <InlineAddRow
       colSpan={colSpan}
@@ -98,43 +164,20 @@ export function LogContactRow({
       saveLabel="Log contact"
       savingLabel="Logging…"
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {subjectPicker ? (
-          <FormField label={subjectPicker.label} htmlFor="contact-subject" required>
-            <EnumSelect
-              id="contact-subject"
-              value={subjectPicker.value}
-              onValueChange={subjectPicker.onValueChange}
-              options={subjectPicker.options}
-              placeholder={subjectPicker.placeholder}
-            />
-          </FormField>
-        ) : null}
-        <FormField
-          label="When"
-          htmlFor="contact-date"
-          required
-          description="Defaults to today — change this to log a past contact."
-        >
-          <input
-            id="contact-date"
-            type="date"
-            value={contactedAt}
-            onChange={(e) => setContactedAt(e.target.value)}
-            {...noBrowserAutofill}
-            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30 dark:bg-input/30"
-          />
-        </FormField>
-      </div>
-      <FormField label="Notes" htmlFor="contact-notes">
-        <textarea
-          id="contact-notes"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          {...noBrowserAutofill}
-          className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30"
-        />
-      </FormField>
+      {notesPrimary ? (
+        <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_16rem]">
+          {notesField}
+          {subjectField}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {subjectField}
+            {whenField}
+          </div>
+          {notesField}
+        </>
+      )}
     </InlineAddRow>
   );
 }
