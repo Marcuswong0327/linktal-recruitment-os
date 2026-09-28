@@ -77,6 +77,10 @@ export function RichTextDescriptionEditor({
 }: RichTextDescriptionEditorProps) {
   const onChangeRef = React.useRef(onChange);
   onChangeRef.current = onChange;
+  // TipTap rewrites the loaded HTML on create and emits onUpdate before anyone
+  // types. That rewrite is not an edit — only propagate after the user focuses
+  // the field or uses the toolbar.
+  const userEditedRef = React.useRef(false);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -107,11 +111,16 @@ export function RichTextDescriptionEditor({
         ),
       },
       handleDOMEvents: {
+        focus: () => {
+          userEditedRef.current = true;
+          return false;
+        },
         copy: (_view, event) => handleOutlookCopy(event),
         cut: (_view, event) => handleOutlookCopy(event),
       },
     },
     onUpdate: ({ editor: ed }) => {
+      if (!userEditedRef.current && !ed.isFocused) return;
       const html = ed.getHTML();
       onChangeRef.current(isEmptyRichTextHtml(html) ? '' : html);
     },
@@ -146,28 +155,40 @@ export function RichTextDescriptionEditor({
         <ToolbarButton
           label="Insert table"
           disabled={disabled || !editor}
-          onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+          onClick={() => {
+            userEditedRef.current = true;
+            editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+          }}
         >
           <Columns3 className="size-3.5" />
         </ToolbarButton>
         <ToolbarButton
           label="Add row"
           disabled={disabled || !editor?.can().addRowAfter()}
-          onClick={() => editor?.chain().focus().addRowAfter().run()}
+          onClick={() => {
+            userEditedRef.current = true;
+            editor?.chain().focus().addRowAfter().run();
+          }}
         >
           <BetweenHorizontalStart className="size-3.5" />
         </ToolbarButton>
         <ToolbarButton
           label="Add column"
           disabled={disabled || !editor?.can().addColumnAfter()}
-          onClick={() => editor?.chain().focus().addColumnAfter().run()}
+          onClick={() => {
+            userEditedRef.current = true;
+            editor?.chain().focus().addColumnAfter().run();
+          }}
         >
           <BetweenVerticalStart className="size-3.5" />
         </ToolbarButton>
         <ToolbarButton
           label="Delete table"
           disabled={disabled || !editor?.can().deleteTable()}
-          onClick={() => editor?.chain().focus().deleteTable().run()}
+          onClick={() => {
+            userEditedRef.current = true;
+            editor?.chain().focus().deleteTable().run();
+          }}
         >
           <Trash2 className="size-3.5" />
         </ToolbarButton>
