@@ -11,21 +11,21 @@ export interface UpdateStakeholderDto {
   /** Client ID this stakeholder belongs to */
   clientId?: string;
   /** First name */
-  firstName?: string;
+  firstName?: string | null;
   /** Last name */
-  lastName?: string;
+  lastName?: string | null;
   /** Job title ID (see /job-titles) — the company's own words for the role */
-  jobTitleId?: string;
+  jobTitleId?: string | null;
   /** Role type ID (see /stakeholder-role-types) — takes precedence over the title-derived classification */
-  roleTypeId?: string;
+  roleTypeId?: string | null;
   /** LinkedIn profile URL */
-  linkedinUrl?: string;
+  linkedinUrl?: string | null;
   /** Email address */
-  email?: string;
+  email?: string | null;
   /** Mobile number */
-  mobile?: string;
+  mobile?: string | null;
   /** Free-text notes about this stakeholder */
-  generalDescription?: string;
+  generalDescription?: string | null;
   /** Location ids this stakeholder covers. Matched against a consultant's scope on its own, independent of where the client sits. */
   coverageLocationIds?: string[];
   /** Relationship-warmth status; defaults to COLD when omitted. Distinct from isAccurate below. */

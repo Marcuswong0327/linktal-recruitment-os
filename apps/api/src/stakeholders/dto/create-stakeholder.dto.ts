@@ -24,49 +24,50 @@ export class CreateStakeholderDto {
   @MaxLength(60)
   firstName!: string;
 
-  @ApiPropertyOptional({ description: 'Last name', example: 'Doe' })
+  @ApiPropertyOptional({ description: 'Last name', example: 'Doe', nullable: true })
   @IsOptional()
   @IsString()
   @MaxLength(60)
-  lastName?: string;
+  lastName?: string | null;
 
   // The company's words for the role vs. the consultant's classification of
   // it — both kept, deliberately (see JobTitle / StakeholderRoleType in
   // schema.prisma). Both are catalog ids: a title new to the catalog is
   // created through /job-titles first, not invented here on the way past.
   // When `roleTypeId` is omitted, one is derived from the title by keyword.
-  @ApiPropertyOptional({ description: "Job title ID (see /job-titles) — the company's own words for the role" })
+  @ApiPropertyOptional({ description: "Job title ID (see /job-titles) — the company's own words for the role", nullable: true })
   @IsOptional()
   @IsString()
-  jobTitleId?: string;
+  jobTitleId?: string | null;
 
   @ApiPropertyOptional({
     description: 'Role type ID (see /stakeholder-role-types) — takes precedence over the title-derived classification',
+    nullable: true,
   })
   @IsOptional()
   @IsString()
-  roleTypeId?: string;
+  roleTypeId?: string | null;
 
-  @ApiPropertyOptional({ description: 'LinkedIn profile URL' })
+  @ApiPropertyOptional({ description: 'LinkedIn profile URL', nullable: true })
   @IsOptional()
   @IsUrl()
-  linkedinUrl?: string;
+  linkedinUrl?: string | null;
 
-  @ApiPropertyOptional({ description: 'Email address', example: 'jane@acme.com' })
+  @ApiPropertyOptional({ description: 'Email address', example: 'jane@acme.com', nullable: true })
   @IsOptional()
   @IsEmail()
-  email?: string;
+  email?: string | null;
 
-  @ApiPropertyOptional({ description: 'Mobile number', example: '+61 412 345 678' })
+  @ApiPropertyOptional({ description: 'Mobile number', example: '+61 412 345 678', nullable: true })
   @IsOptional()
   @IsString()
   @MaxLength(30)
-  mobile?: string;
+  mobile?: string | null;
 
-  @ApiPropertyOptional({ description: 'Free-text notes about this stakeholder' })
+  @ApiPropertyOptional({ description: 'Free-text notes about this stakeholder', nullable: true })
   @IsOptional()
   @IsString()
-  generalDescription?: string;
+  generalDescription?: string | null;
 
   @ApiPropertyOptional({
     description:

@@ -295,15 +295,15 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
     const data: UpdateJobOrderDto = {
       clientId,
       jobTitleId: jobTitleId || undefined,
-      description: sanitizeDescriptionHtml(description) || undefined,
-      jdFileUrl: jdFileUrl || undefined,
-      clientAdsUrl: clientAdsUrl || undefined,
-      otherDocumentsUrl: otherDocumentsUrl || undefined,
+      description: sanitizeDescriptionHtml(description) || null,
+      jdFileUrl: jdFileUrl || null,
+      clientAdsUrl: clientAdsUrl || null,
+      otherDocumentsUrl: otherDocumentsUrl || null,
       status,
       quality,
-      salaryMin: parseOptionalNumber(salaryMin),
-      salaryMax: parseOptionalNumber(salaryMax),
-      salaryCurrency: salaryCurrency.trim() || undefined,
+      salaryMin: parseOptionalNumber(salaryMin) ?? null,
+      salaryMax: parseOptionalNumber(salaryMax) ?? null,
+      salaryCurrency: salaryCurrency.trim() || null,
       openings: openingsValue,
     };
 

@@ -162,12 +162,14 @@ export function CandidateDetail({ id }: { id: string }) {
   return <CandidateEditForm key={candidate.id} candidate={candidate} />;
 }
 
-/** Empty strings become undefined so PATCH omits (not clears) blank fields. */
+/** Blank text is stored as null. Omitting it would leave the previous value in place. */
 function cleanPatch(values: UpdateCandidateDto): UpdateCandidateDto {
   return Object.fromEntries(
-    Object.entries(values).filter(
-      ([, v]) => v !== '' && v !== undefined && !(typeof v === 'number' && Number.isNaN(v)),
-    ),
+    Object.entries(values).flatMap(([key, v]) => {
+      if (v === undefined || (typeof v === 'number' && Number.isNaN(v))) return [];
+      if (v === '') return [[key, null]];
+      return [[key, v]];
+    }),
   ) as UpdateCandidateDto;
 }
 
