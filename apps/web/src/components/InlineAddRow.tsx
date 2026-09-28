@@ -12,6 +12,8 @@ interface InlineAddRowProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   triggerDisabled?: boolean;
+  /** When false, the closed row renders nothing — the caller opens it from a header button. */
+  showTrigger?: boolean;
   triggerLabel: string;
   isSaving: boolean;
   onSave: () => void;
@@ -40,6 +42,7 @@ export function InlineAddRow({
   open,
   onOpenChange,
   triggerDisabled,
+  showTrigger = true,
   triggerLabel,
   isSaving,
   onSave,
@@ -49,6 +52,8 @@ export function InlineAddRow({
   layout = 'stacked',
   children,
 }: InlineAddRowProps) {
+  if (!open && !showTrigger) return null;
+
   if (!open) {
     return (
       <TableRow>

@@ -363,7 +363,7 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
         onKeyDown={blockImplicitEnterSubmit}
         className="flex flex-col gap-3"
       >
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
           <div>
             <JobOrderPipelineCard
               jobOrder={jobOrder}
@@ -523,7 +523,7 @@ function JobOrderDetailView({ jobOrder }: { jobOrder: JobOrder }) {
           </Card>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]">
           <Card size="sm">
             <CardHeader className="border-b py-2 [.border-b]:pb-2">
               <CardTitle className="flex items-center gap-2 text-sm">Description</CardTitle>

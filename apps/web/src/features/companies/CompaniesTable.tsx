@@ -63,6 +63,7 @@ export function CompaniesTable({
   canUpdate = true,
   canDelete = true,
   canCreateIndustry = false,
+  canCreateSpecialization = false,
 }: {
   /** Committed from the search gate's action bar — this table has no filter UI of its own. */
   filters: CompanyAppliedFilters;
@@ -71,6 +72,8 @@ export function CompaniesTable({
   canDelete?: boolean;
   /** `industry:create` — without it the Industry new-row cell is pick-only. */
   canCreateIndustry?: boolean;
+  /** `specialization:create` — without it the Specialization new-row cell is pick-only. */
+  canCreateSpecialization?: boolean;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -120,6 +123,7 @@ export function CompaniesTable({
     disabled: !canCreate,
     industries: industryOptions,
     canCreateIndustry,
+    canCreateSpecialization,
   });
   const importClients = useImportClients();
   const [deleteConfirmOpen, setDeleteConfirmOpen] = React.useState(false);

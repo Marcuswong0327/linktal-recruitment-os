@@ -7,10 +7,8 @@ import { InlineAddRow } from '@/components/InlineAddRow';
 import { Input } from '@/components/ui/input';
 import { CreatableCombobox, type CreatableComboboxOption } from '@/components/CreatableCombobox';
 import { useJobTitleOptions } from '@/hooks/use-catalog-options';
-import { EnumSelect } from '@/components/EnumSelect';
 import { FormField } from '@/components/FormField';
 import { LocationMultiSelect, type LocationOption } from '@/components/LocationMultiSelect';
-import { accuracyOptions } from '@/features/stakeholders/columns';
 
 export interface AddStakeholderValues {
   clientId: string;
@@ -22,8 +20,6 @@ export interface AddStakeholderValues {
   email: string;
   mobile: string;
   coverage: LocationOption[];
-  isAccurate: boolean | null;
-  inaccurateReason: string;
 }
 
 interface AddStakeholderRowProps {
@@ -46,6 +42,10 @@ interface AddStakeholderRowProps {
   onCreateJobTitle: (name: string) => Promise<CreatableComboboxOption>;
   isSaving: boolean;
   onSave: (values: AddStakeholderValues) => void;
+  /** When false, the closed row renders nothing — CompanyDetail opens it from the card header. */
+  showTrigger?: boolean;
+  /** Limits City Coverage to these nodes and coverages under them. Omit for the full catalog. */
+  scopeLocationIds?: string[];
 }
 
 const emptyValues: AddStakeholderValues = {
@@ -58,8 +58,6 @@ const emptyValues: AddStakeholderValues = {
   email: '',
   mobile: '',
   coverage: [],
-  isAccurate: null,
-  inaccurateReason: '',
 };
 
 /**
@@ -80,6 +78,8 @@ export function AddStakeholderRow({
   onCreateJobTitle,
   isSaving,
   onSave,
+  showTrigger = true,
+  scopeLocationIds,
 }: AddStakeholderRowProps) {
   // Server-searched: the Job Titles catalog is far larger than one page
   // (see useJobTitleOptions).
@@ -115,6 +115,7 @@ export function AddStakeholderRow({
         canSave={values.firstName !== '' && values.clientId !== ''}
         saveLabel="Add stakeholder"
         layout="inline"
+        showTrigger={showTrigger}
       >
         <ClientCombobox
           value={values.clientId}
@@ -142,6 +143,7 @@ export function AddStakeholderRow({
       onSave={() => onSave(values)}
       canSave={values.firstName !== ''}
       saveLabel="Add stakeholder"
+      showTrigger={showTrigger}
     >
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <FormField label="First name" htmlFor="stakeholder-first-name" required>
@@ -200,40 +202,16 @@ export function AddStakeholderRow({
             onChange={(e) => set('mobile', e.target.value)}
           />
         </FormField>
-        <FormField
-          label="Details accurate"
-          htmlFor="stakeholder-accurate"
-          description="Whether these contact details have been verified."
-        >
-          <EnumSelect
-            id="stakeholder-accurate"
-            value={values.isAccurate === null ? 'unchecked' : String(values.isAccurate)}
-            onValueChange={(v) => set('isAccurate', v === 'unchecked' ? null : v === 'true')}
-            options={accuracyOptions}
-          />
-        </FormField>
       </div>
-      <FormField
-        label="City Coverage"
-        htmlFor="stakeholder-coverage"
-        description="Which places this contact covers. Optional — can be set later from their detail page."
-      >
+      <FormField label="City Coverage" htmlFor="stakeholder-coverage">
         <LocationMultiSelect
           id="stakeholder-coverage"
           selected={values.coverage}
           onChange={(coverage) => set('coverage', coverage)}
+          scopeLocationIds={scopeLocationIds}
+          showLevel={false}
         />
       </FormField>
-      {values.isAccurate === false ? (
-        <FormField label="What's wrong" htmlFor="stakeholder-inaccurate-reason">
-          <textarea
-            id="stakeholder-inaccurate-reason"
-            value={values.inaccurateReason}
-            onChange={(e) => set('inaccurateReason', e.target.value)}
-            className="min-h-20 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/40 dark:bg-input/30"
-          />
-        </FormField>
-      ) : null}
     </InlineAddRow>
   );
 }

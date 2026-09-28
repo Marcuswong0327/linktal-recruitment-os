@@ -601,12 +601,7 @@ function StakeholderEditForm({
                   />
                 </FormField>
               </div>
-              <FormField
-                label="Job title"
-                htmlFor="jobTitle"
-                description="The company's own words for the role."
-                orientation="horizontal"
-              >
+              <FormField label="Job title" htmlFor="jobTitle" orientation="horizontal">
                 <CreatableCombobox
                   id="jobTitle"
                   value={jobTitleId}
@@ -619,12 +614,7 @@ function StakeholderEditForm({
                   disabled={!canEdit}
                 />
               </FormField>
-              <FormField
-                label="Role type"
-                htmlFor="roleType"
-                description="Your classification of the contact's function."
-                orientation="horizontal"
-              >
+              <FormField label="Role type" htmlFor="roleType" orientation="horizontal">
                 <CreatableCombobox
                   id="roleType"
                   value={roleTypeId}
@@ -705,12 +695,7 @@ function StakeholderEditForm({
                   disabled={!canEdit}
                 />
               </FormField>
-              <FormField
-                label="City Coverage"
-                htmlFor="coverage"
-                description="Which places this contact covers. A country pick automatically covers every City Coverage value inside it."
-                orientation="horizontal"
-              >
+              <FormField label="City Coverage" htmlFor="coverage" orientation="horizontal">
                 <LocationMultiSelect
                   id="coverage"
                   selected={coverage}

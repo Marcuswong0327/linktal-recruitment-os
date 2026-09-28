@@ -52,6 +52,19 @@ interface LocationMultiSelectProps {
    * `LocationCombobox`/`ConsultantCombobox` is the intent.
    */
   bare?: boolean;
+  /**
+   * When set, the dropdown only offers these nodes and city coverages under
+   * them (a result stays if its id is in the list, or its ancestorIds include
+   * one). Omit to search the whole catalog.
+   */
+  scopeLocationIds?: string[];
+  /** Prints Country / City Coverage beside the name. Default true. */
+  showLevel?: boolean;
+  /**
+   * Loads the catalog with an empty query. Pass false to wait until the
+   * user types at least 2 characters, same as the companies grid cell.
+   */
+  browsable?: boolean;
 }
 
 /**
@@ -73,6 +86,9 @@ export function LocationMultiSelect({
   placeholder = 'Search locations…',
   triggerClassName,
   bare = false,
+  scopeLocationIds,
+  showLevel = true,
+  browsable = true,
 }: LocationMultiSelectProps) {
   // Tracked only for the click-catcher's own `bg-accent/50` hover-alike
   // styling below — not passed to Combobox.Root as a controlled `open` (see
@@ -87,14 +103,29 @@ export function LocationMultiSelect({
     return () => clearTimeout(timer);
   }, [inputValue]);
 
-  // Always enabled, unlike the old GeoNames-scale search — with a 13-plus-row
-  // catalog, an empty query just lists everything (see LocationFilterButton's
-  // `browsable` for the same behavior).
+  // `browsable` lists the catalog immediately. Otherwise wait for 2 characters,
+  // same as GridCellLocationCombobox — an empty query would dump every country
+  // and city coverage.
+  const searchEnabled = browsable || debouncedQuery.length >= MIN_QUERY_LENGTH;
   const { data, isFetching } = useGetLocations(
     { q: debouncedQuery || undefined, take: 50 },
-    { query: { placeholderData: keepPreviousData } },
+    { query: { enabled: searchEnabled, placeholderData: keepPreviousData } },
   );
-  const results: LocationEntity[] = data?.status === 200 ? data.data : [];
+  const allResults: LocationEntity[] =
+    searchEnabled && data?.status === 200 ? data.data : [];
+  const scope = React.useMemo(
+    () => (scopeLocationIds ? new Set(scopeLocationIds) : null),
+    [scopeLocationIds],
+  );
+  const results = React.useMemo(
+    () =>
+      scope
+        ? allResults.filter(
+            (r) => scope.has(r.id) || r.ancestorIds.some((ancestorId) => scope.has(ancestorId)),
+          )
+        : allResults,
+    [allResults, scope],
+  );
   const resultsById = React.useMemo(() => new Map(results.map((r) => [r.id, r])), [results]);
   const selectedIds = React.useMemo(() => selected.map((s) => s.id), [selected]);
   const items = React.useMemo(() => results.map((r) => r.id), [results]);
@@ -206,7 +237,7 @@ export function LocationMultiSelect({
               // vs. populated trigger doesn't visibly change type size.
               <Badge key={option.id} className="gap-1 rounded-md pr-1 text-sm font-normal">
                 {option.name}
-                {option.level ? (
+                {showLevel && option.level ? (
                   <span className="text-[10px] tracking-wide text-muted-foreground uppercase">
                     {LEVEL_LABEL[option.level]}
                   </span>
@@ -253,7 +284,7 @@ export function LocationMultiSelect({
               {isFetching ? <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" /> : null}
             </div>
             <Combobox.Empty className="px-3 pb-3 text-center text-sm text-muted-foreground empty:hidden">
-              No locations found.
+              {searchEnabled ? 'No locations found.' : 'Type at least 2 characters to search.'}
             </Combobox.Empty>
             <Combobox.List className="max-h-64 overflow-y-auto p-1">
               {(valueId: string) => {
@@ -265,7 +296,7 @@ export function LocationMultiSelect({
                     className="flex min-h-9 cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-sm outline-hidden select-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
                   >
                     <span className="min-w-0 flex-1 truncate">{location?.name ?? valueId}</span>
-                    {location ? (
+                    {showLevel && location ? (
                       <span className="shrink-0 text-xs text-muted-foreground">{LEVEL_LABEL[location.level]}</span>
                     ) : null}
                   </Combobox.Item>
