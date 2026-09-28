@@ -572,10 +572,10 @@ function CompanyEditForm({
               .map((s) => s.trim())
               .filter(Boolean)
           : [],
-        website: website || undefined,
-        seekJobMarketUrl: seekJobMarketUrl || undefined,
-        linkedinJobMarketUrl: linkedinJobMarketUrl || undefined,
-        generalDescription: generalDescription || undefined,
+        website: website || null,
+        seekJobMarketUrl: seekJobMarketUrl || null,
+        linkedinJobMarketUrl: linkedinJobMarketUrl || null,
+        generalDescription: generalDescription || null,
         status,
         quality,
       };
@@ -1294,12 +1294,7 @@ function CompanyEditForm({
               <div>
                 <span className="text-sm font-medium">Office addresses</span>
               </div>
-              <FormField
-                label="Address(es)"
-                htmlFor="addresses"
-                description="One per line."
-                orientation="horizontal"
-              >
+              <FormField label="Address" htmlFor="addresses" orientation="horizontal">
                 <textarea
                   id="addresses"
                   value={addresses}

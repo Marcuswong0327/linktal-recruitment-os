@@ -20,13 +20,13 @@ export interface UpdateClientDto {
   /** The client's own physical office address(es) — distinct from `locationIds` above */
   addresses?: string[];
   /** Website URL */
-  website?: string;
+  website?: string | null;
   /** Seek / Job Street job market URL */
-  seekJobMarketUrl?: string;
+  seekJobMarketUrl?: string | null;
   /** LinkedIn job market URL */
-  linkedinJobMarketUrl?: string;
+  linkedinJobMarketUrl?: string | null;
   /** General description of the company */
-  generalDescription?: string;
+  generalDescription?: string | null;
   /** Status; defaults to COLD when omitted */
   status?: UpdateClientDtoStatus;
   /** Lead quality; defaults to MEDIUM when omitted */

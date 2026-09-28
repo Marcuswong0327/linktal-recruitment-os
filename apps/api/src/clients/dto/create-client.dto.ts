@@ -53,25 +53,25 @@ export class CreateClientDto {
   @IsString({ each: true })
   addresses?: string[];
 
-  @ApiPropertyOptional({ description: 'Website URL', example: 'https://acme.com' })
+  @ApiPropertyOptional({ description: 'Website URL', example: 'https://acme.com', nullable: true })
   @IsOptional()
   @IsUrl()
-  website?: string;
+  website?: string | null;
 
-  @ApiPropertyOptional({ description: 'Seek / Job Street job market URL' })
+  @ApiPropertyOptional({ description: 'Seek / Job Street job market URL', nullable: true })
   @IsOptional()
   @IsUrl()
-  seekJobMarketUrl?: string;
+  seekJobMarketUrl?: string | null;
 
-  @ApiPropertyOptional({ description: 'LinkedIn job market URL' })
+  @ApiPropertyOptional({ description: 'LinkedIn job market URL', nullable: true })
   @IsOptional()
   @IsUrl()
-  linkedinJobMarketUrl?: string;
+  linkedinJobMarketUrl?: string | null;
 
-  @ApiPropertyOptional({ description: 'General description of the company' })
+  @ApiPropertyOptional({ description: 'General description of the company', nullable: true })
   @IsOptional()
   @IsString()
-  generalDescription?: string;
+  generalDescription?: string | null;
 
   @ApiPropertyOptional({ description: 'Status; defaults to COLD when omitted', enum: ClientStatus, example: 'COLD' })
   @IsOptional()
